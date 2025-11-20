@@ -1,0 +1,136 @@
+import React, { useEffect, useState } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { supabase } from "./supabaseClient";
+
+<<<<<<< HEAD
+// Screens
+=======
+// Context Provider
+import { AppProvider } from "./context/AppContext";
+
+// UI Screens
+>>>>>>> d2232ea (Added progress graph page)
+import SplashScreen from "./SplashScreen";
+import CoverScreen from "./CoverScreen";
+
+// Auth
+import AuthPage from "./AuthPage";
+
+// Pages
+import Dashboard from "./pages/Dashboard";
+import PRTracker from "./pages/PRTracker";
+import MeasurementsPage from "./pages/MeasurementsPage";
+import WorkoutsPage from "./pages/WorkoutsPage";
+import WorkoutLogger from "./pages/WorkoutLogger";
+import ProfilePage from "./pages/ProfilePage";
+
+// Global UI
+import NavBar from "./components/NavBar.jsx";
+
+export default function App() {
+  const [session, setSession] = useState(null);
+  const [ready, setReady] = useState(false);
+
+  // Splash + Cover
+  const [showSplash, setShowSplash] = useState(false);
+  const [showCover, setShowCover] = useState(false);
+  const [firstLaunch, setFirstLaunch] = useState(null);
+
+  // ---------- AUTH LISTENER ----------
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setReady(true);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => setSession(session)
+    );
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // ---------- FIRST-LAUNCH LOGIC ----------
+  useEffect(() => {
+    const seen = localStorage.getItem("armpal-first-launch");
+
+    if (!seen) {
+      setFirstLaunch(true);
+      setShowSplash(true);
+
+      localStorage.setItem("armpal-first-launch", "true");
+
+      setTimeout(() => {
+        setShowSplash(false);
+        setShowCover(true);
+      }, 1800);
+    } else {
+      setFirstLaunch(false);
+    }
+  }, []);
+
+  // ---------- SPLASH ----------
+  if (firstLaunch === true && showSplash) {
+    return (
+      <SplashScreen
+        onFinished={() => {
+          setShowSplash(false);
+          setShowCover(true);
+        }}
+      />
+    );
+  }
+
+  // ---------- COVER ----------
+  if (firstLaunch === true && showCover) {
+    return <CoverScreen onEnterApp={() => setShowCover(false)} />;
+  }
+
+  // ---------- WAIT FOR AUTH ----------
+  if (!ready) return null;
+
+  // ---------- NO USER = LOGIN ----------
+  if (!session) return <AuthPage />;
+
+<<<<<<< HEAD
+  // ---------- MAIN APP ----------
+  return (
+    <Router>
+      <div className="min-h-screen pb-16 bg-black text-white">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/prs" element={<PRTracker />} />
+          <Route path="/measurements" element={<MeasurementsPage />} />
+          <Route path="/workouts" element={<WorkoutsPage />} />
+          <Route path="/workoutlogger" element={<WorkoutLogger />} />
+          <Route path="/profile" element={<ProfilePage />} />
+        </Routes>
+
+        <NavBar />
+      </div>
+    </Router>
+=======
+  // ---------- MAIN APP WITH APP PROVIDER WRAPPING EVERYTHING ----------
+  return (
+    <AppProvider>
+      <div className="min-h-screen bg-black text-white">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+
+          {/* ALL PAGES */}
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/prs" element={<PRTracker />} />
+          <Route path="/prslist" element={<PRsPage />} />
+          <Route path="/measurements" element={<MeasurementsPage />} />
+          <Route path="/workouts" element={<WorkoutsPage />} />
+          <Route path="/workoutlogger" element={<WorkoutLogger />} />
+          <Route path="/profile" element={<ProfilePage />} />
+        </Routes>
+
+        {/* GLOBAL NAV BAR */}
+        <NavBar />
+      </div>
+    </AppProvider>
+>>>>>>> d2232ea (Added progress graph page)
+  );
+}

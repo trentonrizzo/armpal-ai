@@ -1,0 +1,163 @@
+/* ------------------------------ */
+/* GLOBAL GLASS + NEON GLOW STYLE */
+/* ------------------------------ */
+
+/* Neon moving background */
+.neon-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 0, 80, 0.22), transparent 55%),
+    radial-gradient(circle at 80% 100%, rgba(255, 0, 0, 0.18), transparent 55%),
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.06), transparent 60%),
+    #000000;
+  animation: fogMove 18s ease-in-out infinite alternate;
+}
+
+@keyframes fogMove {
+  0% {
+    background-position: 0% 0%, 100% 100%, 50% 40%;
+  }
+  50% {
+    background-position: 10% 5%, 95% 90%, 48% 45%;
+  }
+  100% {
+    background-position: 0% 10%, 100% 95%, 50% 38%;
+  }
+}
+
+/* Main glass content card */
+.glass-card {
+  background: rgba(10, 10, 10, 0.75);
+  border-radius: 22px;
+  padding: 20px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 0, 0, 0.28);
+  box-shadow: 0 0 12px rgba(255, 0, 0, 0.35);
+  animation: glowPulse 3s infinite ease-in-out;
+}
+
+/* Tabs bar container */
+.glass-tabs {
+  background: rgba(15, 15, 15, 0.9);
+  padding: 10px 18px;
+  border-radius: 18px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 0, 0, 0.2);
+  box-shadow: 0 0 12px rgba(255, 0, 0, 0.35);
+}
+
+/* Neon active tab */
+.neon-active {
+  background: rgba(255, 0, 0, 0.9) !important;
+  transform: scale(1.08);
+  box-shadow: 0 0 16px rgba(255, 0, 0, 0.7);
+}
+
+/* Neon inactive tab */
+.neon-inactive {
+  background: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.neon-inactive:hover {
+  background: rgba(55, 55, 55, 0.85);
+  box-shadow: 0 0 8px rgba(255, 0, 0, 0.35);
+}
+
+/* Section header chip */
+.glass-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #f9fafb;
+}
+
+.glass-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+}
+
+/* Floating Action Button */
+.neon-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 14px rgba(255, 0, 0, 0.55);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: #ffffff;
+  cursor: pointer;
+  z-index: 40;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.neon-fab:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 0 20px rgba(255, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.neon-fab:active {
+  transform: translateY(1px) scale(0.97);
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+}
+
+/* Slow breathing glow for glass card */
+@keyframes glowPulse {
+  0% {
+    box-shadow: 0 0 12px rgba(255, 0, 0, 0.32);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 12px rgba(255, 0, 0, 0.32);
+  }
+}
+/* Hybrid Neon Inputs */
+.neon-input {
+  background: rgba(30, 30, 30, 0.85);
+  color: #f3f4f6;
+  padding: 10px 14px;
+  border-radius: 12px;
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.15);
+  transition: all 0.2s ease-in-out;
+}
+
+.neon-input:focus {
+  outline: none;
+  border-color: rgba(255, 0, 0, 0.8);
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.45);
+  background: rgba(40, 40, 40, 0.95);
+}
+
+.neon-label {
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
