@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
-<<<<<<< HEAD
-// Screens
-=======
 // Context Provider
 import { AppProvider } from "./context/AppContext";
 
 // UI Screens
->>>>>>> d2232ea (Added progress graph page)
 import SplashScreen from "./SplashScreen";
 import CoverScreen from "./CoverScreen";
 
@@ -19,13 +15,15 @@ import AuthPage from "./AuthPage";
 // Pages
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
+import PRsPage from "./pages/PRsPage";
 import MeasurementsPage from "./pages/MeasurementsPage";
 import WorkoutsPage from "./pages/WorkoutsPage";
 import WorkoutLogger from "./pages/WorkoutLogger";
 import ProfilePage from "./pages/ProfilePage";
+import HomePage from "./pages/HomePage";
 
 // Global UI
-import NavBar from "./components/NavBar.jsx";
+import NavBar from "./components/NavBar";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -92,28 +90,10 @@ export default function App() {
   // ---------- NO USER = LOGIN ----------
   if (!session) return <AuthPage />;
 
-<<<<<<< HEAD
   // ---------- MAIN APP ----------
   return (
-    <Router>
-      <div className="min-h-screen pb-16 bg-black text-white">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/prs" element={<PRTracker />} />
-          <Route path="/measurements" element={<MeasurementsPage />} />
-          <Route path="/workouts" element={<WorkoutsPage />} />
-          <Route path="/workoutlogger" element={<WorkoutLogger />} />
-          <Route path="/profile" element={<ProfilePage />} />
-        </Routes>
-
-        <NavBar />
-      </div>
-    </Router>
-=======
-  // ---------- MAIN APP WITH APP PROVIDER WRAPPING EVERYTHING ----------
-  return (
     <AppProvider>
-      <div className="min-h-screen bg-black text-white">
+      <div className="min-h-screen bg-black text-white pb-20">
         <Routes>
           <Route path="/" element={<Dashboard />} />
 
@@ -131,6 +111,5 @@ export default function App() {
         <NavBar />
       </div>
     </AppProvider>
->>>>>>> d2232ea (Added progress graph page)
   );
 }
