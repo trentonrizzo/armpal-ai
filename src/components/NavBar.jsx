@@ -7,28 +7,56 @@ export default function NavBar() {
   const path = location.pathname;
 
   const linkClasses = (target) =>
-    `px-3 py-1 rounded-full text-xs sm:text-sm transition ${
+    `flex flex-col items-center justify-center px-4 py-2 rounded-xl transition-all duration-200 ${
       path === target
-        ? "bg-red-600 text-white shadow shadow-red-600/40"
-        : "text-gray-300 hover:text-white hover:bg-red-600/20"
+        ? "text-red-500 scale-110"
+        : "text-gray-400 hover:text-white hover:scale-105"
     }`;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-black/90 border-t border-red-900/50 backdrop-blur-md flex justify-around items-center py-2 z-40">
+    <nav
+      className="
+        fixed bottom-0 left-0 right-0 
+        bg-black/80 backdrop-blur-md 
+        border-t border-red-800/40 
+        flex justify-around items-center 
+        py-3 z-50
+      "
+    >
+      {/* DASHBOARD */}
       <Link className={linkClasses("/")} to="/">
-        Home
+        <i className="fa-solid fa-gauge-high text-xl"></i>
+        <span className="text-[10px] mt-1">Dashboard</span>
       </Link>
+
+      {/* WORKOUTS */}
       <Link className={linkClasses("/workouts")} to="/workouts">
-        Workouts
+        <i className="fa-solid fa-dumbbell text-xl"></i>
+        <span className="text-[10px] mt-1">Workouts</span>
       </Link>
+
+      {/* PRs */}
       <Link className={linkClasses("/prs")} to="/prs">
-        PRs
+        <i className="fa-solid fa-chart-line text-xl"></i>
+        <span className="text-[10px] mt-1">PRs</span>
       </Link>
+
+      {/* MEASUREMENTS */}
       <Link className={linkClasses("/measurements")} to="/measurements">
-        Measure
+        <i className="fa-solid fa-ruler text-xl"></i>
+        <span className="text-[10px] mt-1">Measure</span>
       </Link>
+
+      {/* GOALS (NEW) */}
+      <Link className={linkClasses("/goals")} to="/goals">
+        <i className="fa-solid fa-chart-simple text-xl"></i>
+        <span className="text-[10px] mt-1">Goals</span>
+      </Link>
+
+      {/* PROFILE */}
       <Link className={linkClasses("/profile")} to="/profile">
-        Profile
+        <i className="fa-solid fa-user text-xl"></i>
+        <span className="text-[10px] mt-1">Profile</span>
       </Link>
     </nav>
   );

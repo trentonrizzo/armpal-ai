@@ -21,6 +21,7 @@ import WorkoutsPage from "./pages/WorkoutsPage";
 import WorkoutLogger from "./pages/WorkoutLogger";
 import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
+import GoalsPage from "./pages/GoalsPage"; // ✔ NEW
 
 // Global UI
 import NavBar from "./components/NavBar";
@@ -34,7 +35,7 @@ export default function App() {
   const [showCover, setShowCover] = useState(false);
   const [firstLaunch, setFirstLaunch] = useState(null);
 
-  // ---------- AUTH LISTENER ----------
+  // ---------------- AUTH LISTENER ----------------
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -48,7 +49,7 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // ---------- FIRST-LAUNCH LOGIC ----------
+  // ---------------- FIRST LAUNCH LOGIC ----------------
   useEffect(() => {
     const seen = localStorage.getItem("armpal-first-launch");
 
@@ -58,6 +59,7 @@ export default function App() {
 
       localStorage.setItem("armpal-first-launch", "true");
 
+      // Splash duration
       setTimeout(() => {
         setShowSplash(false);
         setShowCover(true);
@@ -67,7 +69,7 @@ export default function App() {
     }
   }, []);
 
-  // ---------- SPLASH ----------
+  // ---------------- RENDER SPLASH ----------------
   if (firstLaunch === true && showSplash) {
     return (
       <SplashScreen
@@ -79,22 +81,24 @@ export default function App() {
     );
   }
 
-  // ---------- COVER ----------
+  // ---------------- RENDER COVER ----------------
   if (firstLaunch === true && showCover) {
     return <CoverScreen onEnterApp={() => setShowCover(false)} />;
   }
 
-  // ---------- WAIT FOR AUTH ----------
+  // ---------------- WAIT FOR AUTH ----------------
   if (!ready) return null;
 
-  // ---------- NO USER = LOGIN ----------
+  // ---------------- NOT LOGGED IN ----------------
   if (!session) return <AuthPage />;
 
-  // ---------- MAIN APP ----------
+  // ---------------- MAIN APP ----------------
   return (
     <AppProvider>
       <div className="min-h-screen bg-black text-white pb-20">
         <Routes>
+
+          {/* DEFAULT LANDING PAGE */}
           <Route path="/" element={<Dashboard />} />
 
           {/* ALL PAGES */}
@@ -105,6 +109,8 @@ export default function App() {
           <Route path="/workouts" element={<WorkoutsPage />} />
           <Route path="/workoutlogger" element={<WorkoutLogger />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/goals" element={<GoalsPage />} /> {/* ✔ NEW */}
+
         </Routes>
 
         {/* GLOBAL NAV BAR */}

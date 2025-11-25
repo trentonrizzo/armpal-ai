@@ -2,31 +2,28 @@ import { motion } from "framer-motion";
 
 export default function SplashScreen({ onFinished }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-      
-      {/* Background Glow */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black overflow-hidden">
+
+      {/* White background glow */}
       <motion.div
-        initial={{ scale: 0, opacity: 0.1 }}
+        initial={{ scale: 0, opacity: 0.15 }}
         animate={{ scale: 1.8, opacity: 0 }}
         transition={{ duration: 0.9, ease: "easeOut" }}
         className="absolute h-64 w-64 rounded-full blur-3xl bg-white/20"
       />
 
+      {/* Red glow pulse */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0 }}
-        transition={{ duration: 1.1 }}
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 0.25, scale: 1.3 }}
+        transition={{ duration: 0.9, ease: "easeOut", delay: 0.1 }}
         className="absolute h-72 w-72 rounded-full bg-red-600/20 blur-3xl"
       />
 
-      {/* Logo */}
+      {/* Logo + tagline */}
       <motion.div
         initial={{ scale: 2.3, y: -120, opacity: 0 }}
-        animate={{
-          scale: 1,
-          y: 0,
-          opacity: 1,
-        }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
         transition={{
           duration: 0.9,
           type: "spring",
@@ -44,21 +41,21 @@ export default function SplashScreen({ onFinished }) {
         </span>
       </motion.div>
 
-      {/* Subtext */}
+      {/* Subtext fade-in */}
       <motion.p
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8, duration: 0.4 }}
+        transition={{ delay: 0.75, duration: 0.45 }}
         className="absolute bottom-20 text-xs font-medium tracking-[0.25em] text-neutral-400 uppercase"
       >
         Your Strength. Your Progress. Your ArmPal.
       </motion.p>
 
-      {/* Exit */}
+      {/* Trigger exit transition callback */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 1.9, duration: 0.01 }}
+        transition={{ delay: 1.85, duration: 0.01 }}
         onAnimationComplete={onFinished}
       />
     </div>
