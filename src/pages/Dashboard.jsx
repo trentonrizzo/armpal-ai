@@ -7,13 +7,13 @@ export default function Dashboard() {
   const [lastWorkout, setLastWorkout] = useState(null);
   const [prsCount, setPrsCount] = useState(0);
   const [workoutCount, setWorkoutCount] = useState(0);
-  const [goals, setGoals] = useState([]); // ⬅ NEW
+  const [goals, setGoals] = useState([]);
 
   useEffect(() => {
     loadProfile();
     loadStats();
     loadLastWorkout();
-    loadGoals(); // ⬅ NEW
+    loadGoals();
   }, []);
 
   async function loadProfile() {
@@ -48,7 +48,6 @@ export default function Dashboard() {
     setLastWorkout(data?.[0] || null);
   }
 
-  // ⬅ NEW: Load user goals
   async function loadGoals() {
     const { data: auth } = await supabase.auth.getUser();
     const userId = auth?.user?.id;
@@ -58,7 +57,7 @@ export default function Dashboard() {
       .from("goals")
       .select("*")
       .eq("user_id", userId)
-      .order("created_at", { ascending: true });
+      .order("created_at");
 
     setGoals(data || []);
   }
@@ -67,54 +66,54 @@ export default function Dashboard() {
   const avatar = profile?.avatar_url || "/default-avatar.png";
 
   return (
-    <div className="min-h-screen bg-black text-white px-6 pt-10 pb-24 overflow-y-scroll">
+    <div className="min-h-screen bg-neutral-950 text-white px-6 pt-10 pb-24 overflow-y-scroll">
 
-      {/* GRADIENT BACKLIGHT */}
-      <div className="fixed top-0 left-0 right-0 h-64 bg-red-900/20 blur-3xl opacity-40 pointer-events-none"></div>
+      {/* TOP RED GLOW */}
+      <div className="fixed top-0 left-0 right-0 h-52 bg-red-700/20 blur-3xl opacity-40 pointer-events-none"></div>
 
-      {/* HERO HEADER */}
+      {/* HEADER */}
       <motion.div
-        initial={{ opacity: 0, y: -12 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
+        transition={{ duration: 0.25 }}
         className="flex items-center justify-between mb-10"
       >
         <div>
-          <div className="text-lg text-neutral-400">Welcome back,</div>
-          <div className="text-4xl font-extrabold tracking-tight text-white drop-shadow-lg">
+          <div className="text-sm text-neutral-400">Welcome back,</div>
+          <div className="text-3xl font-extrabold tracking-tight text-white">
             {username}
           </div>
         </div>
 
         <motion.img
           src={avatar}
-          className="w-14 h-14 rounded-2xl border border-red-600/40 shadow-lg object-cover"
-          initial={{ opacity: 0, scale: 0.7 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.25, duration: 0.35 }}
+          className="w-14 h-14 rounded-xl border border-red-500/40 shadow-red-500/20 shadow-md object-cover"
+          initial={{ scale: 0.85 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.25 }}
         />
       </motion.div>
 
-      {/* QUICK STATS */}
-      <div className="mb-10">
+      {/* STATS */}
+      <div className="mb-8">
         <h3 className="text-lg font-semibold text-red-400 mb-3">Your Stats</h3>
 
         <div className="grid grid-cols-3 gap-4">
-          <div className="p-4 bg-neutral-900/70 rounded-xl border border-neutral-800 shadow-md text-center">
-            <div className="text-2xl font-bold">{workoutCount}</div>
-            <div className="text-xs text-neutral-400 mt-1">Workouts</div>
+          <div className="p-4 bg-neutral-900 rounded-xl border border-neutral-800 shadow-sm text-center">
+            <div className="text-xl font-bold">{workoutCount}</div>
+            <div className="text-[11px] text-neutral-400 mt-1">Workouts</div>
           </div>
 
-          <div className="p-4 bg-neutral-900/70 rounded-xl border border-neutral-800 shadow-md text-center">
-            <div className="text-2xl font-bold">{prsCount}</div>
-            <div className="text-xs text-neutral-400 mt-1">PRs</div>
+          <div className="p-4 bg-neutral-900 rounded-xl border border-neutral-800 shadow-sm text-center">
+            <div className="text-xl font-bold">{prsCount}</div>
+            <div className="text-[11px] text-neutral-400 mt-1">PRs</div>
           </div>
 
-          <div className="p-4 bg-neutral-900/70 rounded-xl border border-neutral-800 shadow-md text-center">
-            <div className="text-2xl font-bold">
+          <div className="p-4 bg-neutral-900 rounded-xl border border-neutral-800 shadow-sm text-center">
+            <div className="text-xl font-bold">
               {profile?.bio ? profile.bio.length : 0}
             </div>
-            <div className="text-xs text-neutral-400 mt-1">Bio Length</div>
+            <div className="text-[11px] text-neutral-400 mt-1">Bio Length</div>
           </div>
         </div>
       </div>
@@ -126,21 +125,21 @@ export default function Dashboard() {
         <div className="grid grid-cols-3 gap-4 text-center">
           <div
             onClick={() => (window.location.href = "/workoutlogger")}
-            className="py-3 bg-red-600/20 border border-red-800 rounded-xl text-sm text-red-300 font-semibold hover:bg-red-600/30 transition shadow-md active:scale-95"
+            className="py-3 bg-red-600/25 border border-red-700 rounded-xl text-sm text-red-300 font-semibold hover:bg-red-600/35 transition active:scale-95"
           >
             Log<br />Workout
           </div>
 
           <div
             onClick={() => (window.location.href = "/prs")}
-            className="py-3 bg-neutral-900/60 border border-neutral-700 rounded-xl text-sm text-neutral-300 font-semibold hover:bg-neutral-800 transition shadow-md active:scale-95"
+            className="py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-sm text-neutral-300 font-semibold hover:bg-neutral-800 transition active:scale-95"
           >
             Add<br />PR
           </div>
 
           <div
             onClick={() => (window.location.href = "/measurements")}
-            className="py-3 bg-neutral-900/60 border border-neutral-700 rounded-xl text-sm text-neutral-300 font-semibold hover:bg-neutral-800 transition shadow-md active:scale-95"
+            className="py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-sm text-neutral-300 font-semibold hover:bg-neutral-800 transition active:scale-95"
           >
             Add<br />Measure
           </div>
@@ -152,8 +151,8 @@ export default function Dashboard() {
         <div className="mb-10">
           <h3 className="text-lg font-semibold text-red-400 mb-3">Last Workout</h3>
 
-          <div className="p-5 bg-neutral-900/70 rounded-2xl border border-neutral-800 shadow-lg shadow-black/40">
-            <div className="text-lg font-bold mb-2">
+          <div className="p-5 bg-neutral-900 rounded-2xl border border-neutral-800 shadow-md">
+            <div className="text-lg font-bold mb-1">
               {new Date(lastWorkout.created_at).toLocaleDateString()}
             </div>
             <div className="text-neutral-400 text-sm">
@@ -163,7 +162,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* GOALS PREVIEW */}
+      {/* GOALS */}
       <div className="mb-10">
         <h3 className="text-lg font-semibold text-red-400 mb-3">Your Goals</h3>
 
@@ -175,7 +174,7 @@ export default function Dashboard() {
             return (
               <div
                 key={g.id}
-                className="p-4 mb-3 bg-neutral-900/70 border border-neutral-800 rounded-xl"
+                className="p-4 mb-3 bg-neutral-900 border border-neutral-800 rounded-xl"
               >
                 <div className="flex justify-between mb-1">
                   <span className="font-bold">{g.title}</span>
@@ -184,28 +183,18 @@ export default function Dashboard() {
 
                 <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
                   <div
-                    className={`h-full bg-red-600 transition-all ${
-                      percent > 100
-                        ? "shadow-[0_0_8px_2px_rgba(255,0,0,0.7)]"
-                        : ""
-                    }`}
+                    className="h-full bg-red-600 transition-all"
                     style={{ width: `${capped}%` }}
                   />
                 </div>
-
-                {g.current > g.target && (
-                  <div className="text-green-400 text-xs mt-1">
-                    +{g.current - g.target} over goal!
-                  </div>
-                )}
               </div>
             );
           })
         ) : (
-          <div className="text-gray-400 text-sm">No goals yet.</div>
+          <div className="text-neutral-500 text-sm">No goals yet.</div>
         )}
 
-        <a href="/goals" className="text-red-500 text-sm mt-2 block">
+        <a href="/goals" className="text-red-400 text-sm mt-2 block">
           View all goals →
         </a>
       </div>
@@ -213,7 +202,7 @@ export default function Dashboard() {
       {/* MOTIVATION */}
       <div className="mb-20">
         <h3 className="text-lg font-semibold text-red-400 mb-3">Motivation</h3>
-        <div className="p-5 bg-neutral-900/60 border border-neutral-700 rounded-xl shadow-md italic text-neutral-300">
+        <div className="p-5 bg-neutral-900 border border-neutral-700 rounded-xl shadow-md italic text-neutral-300">
           “Discipline beats motivation — show up, even when you don’t feel like it.”
         </div>
       </div>
