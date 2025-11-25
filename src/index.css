@@ -3,164 +3,150 @@
 @tailwind utilities;
 
 /* =============================== */
-/*         ARMPAL GLOBAL THEME     */
+/*        ARMPAL GLOBAL THEME      */
 /* =============================== */
 
+/* PURE ArmPal colors */
 :root {
-  --bg: #000000;
-  --card-bg: #0d0d0d;
-  --card-bg-2: #111111;
-  --red: #e50914;
-  --red-soft: #ff4d57;
-  --text: #ffffff;
-  --text-dim: #b3b3b3;
-  --glow: 0 0 14px rgba(229, 9, 20, 0.45);
+  --bg: #000000;          /* pure black */
+  --card: #0a0a0a;        /* subtle black lift */
+  --card-2: #111111;      /* second-level black */
+  --red: #e00000;         /* ArmPal red */
+  --red-soft: #ff1a1a;    /* bright highlight red */
+  --text: #ffffff;        /* pure white */
+  --text-dim: #c8c8c8;    /* soft white */
 }
 
-/* Global Reset */
+/* RESET */
 * {
-  box-sizing: border-box;
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
 }
 
-body {
-  font-family: system-ui, sans-serif;
+html, body {
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
+  font-family: system-ui, sans-serif;
+  min-height: 100%;
   overflow-x: hidden;
 }
 
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 7px;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 7px; }
 ::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 10px;
+  background: #222;
+  border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #666;
+  background: #333;
 }
 
-/* ------------------------------- */
-/*           DASHBOARD             */
-/* ------------------------------- */
-
-.dashboard-section {
-  margin-bottom: 32px;
-}
-
-.section-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 14px;
-}
-
+/* CARDS */
 .card {
-  background: var(--card-bg);
-  border: 1px solid #1b1b1b;
+  background: var(--card);
+  border: 1px solid #1a1a1a;
   border-radius: 16px;
   padding: 18px;
-  box-shadow: 0px 4px 20px rgba(0,0,0,0.45);
-  backdrop-filter: blur(6px);
+  box-shadow: 0 0 25px rgba(0,0,0,0.6);
   transition: 0.2s ease;
 }
-
 .card:hover {
   transform: translateY(-2px);
-  box-shadow: 0px 6px 28px rgba(0,0,0,0.55);
+  border-color: var(--red);
 }
 
-/* Stats Grid */
+/* TITLES */
+.section-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--red);
+  margin-bottom: 12px;
+}
+
+/* GRID – pure, clean, modern */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 14px;
 }
 
 .stat-box {
-  background: var(--card-bg-2);
+  background: var(--card-2);
   padding: 16px;
-  border-radius: 14px;
+  border-radius: 12px;
   text-align: center;
+  border: 1px solid #1b1b1b;
 }
 
 .stat-number {
-  font-size: 1.6rem;
-  font-weight: 800;
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: var(--text);
 }
 
 .stat-label {
+  margin-top: 3px;
   font-size: 0.75rem;
   color: var(--text-dim);
 }
 
-/* Quick Action Buttons */
-.qa-grid {
-  display: flex;
-  gap: 12px;
-}
-
+/* QUICK-ACTION BUTTONS */
 .qa-btn {
-  flex: 1;
-  background: #141414;
-  padding: 14px;
+  background: var(--card);
+  border: 1px solid #1b1b1b;
   border-radius: 14px;
+  padding: 14px;
   text-align: center;
-  border: 1px solid #1c1c1c;
-  font-size: 0.85rem;
-  transition: 0.18s;
+  font-weight: 600;
+  transition: 0.25s;
 }
+
 .qa-btn:hover {
-  background: #181818;
   border-color: var(--red);
-  box-shadow: var(--glow);
+  color: var(--red-soft);
+  transform: translateY(-1px);
 }
 
-/* Motivational Quote */
-.quote-box {
-  font-size: 0.9rem;
-  color: var(--text-dim);
-  font-style: italic;
+/* RED BUTTON VARIANT */
+.qa-btn-red {
+  background: rgba(224,0,0,0.2);
+  border: 1px solid rgba(224,0,0,0.4);
+  color: var(--red);
+}
+.qa-btn-red:hover {
+  background: rgba(224,0,0,0.35);
 }
 
-/* Strength Bars */
+/* PROGRESS BARS */
 .strength-bar {
   width: 100%;
   background: #1a1a1a;
-  border-radius: 30px;
   height: 10px;
+  border-radius: 20px;
   overflow: hidden;
 }
 .strength-fill {
   height: 100%;
   background: var(--red-soft);
+  border-radius: 20px;
   transition: width 0.4s ease;
-  border-radius: 30px;
 }
 
-/* Profile Avatar */
+/* AVATAR */
 .avatar {
-  width: 78px;
-  height: 78px;
-  border-radius: 50%;
+  width: 76px;
+  height: 76px;
   object-fit: cover;
+  border-radius: 18px;
   border: 2px solid var(--red);
-  box-shadow: var(--glow);
 }
 
-/* Page Animation */
+/* FADE-IN */
 .fade-in {
-  animation: fadeIn 0.45s ease-out;
+  animation: fadeIn 0.3s ease-out;
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
