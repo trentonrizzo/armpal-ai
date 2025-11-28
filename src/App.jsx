@@ -21,10 +21,10 @@ import WorkoutsPage from "./pages/WorkoutsPage";
 import WorkoutLogger from "./pages/WorkoutLogger";
 import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
-import GoalsPage from "./pages/GoalsPage"; // ✔ NEW
+import GoalsPage from "./pages/GoalsPage";
 
-// Global UI
-import NavBar from "./components/NavBar";
+// NEW: Bottom NavBar
+import BottomNav from "./components/BottomNav/BottomNav";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -59,7 +59,6 @@ export default function App() {
 
       localStorage.setItem("armpal-first-launch", "true");
 
-      // Splash duration
       setTimeout(() => {
         setShowSplash(false);
         setShowCover(true);
@@ -97,7 +96,6 @@ export default function App() {
     <AppProvider>
       <div className="min-h-screen bg-black text-white pb-20">
         <Routes>
-
           {/* DEFAULT LANDING PAGE */}
           <Route path="/" element={<Dashboard />} />
 
@@ -105,16 +103,15 @@ export default function App() {
           <Route path="/home" element={<HomePage />} />
           <Route path="/prs" element={<PRTracker />} />
           <Route path="/prslist" element={<PRsPage />} />
-          <Route path="/measurements" element={<MeasurementsPage />} />
+          <Route path="/measure" element={<MeasurementsPage />} />
           <Route path="/workouts" element={<WorkoutsPage />} />
           <Route path="/workoutlogger" element={<WorkoutLogger />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/goals" element={<GoalsPage />} /> {/* ✔ NEW */}
-
+          <Route path="/goals" element={<GoalsPage />} />
         </Routes>
 
-        {/* GLOBAL NAV BAR */}
-        <NavBar />
+        {/* GLOBAL BOTTOM NAVBAR */}
+        <BottomNav />
       </div>
     </AppProvider>
   );
