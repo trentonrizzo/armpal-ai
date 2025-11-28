@@ -102,8 +102,15 @@ export default function WorkoutsPage() {
 
   // Add exercise
   const handleAddExercise = async (workoutId) => {
-    const form = exerciseForms[workoutId];
-    if (!user || !form?.name) return;
+    const form =
+      exerciseForms[workoutId] || {
+        name: "",
+        sets: "",
+        reps: "",
+        weight: "",
+      };
+
+    if (!user || !form.name.trim()) return;
 
     const created = await addExerciseApi({
       userId: user.id,
@@ -133,12 +140,21 @@ export default function WorkoutsPage() {
     }
   };
 
-  // Exercise input typing
+  // Exercise input typing FIXED
   const handleChange = (workoutId, e) => {
     const { name, value } = e.target;
+
     setExerciseForms((prev) => ({
       ...prev,
-      [workoutId]: { ...prev[workoutId], [name]: value },
+      [workoutId]: {
+        ...(prev[workoutId] || {
+          name: "",
+          sets: "",
+          reps: "",
+          weight: "",
+        }),
+        [name]: value,
+      },
     }));
   };
 
@@ -188,7 +204,7 @@ export default function WorkoutsPage() {
   if (loading) return <div className="p-6 text-white">Loading…</div>;
 
   return (
-    <div className="p-6 text-white">
+    <div className="p-6 text-white pb-24">
       <h1 className="text-2xl font-bold text-red-500 mb-3">Workouts</h1>
 
       {/* Add Workout */}
@@ -214,9 +230,12 @@ export default function WorkoutsPage() {
         <ReorderableList
           items={workouts}
           type="workouts"
-          onReorder={(updated) => setWorkouts(updated)} // local reorder only
+          onReorder={(updated) => setWorkouts(updated)}
           renderItem={(w) => (
-            <div key={w.id} className="bg-neutral-800 p-4 rounded-xl mb-4 shadow-lg">
+            <div
+              key={w.id}
+              className="bg-neutral-800 p-4 rounded-xl mb-4 shadow-lg"
+            >
               {/* Workout Header */}
               <div className="flex justify-between items-center mb-3">
                 {editingWorkout === w.id ? (
@@ -229,7 +248,6 @@ export default function WorkoutsPage() {
                       handleWorkoutNameBlur(w.id, e.target.value)
                     }
                     className="bg-neutral-900 text-white p-2 rounded w-full"
-                    autoFocus
                   />
                 ) : (
                   <h2
@@ -282,7 +300,6 @@ export default function WorkoutsPage() {
                             handleExerciseEditBlur(ex.id, e.target.value)
                           }
                           className="bg-neutral-800 text-white w-full p-1 rounded"
-                          autoFocus
                         />
                       ) : (
                         <span

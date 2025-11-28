@@ -31,7 +31,15 @@ export default function GoalsPage() {
   }
 
   function handleChange(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    // Prevent phantom blur problems
+    e.stopPropagation();
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   }
 
   async function handleSubmit(e) {
@@ -39,11 +47,13 @@ export default function GoalsPage() {
 
     const goalData = {
       user_id: userId,
-      title: form.title,
+      title: form.title.trim(),
       current: Number(form.current),
       target: Number(form.target),
       deadline: form.deadline || null,
     };
+
+    if (!goalData.title) return;
 
     if (form.id) {
       await updateGoal(form.id, goalData);
@@ -51,7 +61,15 @@ export default function GoalsPage() {
       await createGoal(goalData);
     }
 
-    setForm({ id: null, title: "", current: "", target: "", deadline: "" });
+    // Reset form
+    setForm({
+      id: null,
+      title: "",
+      current: "",
+      target: "",
+      deadline: "",
+    });
+
     loadUserGoals(userId);
   }
 
@@ -76,24 +94,27 @@ export default function GoalsPage() {
 
       <h1 className="text-3xl font-bold mb-6 text-red-500">Goals</h1>
 
-      {/* FORM */}
-      <form onSubmit={handleSubmit} className="mb-8 bg-neutral-900 p-5 rounded-2xl border border-neutral-800">
+      {/* GOAL FORM */}
+      <form
+        onSubmit={handleSubmit}
+        className="mb-8 bg-neutral-900 p-5 rounded-2xl border border-neutral-800"
+      >
         <input
           name="title"
           value={form.title}
           onChange={handleChange}
           placeholder="Goal title (Bench 315, Lose 10 lbs, etc.)"
-          className="input"
+          className="bg-neutral-800 text-white px-3 py-2 rounded-lg w-full mb-3"
         />
 
-        <div className="flex gap-4 mt-3">
+        <div className="flex gap-4">
           <input
             name="current"
             value={form.current}
             onChange={handleChange}
             type="number"
             placeholder="Current"
-            className="input"
+            className="bg-neutral-800 text-white px-3 py-2 rounded-lg w-1/2"
           />
           <input
             name="target"
@@ -101,7 +122,7 @@ export default function GoalsPage() {
             onChange={handleChange}
             type="number"
             placeholder="Target"
-            className="input"
+            className="bg-neutral-800 text-white px-3 py-2 rounded-lg w-1/2"
           />
         </div>
 
@@ -110,7 +131,7 @@ export default function GoalsPage() {
           type="date"
           value={form.deadline}
           onChange={handleChange}
-          className="input mt-3"
+          className="bg-neutral-800 text-white px-3 py-2 rounded-lg w-full mt-3"
         />
 
         <button
@@ -121,7 +142,7 @@ export default function GoalsPage() {
         </button>
       </form>
 
-      {/* LIST */}
+      {/* GOAL LIST */}
       {goals.length === 0 && (
         <div className="text-gray-500 text-center mt-10">
           No goals yet — add your first one!
