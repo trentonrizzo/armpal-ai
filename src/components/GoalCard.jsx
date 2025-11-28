@@ -1,90 +1,97 @@
 // src/components/GoalCard.jsx
-import React, { useEffect, useState } from "react";
-import { FaBullseye, FaWeightHanging, FaDumbbell } from "react-icons/fa";
+import React from "react";
 
 export default function GoalCard({ goal, onEdit, onDelete }) {
-  // DB Field mapping (your schema)
   const current = goal.current_value || 0;
   const target = goal.target_value || 0;
-  const rawProgress = target > 0 ? (current / target) * 100 : 0;
-  const progress = Math.min(100, Math.round(rawProgress));
 
-  // Smooth animated counter
-  const [animatedProgress, setAnimatedProgress] = useState(0);
+  // real calculated percent (can be over 100)
+  const raw = target > 0 ? Math.round((current / target) * 100) : 0;
+  const percent = raw; // keep real number
+  const capped = Math.min(raw, 100); // bar width stops at 100%
 
-  useEffect(() => {
-    let start = 0;
-    const end = progress;
-    const duration = 600; // ms
-    const increment = 15;
-
-    const interval = setInterval(() => {
-      start += (end / (duration / increment));
-      if (start >= end) {
-        start = end;
-        clearInterval(interval);
-      }
-      setAnimatedProgress(Math.round(start));
-    }, increment);
-
-    return () => clearInterval(interval);
-  }, [progress]);
-
-  // Pick an icon based on goal.type
-  const icon =
-    goal.type === "pr" ? <FaDumbbell className="text-red-500" /> :
-    goal.type === "measurement" ? <FaWeightHanging className="text-red-500" /> :
-    <FaBullseye className="text-red-500" />;
+  const isOver = percent > 100;
 
   return (
-    <div className="card mb-6 fade-in">
+    <div className="card mb-5 fade-in">
 
-      {/* Header */}
-      <div className="flex justify-between items-center mb-3">
-        <div className="flex items-center gap-3">
-          {icon}
-          <h2 className="text-xl font-bold text-white">{goal.title}</h2>
-        </div>
+      {/* TITLE + Buttons */}
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="text-xl font-bold text-white">{goal.title}</h2>
 
         <div className="flex gap-3 text-sm">
           <button
             onClick={() => onEdit(goal)}
-            className="px-3 py-1 rounded-lg bg-neutral-800 text-red-400 border border-neutral-700 hover:bg-neutral-700"
+            className="text-red-400 hover:text-red-300"
           >
             Edit
           </button>
           <button
             onClick={() => onDelete(goal.id)}
-            className="px-3 py-1 rounded-lg bg-neutral-800 text-gray-400 border border-neutral-700 hover:bg-red-700 hover:text-white"
+            className="text-gray-400 hover:text-red-500"
           >
             Delete
           </button>
         </div>
       </div>
 
-      {/* Numbers */}
-      <div className="text-sm text-gray-300 mb-2">
+      {/* CURRENT / TARGET */}
+      <div className="text-sm text-gray-300 mb-1">
         {current} / {target}
       </div>
 
-      {/* Premium Gradient Progress Bar */}
-      <div className="premium-progress-bar">
+      {/* PROGRESS BAR */}
+      <div
+        className="goal-progress-bar mt-2 relative overflow-visible"
+        style={{
+          height: "14px",
+          background: "#1a1a1a",
+          borderRadius: "20px",
+          border: "1px solid rgba(255,0,0,0.25)",
+        }}
+      >
+        {/* MAIN FILL */}
         <div
-          className="premium-progress-fill"
+          className={`goal-progress-fill transition-all ${
+            isOver ? "over-goal-fill" : "progress-glow"
+          }`}
           style={{
-            width: `${animatedProgress}%`,
+            width: `${capped}%`,
+            height: "100%",
+            borderRadius: "20px",
+            background: isOver
+              ? "linear-gradient(90deg, #ffdd55, #ffaa00)"
+              : "var(--red-soft)",
           }}
         ></div>
+
+        {/* GOLDEN OVERFLOW INDICATOR */}
+        {isOver && (
+          <div
+            className="absolute top-1/2 -translate-y-1/2 overflow-indicator"
+            style={{
+              left: "100%",
+              width: "34px",
+              height: "14px",
+              background:
+                "linear-gradient(90deg, rgba(255,221,85,0.9), rgba(255,170,0,0.8))",
+              boxShadow: "0 0 10px rgba(255,200,0,0.7)",
+              borderRadius: "10px",
+              marginLeft: "8px",
+              animation: "pulseGlow 1.2s infinite ease-in-out",
+            }}
+          ></div>
+        )}
       </div>
 
-      {/* Percentage */}
-      <div className="text-right text-sm text-gray-400 mt-1">
-        {animatedProgress}% complete
+      {/* PERCENT TEXT */}
+      <div className="text-right text-xs text-gray-400 mt-1 font-semibold">
+        {percent}% complete
       </div>
 
-      {/* Deadline */}
+      {/* DEADLINE */}
       {goal.deadline && (
-        <div className="text-xs text-gray-500 mt-2">
+        <div className="text-xs text-gray-600 mt-2">
           Deadline: {goal.deadline}
         </div>
       )}

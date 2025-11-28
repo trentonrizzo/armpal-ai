@@ -10,8 +10,9 @@ export default function GoalsPage() {
   const [form, setForm] = useState({
     id: null,
     title: "",
-    current_value: "",
-    target_value: "",
+    current: "",
+    target: "",
+    deadline: "",
   });
 
   useEffect(() => {
@@ -39,10 +40,10 @@ export default function GoalsPage() {
     const goalData = {
       user_id: userId,
       title: form.title,
-      current_value: Number(form.current_value),
-      target_value: Number(form.target_value),
-      type: "custom",   // REQUIRED by your DB
-      unit: "",         // MUST exist, even empty
+      current_value: Number(form.current),
+      target_value: Number(form.target),
+      deadline: form.deadline || null,
+      type: "custom",
     };
 
     if (form.id) {
@@ -51,7 +52,7 @@ export default function GoalsPage() {
       await createGoal(goalData);
     }
 
-    setForm({ id: null, title: "", current_value: "", target_value: "" });
+    setForm({ id: null, title: "", current: "", target: "", deadline: "" });
     loadUserGoals(userId);
   }
 
@@ -59,10 +60,10 @@ export default function GoalsPage() {
     setForm({
       id: goal.id,
       title: goal.title,
-      current_value: goal.current_value,
-      target_value: goal.target_value,
+      current: goal.current_value,
+      target: goal.target_value,
+      deadline: goal.deadline || "",
     });
-
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -71,8 +72,18 @@ export default function GoalsPage() {
     loadUserGoals(userId);
   }
 
+  // ⭐ PIN / UNPIN
+  async function handleTogglePin(goal) {
+    await updateGoal(goal.id, {
+      pinned_to_dashboard: !goal.pinned_to_dashboard,
+    });
+
+    loadUserGoals(userId);
+  }
+
   return (
     <div className="min-h-screen bg-black text-white px-5 pt-8 pb-24">
+
       <h1 className="text-3xl font-bold mb-6 text-red-500">Goals</h1>
 
       {/* FORM */}
@@ -87,22 +98,30 @@ export default function GoalsPage() {
 
         <div className="flex gap-4 mt-3">
           <input
-            name="current_value"
-            value={form.current_value}
+            name="current"
+            value={form.current}
             onChange={handleChange}
             type="number"
             placeholder="Current"
             className="input"
           />
           <input
-            name="target_value"
-            value={form.target_value}
+            name="target"
+            value={form.target}
             onChange={handleChange}
             type="number"
             placeholder="Target"
             className="input"
           />
         </div>
+
+        <input
+          name="deadline"
+          type="date"
+          value={form.deadline}
+          onChange={handleChange}
+          className="input mt-3"
+        />
 
         <button
           type="submit"
@@ -112,7 +131,7 @@ export default function GoalsPage() {
         </button>
       </form>
 
-      {/* LIST */}
+      {/* GOALS LIST */}
       {goals.length === 0 && (
         <div className="text-gray-500 text-center mt-10">
           No goals yet — add your first one!
@@ -125,6 +144,7 @@ export default function GoalsPage() {
           goal={goal}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onTogglePin={handleTogglePin}
         />
       ))}
     </div>
