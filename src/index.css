@@ -295,3 +295,10 @@ a:hover {
 .over-goal-fill {
   box-shadow: 0 0 12px rgba(255,200,0,0.8);
 }
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
