@@ -8,11 +8,15 @@ export async function createGoal(goal) {
     .insert([goal])
     .select();
 
-  if (error) console.error("Error creating goal:", error);
+  if (error) {
+    console.error("Error creating goal:", error);
+    return null;
+  }
+
   return data?.[0];
 }
 
-// ---------- READ (All User Goals) ----------
+// ---------- READ ----------
 export async function getGoals(userId) {
   const { data, error } = await supabase
     .from("goals")
@@ -32,7 +36,11 @@ export async function updateGoal(id, updates) {
     .eq("id", id)
     .select();
 
-  if (error) console.error("Error updating goal:", error);
+  if (error) {
+    console.error("Error updating goal:", error);
+    return null;
+  }
+
   return data?.[0];
 }
 
@@ -43,6 +51,10 @@ export async function deleteGoal(id) {
     .delete()
     .eq("id", id);
 
-  if (error) console.error("Error deleting goal:", error);
-  return !error;
+  if (error) {
+    console.error("Error deleting goal:", error);
+    return false;
+  }
+
+  return true;
 }

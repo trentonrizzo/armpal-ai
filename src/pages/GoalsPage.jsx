@@ -7,27 +7,19 @@ import { createGoal, getGoals, updateGoal, deleteGoal } from "../api/goals";
 export default function GoalsPage() {
   const [userId, setUserId] = useState(null);
   const [goals, setGoals] = useState([]);
-
   const [form, setForm] = useState({
     id: null,
     title: "",
-    current: "",
-    target: "",
-    deadline: "",
+    current_value: "",
+    target_value: "",
   });
 
-  // ---------------------------
-  // Load user + goals
-  // ---------------------------
   useEffect(() => {
     async function loadUser() {
       const { data } = await supabase.auth.getUser();
       const id = data?.user?.id;
       setUserId(id);
-
-      if (id) {
-        loadUserGoals(id);
-      }
+      if (id) loadUserGoals(id);
     }
     loadUser();
   }, []);
@@ -37,67 +29,43 @@ export default function GoalsPage() {
     setGoals(list);
   }
 
-  // ---------------------------
-  // Handle form changes
-  // ---------------------------
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
-  // ---------------------------
-  // Add or Update goal
-  // ---------------------------
   async function handleSubmit(e) {
     e.preventDefault();
 
-    if (!userId || !form.title.trim()) return;
-
     const goalData = {
       user_id: userId,
-      title: form.title.trim(),
-      current_value: Number(form.current) || 0,
-      target_value: Number(form.target) || 0,
-      deadline: form.deadline || null,
+      title: form.title,
+      current_value: Number(form.current_value),
+      target_value: Number(form.target_value),
+      type: "custom",   // REQUIRED by your DB
+      unit: "",         // MUST exist, even empty
     };
 
     if (form.id) {
-      // Update existing
       await updateGoal(form.id, goalData);
     } else {
-      // Create new
       await createGoal(goalData);
     }
 
-    // Reset form
-    setForm({
-      id: null,
-      title: "",
-      current: "",
-      target: "",
-      deadline: "",
-    });
-
+    setForm({ id: null, title: "", current_value: "", target_value: "" });
     loadUserGoals(userId);
   }
 
-  // ---------------------------
-  // Edit existing goal
-  // ---------------------------
   function handleEdit(goal) {
     setForm({
       id: goal.id,
       title: goal.title,
-      current: goal.current_value || "",
-      target: goal.target_value || "",
-      deadline: goal.deadline || "",
+      current_value: goal.current_value,
+      target_value: goal.target_value,
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ---------------------------
-  // Delete goal
-  // ---------------------------
   async function handleDelete(id) {
     await deleteGoal(id);
     loadUserGoals(userId);
@@ -108,44 +76,33 @@ export default function GoalsPage() {
       <h1 className="text-3xl font-bold mb-6 text-red-500">Goals</h1>
 
       {/* FORM */}
-      <form
-        onSubmit={handleSubmit}
-        className="mb-8 bg-neutral-900 p-5 rounded-2xl border border-neutral-800"
-      >
+      <form onSubmit={handleSubmit} className="mb-8 bg-neutral-900 p-5 rounded-2xl border border-neutral-800">
         <input
           name="title"
           value={form.title}
           onChange={handleChange}
-          placeholder="Goal title (Bench 315, Lose 10 lbs, etc.)"
-          className="input w-full bg-neutral-800 p-3 rounded-xl text-white"
+          placeholder="Goal title"
+          className="input"
         />
 
         <div className="flex gap-4 mt-3">
           <input
-            name="current"
-            value={form.current}
+            name="current_value"
+            value={form.current_value}
             onChange={handleChange}
             type="number"
             placeholder="Current"
-            className="input w-full bg-neutral-800 p-3 rounded-xl text-white"
+            className="input"
           />
           <input
-            name="target"
-            value={form.target}
+            name="target_value"
+            value={form.target_value}
             onChange={handleChange}
             type="number"
             placeholder="Target"
-            className="input w-full bg-neutral-800 p-3 rounded-xl text-white"
+            className="input"
           />
         </div>
-
-        <input
-          name="deadline"
-          type="date"
-          value={form.deadline}
-          onChange={handleChange}
-          className="input w-full bg-neutral-800 p-3 rounded-xl text-white mt-3"
-        />
 
         <button
           type="submit"
@@ -155,7 +112,7 @@ export default function GoalsPage() {
         </button>
       </form>
 
-      {/* GOAL LIST */}
+      {/* LIST */}
       {goals.length === 0 && (
         <div className="text-gray-500 text-center mt-10">
           No goals yet — add your first one!
