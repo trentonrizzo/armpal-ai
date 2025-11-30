@@ -6,9 +6,10 @@ import {
   addMeasurement,
   deleteMeasurement,
 } from "../api/measurements";
+import BottomSheet from "../components/BottomSheet";
 
 export default function MeasurementsPage() {
-  const [unitToggle, setUnitToggle] = useState("in"); // in or cm
+  const [unitToggle, setUnitToggle] = useState("in");
 
   // Default measurement fields
   const [bicep, setBicep] = useState("");
@@ -18,7 +19,7 @@ export default function MeasurementsPage() {
     new Date().toISOString().slice(0, 10)
   );
 
-  // Custom modal fields
+  // Bottom sheet modal fields
   const [showModal, setShowModal] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customValue, setCustomValue] = useState("");
@@ -27,10 +28,9 @@ export default function MeasurementsPage() {
     new Date().toISOString().slice(0, 10)
   );
 
-  // Loaded measurements
   const [measurements, setMeasurements] = useState([]);
 
-  // Load measurements on mount
+  // Load measurements
   useEffect(() => {
     const load = async () => {
       const {
@@ -45,24 +45,24 @@ export default function MeasurementsPage() {
     load();
   }, []);
 
-  // Group measurements by name
+  // Group by name
   const grouped = measurements.reduce((acc, m) => {
     if (!acc[m.name]) acc[m.name] = [];
     acc[m.name].push(m);
     return acc;
   }, {});
 
-  // Save all default measurements at once
+  // Save default measurements
   const handleSaveDefaults = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
 
-    const baseDate = defaultDate;
-
     const itemsToSave = [
-      { name: "Bicep", value: bicep, unit: unitToggle, date: baseDate },
-      { name: "Forearm", value: forearm, unit: unitToggle, date: baseDate },
-      { name: "Wrist", value: wrist, unit: unitToggle, date: baseDate },
+      { name: "Bicep", value: bicep, unit: unitToggle, date: defaultDate },
+      { name: "Forearm", value: forearm, unit: unitToggle, date: defaultDate },
+      { name: "Wrist", value: wrist, unit: unitToggle, date: defaultDate },
     ];
 
     for (const item of itemsToSave) {
@@ -87,7 +87,9 @@ export default function MeasurementsPage() {
 
   // Save custom measurement
   const handleSaveCustom = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
 
     if (!customName || !customValue) return;
@@ -100,7 +102,7 @@ export default function MeasurementsPage() {
       date: customDate,
     });
 
-    // Reset modal
+    // Reset
     setCustomName("");
     setCustomValue("");
     setCustomUnit("in");
@@ -117,12 +119,12 @@ export default function MeasurementsPage() {
 
   return (
     <div className="text-white p-4">
-      {/* Top title chip */}
+      {/* Title */}
       <div className="glass-chip mb-4 text-glow">
         <span className="glass-chip-dot" /> Measurements
       </div>
 
-      {/* Global unit toggle */}
+      {/* Unit Toggle */}
       <div className="flex gap-4 mb-4">
         <button
           onClick={() => setUnitToggle("in")}
@@ -147,7 +149,7 @@ export default function MeasurementsPage() {
         </button>
       </div>
 
-      {/* DEFAULT MEASUREMENTS */}
+      {/* Default Measurements */}
       <div className="glass-section mb-6 p-4 rounded-2xl">
         <div className="glass-chip mb-3 text-glow">
           <span className="glass-chip-dot" /> Default Measurements
@@ -186,7 +188,7 @@ export default function MeasurementsPage() {
           </div>
         </div>
 
-        {/* Date picker */}
+        {/* Date */}
         <div className="mb-4">
           <label className="neon-label">Date</label>
           <input
@@ -205,7 +207,7 @@ export default function MeasurementsPage() {
         </button>
       </div>
 
-      {/* CUSTOM MEASUREMENTS */}
+      {/* Custom Measurements header */}
       <div className="glass-section p-4 rounded-2xl mb-6">
         <div className="flex justify-between items-center">
           <div className="glass-chip text-glow">
@@ -221,7 +223,7 @@ export default function MeasurementsPage() {
         </div>
       </div>
 
-      {/* HISTORY */}
+      {/* History */}
       <div className="glass-section p-4 rounded-2xl">
         <div className="glass-chip mb-4 text-glow">
           <span className="glass-chip-dot" /> History
@@ -260,72 +262,68 @@ export default function MeasurementsPage() {
         )}
       </div>
 
-      {/* CUSTOM MODAL */}
-      {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-box">
-            <h3 className="text-xl font-bold mb-4">Add Custom Measurement</h3>
+      {/* 🔥 Bottom Sheet Modal */}
+      <BottomSheet open={showModal} onClose={() => setShowModal(false)}>
+        <h3 className="text-xl font-bold mb-4 text-white">Add Custom Measurement</h3>
 
-            <div className="mb-3">
-              <label className="neon-label">Name</label>
-              <input
-                type="text"
-                className="neon-input"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-              />
-            </div>
-
-            <div className="mb-3">
-              <label className="neon-label">Value</label>
-              <input
-                type="number"
-                className="neon-input"
-                value={customValue}
-                onChange={(e) => setCustomValue(e.target.value)}
-              />
-            </div>
-
-            <div className="mb-3">
-              <label className="neon-label">Unit</label>
-              <select
-                className="neon-input"
-                value={customUnit}
-                onChange={(e) => setCustomUnit(e.target.value)}
-              >
-                <option value="in">in</option>
-                <option value="cm">cm</option>
-              </select>
-            </div>
-
-            <div className="mb-3">
-              <label className="neon-label">Date</label>
-              <input
-                type="date"
-                className="neon-input"
-                value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
-              />
-            </div>
-
-            <div className="flex justify-between mt-4">
-              <button
-                className="px-4 py-2 bg-neutral-700 rounded-xl"
-                onClick={() => setShowModal(false)}
-              >
-                Cancel
-              </button>
-
-              <button
-                className="px-4 py-2 bg-red-600 rounded-xl"
-                onClick={handleSaveCustom}
-              >
-                Save
-              </button>
-            </div>
-          </div>
+        <div className="mb-3">
+          <label className="neon-label">Name</label>
+          <input
+            type="text"
+            className="neon-input w-full"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+          />
         </div>
-      )}
+
+        <div className="mb-3">
+          <label className="neon-label">Value</label>
+          <input
+            type="number"
+            className="neon-input w-full"
+            value={customValue}
+            onChange={(e) => setCustomValue(e.target.value)}
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Unit</label>
+          <select
+            className="neon-input w-full"
+            value={customUnit}
+            onChange={(e) => setCustomUnit(e.target.value)}
+          >
+            <option value="in">in</option>
+            <option value="cm">cm</option>
+          </select>
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Date</label>
+          <input
+            type="date"
+            className="neon-input w-full"
+            value={customDate}
+            onChange={(e) => setCustomDate(e.target.value)}
+          />
+        </div>
+
+        <div className="flex justify-between mt-4">
+          <button
+            className="px-4 py-2 bg-neutral-700 rounded-xl"
+            onClick={() => setShowModal(false)}
+          >
+            Cancel
+          </button>
+
+          <button
+            className="px-4 py-2 bg-red-600 rounded-xl"
+            onClick={handleSaveCustom}
+          >
+            Save
+          </button>
+        </div>
+      </BottomSheet>
     </div>
   );
 }
