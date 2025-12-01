@@ -8,7 +8,6 @@ export default function StrengthCalculator() {
   const calculate1RM = () => {
     if (!weight || !reps) return;
 
-    // Epley Formula
     const rm = Math.round(weight * (1 + reps / 30));
     setOneRM(rm);
   };
@@ -19,53 +18,65 @@ export default function StrengthCalculator() {
   return (
     <div className="p-5 text-white min-h-screen bg-black">
 
-      <h1 className="text-3xl font-bold text-red-500 mb-5">1RM Calculator</h1>
+      {/* Header Chip */}
+      <div className="glass-chip mb-5">
+        <span className="glass-chip-dot" /> Strength Calculator
+      </div>
 
-      {/* Input Card */}
-      <div className="bg-neutral-900/80 p-4 rounded-2xl border border-neutral-800 mb-6 shadow-lg">
-        <label className="block text-red-400 mb-1 font-semibold">Weight</label>
-        <input
-          className="w-full p-3 rounded-xl bg-neutral-800 border border-neutral-700 mb-3"
-          type="number"
-          value={weight}
-          onChange={(e) => setWeight(e.target.value)}
-        />
+      {/* Input Form */}
+      <div className="glass-card mb-6">
+        <h2 className="text-xl font-bold text-red-400 mb-4">Your Lift</h2>
 
-        <label className="block text-red-400 mb-1 font-semibold">Reps</label>
-        <input
-          className="w-full p-3 rounded-xl bg-neutral-800 border border-neutral-700 mb-4"
-          type="number"
-          value={reps}
-          onChange={(e) => setReps(e.target.value)}
-        />
+        <div className="mb-4">
+          <label className="neon-label">Weight</label>
+          <input
+            className="neon-input"
+            type="number"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            placeholder="Enter weight lifted"
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="neon-label">Reps</label>
+          <input
+            className="neon-input"
+            type="number"
+            value={reps}
+            onChange={(e) => setReps(e.target.value)}
+            placeholder="How many reps?"
+          />
+        </div>
 
         <button
           onClick={calculate1RM}
-          className="w-full p-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold shadow shadow-red-500/30"
+          className="w-full mt-2 py-3 bg-red-600 hover:bg-red-700 font-bold rounded-xl shadow shadow-red-500/40"
         >
-          Calculate
+          Calculate 1RM
         </button>
       </div>
 
-      {/* Results */}
       {oneRM && (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fadeIn">
 
-          {/* 1RM Display */}
-          <div className="bg-neutral-900/80 p-5 rounded-2xl border border-red-900 shadow-lg">
-            <h2 className="text-xl font-bold text-red-400 mb-2">Your Estimated 1RM</h2>
-            <p className="text-3xl font-bold">{oneRM} lbs</p>
+          {/* 1RM Result */}
+          <div className="glass-card">
+            <h2 className="text-xl font-bold text-red-400 mb-2">Estimated 1RM</h2>
+            <p className="text-4xl font-bold text-center mt-2">{oneRM} lbs</p>
           </div>
 
           {/* Percentages */}
-          <div className="bg-neutral-900/80 p-5 rounded-2xl border border-neutral-800 shadow-lg">
-            <h2 className="text-xl font-bold text-red-400 mb-3">Percentages Table</h2>
+          <div className="glass-card">
+            <h3 className="text-lg font-bold text-red-400 mb-4">Percentages</h3>
 
             <div className="space-y-2">
-              {percentages.map((p) => (
+              {percentages.map((p, i) => (
                 <div
                   key={p}
-                  className="flex justify-between bg-neutral-800 p-3 rounded-xl"
+                  className={`flex justify-between p-3 rounded-xl 
+                  ${i % 2 === 0 ? "bg-neutral-800/80" : "bg-neutral-900/80"} 
+                  border border-neutral-800`}
                 >
                   <span>{p}%</span>
                   <span className="font-bold">{Math.round(oneRM * (p / 100))} lbs</span>
@@ -75,14 +86,16 @@ export default function StrengthCalculator() {
           </div>
 
           {/* Rep Potential */}
-          <div className="bg-neutral-900/80 p-5 rounded-2xl border border-neutral-800 shadow-lg">
-            <h2 className="text-xl font-bold text-red-400 mb-3">Rep Potential</h2>
+          <div className="glass-card">
+            <h3 className="text-lg font-bold text-red-400 mb-4">Rep Potential</h3>
 
             <div className="space-y-2">
-              {repTable.map((r) => (
+              {repTable.map((r, i) => (
                 <div
                   key={r}
-                  className="flex justify-between bg-neutral-800 p-3 rounded-xl"
+                  className={`flex justify-between p-3 rounded-xl 
+                  ${i % 2 === 0 ? "bg-neutral-800/80" : "bg-neutral-900/80"}
+                  border border-neutral-800`}
                 >
                   <span>{r} reps</span>
                   <span className="font-bold">
@@ -94,22 +107,21 @@ export default function StrengthCalculator() {
           </div>
 
           {/* Training Zones */}
-          <div className="bg-neutral-900/80 p-5 rounded-2xl border border-neutral-800 shadow-lg">
-            <h2 className="text-xl font-bold text-red-400 mb-3">Training Zones</h2>
+          <div className="glass-card mb-10">
+            <h3 className="text-lg font-bold text-red-400 mb-4">Training Zones</h3>
 
-            <ul className="space-y-2">
-              <li className="bg-neutral-800 rounded-xl p-3">
-                <span className="font-bold text-red-400">Strength</span> — 85–100%
+            <ul className="space-y-3">
+              <li className="p-3 rounded-xl bg-neutral-800/80 border border-neutral-700">
+                <strong className="text-red-400">Strength:</strong> 85–100%
               </li>
-              <li className="bg-neutral-800 rounded-xl p-3">
-                <span className="font-bold text-red-400">Hypertrophy</span> — 65–85%
+              <li className="p-3 rounded-xl bg-neutral-800/80 border border-neutral-700">
+                <strong className="text-red-400">Hypertrophy:</strong> 65–85%
               </li>
-              <li className="bg-neutral-800 rounded-xl p-3">
-                <span className="font-bold text-red-400">Endurance</span> — 50–65%
+              <li className="p-3 rounded-xl bg-neutral-800/80 border border-neutral-700">
+                <strong className="text-red-400">Endurance:</strong> 50–65%
               </li>
             </ul>
           </div>
-
         </div>
       )}
     </div>
