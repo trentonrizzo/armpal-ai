@@ -1,15 +1,36 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
+import BottomSheet from "../components/BottomSheet";
+import { AppContext } from "../context/AppContext";
 
 export default function StrengthCalculator() {
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
   const [oneRM, setOneRM] = useState(null);
 
+  // PR Sheet
+  const [showPRSheet, setShowPRSheet] = useState(false);
+  const [prLiftName, setPrLiftName] = useState("");
+  const [prDate, setPrDate] = useState(new Date().toISOString().slice(0, 10));
+
+  const { createPR } = useContext(AppContext);
+
   const calculate1RM = () => {
     if (!weight || !reps) return;
 
     const rm = Math.round(weight * (1 + reps / 30));
     setOneRM(rm);
+  };
+
+  const savePR = async () => {
+    if (!prLiftName) {
+      alert("Enter a lift name.");
+      return;
+    }
+
+    await createPR(prLiftName, oneRM, "lbs", prDate);
+
+    setPrLiftName("");
+    setShowPRSheet(false);
   };
 
   const percentages = [95, 90, 85, 80, 75, 70, 65, 60, 55, 50];
@@ -57,17 +78,24 @@ export default function StrengthCalculator() {
         </button>
       </div>
 
+      {/* RESULTS */}
       {oneRM && (
-        <div className="space-y-6 animate-fadeIn">
-
-          {/* 1RM Result */}
-          <div className="glass-card">
+        <>
+          <div className="glass-card mb-6">
             <h2 className="text-xl font-bold text-red-400 mb-2">Estimated 1RM</h2>
             <p className="text-4xl font-bold text-center mt-2">{oneRM} lbs</p>
+
+            {/* ⭐ Save as PR Button */}
+            <button
+              onClick={() => setShowPRSheet(true)}
+              className="w-full mt-4 py-2 bg-neutral-800 border border-red-700 rounded-xl hover:bg-neutral-700"
+            >
+              Save as PR
+            </button>
           </div>
 
           {/* Percentages */}
-          <div className="glass-card">
+          <div className="glass-card mb-6">
             <h3 className="text-lg font-bold text-red-400 mb-4">Percentages</h3>
 
             <div className="space-y-2">
@@ -86,7 +114,7 @@ export default function StrengthCalculator() {
           </div>
 
           {/* Rep Potential */}
-          <div className="glass-card">
+          <div className="glass-card mb-6">
             <h3 className="text-lg font-bold text-red-400 mb-4">Rep Potential</h3>
 
             <div className="space-y-2">
@@ -107,7 +135,7 @@ export default function StrengthCalculator() {
           </div>
 
           {/* Training Zones */}
-          <div className="glass-card mb-10">
+          <div className="glass-card mb-16">
             <h3 className="text-lg font-bold text-red-400 mb-4">Training Zones</h3>
 
             <ul className="space-y-3">
@@ -122,8 +150,65 @@ export default function StrengthCalculator() {
               </li>
             </ul>
           </div>
-        </div>
+        </>
       )}
+
+      {/* ⭐ BOTTOM SHEET: SAVE PR */}
+      <BottomSheet open={showPRSheet} onClose={() => setShowPRSheet(false)}>
+        <h2 className="text-xl font-bold text-white mb-4">Save as PR</h2>
+
+        <div className="mb-3">
+          <label className="neon-label">Lift Name</label>
+          <input
+            className="neon-input"
+            type="text"
+            value={prLiftName}
+            onChange={(e) => setPrLiftName(e.target.value)}
+            placeholder="Bench, Squat, Deadlift..."
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Weight (1RM)</label>
+          <input
+            className="neon-input"
+            type="number"
+            value={oneRM}
+            readOnly
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Unit</label>
+          <input className="neon-input" type="text" value="lbs" readOnly />
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Date</label>
+          <input
+            className="neon-input"
+            type="date"
+            value={prDate}
+            onChange={(e) => setPrDate(e.target.value)}
+          />
+        </div>
+
+        <div className="flex justify-between mt-6">
+          <button
+            className="px-4 py-2 bg-neutral-700 rounded-xl"
+            onClick={() => setShowPRSheet(false)}
+          >
+            Cancel
+          </button>
+
+          <button
+            className="px-4 py-2 bg-red-600 rounded-xl"
+            onClick={savePR}
+          >
+            Save PR
+          </button>
+        </div>
+      </BottomSheet>
     </div>
   );
 }
