@@ -3,11 +3,7 @@ import { AppContext } from "../context/AppContext";
 import { Link } from "react-router-dom";
 
 const PRsPage = () => {
-  const {
-    prs,
-    createPR,
-    removePR
-  } = useContext(AppContext);
+  const { prs, createPR, removePR } = useContext(AppContext);
 
   const [liftName, setLiftName] = useState("");
   const [weight, setWeight] = useState("");
@@ -31,63 +27,73 @@ const PRsPage = () => {
   };
 
   return (
-    <div className="p-6 text-white min-h-screen">
-      <h1 className="text-3xl font-bold text-red-500 mb-4">Personal Records</h1>
+    <div className="p-6 text-white min-h-screen bg-black">
+
+      {/* PAGE CHIP */}
+      <div className="glass-chip mb-4">
+        <span className="glass-chip-dot" /> Personal Records
+      </div>
 
       {/* 🔥 Strength Calculator Button */}
-      <Link to="/strength">
-        <button className="
-          w-full mb-6 py-3 
-          bg-red-600 hover:bg-red-700 
-          rounded-xl font-bold text-white 
-          shadow shadow-red-500/40
-        ">
+      <Link to="/strength-calculator">
+        <button className="w-full mb-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow shadow-red-500/40">
           🔥 1RM & Strength Calculator
         </button>
       </Link>
 
-      {/* Add PR form */}
-      <div className="bg-neutral-900 p-4 rounded-xl mb-6 border border-neutral-800">
-        <h2 className="text-lg font-semibold mb-2 text-red-400">
-          Add New PR
-        </h2>
+      {/* Add PR Form */}
+      <div className="glass-card mb-6">
+        <h2 className="text-lg font-semibold mb-2 text-red-400">Add New PR</h2>
 
-        <div className="flex flex-col gap-3">
-          <input
-            type="text"
-            placeholder="Lift Name (Bench, Squat, etc.)"
-            className="p-2 rounded bg-neutral-800"
-            value={liftName}
-            onChange={(e) => setLiftName(e.target.value)}
-          />
+        <div className="flex flex-col gap-4 mt-3">
 
-          <input
-            type="number"
-            placeholder="Weight"
-            className="p-2 rounded bg-neutral-800"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-          />
+          <div>
+            <label className="neon-label">Lift Name</label>
+            <input
+              type="text"
+              placeholder="Bench Press, Squat, Curl..."
+              className="neon-input"
+              value={liftName}
+              onChange={(e) => setLiftName(e.target.value)}
+            />
+          </div>
 
-          <select
-            className="p-2 rounded bg-neutral-800"
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-          >
-            <option value="lbs">lbs</option>
-            <option value="kg">kg</option>
-          </select>
+          <div>
+            <label className="neon-label">Weight</label>
+            <input
+              type="number"
+              placeholder="Weight"
+              className="neon-input"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+            />
+          </div>
 
-          <input
-            type="date"
-            className="p-2 rounded bg-neutral-800"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <div>
+            <label className="neon-label">Unit</label>
+            <select
+              className="neon-input"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+            >
+              <option value="lbs">lbs</option>
+              <option value="kg">kg</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="neon-label">Date</label>
+            <input
+              type="date"
+              className="neon-input"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
 
           <button
             onClick={handleAddPR}
-            className="bg-red-600 hover:bg-red-700 p-2 rounded font-bold"
+            className="bg-red-600 hover:bg-red-700 p-3 rounded-xl font-bold shadow shadow-red-500/40"
           >
             Add PR
           </button>
@@ -98,11 +104,11 @@ const PRsPage = () => {
       {prs.length === 0 ? (
         <p className="text-neutral-400">No PRs yet. Add one above.</p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-3 mb-20">
           {prs.map((p) => (
             <li
               key={p.id}
-              className="bg-neutral-900 border border-neutral-800 p-4 rounded-xl flex justify-between items-center"
+              className="glass-card flex justify-between items-center py-4 px-4"
             >
               <div>
                 <p className="text-lg font-bold text-red-400">{p.lift_name}</p>
