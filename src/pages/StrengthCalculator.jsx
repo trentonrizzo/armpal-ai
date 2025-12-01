@@ -1,0 +1,172 @@
+import React, { useState } from "react";
+
+export default function StrengthCalculator() {
+  const [weight, setWeight] = useState("");
+  const [reps, setReps] = useState("");
+
+  const [oneRM, setOneRM] = useState(null);
+
+  // Toggles
+  const [showPercentages, setShowPercentages] = useState(true);
+  const [showReps, setShowReps] = useState(true);
+  const [showZones, setShowZones] = useState(true);
+
+  const calculate1RM = () => {
+    if (!weight || !reps) return;
+
+    const w = parseFloat(weight);
+    const r = parseFloat(reps);
+
+    // Epley formula
+    const rm = w * (1 + r / 30);
+
+    setOneRM(parseFloat(rm.toFixed(1)));
+  };
+
+  // Helper: percent value
+  const percent = (pct) =>
+    oneRM ? Math.round(oneRM * pct) : 0;
+
+  // Helper: rep potential
+  const repMax = (r) =>
+    Math.round(oneRM / (1 + r / 30));
+
+  return (
+    <div className="text-white p-4 pb-24">
+      
+      {/* 🔥 TITLE */}
+      <div className="glass-chip mb-4 text-glow">
+        <span className="glass-chip-dot" /> Strength Calculator
+      </div>
+
+      {/* Input Section */}
+      <div className="glass-section p-4 rounded-2xl mb-6">
+        <h2 className="text-xl font-bold mb-4">Enter Your Lift</h2>
+
+        <div className="mb-4">
+          <label className="neon-label">Weight Lifted</label>
+          <input
+            type="number"
+            className="neon-input w-full"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="neon-label">Reps Performed</label>
+          <input
+            type="number"
+            className="neon-input w-full"
+            value={reps}
+            onChange={(e) => setReps(e.target.value)}
+          />
+        </div>
+
+        <button
+          onClick={calculate1RM}
+          className="px-5 py-2 bg-red-600 rounded-xl w-full mt-2 shadow shadow-red-500/40"
+        >
+          Calculate 1RM
+        </button>
+
+        {oneRM && (
+          <p className="mt-4 text-lg font-bold text-red-400">
+            Estimated 1RM: {oneRM} lbs
+          </p>
+        )}
+      </div>
+
+      {/* Toggles */}
+      <div className="glass-section p-4 rounded-2xl mb-6">
+        <h2 className="text-lg font-semibold mb-3">Display Options</h2>
+
+        <div className="flex flex-col gap-3">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={showPercentages}
+              onChange={() => setShowPercentages(!showPercentages)}
+            />
+            Show % Table
+          </label>
+
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={showReps}
+              onChange={() => setShowReps(!showReps)}
+            />
+            Show Rep Potential
+          </label>
+
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={showZones}
+              onChange={() => setShowZones(!showZones)}
+            />
+            Show Training Zones
+          </label>
+        </div>
+      </div>
+
+      {/* ⭐ Percentages Table */}
+      {showPercentages && oneRM && (
+        <div className="glass-section p-4 rounded-2xl mb-6">
+          <h2 className="text-lg font-bold mb-3">Percentages Table</h2>
+
+          <div className="space-y-2">
+            {[95, 90, 85, 80, 75, 70, 65, 60, 55, 50].map((p) => (
+              <div
+                key={p}
+                className="flex justify-between bg-neutral-900/70 p-2 rounded-xl border border-red-900/40"
+              >
+                <span>{p}%</span>
+                <span>{percent(p / 100)} lbs</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ⭐ Rep Potential */}
+      {showReps && oneRM && (
+        <div className="glass-section p-4 rounded-2xl mb-6">
+          <h2 className="text-lg font-bold mb-3">Rep Potential</h2>
+
+          <div className="space-y-2">
+            {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((r) => (
+              <div
+                key={r}
+                className="flex justify-between bg-neutral-900/70 p-2 rounded-xl border border-red-900/40"
+              >
+                <span>{r} reps</span>
+                <span>{repMax(r)} lbs</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ⭐ Training Zones */}
+      {showZones && oneRM && (
+        <div className="glass-section p-4 rounded-2xl mb-6">
+          <h2 className="text-lg font-bold mb-3">Training Zones</h2>
+
+          <ul className="space-y-3">
+            <li className="bg-neutral-900/70 p-3 rounded-xl border border-red-900/40">
+              <strong>Hypertrophy (65–80%)</strong> — {percent(0.65)} to {percent(0.8)} lbs
+            </li>
+            <li className="bg-neutral-900/70 p-3 rounded-xl border border-red-900/40">
+              <strong>Strength (80–90%)</strong> — {percent(0.8)} to {percent(0.9)} lbs
+            </li>
+            <li className="bg-neutral-900/70 p-3 rounded-xl border border-red-900/40">
+              <strong>Power (90–100%)</strong> — {percent(0.9)} to {percent(1.0)} lbs
+            </li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -23,6 +23,9 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 
+// ⭐ NEW PAGE: Strength Calculator
+import StrengthCalculator from "./pages/StrengthCalculator";
+
 // NEW: Bottom NavBar
 import BottomNav from "./components/BottomNav/BottomNav";
 
@@ -108,6 +111,9 @@ export default function App() {
           <Route path="/workoutlogger" element={<WorkoutLogger />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/goals" element={<GoalsPage />} />
+
+          {/* ⭐ NEW: Strength Calculator */}
+          <Route path="/strength-calculator" element={<StrengthCalculator />} />
         </Routes>
 
         {/* GLOBAL BOTTOM NAVBAR */}
