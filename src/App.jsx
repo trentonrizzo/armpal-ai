@@ -113,7 +113,7 @@ export default function App() {
           <Route path="/goals" element={<GoalsPage />} />
 
           {/* ⭐ NEW: Strength Calculator */}
-          <Route path="/strength" element={<StrengthCalculator />} />
+          <Route path="/strength-calculator" element={<StrengthCalculator />} />
         </Routes>
 
         {/* GLOBAL BOTTOM NAVBAR */}
