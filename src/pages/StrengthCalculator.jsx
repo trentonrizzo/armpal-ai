@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useMemo } from "react";
 import BottomSheet from "../components/BottomSheet";
 import { AppContext } from "../context/AppContext";
 
@@ -6,21 +6,47 @@ export default function StrengthCalculator() {
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
   const [oneRM, setOneRM] = useState(null);
+  const [liftName, setLiftName] = useState("");
 
-  // PR Sheet
+  // Bottom Sheet
   const [showPRSheet, setShowPRSheet] = useState(false);
   const [prLiftName, setPrLiftName] = useState("");
   const [prDate, setPrDate] = useState(new Date().toISOString().slice(0, 10));
 
-  const { createPR } = useContext(AppContext);
+  const { prs, createPR } = useContext(AppContext);
 
+  // -------------------------------
+  //  1RM Calculator (Epley Formula)
+  // -------------------------------
   const calculate1RM = () => {
     if (!weight || !reps) return;
-
     const rm = Math.round(weight * (1 + reps / 30));
     setOneRM(rm);
   };
 
+  // ----------------------------------
+  //  Strict-but-loose PR Match (Option 3)
+  // ----------------------------------
+  const matchedPR = useMemo(() => {
+    if (!liftName) return null;
+    const target = liftName.toLowerCase().trim();
+
+    return prs.find((p) => {
+      const name = p.lift_name.toLowerCase();
+      const targetWords = target.split(" ");
+      const nameWords = name.split(" ");
+
+      // Rule: full-word containment either direction
+      return (
+        targetWords.some((w) => nameWords.includes(w)) ||
+        nameWords.some((w) => targetWords.includes(w))
+      );
+    });
+  }, [liftName, prs]);
+
+  // ----------------------------------
+  //  Save PR from Bottom Sheet
+  // ----------------------------------
   const savePR = async () => {
     if (!prLiftName) {
       alert("Enter a lift name.");
@@ -47,6 +73,16 @@ export default function StrengthCalculator() {
       {/* Input Form */}
       <div className="glass-card mb-6">
         <h2 className="text-xl font-bold text-red-400 mb-4">Your Lift</h2>
+
+        <div className="mb-4">
+          <label className="neon-label">Lift Name</label>
+          <input
+            className="neon-input"
+            value={liftName}
+            onChange={(e) => setLiftName(e.target.value)}
+            placeholder="Bench, Squat, Curl..."
+          />
+        </div>
 
         <div className="mb-4">
           <label className="neon-label">Weight</label>
@@ -85,9 +121,56 @@ export default function StrengthCalculator() {
             <h2 className="text-xl font-bold text-red-400 mb-2">Estimated 1RM</h2>
             <p className="text-4xl font-bold text-center mt-2">{oneRM} lbs</p>
 
-            {/* ⭐ Save as PR Button */}
+            {/* ⭐ PR Comparison Section */}
+            <div className="mt-5 p-4 rounded-xl bg-neutral-950/70 border border-neutral-700">
+              {matchedPR ? (
+                <div>
+                  <p className="text-lg text-red-300 font-semibold mb-2">
+                    Comparison to Current PR
+                  </p>
+
+                  <p className="text-neutral-300">
+                    Current PR:{" "}
+                    <span className="font-bold text-white">{matchedPR.weight} lbs</span>
+                  </p>
+
+                  <p className="text-neutral-300">
+                    Your 1RM:{" "}
+                    <span className="font-bold text-white">{oneRM} lbs</span>
+                  </p>
+
+                  <p className="mt-1 font-bold">
+                    Difference:{" "}
+                    <span
+                      className={
+                        oneRM > matchedPR.weight
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }
+                    >
+                      {oneRM - matchedPR.weight} lbs
+                    </span>
+                  </p>
+
+                  {oneRM > matchedPR.weight && (
+                    <div className="mt-3 py-2 px-3 bg-red-600 rounded-lg text-center font-bold shadow shadow-red-500/40">
+                      🔥 NEW PR POSSIBLE!
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-neutral-400 text-sm">
+                  No PR found for this lift yet.
+                </p>
+              )}
+            </div>
+
+            {/* Save as PR */}
             <button
-              onClick={() => setShowPRSheet(true)}
+              onClick={() => {
+                setPrLiftName(liftName);
+                setShowPRSheet(true);
+              }}
               className="w-full mt-4 py-2 bg-neutral-800 border border-red-700 rounded-xl hover:bg-neutral-700"
             >
               Save as PR
@@ -103,11 +186,13 @@ export default function StrengthCalculator() {
                 <div
                   key={p}
                   className={`flex justify-between p-3 rounded-xl 
-                  ${i % 2 === 0 ? "bg-neutral-800/80" : "bg-neutral-900/80"} 
-                  border border-neutral-800`}
+                    ${i % 2 === 0 ? "bg-neutral-800/80" : "bg-neutral-900/80"} 
+                    border border-neutral-800`}
                 >
                   <span>{p}%</span>
-                  <span className="font-bold">{Math.round(oneRM * (p / 100))} lbs</span>
+                  <span className="font-bold">
+                    {Math.round(oneRM * (p / 100))} lbs
+                  </span>
                 </div>
               ))}
             </div>
@@ -122,8 +207,8 @@ export default function StrengthCalculator() {
                 <div
                   key={r}
                   className={`flex justify-between p-3 rounded-xl 
-                  ${i % 2 === 0 ? "bg-neutral-800/80" : "bg-neutral-900/80"}
-                  border border-neutral-800`}
+                    ${i % 2 === 0 ? "bg-neutral-800/80" : "bg-neutral-900/80"}
+                    border border-neutral-800`}
                 >
                   <span>{r} reps</span>
                   <span className="font-bold">
@@ -153,7 +238,7 @@ export default function StrengthCalculator() {
         </>
       )}
 
-      {/* ⭐ BOTTOM SHEET: SAVE PR */}
+      {/* ⭐ Bottom Sheet to Save PR */}
       <BottomSheet open={showPRSheet} onClose={() => setShowPRSheet(false)}>
         <h2 className="text-xl font-bold text-white mb-4">Save as PR</h2>
 
@@ -164,7 +249,6 @@ export default function StrengthCalculator() {
             type="text"
             value={prLiftName}
             onChange={(e) => setPrLiftName(e.target.value)}
-            placeholder="Bench, Squat, Deadlift..."
           />
         </div>
 
