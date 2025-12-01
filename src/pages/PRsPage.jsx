@@ -1,134 +1,213 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useMemo } from "react";
 import { AppContext } from "../context/AppContext";
 import { Link } from "react-router-dom";
 
-const PRsPage = () => {
-  const { prs, createPR, removePR } = useContext(AppContext);
+// HAPTICS (safe for mobile PWA)
+const vibrate = (ms = 15) => {
+  if (navigator.vibrate) navigator.vibrate(ms);
+};
 
-  const [liftName, setLiftName] = useState("");
-  const [weight, setWeight] = useState("");
-  const [unit, setUnit] = useState("lbs");
-  const [date, setDate] = useState("");
+export default function PRsPage() {
+  const { prs, removePR, createPR } = useContext(AppContext);
 
-  const handleAddPR = async () => {
-    if (!liftName || !weight) {
-      alert("Enter lift name and weight.");
-      return;
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [sortMode, setSortMode] = useState(
+    localStorage.getItem("pr-sort-mode") || "recent"
+  );
+
+  const toggleSortMode = () => {
+    const newMode = sortMode === "recent" ? "alpha" : "recent";
+    setSortMode(newMode);
+    localStorage.setItem("pr-sort-mode", newMode);
+  };
+
+  // GROUP PRs BY LIFT NAME
+  const grouped = useMemo(() => {
+    const groups = {};
+
+    prs.forEach((p) => {
+      if (!groups[p.lift_name]) groups[p.lift_name] = [];
+      groups[p.lift_name].push(p);
+    });
+
+    return groups;
+  }, [prs]);
+
+  // SORT GROUPS
+  const sortedGroupKeys = useMemo(() => {
+    const keys = Object.keys(grouped);
+
+    if (sortMode === "alpha") {
+      return keys.sort((a, b) => a.localeCompare(b));
     }
 
-    const prDate = date || new Date().toISOString().split("T")[0];
+    // RECENT FIRST
+    return keys.sort((a, b) => {
+      const newestA = grouped[a].sort(
+        (x, y) => new Date(y.date) - new Date(x.date)
+      )[0];
+      const newestB = grouped[b].sort(
+        (x, y) => new Date(y.date) - new Date(x.date)
+      )[0];
+      return new Date(newestB.date) - new Date(newestA.date);
+    });
+  }, [grouped, sortMode]);
 
-    await createPR(liftName, weight, unit, prDate);
-
-    setLiftName("");
-    setWeight("");
-    setUnit("lbs");
-    setDate("");
+  // TOGGLE GROUP OPEN/CLOSED
+  const toggleGroup = (liftName) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [liftName]: !prev[liftName],
+    }));
   };
 
   return (
-    <div className="p-6 text-white min-h-screen bg-black">
+    <div className="p-5 text-white min-h-screen">
 
-      {/* PAGE CHIP */}
-      <div className="glass-chip mb-4">
-        <span className="glass-chip-dot" /> Personal Records
-      </div>
+      {/* Title */}
+      <h1 className="text-3xl font-bold text-red-500 mb-4">Personal Records</h1>
 
-      {/* 🔥 Strength Calculator Button */}
+      {/* Strength Calculator button */}
       <Link to="/strength-calculator">
         <button className="w-full mb-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow shadow-red-500/40">
           🔥 1RM & Strength Calculator
         </button>
       </Link>
 
-      {/* Add PR Form */}
-      <div className="glass-card mb-6">
-        <h2 className="text-lg font-semibold mb-2 text-red-400">Add New PR</h2>
-
-        <div className="flex flex-col gap-4 mt-3">
-
-          <div>
-            <label className="neon-label">Lift Name</label>
-            <input
-              type="text"
-              placeholder="Bench Press, Squat, Curl..."
-              className="neon-input"
-              value={liftName}
-              onChange={(e) => setLiftName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="neon-label">Weight</label>
-            <input
-              type="number"
-              placeholder="Weight"
-              className="neon-input"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="neon-label">Unit</label>
-            <select
-              className="neon-input"
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-            >
-              <option value="lbs">lbs</option>
-              <option value="kg">kg</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="neon-label">Date</label>
-            <input
-              type="date"
-              className="neon-input"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-
-          <button
-            onClick={handleAddPR}
-            className="bg-red-600 hover:bg-red-700 p-3 rounded-xl font-bold shadow shadow-red-500/40"
-          >
-            Add PR
-          </button>
-        </div>
+      {/* SORT TOGGLE */}
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={toggleSortMode}
+          className="px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-sm"
+        >
+          Sort:{" "}
+          {sortMode === "recent" ? "Recent ▼" : "A–Z ▼"}
+        </button>
       </div>
 
-      {/* Show PR list */}
-      {prs.length === 0 ? (
-        <p className="text-neutral-400">No PRs yet. Add one above.</p>
-      ) : (
-        <ul className="space-y-3 mb-20">
-          {prs.map((p) => (
-            <li
-              key={p.id}
-              className="glass-card flex justify-between items-center py-4 px-4"
-            >
-              <div>
-                <p className="text-lg font-bold text-red-400">{p.lift_name}</p>
-                <p className="text-neutral-300 text-sm">
-                  {p.weight} {p.unit} — {p.date}
-                </p>
-              </div>
-
-              <button
-                onClick={() => removePR(p.id)}
-                className="bg-red-700 hover:bg-red-800 p-2 rounded"
-              >
-                ❌
-              </button>
-            </li>
-          ))}
-        </ul>
+      {/* NO PRS */}
+      {prs.length === 0 && (
+        <p className="text-neutral-400">No PRs yet. Add one using the calculator.</p>
       )}
+
+      {/* GROUPED PRs */}
+      <div className="space-y-4">
+        {sortedGroupKeys.map((lift) => {
+          const isOpen = expandedGroups[lift];
+          const items = grouped[lift].sort(
+            (a, b) => new Date(b.date) - new Date(a.date)
+          );
+
+          // Newest PR in group
+          const newest = items[0];
+
+          return (
+            <div
+              key={lift}
+              className="glass-card border border-neutral-800 rounded-xl"
+            >
+              {/* Group Header */}
+              <button
+                onClick={() => toggleGroup(lift)}
+                className="w-full flex justify-between items-center py-3"
+              >
+                <div>
+                  <p className="text-xl font-bold text-red-400">{lift}</p>
+                  <p className="text-neutral-400 text-sm">
+                    Latest: {newest.weight} {newest.unit} — {newest.date}
+                  </p>
+                </div>
+
+                {/* Chevron */}
+                <span
+                  className={`transition-transform text-xl ${
+                    isOpen ? "rotate-180" : ""
+                  }`}
+                >
+                  ▼
+                </span>
+              </button>
+
+              {/* Collapsible Body */}
+              {isOpen && (
+                <div className="mt-3 space-y-3">
+                  {items.map((p) => (
+                    <PRSwipeItem key={p.id} pr={p} removePR={removePR} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
-};
+}
 
-export default PRsPage;
+/* -------------------------------
+   SWIPE-TO-DELETE COMPONENT
+--------------------------------*/
+function PRSwipeItem({ pr, removePR }) {
+  const [offset, setOffset] = useState(0);
+  const [startX, setStartX] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleStart = (e) => {
+    setStartX(e.touches ? e.touches[0].clientX : e.clientX);
+  };
+
+  const handleMove = (e) => {
+    if (startX === null) return;
+
+    const currentX = e.touches ? e.touches[0].clientX : e.clientX;
+    const diff = currentX - startX;
+
+    if (diff < 0) {
+      setOffset(Math.max(diff, -90));
+    }
+  };
+
+  const handleEnd = () => {
+    if (offset <= -70) {
+      vibrate(25);
+      setOffset(-90);
+      setConfirmDelete(true);
+    } else {
+      setOffset(0);
+      setConfirmDelete(false);
+    }
+    setStartX(null);
+  };
+
+  return (
+    <div className="relative overflow-hidden">
+      {/* DELETE BUTTON */}
+      <button
+        onClick={() => {
+          vibrate(40);
+          removePR(pr.id);
+        }}
+        className="absolute right-0 top-0 h-full w-[90px] bg-red-700 text-white font-bold flex items-center justify-center"
+      >
+        Delete
+      </button>
+
+      {/* SWIPE CARD */}
+      <div
+        className="bg-neutral-900 border border-neutral-800 p-4 rounded-xl transition-all"
+        style={{ transform: `translateX(${offset}px)` }}
+        onMouseDown={handleStart}
+        onMouseMove={handleMove}
+        onMouseUp={handleEnd}
+        onTouchStart={handleStart}
+        onTouchMove={handleMove}
+        onTouchEnd={handleEnd}
+      >
+        <p className="text-lg font-bold text-red-400">{pr.lift_name}</p>
+        <p className="text-neutral-300 text-sm">
+          {pr.weight} {pr.unit} — {pr.date}
+        </p>
+      </div>
+    </div>
+  );
+}
