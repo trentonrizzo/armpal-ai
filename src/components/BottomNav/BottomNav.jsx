@@ -38,7 +38,8 @@ const BottomNav = () => {
         )}
       </NavLink>
 
-      <NavLink to="/prs" className="nav-item">
+      {/* ⭐ FIXED ROUTE HERE */}
+      <NavLink to="/prslist" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
             {isActive && <div className="active-glow"></div>}
