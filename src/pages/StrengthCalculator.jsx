@@ -1,9 +1,11 @@
 import React, { useState } from "react";
+import BottomSheet from "../components/BottomSheet";
+import { AppContext } from "../context/AppContext";
+import { useContext } from "react";
 
 export default function StrengthCalculator() {
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
-
   const [oneRM, setOneRM] = useState(null);
 
   // Toggles
@@ -11,25 +13,37 @@ export default function StrengthCalculator() {
   const [showReps, setShowReps] = useState(true);
   const [showZones, setShowZones] = useState(true);
 
+  // Bottom sheet state (Save PR)
+  const [showSaveSheet, setShowSaveSheet] = useState(false);
+  const [prLiftName, setPrLiftName] = useState("");
+  const [prDate, setPrDate] = useState(new Date().toISOString().slice(0, 10));
+
+  const { createPR } = useContext(AppContext);
+
   const calculate1RM = () => {
     if (!weight || !reps) return;
 
     const w = parseFloat(weight);
     const r = parseFloat(reps);
 
-    // Epley formula
     const rm = w * (1 + r / 30);
-
     setOneRM(parseFloat(rm.toFixed(1)));
   };
 
-  // Helper: percent value
-  const percent = (pct) =>
-    oneRM ? Math.round(oneRM * pct) : 0;
+  const percent = (pct) => (oneRM ? Math.round(oneRM * pct) : 0);
+  const repMax = (r) => Math.round(oneRM / (1 + r / 30));
 
-  // Helper: rep potential
-  const repMax = (r) =>
-    Math.round(oneRM / (1 + r / 30));
+  const savePR = async () => {
+    if (!prLiftName) {
+      alert("Enter a lift name.");
+      return;
+    }
+
+    await createPR(prLiftName, oneRM, "lbs", prDate);
+
+    setPrLiftName("");
+    setShowSaveSheet(false);
+  };
 
   return (
     <div className="text-white p-4 pb-24">
@@ -71,9 +85,19 @@ export default function StrengthCalculator() {
         </button>
 
         {oneRM && (
-          <p className="mt-4 text-lg font-bold text-red-400">
-            Estimated 1RM: {oneRM} lbs
-          </p>
+          <div className="mt-4">
+            <p className="text-lg font-bold text-red-400">
+              Estimated 1RM: {oneRM} lbs
+            </p>
+
+            {/* 🔥 Save as PR Button */}
+            <button
+              className="mt-3 w-full bg-neutral-800 border border-red-700 hover:bg-neutral-700 py-2 rounded-xl"
+              onClick={() => setShowSaveSheet(true)}
+            >
+              Save as PR
+            </button>
+          </div>
         )}
       </div>
 
@@ -167,6 +191,67 @@ export default function StrengthCalculator() {
           </ul>
         </div>
       )}
+
+      {/* 🔥 SAVE PR BOTTOM SHEET */}
+      <BottomSheet open={showSaveSheet} onClose={() => setShowSaveSheet(false)}>
+        <h3 className="text-xl font-bold mb-4 text-white">Save as PR</h3>
+
+        <div className="mb-3">
+          <label className="neon-label">Lift Name</label>
+          <input
+            type="text"
+            className="neon-input w-full"
+            value={prLiftName}
+            onChange={(e) => setPrLiftName(e.target.value)}
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Weight (1RM)</label>
+          <input
+            type="number"
+            className="neon-input w-full"
+            value={oneRM}
+            readOnly
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Unit</label>
+          <input
+            type="text"
+            value="lbs"
+            readOnly
+            className="neon-input w-full"
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="neon-label">Date</label>
+          <input
+            type="date"
+            className="neon-input w-full"
+            value={prDate}
+            onChange={(e) => setPrDate(e.target.value)}
+          />
+        </div>
+
+        <div className="flex justify-between mt-4">
+          <button
+            className="px-4 py-2 bg-neutral-700 rounded-xl"
+            onClick={() => setShowSaveSheet(false)}
+          >
+            Cancel
+          </button>
+
+          <button
+            className="px-4 py-2 bg-red-600 rounded-xl"
+            onClick={savePR}
+          >
+            Save PR
+          </button>
+        </div>
+      </BottomSheet>
     </div>
   );
 }

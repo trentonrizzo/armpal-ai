@@ -35,15 +35,22 @@ const PRsPage = () => {
       <h1 className="text-3xl font-bold text-red-500 mb-4">Personal Records</h1>
 
       {/* 🔥 Strength Calculator Button */}
-      <Link to="/strength-calculator">
-        <button className="w-full mb-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-bold text-white shadow shadow-red-500/40">
+      <Link to="/strength">
+        <button className="
+          w-full mb-6 py-3 
+          bg-red-600 hover:bg-red-700 
+          rounded-xl font-bold text-white 
+          shadow shadow-red-500/40
+        ">
           🔥 1RM & Strength Calculator
         </button>
       </Link>
 
       {/* Add PR form */}
       <div className="bg-neutral-900 p-4 rounded-xl mb-6 border border-neutral-800">
-        <h2 className="text-lg font-semibold mb-2 text-red-400">Add New PR</h2>
+        <h2 className="text-lg font-semibold mb-2 text-red-400">
+          Add New PR
+        </h2>
 
         <div className="flex flex-col gap-3">
           <input
