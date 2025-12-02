@@ -93,6 +93,7 @@ export default function App() {
 
           {/* THE ONLY PR PAGE NOW */}
           <Route path="/prs" element={<PRTracker />} />
+          <Route path="/prslist" element={<PRTracker />} /> {/* FIXED ROUTE */}
 
           <Route path="/measure" element={<MeasurementsPage />} />
           <Route path="/workouts" element={<WorkoutsPage />} />

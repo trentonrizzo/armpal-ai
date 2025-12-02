@@ -1,3 +1,4 @@
+// src/context/AppContext.jsx
 import React, { createContext, useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 
@@ -17,7 +18,9 @@ import {
 import {
   getPRs,
   addPR,
-  deletePR
+  deletePR,
+  updatePR,
+  updatePROrder
 } from "../api/prs";
 
 import {
@@ -37,103 +40,101 @@ export const AppProvider = ({ children }) => {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  // 🔥 Load user from Supabase Auth
+  // ---------------------------
+  // AUTH: Load User
+  // ---------------------------
   useEffect(() => {
     async function loadUser() {
       const { data } = await supabase.auth.getUser();
-
       if (data?.user) setUser(data.user);
-
       setIsLoading(false);
     }
 
     loadUser();
 
-    // Auth listener
-    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user ?? null);
-    });
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_, session) => setUser(session?.user ?? null)
+    );
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // 🔥 Load all data when user logs in
+  // ---------------------------
+  // Load All Data After Login
+  // ---------------------------
   useEffect(() => {
     if (!user) return;
 
     async function loadAllData() {
       const uid = user.id;
 
-      setWorkouts(await getWorkoutsWithExercises(uid) || []);
-      setPRs(await getPRs(uid) || []);
-      setMeasurements(await getMeasurements(uid) || []);
+      setWorkouts((await getWorkoutsWithExercises(uid)) || []);
+      setPRs((await getPRs(uid)) || []);
+      setMeasurements((await getMeasurements(uid)) || []);
     }
 
     loadAllData();
   }, [user]);
 
-  // 🔥 Refreshers
+  // ---------------------------
+  // Refresh Helpers
+  // ---------------------------
   async function refreshWorkouts() {
     if (!user) return;
-    const data = await getWorkoutsWithExercises(user.id);
-    setWorkouts(data || []);
+    setWorkouts((await getWorkoutsWithExercises(user.id)) || []);
   }
 
   async function refreshPRs() {
     if (!user) return;
-    const data = await getPRs(user.id);
-    setPRs(data || []);
+    setPRs((await getPRs(user.id)) || []);
   }
 
   async function refreshMeasurements() {
     if (!user) return;
-    const data = await getMeasurements(user.id);
-    setMeasurements(data || []);
+    setMeasurements((await getMeasurements(user.id)) || []);
   }
 
-  // 🔥 REALTIME LISTENERS
+  // ---------------------------
+  // REALTIME SUBSCRIPTIONS
+  // ---------------------------
   useEffect(() => {
     if (!user) return;
 
     const uid = user.id;
 
-    // Workouts table
     const workoutsSub = supabase
       .channel("workouts-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "workouts", filter: `user_id=eq.${uid}` },
-        () => refreshWorkouts()
+        refreshWorkouts
       )
       .subscribe();
 
-    // Exercises table
     const exercisesSub = supabase
       .channel("exercises-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "exercises", filter: `user_id=eq.${uid}` },
-        () => refreshWorkouts()
+        refreshWorkouts
       )
       .subscribe();
 
-    // PRs table
     const prsSub = supabase
       .channel("prs-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "PRs", filter: `user_id=eq.${uid}` },
-        () => refreshPRs()
+        refreshPRs
       )
       .subscribe();
 
-    // Measurements table
     const measurementsSub = supabase
       .channel("measurements-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "measurements", filter: `user_id=eq.${uid}` },
-        () => refreshMeasurements()
+        refreshMeasurements
       )
       .subscribe();
 
@@ -145,8 +146,9 @@ export const AppProvider = ({ children }) => {
     };
   }, [user]);
 
-  // 🔥 ACTIONS (Create/Delete)
-
+  // ---------------------------
+  // WORKOUT ACTIONS
+  // ---------------------------
   async function createWorkout(name) {
     const newItem = await addWorkout({ userId: user.id, name });
     if (newItem) refreshWorkouts();
@@ -174,6 +176,9 @@ export const AppProvider = ({ children }) => {
     refreshWorkouts();
   }
 
+  // ---------------------------
+  // PR ACTIONS (FULL UPGRADE)
+  // ---------------------------
   async function createPR(lift_name, weight, unit, date) {
     const newItem = await addPR({
       userId: user.id,
@@ -190,6 +195,20 @@ export const AppProvider = ({ children }) => {
     refreshPRs();
   }
 
+  async function editPR(id, values) {
+    await updatePR(id, values);
+    refreshPRs();
+  }
+
+  async function reorderPRs(newOrder) {
+    // newOrder: [{ id, order_index }]
+    await updatePROrder(newOrder);
+    refreshPRs();
+  }
+
+  // ---------------------------
+  // MEASUREMENTS
+  // ---------------------------
   async function createMeasurement(name, value, unit, date) {
     const newItem = await addMeasurement({
       userId: user.id,
@@ -221,6 +240,8 @@ export const AppProvider = ({ children }) => {
 
         createPR,
         removePR,
+        editPR,
+        reorderPRs,
 
         createMeasurement,
         removeMeasurement,

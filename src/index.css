@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ======== TAILWIND v4 IMPORT (REQUIRED) ======== */
+@import "tailwindcss";
 
 /* =============================== */
 /*        ARMPAL GLOBAL THEME      */
@@ -186,6 +185,7 @@ a:hover {
   box-shadow: 0 0 12px rgba(224, 0, 0, 0.45);
   transition: width 0.5s ease, box-shadow 0.3s ease;
 }
+
 /* =============================== */
 /*     PREMIUM GOAL PROGRESS BAR   */
 /* =============================== */
@@ -221,6 +221,7 @@ a:hover {
   0% { background-position: 0% 0; }
   100% { background-position: 300% 0; }
 }
+
 /* GOAL BAR FRAME */
 .goal-progress-bar {
   width: 100%;
@@ -242,6 +243,7 @@ a:hover {
 .progress-glow {
   box-shadow: 0 0 10px rgba(255, 0, 0, 0.45);
 }
+
 /* =============================== */
 /*      GOAL PROGRESS BAR v2       */
 /* =============================== */
@@ -269,39 +271,33 @@ a:hover {
   box-shadow: 0 0 12px rgba(224, 0, 0, 0.55);
 }
 
-/* Pulse (gentle, sexy, controlled) */
+/* Pulse */
 .pulse {
   animation: pulseGlow 3.5s infinite ease-in-out;
 }
 
 @keyframes pulseGlow {
-  0% {
-    box-shadow: 0 0 8px rgba(224, 0, 0, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 14px rgba(255, 0, 0, 0.75);
-  }
-  100% {
-    box-shadow: 0 0 8px rgba(224, 0, 0, 0.4);
-  }
+  0%   { box-shadow: 0 0 8px rgba(224,0,0,0.4); }
+  50%  { box-shadow: 0 0 14px rgba(255,0,0,0.75); }
+  100% { box-shadow: 0 0 8px rgba(224,0,0,0.4); }
 }
-/* Overflow gold pulse */
+
+/* GOLD overflow pulse */
 @keyframes pulseGlow {
-  0% { box-shadow: 0 0 6px rgba(255,220,0,0.4); }
-  50% { box-shadow: 0 0 14px rgba(255,220,0,0.9); }
+  0%   { box-shadow: 0 0 6px rgba(255,220,0,0.4); }
+  50%  { box-shadow: 0 0 14px rgba(255,220,0,0.9); }
   100% { box-shadow: 0 0 6px rgba(255,220,0,0.4); }
 }
 
 .over-goal-fill {
   box-shadow: 0 0 12px rgba(255,200,0,0.8);
 }
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+
+/* Scrollbar Hiders */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Slide Animation */
 @keyframes slideUp {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
