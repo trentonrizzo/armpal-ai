@@ -4,10 +4,12 @@ import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
 
+// Screens
 import SplashScreen from "./SplashScreen";
 import CoverScreen from "./CoverScreen";
 import AuthPage from "./AuthPage";
 
+// Pages
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
 import MeasurementsPage from "./pages/MeasurementsPage";
@@ -20,6 +22,7 @@ import GoalsPage from "./pages/GoalsPage";
 // Strength Calculator
 import StrengthCalculator from "./pages/StrengthCalculator";
 
+// Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
 
 export default function App() {
@@ -30,6 +33,7 @@ export default function App() {
   const [showCover, setShowCover] = useState(false);
   const [firstLaunch, setFirstLaunch] = useState(null);
 
+  // AUTH
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -43,13 +47,13 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // SPLASH + COVER
   useEffect(() => {
     const seen = localStorage.getItem("armpal-first-launch");
 
     if (!seen) {
       setFirstLaunch(true);
       setShowSplash(true);
-
       localStorage.setItem("armpal-first-launch", "true");
 
       setTimeout(() => {
@@ -63,10 +67,12 @@ export default function App() {
 
   if (firstLaunch === true && showSplash) {
     return (
-      <SplashScreen onFinished={() => {
-        setShowSplash(false);
-        setShowCover(true);
-      }} />
+      <SplashScreen
+        onFinished={() => {
+          setShowSplash(false);
+          setShowCover(true);
+        }}
+      />
     );
   }
 
@@ -84,7 +90,10 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/home" element={<HomePage />} />
+
+          {/* THE ONLY PR PAGE NOW */}
           <Route path="/prs" element={<PRTracker />} />
+
           <Route path="/measure" element={<MeasurementsPage />} />
           <Route path="/workouts" element={<WorkoutsPage />} />
           <Route path="/workoutlogger" element={<WorkoutLogger />} />

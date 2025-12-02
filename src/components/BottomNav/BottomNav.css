@@ -13,6 +13,9 @@
   align-items: center;
 
   z-index: 999;
+
+  /* 🔥 REQUIRED FOR MOBILE — fixes cutoff */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .nav-item {
@@ -35,7 +38,6 @@
   z-index: 2;
 }
 
-/* Labels */
 .nav-label {
   font-size: 11px;
   margin-top: 3px;
@@ -47,7 +49,6 @@
   font-weight: 600;
 }
 
-/* 🔥 The SEXY RED GLOW INDICATOR */
 .active-glow {
   position: absolute;
   width: 36px;
@@ -55,12 +56,12 @@
   border-radius: 50%;
 
   background: rgba(255, 0, 0, 0.45);
-  box-shadow: 0px 0px 12px 6px rgba(255, 0, 0, 0.45);
+  box-shadow: 0 0 12px 6px rgba(255, 0, 0, 0.45);
 
   top: -2px;
   z-index: 1;
 
-  animation: fadeIn .2s ease-out;
+  animation: fadeIn 0.2s ease-out;
 }
 
 @keyframes fadeIn {
