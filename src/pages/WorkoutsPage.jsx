@@ -1,3 +1,4 @@
+// src/pages/WorkoutsPage.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import ReorderableList from "../components/ReorderableListDndKit.jsx";
@@ -16,7 +17,6 @@ import {
 } from "../api/exercises";
 
 export default function WorkoutsPage() {
-  console.log("DEBUG — WorkoutsPage is LOADED");
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +27,9 @@ export default function WorkoutsPage() {
   const [editingExercise, setEditingExercise] = useState({});
   const [confirmDelete, setConfirmDelete] = useState({});
 
-  // Load workouts + exercises from Supabase
+  /* --------------------------------------------------
+     LOAD USER + WORKOUTS
+  ----------------------------------------------------- */
   useEffect(() => {
     const load = async () => {
       const { data: userData } = await supabase.auth.getUser();
@@ -46,7 +48,9 @@ export default function WorkoutsPage() {
     load();
   }, []);
 
-  // Confirm delete
+  /* --------------------------------------------------
+     DELETE CONFIRM (WORKOUT or EXERCISE)
+  ----------------------------------------------------- */
   const confirmDeleteClick = async (type, id, workoutId = null) => {
     const key = `${type}-${id}-${workoutId || ""}`;
 
@@ -85,7 +89,9 @@ export default function WorkoutsPage() {
     }
   };
 
-  // Add workout
+  /* --------------------------------------------------
+     ADD WORKOUT
+  ----------------------------------------------------- */
   const handleAddWorkout = async () => {
     if (!newWorkout.trim() || !user) return;
 
@@ -100,7 +106,9 @@ export default function WorkoutsPage() {
     }
   };
 
-  // Add exercise
+  /* --------------------------------------------------
+     ADD EXERCISE TO WORKOUT
+  ----------------------------------------------------- */
   const handleAddExercise = async (workoutId) => {
     const form =
       exerciseForms[workoutId] || {
@@ -140,7 +148,9 @@ export default function WorkoutsPage() {
     }
   };
 
-  // Exercise input typing FIXED
+  /* --------------------------------------------------
+     INPUT CHANGE FOR EXERCISE FORM
+  ----------------------------------------------------- */
   const handleChange = (workoutId, e) => {
     const { name, value } = e.target;
 
@@ -158,7 +168,9 @@ export default function WorkoutsPage() {
     }));
   };
 
-  // Rename workout
+  /* --------------------------------------------------
+     EDIT WORKOUT NAME
+  ----------------------------------------------------- */
   const handleWorkoutNameChange = (workoutId, value) => {
     setWorkouts((prev) =>
       prev.map((w) => (w.id === workoutId ? { ...w, name: value } : w))
@@ -172,7 +184,9 @@ export default function WorkoutsPage() {
     await updateWorkoutApi(workoutId, { name: trimmed });
   };
 
-  // Edit exercise label
+  /* --------------------------------------------------
+     EDIT EXERCISE NAME
+  ----------------------------------------------------- */
   const handleExerciseEditChange = (workoutId, exId, value) => {
     setWorkouts((prev) =>
       prev.map((w) =>
@@ -201,29 +215,36 @@ export default function WorkoutsPage() {
     await updateExerciseApi(exId, { name: trimmed });
   };
 
+  /* --------------------------------------------------
+     LOADING STATE
+  ----------------------------------------------------- */
   if (loading) return <div className="p-6 text-white">Loading…</div>;
 
+  /* --------------------------------------------------
+     PAGE UI
+  ----------------------------------------------------- */
   return (
     <div className="p-6 text-white pb-24">
-      <h1 className="text-2xl font-bold text-red-500 mb-3">Workouts</h1>
+      <h1 className="text-2xl font-bold text-red-500 mb-5">Workouts</h1>
 
-      {/* Add Workout */}
-      <div className="flex gap-2 mb-5">
+      {/* ADD WORKOUT */}
+      <div className="flex gap-2 mb-6">
         <input
           type="text"
           placeholder="Workout name (e.g. Push Day)"
           value={newWorkout}
           onChange={(e) => setNewWorkout(e.target.value)}
-          className="flex-1 bg-neutral-900 text-white p-2 rounded-lg border border-neutral-700"
+          className="flex-1 bg-[#111] text-white p-3 rounded-lg border border-neutral-700"
         />
         <button
           onClick={handleAddWorkout}
-          className="bg-red-600 hover:bg-red-700 transition px-4 rounded-lg font-semibold"
+          className="bg-red-600 hover:bg-red-700 transition px-5 rounded-lg font-semibold"
         >
           Add
         </button>
       </div>
 
+      {/* WORKOUT LIST */}
       {workouts.length === 0 ? (
         <p className="text-gray-400">No workouts yet. Add one above!</p>
       ) : (
@@ -234,10 +255,10 @@ export default function WorkoutsPage() {
           renderItem={(w) => (
             <div
               key={w.id}
-              className="bg-neutral-800 p-4 rounded-xl mb-4 shadow-lg"
+              className="bg-neutral-900 p-4 rounded-xl mb-5 border border-neutral-800 shadow-md"
             >
-              {/* Workout Header */}
-              <div className="flex justify-between items-center mb-3">
+              {/* WORKOUT HEADER */}
+              <div className="flex justify-between items-center mb-4">
                 {editingWorkout === w.id ? (
                   <input
                     value={w.name}
@@ -247,7 +268,7 @@ export default function WorkoutsPage() {
                     onBlur={(e) =>
                       handleWorkoutNameBlur(w.id, e.target.value)
                     }
-                    className="bg-neutral-900 text-white p-2 rounded w-full"
+                    className="bg-neutral-800 text-white p-2 rounded w-full"
                   />
                 ) : (
                   <h2
@@ -257,6 +278,7 @@ export default function WorkoutsPage() {
                     {w.name}
                   </h2>
                 )}
+
                 <button
                   onClick={() => confirmDeleteClick("workout", w.id)}
                   className={`text-sm ml-3 transition ${
@@ -269,7 +291,7 @@ export default function WorkoutsPage() {
                 </button>
               </div>
 
-              {/* Exercises */}
+              {/* EXERCISES */}
               {w.exercises?.length > 0 ? (
                 <ReorderableList
                   items={w.exercises}
@@ -284,7 +306,7 @@ export default function WorkoutsPage() {
                   renderItem={(ex) => (
                     <div
                       key={ex.id}
-                      className="bg-neutral-900 p-2 rounded flex justify-between items-center mb-2"
+                      className="bg-neutral-800 p-2 rounded-lg flex justify-between items-center mb-2 border border-neutral-700"
                     >
                       {editingExercise[ex.id] ? (
                         <input
@@ -299,7 +321,7 @@ export default function WorkoutsPage() {
                           onBlur={(e) =>
                             handleExerciseEditBlur(ex.id, e.target.value)
                           }
-                          className="bg-neutral-800 text-white w-full p-1 rounded"
+                          className="bg-neutral-700 text-white w-full p-1 rounded"
                         />
                       ) : (
                         <span
@@ -317,6 +339,7 @@ export default function WorkoutsPage() {
                             : ""}
                         </span>
                       )}
+
                       <button
                         onClick={() =>
                           confirmDeleteClick("exercise", ex.id, w.id)
@@ -340,8 +363,8 @@ export default function WorkoutsPage() {
                 </p>
               )}
 
-              {/* Add Exercise Form */}
-              <div className="flex gap-2 mt-3 flex-wrap">
+              {/* ADD EXERCISE FORM */}
+              <div className="flex gap-2 mt-4 flex-wrap">
                 <input
                   type="text"
                   name="name"
@@ -374,6 +397,7 @@ export default function WorkoutsPage() {
                   onChange={(e) => handleChange(w.id, e)}
                   className="w-24 bg-neutral-900 text-white p-2 rounded"
                 />
+
                 <button
                   onClick={() => handleAddExercise(w.id)}
                   className="bg-red-600 hover:bg-red-700 px-3 rounded font-semibold"
