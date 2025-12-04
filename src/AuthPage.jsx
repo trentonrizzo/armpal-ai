@@ -1,125 +1,131 @@
-import React, { useState, useEffect } from 'react'
-import { supabase } from './supabaseClient'
+// src/AuthPage.jsx
+import React, { useState } from "react";
+import { supabase } from "./supabaseClient";
 
 export default function AuthPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const [session, setSession] = useState(null)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("login"); // login | signup
 
-  // ✅ Check if a user is already logged in when the app loads
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-    })
+  async function handleAuth(e) {
+    e.preventDefault();
+    setLoading(true);
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
+    try {
+      let result;
 
-    return () => listener.subscription.unsubscribe()
-  }, [])
+      if (mode === "login") {
+        result = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+      } else {
+        result = await supabase.auth.signUp({
+          email,
+          password,
+        });
+      }
 
-  // ✅ Sign up with email & password
-  async function handleSignUp() {
-    const { error } = await supabase.auth.signUp({ email, password })
-    setMessage(error ? error.message : '✅ Check your email for the confirmation link!')
+      if (result.error) {
+        alert(result.error.message);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // ✅ Sign in with email & password
-  async function handleSignIn() {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setMessage(error ? error.message : '✅ Signed in successfully!')
-  }
-
-  // ✅ Sign out
-  async function handleSignOut() {
-    const { error } = await supabase.auth.signOut()
-    setMessage(error ? error.message : '✅ Signed out successfully!')
-  }
-
-  // ✅ If the user is logged in, show a welcome screen
-  if (session) {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        textAlign: 'center'
-      }}>
-        <h1>Welcome back to ArmPal 💪</h1>
-        <p style={{ marginBottom: 20 }}>You're signed in as <b>{session.user.email}</b></p>
-        <button onClick={handleSignOut} style={{
-          padding: '10px 20px',
-          background: '#ff5555',
-          color: 'white',
-          border: 'none',
-          borderRadius: 6,
-          cursor: 'pointer'
-        }}>Sign Out</button>
-        {message && <p style={{ marginTop: 15 }}>{message}</p>}
-      </div>
-    )
-  }
-
-  // ✅ If no user is logged in, show the login form
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      textAlign: 'center'
-    }}>
-      <h1>ArmPal Login</h1>
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ margin: 10, padding: 8, width: 250 }}
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{ margin: 10, padding: 8, width: 250 }}
-      />
-      <div>
-        <button
-          onClick={handleSignIn}
-          style={{
-            margin: 5,
-            padding: '8px 16px',
-            background: '#0070f3',
-            color: 'white',
-            border: 'none',
-            borderRadius: 4,
-            cursor: 'pointer'
-          }}
-        >
-          Sign In
-        </button>
-        <button
-          onClick={handleSignUp}
-          style={{
-            margin: 5,
-            padding: '8px 16px',
-            background: '#00b37e',
-            color: 'white',
-            border: 'none',
-            borderRadius: 4,
-            cursor: 'pointer'
-          }}
-        >
-          Sign Up
-        </button>
+    <div className="min-h-screen w-full bg-black flex items-center justify-center px-6">
+
+      {/* ====== CARD ====== */}
+      <div
+        className="
+          w-full max-w-sm p-8 rounded-2xl relative
+          bg-[#0a0a0a] border border-[#1a1a1a]
+          shadow-[0_0_15px_rgba(255,0,0,0.35)]
+        "
+        style={{
+          boxShadow: `
+            0 0 18px rgba(255, 0, 0, 0.35),
+            inset 0 0 12px rgba(255, 0, 0, 0.20)
+          `,
+        }}
+      >
+        {/* HEADER */}
+        <h1 className="text-3xl font-extrabold text-white text-center mb-2 tracking-wide">
+          Arm<span className="text-red-500">Pal</span>
+        </h1>
+
+        <p className="text-center text-sm text-neutral-400 mb-6">
+          {mode === "login" ? "Welcome back" : "Create your account"}
+        </p>
+
+        {/* FORM */}
+        <form onSubmit={handleAuth} className="space-y-4">
+
+          {/* EMAIL */}
+          <input
+            type="email"
+            required
+            placeholder="Email"
+            className="w-full p-3 rounded-lg bg-black border border-neutral-700 text-white text-sm focus:border-red-500 outline-none transition"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          {/* PASSWORD */}
+          <input
+            type="password"
+            required
+            placeholder="Password"
+            className="w-full p-3 rounded-lg bg-black border border-neutral-700 text-white text-sm focus:border-red-500 outline-none transition"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          {/* SUBMIT BUTTON */}
+          <button
+            disabled={loading}
+            className="
+              w-full py-3 rounded-lg font-bold text-white text-sm
+              bg-red-600 hover:bg-red-700 transition
+              shadow-[0_0_10px_rgba(255,0,0,0.4)]
+            "
+          >
+            {loading
+              ? "Please wait…"
+              : mode === "login"
+              ? "Log In"
+              : "Sign Up"}
+          </button>
+        </form>
+
+        {/* SWITCH MODE */}
+        <div className="text-center mt-5 text-neutral-400 text-xs">
+          {mode === "login" ? (
+            <span>
+              Don’t have an account?{" "}
+              <button
+                onClick={() => setMode("signup")}
+                className="text-red-500 font-semibold hover:underline"
+              >
+                Sign up
+              </button>
+            </span>
+          ) : (
+            <span>
+              Already have an account?{" "}
+              <button
+                onClick={() => setMode("login")}
+                className="text-red-500 font-semibold hover:underline"
+              >
+                Log in
+              </button>
+            </span>
+          )}
+        </div>
       </div>
-      {message && <p style={{ marginTop: 15 }}>{message}</p>}
     </div>
-  )
+  );
 }
