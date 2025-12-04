@@ -2,7 +2,7 @@ import React, { useContext, useState, useMemo } from "react";
 import { AppContext } from "../context/AppContext";
 import { FaTrashAlt, FaEdit } from "react-icons/fa";
 
-// 🔥 Clean GlowCard layout just like Workouts
+// Glow card
 function GlowCard({ children, dragging }) {
   return (
     <div
@@ -149,8 +149,8 @@ export default function PRTracker() {
       >
         <GlowCard dragging={isDragging}>
           {editing ? (
-            // EDIT MODE
             <div className="space-y-3">
+              {/* EDIT MODE CONTENT */}
               <input
                 className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
                 value={editLift}
@@ -181,7 +181,6 @@ export default function PRTracker() {
                   <option value="lbs">lbs</option>
                   <option value="kg">kg</option>
                 </select>
-
                 <input
                   type="date"
                   className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
@@ -212,7 +211,6 @@ export default function PRTracker() {
               </div>
             </div>
           ) : deleting ? (
-            // DELETE MODE
             <div className="text-center space-y-3">
               <p className="text-sm">Delete this PR?</p>
               <div className="flex justify-center gap-4">
@@ -236,11 +234,16 @@ export default function PRTracker() {
           ) : (
             // NORMAL VIEW
             <div className="space-y-2">
-              <div className="flex items-start justify-between w-full">
-                <p className="font-semibold text-[15px]">{pr.lift_name}</p>
 
-                {/* 🔥 BUTTONS ON THE RIGHT — PERMANENTLY */}
-                <div className="flex gap-4">
+              {/* 🔥 FIXED — PERMANENT RIGHT-SIDE ICONS */}
+              <div className="flex items-start justify-between w-full min-w-0">
+
+                <p className="font-semibold text-[15px] truncate">
+                  {pr.lift_name}
+                </p>
+
+                {/* 🔥 ICONS NEVER COLLAPSE, ALWAYS RIGHT */}
+                <div className="flex-shrink-0 flex gap-4">
                   <button onClick={() => beginEdit(pr)}>
                     <FaEdit size={16} className="text-red-400" />
                   </button>
@@ -248,6 +251,7 @@ export default function PRTracker() {
                     <FaTrashAlt size={16} className="text-red-500" />
                   </button>
                 </div>
+
               </div>
 
               <p className="text-neutral-400 text-xs">
@@ -338,7 +342,7 @@ export default function PRTracker() {
           </button>
         </GlowCard>
 
-        {/* PR LIST */}
+        {/* LIST */}
         <div className="mt-6 w-full">
           {flatPRs.map((p) => PRCard(p))}
         </div>
