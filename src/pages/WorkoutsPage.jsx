@@ -1,414 +1,656 @@
 // src/pages/WorkoutsPage.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import ReorderableList from "../components/ReorderableListDndKit.jsx";
-
 import {
-  getWorkoutsWithExercises,
-  addWorkout as addWorkoutApi,
-  updateWorkout as updateWorkoutApi,
-  deleteWorkout as deleteWorkoutApi,
-} from "../api/workouts";
-
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import {
-  addExercise as addExerciseApi,
-  updateExercise as updateExerciseApi,
-  deleteExercise as deleteExerciseApi,
-} from "../api/exercises";
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
+
+// Draggable wrapper
+function SortableItem({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    touchAction: "none",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+}
 
 export default function WorkoutsPage() {
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
+  const [expandedExercises, setExpandedExercises] = useState({}); // { workoutId: [exercises] }
   const [loading, setLoading] = useState(true);
 
-  const [newWorkout, setNewWorkout] = useState("");
-  const [exerciseForms, setExerciseForms] = useState({});
+  // Workout modal
+  const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
-  const [editingExercise, setEditingExercise] = useState({});
-  const [confirmDelete, setConfirmDelete] = useState({});
+  const [workoutName, setWorkoutName] = useState("");
+  const [workoutSchedule, setWorkoutSchedule] = useState("");
 
-  /* --------------------------------------------------
-     LOAD USER + WORKOUTS
-  ----------------------------------------------------- */
+  // Exercise modal
+  const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
+  const [exerciseWorkoutId, setExerciseWorkoutId] = useState(null);
+  const [editingExercise, setEditingExercise] = useState(null);
+  const [exerciseName, setExerciseName] = useState("");
+  const [exerciseSets, setExerciseSets] = useState("");
+  const [exerciseReps, setExerciseReps] = useState("");
+  const [exerciseWeight, setExerciseWeight] = useState("");
+
+  // Drag sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
+
+  // Initial load
   useEffect(() => {
-    const load = async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
-        setLoading(false);
-        return;
-      }
-
-      setUser(userData.user);
-
-      const data = await getWorkoutsWithExercises(userData.user.id);
-      setWorkouts(data);
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setUser(user);
+      if (user) await loadWorkouts(user.id);
       setLoading(false);
-    };
-
-    load();
+    })();
   }, []);
 
-  /* --------------------------------------------------
-     DELETE CONFIRM (WORKOUT or EXERCISE)
-  ----------------------------------------------------- */
-  const confirmDeleteClick = async (type, id, workoutId = null) => {
-    const key = `${type}-${id}-${workoutId || ""}`;
+  async function loadWorkouts(uid) {
+    const { data, error } = await supabase
+      .from("workouts")
+      .select("*")
+      .eq("user_id", uid)
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
 
-    if (confirmDelete[key]) {
-      if (type === "workout") {
-        await deleteWorkoutApi(id);
-        setWorkouts((prev) => prev.filter((w) => w.id !== id));
-      } else {
-        await deleteExerciseApi(id);
-        setWorkouts((prev) =>
-          prev.map((w) =>
-            w.id === workoutId
-              ? {
-                  ...w,
-                  exercises: w.exercises.filter((ex) => ex.id !== id),
-                }
-              : w
-          )
-        );
-      }
+    if (error) {
+      console.error("Error loading workouts:", error.message);
+      return;
+    }
+    setWorkouts(data || []);
+  }
 
-      setConfirmDelete((prev) => {
-        const copy = { ...prev };
-        delete copy[key];
-        return copy;
-      });
+  async function loadExercises(workoutId) {
+    const { data, error } = await supabase
+      .from("exercises")
+      .select("*")
+      .eq("workout_id", workoutId)
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Error loading exercises:", error.message);
+      return [];
+    }
+    return data || [];
+  }
+
+  // Expand/collapse workout -> load exercises
+  async function toggleExpand(workoutId) {
+    if (expandedExercises[workoutId]) {
+      // currently open -> collapse
+      const copy = { ...expandedExercises };
+      delete copy[workoutId];
+      setExpandedExercises(copy);
     } else {
-      setConfirmDelete((prev) => ({ ...prev, [key]: true }));
-      setTimeout(() => {
-        setConfirmDelete((prev) => {
-          const copy = { ...prev };
-          delete copy[key];
-          return copy;
-        });
-      }, 3000);
+      // open and load exercises
+      const ex = await loadExercises(workoutId);
+      setExpandedExercises((prev) => ({ ...prev, [workoutId]: ex }));
     }
-  };
+  }
 
-  /* --------------------------------------------------
-     ADD WORKOUT
-  ----------------------------------------------------- */
-  const handleAddWorkout = async () => {
-    if (!newWorkout.trim() || !user) return;
+  // Drag end for workouts
+  async function handleWorkoutDragEnd(event) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-    const created = await addWorkoutApi({
-      userId: user.id,
-      name: newWorkout.trim(),
-    });
+    const oldIndex = workouts.findIndex((w) => w.id === active.id);
+    const newIndex = workouts.findIndex((w) => w.id === over.id);
+    const reordered = arrayMove(workouts, oldIndex, newIndex);
+    setWorkouts(reordered);
 
-    if (created) {
-      setWorkouts((prev) => [{ ...created, exercises: [] }, ...prev]);
-      setNewWorkout("");
+    // Save new order
+    for (let i = 0; i < reordered.length; i++) {
+      await supabase
+        .from("workouts")
+        .update({ position: i })
+        .eq("id", reordered[i].id);
     }
-  };
+  }
 
-  /* --------------------------------------------------
-     ADD EXERCISE TO WORKOUT
-  ----------------------------------------------------- */
-  const handleAddExercise = async (workoutId) => {
-    const form =
-      exerciseForms[workoutId] || {
-        name: "",
-        sets: "",
-        reps: "",
-        weight: "",
-      };
+  // Drag end for exercises
+  async function handleExerciseDragEnd(workoutId, event) {
+    const list = expandedExercises[workoutId] || [];
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-    if (!user || !form.name.trim()) return;
+    const oldIndex = list.findIndex((e) => e.id === active.id);
+    const newIndex = list.findIndex((e) => e.id === over.id);
+    const reordered = arrayMove(list, oldIndex, newIndex);
 
-    const created = await addExerciseApi({
-      userId: user.id,
-      workoutId,
-      name: form.name.trim(),
-      sets: form.sets,
-      reps: form.reps,
-      weight: form.weight,
-    });
-
-    if (created) {
-      setWorkouts((prev) =>
-        prev.map((w) =>
-          w.id === workoutId
-            ? {
-                ...w,
-                exercises: [...w.exercises, created],
-              }
-            : w
-        )
-      );
-
-      setExerciseForms((prev) => ({
-        ...prev,
-        [workoutId]: { name: "", sets: "", reps: "", weight: "" },
-      }));
+    // Save new order
+    for (let i = 0; i < reordered.length; i++) {
+      await supabase
+        .from("exercises")
+        .update({ position: i })
+        .eq("id", reordered[i].id);
     }
-  };
 
-  /* --------------------------------------------------
-     INPUT CHANGE FOR EXERCISE FORM
-  ----------------------------------------------------- */
-  const handleChange = (workoutId, e) => {
-    const { name, value } = e.target;
-
-    setExerciseForms((prev) => ({
+    setExpandedExercises((prev) => ({
       ...prev,
-      [workoutId]: {
-        ...(prev[workoutId] || {
-          name: "",
-          sets: "",
-          reps: "",
-          weight: "",
-        }),
-        [name]: value,
-      },
+      [workoutId]: reordered,
     }));
-  };
+  }
 
-  /* --------------------------------------------------
-     EDIT WORKOUT NAME
-  ----------------------------------------------------- */
-  const handleWorkoutNameChange = (workoutId, value) => {
-    setWorkouts((prev) =>
-      prev.map((w) => (w.id === workoutId ? { ...w, name: value } : w))
+  // Open workout modal
+  function openWorkoutModal(workout = null) {
+    setEditingWorkout(workout);
+    setWorkoutName(workout?.name || "");
+    setWorkoutSchedule(
+      workout?.scheduled_for
+        ? workout.scheduled_for.slice(0, 16)
+        : ""
     );
-  };
+    setWorkoutModalOpen(true);
+  }
 
-  const handleWorkoutNameBlur = async (workoutId, value) => {
+  // Save workout
+  async function saveWorkout() {
+    if (!user) return;
+
+    const payload = {
+      user_id: user.id,
+      name: workoutName || "Workout",
+      scheduled_for: workoutSchedule
+        ? new Date(workoutSchedule).toISOString()
+        : null,
+    };
+
+    if (editingWorkout) {
+      await supabase
+        .from("workouts")
+        .update(payload)
+        .eq("id", editingWorkout.id);
+    } else {
+      payload.position = workouts.length;
+      await supabase.from("workouts").insert(payload);
+    }
+
+    setWorkoutModalOpen(false);
     setEditingWorkout(null);
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    await updateWorkoutApi(workoutId, { name: trimmed });
-  };
+    await loadWorkouts(user.id);
+  }
 
-  /* --------------------------------------------------
-     EDIT EXERCISE NAME
-  ----------------------------------------------------- */
-  const handleExerciseEditChange = (workoutId, exId, value) => {
-    setWorkouts((prev) =>
-      prev.map((w) =>
-        w.id === workoutId
-          ? {
-              ...w,
-              exercises: w.exercises.map((ex) =>
-                ex.id === exId ? { ...ex, name: value } : ex
-              ),
-            }
-          : w
-      )
-    );
-  };
+  // Delete workout
+  async function deleteWorkout(id) {
+    await supabase.from("workouts").delete().eq("id", id);
+    if (user) await loadWorkouts(user.id);
+  }
 
-  const handleExerciseEditBlur = async (exId, value) => {
-    setEditingExercise((prev) => {
-      const copy = { ...prev };
-      delete copy[exId];
-      return copy;
+  // Open exercise modal
+  function openExerciseModal(workoutId, exercise = null) {
+    setExerciseWorkoutId(workoutId);
+    setEditingExercise(exercise);
+    setExerciseName(exercise?.name || "");
+    setExerciseSets(exercise?.sets ?? "");
+    setExerciseReps(exercise?.reps ?? "");
+    setExerciseWeight(exercise?.weight ?? "");
+    setExerciseModalOpen(true);
+  }
+
+  // Save exercise
+  async function saveExercise() {
+    if (!user || !exerciseWorkoutId) return;
+
+    const list = expandedExercises[exerciseWorkoutId] || [];
+
+    const payload = {
+      user_id: user.id,
+      workout_id: exerciseWorkoutId,
+      name: exerciseName || "Exercise",
+      sets: exerciseSets === "" ? null : Number(exerciseSets),
+      reps: exerciseReps === "" ? null : Number(exerciseReps),
+      weight: exerciseWeight === "" ? null : exerciseWeight,
+    };
+
+    if (editingExercise) {
+      await supabase
+        .from("exercises")
+        .update(payload)
+        .eq("id", editingExercise.id);
+    } else {
+      payload.position = list.length;
+      await supabase.from("exercises").insert(payload);
+    }
+
+    // reload exercises for this workout
+    const ex = await loadExercises(exerciseWorkoutId);
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [exerciseWorkoutId]: ex,
+    }));
+
+    setExerciseModalOpen(false);
+    setEditingExercise(null);
+  }
+
+  // Delete exercise
+  async function deleteExercise(id, workoutId) {
+    await supabase.from("exercises").delete().eq("id", id);
+    const ex = await loadExercises(workoutId);
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [workoutId]: ex,
+    }));
+  }
+
+  function formatSchedule(value) {
+    if (!value) return "Not scheduled";
+    const d = new Date(value);
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
+  }
 
-    const trimmed = value.trim();
-    if (!trimmed) return;
-
-    await updateExerciseApi(exId, { name: trimmed });
-  };
-
-  /* --------------------------------------------------
-     LOADING STATE
-  ----------------------------------------------------- */
-  if (loading) return <div className="p-6 text-white">Loading…</div>;
-
-  /* --------------------------------------------------
-     PAGE UI
-  ----------------------------------------------------- */
   return (
-    <div className="p-6 text-white pb-24">
-      <h1 className="text-2xl font-bold text-red-500 mb-5">Workouts</h1>
+    <div
+      style={{
+        padding: "20px 16px 90px",
+        maxWidth: "900px",
+        margin: "0 auto",
+      }}
+    >
+      <h1
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          marginBottom: 16,
+        }}
+      >
+        Workouts
+      </h1>
 
-      {/* ADD WORKOUT */}
-      <div className="flex gap-2 mb-6">
-        <input
-          type="text"
-          placeholder="Workout name (e.g. Push Day)"
-          value={newWorkout}
-          onChange={(e) => setNewWorkout(e.target.value)}
-          className="flex-1 bg-[#111] text-white p-3 rounded-lg border border-neutral-700"
-        />
-        <button
-          onClick={handleAddWorkout}
-          className="bg-red-600 hover:bg-red-700 transition px-5 rounded-lg font-semibold"
-        >
-          Add
-        </button>
-      </div>
+      <button
+        onClick={() => openWorkoutModal(null)}
+        style={{
+          padding: "10px 20px",
+          background: "#ff2f2f",
+          borderRadius: "999px",
+          border: "none",
+          fontSize: 14,
+          fontWeight: 600,
+          color: "white",
+          marginBottom: 18,
+          boxShadow: "0 0 14px rgba(255,47,47,0.35)",
+        }}
+      >
+        + Add Workout
+      </button>
 
-      {/* WORKOUT LIST */}
-      {workouts.length === 0 ? (
-        <p className="text-gray-400">No workouts yet. Add one above!</p>
+      {loading ? (
+        <p style={{ opacity: 0.7 }}>Loading workouts...</p>
+      ) : workouts.length === 0 ? (
+        <p style={{ opacity: 0.7 }}>No workouts yet. Add your first one.</p>
       ) : (
-        <ReorderableList
-          items={workouts}
-          type="workouts"
-          onReorder={(updated) => setWorkouts(updated)}
-          renderItem={(w) => (
-            <div
-              key={w.id}
-              className="bg-neutral-900 p-4 rounded-xl mb-5 border border-neutral-800 shadow-md"
-            >
-              {/* WORKOUT HEADER */}
-              <div className="flex justify-between items-center mb-4">
-                {editingWorkout === w.id ? (
-                  <input
-                    value={w.name}
-                    onChange={(e) =>
-                      handleWorkoutNameChange(w.id, e.target.value)
-                    }
-                    onBlur={(e) =>
-                      handleWorkoutNameBlur(w.id, e.target.value)
-                    }
-                    className="bg-neutral-800 text-white p-2 rounded w-full"
-                  />
-                ) : (
-                  <h2
-                    className="text-lg font-semibold text-red-400 cursor-pointer"
-                    onClick={() => setEditingWorkout(w.id)}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleWorkoutDragEnd}
+        >
+          <SortableContext
+            items={workouts.map((w) => w.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {workouts.map((workout) => {
+              const exercises = expandedExercises[workout.id] || null;
+
+              return (
+                <SortableItem key={workout.id} id={workout.id}>
+                  <div
+                    style={{
+                      background: "#0f0f0f",
+                      borderRadius: 12,
+                      padding: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      marginBottom: 10,
+                    }}
                   >
-                    {w.name}
-                  </h2>
-                )}
-
-                <button
-                  onClick={() => confirmDeleteClick("workout", w.id)}
-                  className={`text-sm ml-3 transition ${
-                    confirmDelete[`workout-${w.id}-`]
-                      ? "text-red-500 font-semibold"
-                      : "text-gray-400 hover:text-red-500"
-                  }`}
-                >
-                  {confirmDelete[`workout-${w.id}-`] ? "Confirm?" : "🗑"}
-                </button>
-              </div>
-
-              {/* EXERCISES */}
-              {w.exercises?.length > 0 ? (
-                <ReorderableList
-                  items={w.exercises}
-                  type={`exercises-${w.id}`}
-                  onReorder={(updated) =>
-                    setWorkouts((prev) =>
-                      prev.map((x) =>
-                        x.id === w.id ? { ...x, exercises: updated } : x
-                      )
-                    )
-                  }
-                  renderItem={(ex) => (
+                    {/* Header row */}
                     <div
-                      key={ex.id}
-                      className="bg-neutral-800 p-2 rounded-lg flex justify-between items-center mb-2 border border-neutral-700"
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
                     >
-                      {editingExercise[ex.id] ? (
-                        <input
-                          value={ex.name}
-                          onChange={(e) =>
-                            handleExerciseEditChange(
-                              w.id,
-                              ex.id,
-                              e.target.value
-                            )
-                          }
-                          onBlur={(e) =>
-                            handleExerciseEditBlur(ex.id, e.target.value)
-                          }
-                          className="bg-neutral-700 text-white w-full p-1 rounded"
+                      <div
+                        style={{ flex: 1, cursor: "pointer" }}
+                        onClick={() => toggleExpand(workout.id)}
+                      >
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 15,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {workout.name || "Workout"}
+                        </p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 11,
+                            opacity: 0.7,
+                          }}
+                        >
+                          {formatSchedule(workout.scheduled_for)}
+                        </p>
+                      </div>
+
+                      <FaEdit
+                        style={{ fontSize: 14, cursor: "pointer" }}
+                        onClick={() => openWorkoutModal(workout)}
+                      />
+                      <FaTrash
+                        style={{
+                          fontSize: 14,
+                          cursor: "pointer",
+                          color: "#ff4d4d",
+                        }}
+                        onClick={() => deleteWorkout(workout.id)}
+                      />
+                      {exercises ? (
+                        <FaChevronUp
+                          style={{ marginLeft: 6, fontSize: 12 }}
                         />
                       ) : (
-                        <span
-                          onClick={() =>
-                            setEditingExercise((prev) => ({
-                              ...prev,
-                              [ex.id]: true,
-                            }))
-                          }
-                          className="text-gray-200 cursor-pointer"
-                        >
-                          {ex.name}
-                          {ex.sets && ex.reps && ex.weight
-                            ? ` — ${ex.sets}×${ex.reps} @ ${ex.weight}`
-                            : ""}
-                        </span>
+                        <FaChevronDown
+                          style={{ marginLeft: 6, fontSize: 12 }}
+                        />
                       )}
-
-                      <button
-                        onClick={() =>
-                          confirmDeleteClick("exercise", ex.id, w.id)
-                        }
-                        className={`text-xs ml-2 transition ${
-                          confirmDelete[`exercise-${ex.id}-${w.id}`]
-                            ? "text-red-500 font-semibold"
-                            : "text-gray-400 hover:text-red-500"
-                        }`}
-                      >
-                        {confirmDelete[`exercise-${ex.id}-${w.id}`]
-                          ? "Confirm?"
-                          : "✖"}
-                      </button>
                     </div>
-                  )}
-                />
-              ) : (
-                <p className="text-gray-500 text-sm italic mb-2">
-                  No exercises yet.
-                </p>
-              )}
 
-              {/* ADD EXERCISE FORM */}
-              <div className="flex gap-2 mt-4 flex-wrap">
-                <input
-                  type="text"
-                  name="name"
-                  placeholder="Exercise"
-                  value={exerciseForms[w.id]?.name || ""}
-                  onChange={(e) => handleChange(w.id, e)}
-                  className="flex-1 bg-neutral-900 text-white p-2 rounded"
-                />
-                <input
-                  type="text"
-                  name="sets"
-                  placeholder="Sets"
-                  value={exerciseForms[w.id]?.sets || ""}
-                  onChange={(e) => handleChange(w.id, e)}
-                  className="w-20 bg-neutral-900 text-white p-2 rounded"
-                />
-                <input
-                  type="text"
-                  name="reps"
-                  placeholder="Reps"
-                  value={exerciseForms[w.id]?.reps || ""}
-                  onChange={(e) => handleChange(w.id, e)}
-                  className="w-20 bg-neutral-900 text-white p-2 rounded"
-                />
-                <input
-                  type="text"
-                  name="weight"
-                  placeholder="Weight"
-                  value={exerciseForms[w.id]?.weight || ""}
-                  onChange={(e) => handleChange(w.id, e)}
-                  className="w-24 bg-neutral-900 text-white p-2 rounded"
-                />
+                    {/* Exercises section */}
+                    {exercises && (
+                      <div style={{ marginTop: 10 }}>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(event) =>
+                            handleExerciseDragEnd(workout.id, event)
+                          }
+                        >
+                          <SortableContext
+                            items={exercises.map((e) => e.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            {exercises.map((ex) => (
+                              <SortableItem key={ex.id} id={ex.id}>
+                                <div
+                                  style={{
+                                    background: "#151515",
+                                    borderRadius: 10,
+                                    padding: 10,
+                                    marginBottom: 8,
+                                    border:
+                                      "1px solid rgba(255,255,255,0.06)",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <div>
+                                      <p
+                                        style={{
+                                          margin: 0,
+                                          fontSize: 14,
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {ex.name}
+                                      </p>
+                                      <p
+                                        style={{
+                                          margin: 0,
+                                          fontSize: 11,
+                                          opacity: 0.7,
+                                        }}
+                                      >
+                                        {(ex.sets ?? "-") +
+                                          " x " +
+                                          (ex.reps ?? "-") +
+                                          (ex.weight
+                                            ? ` — ${ex.weight}`
+                                            : "")}
+                                      </p>
+                                    </div>
 
-                <button
-                  onClick={() => handleAddExercise(w.id)}
-                  className="bg-red-600 hover:bg-red-700 px-3 rounded font-semibold"
-                >
-                  ➕
-                </button>
-              </div>
-            </div>
-          )}
-        />
+                                    <FaEdit
+                                      style={{
+                                        fontSize: 13,
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() =>
+                                        openExerciseModal(workout.id, ex)
+                                      }
+                                    />
+                                    <FaTrash
+                                      style={{
+                                        fontSize: 13,
+                                        cursor: "pointer",
+                                        color: "#ff4d4d",
+                                      }}
+                                      onClick={() =>
+                                        deleteExercise(ex.id, workout.id)
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </SortableItem>
+                            ))}
+                          </SortableContext>
+                        </DndContext>
+
+                        <button
+                          onClick={() =>
+                            openExerciseModal(workout.id, null)
+                          }
+                          style={{
+                            width: "100%",
+                            padding: 8,
+                            fontSize: 12,
+                            background: "transparent",
+                            borderRadius: 999,
+                            border:
+                              "1px solid rgba(255,255,255,0.14)",
+                            color: "#ccc",
+                            marginTop: 4,
+                          }}
+                        >
+                          + Add Exercise
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </SortableItem>
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+      )}
+
+      {/* Workout modal */}
+      {workoutModalOpen && (
+        <div
+          style={modalBackdrop}
+          onClick={() => {
+            setWorkoutModalOpen(false);
+            setEditingWorkout(null);
+          }}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              {editingWorkout ? "Edit Workout" : "New Workout"}
+            </h2>
+
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={workoutName}
+              onChange={(e) => setWorkoutName(e.target.value)}
+              placeholder="Push Day, Pull Day, Legs, etc."
+            />
+
+            <label style={labelStyle}>Scheduled For</label>
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={workoutSchedule}
+              onChange={(e) => setWorkoutSchedule(e.target.value)}
+            />
+
+            <button style={primaryBtn} onClick={saveWorkout}>
+              Save Workout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Exercise modal */}
+      {exerciseModalOpen && (
+        <div
+          style={modalBackdrop}
+          onClick={() => {
+            setExerciseModalOpen(false);
+            setEditingExercise(null);
+          }}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              {editingExercise ? "Edit Exercise" : "New Exercise"}
+            </h2>
+
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={exerciseName}
+              onChange={(e) => setExerciseName(e.target.value)}
+              placeholder="Bench Press, Squat, etc."
+            />
+
+            <label style={labelStyle}>Sets</label>
+            <input
+              style={inputStyle}
+              type="number"
+              value={exerciseSets}
+              onChange={(e) => setExerciseSets(e.target.value)}
+            />
+
+            <label style={labelStyle}>Reps</label>
+            <input
+              style={inputStyle}
+              type="number"
+              value={exerciseReps}
+              onChange={(e) => setExerciseReps(e.target.value)}
+            />
+
+            <label style={labelStyle}>Weight</label>
+            <input
+              style={inputStyle}
+              value={exerciseWeight}
+              onChange={(e) => setExerciseWeight(e.target.value)}
+              placeholder="e.g. 225 lb"
+            />
+
+            <button style={primaryBtn} onClick={saveExercise}>
+              Save Exercise
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 }
+
+// shared styles for modals
+const modalBackdrop = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.7)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+  zIndex: 999,
+};
+
+const modalCard = {
+  background: "#111",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  padding: 18,
+  width: "100%",
+  maxWidth: 420,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.15)",
+  background: "#000",
+  color: "white",
+  marginBottom: 10,
+};
+
+const labelStyle = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 4,
+};
+
+const primaryBtn = {
+  width: "100%",
+  padding: 10,
+  borderRadius: 10,
+  border: "none",
+  background: "#ff2f2f",
+  color: "white",
+  fontWeight: 600,
+  marginTop: 8,
+};

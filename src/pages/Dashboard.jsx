@@ -1,358 +1,491 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { Link } from "react-router-dom";
 
 export default function Dashboard() {
-  const [userId, setUserId] = useState(null);
+  const [user, setUser] = useState(null);
   const [goals, setGoals] = useState([]);
-  const [upcoming, setUpcoming] = useState([]);
+  const [loadingGoals, setLoadingGoals] = useState(true);
 
-  const mainGoal = goals[0] || null;
+  // Strength Calculator State
+  const [oneRepMaxInput, setOneRepMaxInput] = useState("");
+  const [estimated1RM, setEstimated1RM] = useState(null);
 
-  // -------------------------
-  // STRENGTH CALCULATOR STATE
-  // -------------------------
-  const [liftName, setLiftName] = useState("");
-  const [weight, setWeight] = useState("");
-  const [reps, setReps] = useState("");
-  const [oneRM, setOneRM] = useState(null);
-  const [currentPR, setCurrentPR] = useState(null);
-
-  const repMultipliers = {
-    1: 1.0,
-    2: 1.05,
-    3: 1.08,
-    4: 1.12,
-    5: 1.15,
-    6: 1.18,
-    7: 1.20,
-    8: 1.22,
-    9: 1.24,
-    10: 1.27,
-  };
-
-  const percentages = [
-    { pct: 95, reps: 1 },
-    { pct: 90, reps: 2 },
-    { pct: 85, reps: 3 },
-    { pct: 80, reps: 5 },
-    { pct: 75, reps: 8 },
-    { pct: 70, reps: 10 },
-    { pct: 65, reps: 12 },
-    { pct: 60, reps: 15 },
-  ];
-
-  // -------------------------
-  // LOAD USER / GOALS / WORKOUT
-  // -------------------------
   useEffect(() => {
-    async function loadUser() {
-      const { data } = await supabase.auth.getUser();
-      const id = data?.user?.id;
-      setUserId(id);
-
-      if (id) {
-        loadGoals(id);
-        loadUpcoming(id);
-      }
-    }
-    loadUser();
+    loadUserAndGoals();
   }, []);
 
-  async function loadGoals(uid) {
-    const { data } = await supabase
-      .from("goals")
-      .select("*")
-      .eq("user_id", uid)
-      .order("updated_at", { ascending: false })
-      .limit(3);
+  async function loadUserAndGoals() {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
 
-    setGoals(data || []);
+      const currentUser = data?.user || null;
+      setUser(currentUser);
+
+      if (currentUser?.id) {
+        await loadGoals(currentUser.id);
+      } else {
+        setLoadingGoals(false);
+      }
+    } catch (err) {
+      console.error("Error loading user:", err.message);
+      setLoadingGoals(false);
+    }
   }
 
-  async function loadUpcoming(uid) {
-    const { data, error } = await supabase
-      .from("workouts")
-      .select("*")
-      .eq("user_id", uid)
-      .not("scheduled_for", "is", null)
-      .gte("scheduled_for", new Date().toISOString())
-      .order("scheduled_for", { ascending: true })
-      .limit(1);
+  async function loadGoals(uid) {
+    try {
+      const { data, error } = await supabase
+        .from("goals")
+        .select("*")
+        .eq("user_id", uid)
+        .order("updated_at", { ascending: false })
+        .limit(3);
 
-    if (error) console.error("LOAD UPCOMING ERROR:", error);
-    setUpcoming(data || []);
+      if (error) throw error;
+
+      setGoals(data || []);
+    } catch (err) {
+      console.error("Error loading goals:", err.message);
+    } finally {
+      setLoadingGoals(false);
+    }
   }
 
   function getProgress(goal) {
-    const current = goal?.current_value || 0;
-    const target = goal?.target_value || 0;
-    if (!target) return 0;
-    return Math.min(Math.round((current / target) * 100), 999);
+    const current = Number(goal.current_value) || 0;
+    const target = Number(goal.target_value) || 0;
+    if (!target || target <= 0) return 0;
+
+    const pct = Math.round((current / target) * 100);
+    if (pct < 0) return 0;
+    if (pct > 100) return 100;
+    return pct;
   }
 
-  // -------------------------
-  // LOAD CURRENT PR WHEN LIFT CHANGES
-  // -------------------------
-  useEffect(() => {
-    async function loadPR() {
-      if (!liftName) {
-        setCurrentPR(null);
-        return;
-      }
+  function handleOneRepMaxChange(e) {
+    const value = e.target.value;
+    setOneRepMaxInput(value);
 
-      const { data, error } = await supabase
-        .from("prs")
-        .select("*")
-        .eq("lift_name", liftName.toLowerCase())
-        .order("weight", { ascending: false })
-        .limit(1);
-
-      if (error) {
-        console.error("LOAD PR ERROR:", error);
-        setCurrentPR(null);
-        return;
-      }
-
-      setCurrentPR(data?.[0]?.weight ?? null);
+    const numeric = parseFloat(value);
+    if (isNaN(numeric) || numeric <= 0) {
+      setEstimated1RM(null);
+    } else {
+      setEstimated1RM(numeric);
     }
-
-    loadPR();
-  }, [liftName]);
-
-  // -------------------------
-  // CALCULATE ESTIMATED 1RM
-  // -------------------------
-  function calculateOneRM() {
-    if (!weight || !reps) return;
-
-    const w = Number(weight);
-    const r = Number(reps);
-    if (!w || !r) return;
-
-    const multiplier = repMultipliers[r] || (1 + r * 0.03);
-    const est = Math.round(w * multiplier);
-
-    setOneRM(est);
   }
 
-  // -------------------------
-  // SAVE PR
-  // -------------------------
-  async function savePR() {
-    if (!liftName || !oneRM) return;
+  function getStrengthRows() {
+    if (!estimated1RM) return [];
 
-    const { error } = await supabase.from("prs").insert({
-      lift_name: liftName.toLowerCase(),
-      weight: oneRM,
+    const percents = [95, 90, 85, 80, 75, 70, 65, 60];
+    const repsByPercent = {
+      95: 2,
+      90: 3,
+      85: 5,
+      80: 8,
+      75: 10,
+      70: 12,
+      65: 15,
+      60: 20,
+    };
+
+    return percents.map((p) => {
+      const weight = Math.round(estimated1RM * (p / 100));
+      const reps = repsByPercent[p] || "";
+      return {
+        percent: p,
+        weight,
+        reps,
+      };
     });
-
-    if (error) {
-      console.error("SAVE PR ERROR:", error);
-      return;
-    }
-
-    setCurrentPR(oneRM);
   }
 
-  // -------------------------
-  // RENDER
-  // -------------------------
+  const strengthRows = getStrengthRows();
+
+  const username =
+    user?.user_metadata?.username ||
+    (user?.email ? user.email.split("@")[0] : "Athlete");
+
   return (
-    <div className="text-white p-4 pb-28">
-      {/* HEADER */}
-      <header className="mb-6">
-        <h1 className="text-3xl font-extrabold leading-tight">ArmPal</h1>
-        <p className="text-sm text-gray-300">Stronger every session.</p>
+    <div
+      className="dashboard-page"
+      style={{
+        paddingTop: "16px",
+        paddingLeft: "16px",
+        paddingRight: "16px",
+        paddingBottom: "90px", // safe for BottomNav
+        maxWidth: "900px",
+        margin: "0 auto",
+      }}
+    >
+      {/* Header */}
+      <header style={{ marginBottom: "16px" }}>
+        <p
+          style={{
+            fontSize: "14px",
+            opacity: 0.8,
+            margin: 0,
+          }}
+        >
+          Welcome back,
+        </p>
+        <h1
+          style={{
+            fontSize: "24px",
+            fontWeight: 700,
+            margin: "2px 0 0",
+          }}
+        >
+          {username}
+        </h1>
+        <p
+          style={{
+            fontSize: "13px",
+            opacity: 0.7,
+            marginTop: "4px",
+          }}
+        >
+          Track your progress. Crush your PRs. Stay locked in.
+        </p>
       </header>
 
-      {/* UPCOMING WORKOUT */}
-      <section className="mb-5">
-        <h2 className="text-lg font-semibold mb-1">Upcoming Workout</h2>
-        {upcoming.length === 0 ? (
-          <p className="text-gray-400 text-sm">
-            No workouts yet. Create one!
-          </p>
-        ) : (
-          upcoming.map((w) => (
-            <div
-              key={w.id}
-              className="bg-[#111] p-3 rounded-xl border border-gray-800 mb-2"
-            >
-              <p className="font-medium">{w.name}</p>
-              <p className="text-xs text-gray-400">
-                {new Date(w.scheduled_for).toLocaleDateString()}
-              </p>
-            </div>
-          ))
-        )}
-      </section>
+      {/* Goals Section */}
+      <section style={{ marginBottom: "18px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: "8px",
+          }}
+        >
+          <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>
+            Top Goals
+          </h2>
 
-      {/* MAIN GOAL */}
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold mb-1">Main Goal</h2>
-
-        {mainGoal ? (
-          <div className="bg-[#111] p-4 rounded-xl border border-gray-800">
-            <p className="font-semibold mb-1">{mainGoal.title}</p>
-            <p className="text-sm text-gray-300">
-              {mainGoal.current_value} / {mainGoal.target_value}
-            </p>
-            <p className="text-sm">{getProgress(mainGoal)}% complete</p>
-
-            <div className="w-full bg-gray-700 h-2 rounded mt-2">
-              <div
-                className="bg-red-600 h-2 rounded"
-                style={{ width: `${Math.min(getProgress(mainGoal), 100)}%` }}
-              />
-            </div>
-
-            <button className="mt-3 text-xs text-red-400">
-              View all goals →
-            </button>
-          </div>
-        ) : (
-          <p className="text-gray-400 text-sm">
-            No goals yet. Add one in the Goals tab.
-          </p>
-        )}
-      </section>
-
-      {/* ============================= */}
-      {/*      STRENGTH CALCULATOR      */}
-      {/* ============================= */}
-      <section className="bg-[#0d0d0d] p-5 rounded-2xl border border-red-900/40 shadow-[0_0_25px_rgba(255,0,0,0.15)] mb-6">
-        <h2 className="text-lg font-semibold text-red-400 mb-3">
-          STRENGTH CALCULATOR
-        </h2>
-
-        {/* Lift Name */}
-        <label className="block text-sm text-gray-300 mb-1">Lift Name</label>
-        <input
-          type="text"
-          placeholder="bench, squat, deadlift..."
-          value={liftName}
-          onChange={(e) => setLiftName(e.target.value)}
-          className="w-full p-3 mb-3 bg-black border border-red-800/40 rounded-lg focus:border-red-600 transition"
-        />
-
-        {/* Weight + Reps on SAME ROW */}
-        <div className="flex gap-3 mb-3">
-          <div className="flex-1">
-            <label className="block text-sm text-gray-300 mb-1">Weight</label>
-            <input
-              type="number"
-              placeholder="lbs"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              className="w-full p-3 bg-black border border-red-800/40 rounded-lg"
-            />
-          </div>
-
-          <div className="w-24">
-            <label className="block text-sm text-gray-300 mb-1">Reps</label>
-            <input
-              type="number"
-              placeholder="#"
-              value={reps}
-              onChange={(e) => setReps(e.target.value)}
-              className="w-full p-3 bg-black border border-red-800/40 rounded-lg"
-            />
-          </div>
+          <Link
+            to="/goals"
+            style={{
+              fontSize: "12px",
+              textDecoration: "none",
+              opacity: 0.8,
+            }}
+          >
+            View all
+          </Link>
         </div>
 
-        {/* Button */}
-        <button
-          onClick={calculateOneRM}
-          className="w-full mt-1 py-3 rounded-lg font-bold bg-red-600 hover:bg-red-700 tracking-wide shadow-[0_0_15px_rgba(255,0,0,0.35)] transition"
+        <div
+          style={{
+            background: "#101010",
+            borderRadius: "12px",
+            padding: "12px",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
         >
-          Calculate 1RM
-        </button>
-      </section>
-
-      {/* ESTIMATED 1RM + PR COMPARISON */}
-      {oneRM && (
-        <section className="bg-[#0d0d0d] p-5 rounded-2xl border border-red-900/40 shadow-[0_0_25px_rgba(255,0,0,0.15)] mb-6">
-          <h3 className="text-xl font-bold text-red-400 mb-1">
-            Estimated 1RM
-          </h3>
-          <p className="text-3xl font-extrabold text-white mb-2">
-            {oneRM} lbs
-          </p>
-
-          <div className="w-full h-[2px] bg-red-700 mb-3" />
-
-          {/* PR COMPARISON – always show something */}
-          <div className="mb-3 text-sm">
-            <p className="text-gray-400">PR Comparison</p>
-            {currentPR !== null ? (
-              <>
-                <p>Current PR: {currentPR} lbs</p>
-                <p>Your 1RM: {oneRM} lbs</p>
-                <p className="mt-1">
-                  Difference:{" "}
-                  <span className="font-semibold text-red-400">
-                    {oneRM - currentPR} lbs
-                  </span>
-                </p>
-                {oneRM > currentPR && (
-                  <p className="text-red-400 font-bold mt-1">
-                    🔥 NEW PR POSSIBLE
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-gray-300">
-                No PR saved yet for this lift.
-              </p>
-            )}
-          </div>
-
-          {/* Save button – always available when 1RM exists */}
-          <button
-            onClick={savePR}
-            className="w-full py-2 mt-2 bg-red-700 rounded-lg hover:bg-red-800 font-semibold"
-          >
-            Save as PR
-          </button>
-        </section>
-      )}
-
-      {/* PERCENTAGES: LEFT = % + weight, RIGHT = reps + weight */}
-      {oneRM && (
-        <section className="bg-[#0d0d0d] p-5 rounded-2xl border border-red-900/40 shadow-[0_0_25px_rgba(255,0,0,0.15)]">
-          <h3 className="text-xl font-bold mb-4">Percentages</h3>
-
-          <div className="space-y-2 text-sm">
-            {percentages.map((row) => {
-              const pctWeight = Math.round(oneRM * (row.pct / 100));
-              const repsWeight = Math.round(
-                oneRM / (repMultipliers[row.reps] || 1)
-              );
+          {loadingGoals ? (
+            <p style={{ fontSize: "13px", opacity: 0.7, margin: 0 }}>
+              Loading goals...
+            </p>
+          ) : goals.length === 0 ? (
+            <p style={{ fontSize: "13px", opacity: 0.7, margin: 0 }}>
+              No goals yet. Add some to start tracking your progress.
+            </p>
+          ) : (
+            goals.map((goal) => {
+              const progress = getProgress(goal);
 
               return (
                 <div
-                  key={row.pct}
-                  className="flex items-center justify-between"
+                  key={goal.id}
+                  style={{
+                    marginBottom: "10px",
+                    paddingBottom: "8px",
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  }}
                 >
-                  {/* LEFT: 95% — 299 lbs */}
-                  <span>
-                    {row.pct}% — {pctWeight} lbs
-                  </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    <div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "14px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {goal.title || "Goal"}
+                      </p>
+                      {goal.target_value ? (
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: "11px",
+                            opacity: 0.7,
+                          }}
+                        >
+                          {goal.current_value ?? 0} / {goal.target_value}{" "}
+                          {goal.unit || ""}
+                        </p>
+                      ) : null}
+                    </div>
 
-                  {/* RIGHT: 1 rep — 315 lbs */}
-                  <span className="text-gray-300">
-                    {row.reps} reps —{" "}
-                    <span className="text-red-400 font-semibold">
-                      {repsWeight} lbs
+                    <span style={{ fontSize: "12px", opacity: 0.8 }}>
+                      {progress}%
                     </span>
-                  </span>
+                  </div>
+
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "6px",
+                      background: "rgba(255,255,255,0.06)",
+                      borderRadius: "999px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${progress}%`,
+                        height: "100%",
+                        background:
+                          "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
+                        borderRadius: "999px",
+                        transition: "width 0.2s ease-out",
+                      }}
+                    ></div>
+                  </div>
                 </div>
               );
-            })}
-          </div>
-        </section>
-      )}
+            })
+          )}
+        </div>
+      </section>
+
+      {/* Strength Calculator */}
+      <section style={{ marginBottom: "18px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: "8px",
+          }}
+        >
+          <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>
+            Strength Calculator
+          </h2>
+
+          <Link
+            to="/strength-calculator"
+            style={{
+              fontSize: "12px",
+              textDecoration: "none",
+              opacity: 0.8,
+            }}
+          >
+            Full view
+          </Link>
+        </div>
+
+        <div
+          style={{
+            background: "#101010",
+            borderRadius: "12px",
+            padding: "12px",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <label
+            style={{
+              display: "block",
+              fontSize: "12px",
+              marginBottom: "6px",
+              opacity: 0.9,
+            }}
+          >
+            Estimated 1RM (lbs)
+          </label>
+
+          <input
+            type="number"
+            value={oneRepMaxInput}
+            onChange={handleOneRepMaxChange}
+            placeholder="Enter your 1 rep max"
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              background: "#080808",
+              color: "white",
+              borderRadius: "8px",
+              border: "1px solid rgba(255,255,255,0.15)",
+              marginBottom: "12px",
+            }}
+          />
+
+          {estimated1RM && strengthRows.length > 0 ? (
+            <div
+              style={{
+                borderRadius: "10px",
+                border: "1px solid rgba(255,255,255,0.08)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  fontSize: "11px",
+                  padding: "6px 8px",
+                  background: "#141414",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  fontWeight: 600,
+                }}
+              >
+                <span>% of 1RM</span>
+                <span style={{ textAlign: "center" }}>Weight</span>
+                <span style={{ textAlign: "right" }}>Reps</span>
+              </div>
+
+              {strengthRows.map((row) => (
+                <div
+                  key={row.percent}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    padding: "6px 8px",
+                    fontSize: "11px",
+                    borderBottom: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <span>{row.percent}%</span>
+                  <span style={{ textAlign: "center" }}>
+                    {row.weight} lb
+                  </span>
+                  <span style={{ textAlign: "right" }}>
+                    {row.reps || "-"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: "12px", opacity: 0.7, margin: 0 }}>
+              Enter a 1RM to calculate your working weights.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Upcoming Workouts */}
+      <section style={{ marginBottom: "18px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: "8px",
+          }}
+        >
+          <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>
+            Upcoming Workouts
+          </h2>
+
+          <Link
+            to="/workouts"
+            style={{
+              fontSize: "12px",
+              textDecoration: "none",
+              opacity: 0.8,
+            }}
+          >
+            Open workouts
+          </Link>
+        </div>
+
+        <div
+          style={{
+            background: "#101010",
+            borderRadius: "12px",
+            padding: "12px",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <p style={{ fontSize: "13px", opacity: 0.8, margin: 0 }}>
+            No upcoming workouts yet.
+          </p>
+          <p
+            style={{
+              fontSize: "12px",
+              opacity: 0.7,
+              marginTop: "4px",
+            }}
+          >
+            Plan your next session on the Workouts page.
+          </p>
+        </div>
+      </section>
+
+      {/* Quick Links */}
+      <section style={{ marginBottom: "8px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "8px",
+          }}
+        >
+          <Link
+            to="/pr-tracker"
+            style={{
+              textDecoration: "none",
+              background: "#101010",
+              borderRadius: "10px",
+              padding: "10px",
+              border: "1px solid rgba(255,255,255,0.06)",
+              fontSize: "12px",
+              textAlign: "center",
+            }}
+          >
+            PRs
+          </Link>
+
+          <Link
+            to="/measurements"
+            style={{
+              textDecoration: "none",
+              background: "#101010",
+              borderRadius: "10px",
+              padding: "10px",
+              border: "1px solid rgba(255,255,255,0.06)",
+              fontSize: "12px",
+              textAlign: "center",
+            }}
+          >
+            Measurements
+          </Link>
+
+          <Link
+            to="/profile"
+            style={{
+              textDecoration: "none",
+              background: "#101010",
+              borderRadius: "10px",
+              padding: "10px",
+              border: "1px solid rgba(255,255,255,0.06)",
+              fontSize: "12px",
+              textAlign: "center",
+            }}
+          >
+            Profile
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
