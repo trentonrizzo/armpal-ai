@@ -82,7 +82,7 @@ export default function App() {
 
   if (!ready) return null;
 
-  if (!session) return <AuthPage />;
+  if (!session) return <AuthPage key="auth" />;
 
   return (
     <AppProvider>
