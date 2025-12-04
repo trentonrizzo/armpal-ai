@@ -5,15 +5,14 @@
 /*        ARMPAL GLOBAL THEME      */
 /* =============================== */
 
-/* PURE ArmPal colors */
 :root {
-  --bg: #000000;          /* pure black */
-  --card: #0a0a0a;        /* subtle black lift */
-  --card-2: #111111;      /* second-level black */
-  --red: #e00000;         /* ArmPal red */
-  --red-soft: #ff1a1a;    /* bright highlight red */
-  --text: #ffffff;        /* pure white */
-  --text-dim: #c8c8c8;    /* soft white */
+  --bg: #000000;
+  --card: #0a0a0a;
+  --card-2: #111111;
+  --red: #e00000;
+  --red-soft: #ff1a1a;
+  --text: #ffffff;
+  --text-dim: #c8c8c8;
 }
 
 /* RESET */
@@ -37,25 +36,26 @@ html, body {
   background: #222;
   border-radius: 8px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #333;
-}
+::-webkit-scrollbar-thumb:hover { background: #333; }
 
-/* CARDS */
+/* =============================== */
+/*            CARD BASE             */
+/* =============================== */
+/* IMPORTANT: No glow, no fog, no shadows.
+   PRTracker will handle its own card UI.
+*/
+
 .card {
   background: var(--card);
   border: 1px solid #1a1a1a;
   border-radius: 16px;
   padding: 18px;
-  box-shadow: 0 0 25px rgba(0,0,0,0.6);
-  transition: 0.2s ease;
-}
-.card:hover {
-  transform: translateY(-2px);
-  border-color: var(--red);
 }
 
-/* TITLES */
+/* =============================== */
+/*            TITLES               */
+/* =============================== */
+
 .section-title {
   font-size: 1.3rem;
   font-weight: 800;
@@ -63,7 +63,10 @@ html, body {
   margin-bottom: 12px;
 }
 
-/* GRID – pure, clean, modern */
+/* =============================== */
+/*              GRIDS              */
+/* =============================== */
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -90,7 +93,10 @@ html, body {
   color: var(--text-dim);
 }
 
-/* QUICK-ACTION BUTTONS */
+/* =============================== */
+/*        QUICK ACTION BUTTONS      */
+/* =============================== */
+
 .qa-btn {
   background: var(--card);
   border: 1px solid #1b1b1b;
@@ -100,24 +106,23 @@ html, body {
   font-weight: 600;
   transition: 0.25s;
 }
-
 .qa-btn:hover {
   border-color: var(--red);
   color: var(--red-soft);
   transform: translateY(-1px);
 }
 
-/* RED BUTTON VARIANT */
 .qa-btn-red {
   background: rgba(224,0,0,0.2);
   border: 1px solid rgba(224,0,0,0.4);
   color: var(--red);
 }
-.qa-btn-red:hover {
-  background: rgba(224,0,0,0.35);
-}
+.qa-btn-red:hover { background: rgba(224,0,0,0.35); }
 
-/* LIFTING PROGRESS BARS (for Strength page etc.) */
+/* =============================== */
+/*       STRENGTH PROGRESS BARS     */
+/* =============================== */
+
 .strength-bar {
   width: 100%;
   background: #1a1a1a;
@@ -132,7 +137,10 @@ html, body {
   transition: width 0.4s ease;
 }
 
-/* AVATAR */
+/* =============================== */
+/*              AVATAR              */
+/* =============================== */
+
 .avatar {
   width: 76px;
   height: 76px;
@@ -141,7 +149,10 @@ html, body {
   border: 2px solid var(--red);
 }
 
-/* FADE-IN */
+/* =============================== */
+/*           FADE-IN ANIM           */
+/* =============================== */
+
 .fade-in {
   animation: fadeIn 0.3s ease-out;
 }
@@ -150,26 +161,27 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* REMOVE ALL DEFAULT LINK COLORS */
+/* =============================== */
+/*        REMOVE LINK COLORS         */
+/* =============================== */
+
 a, a:visited {
   color: inherit !important;
   text-decoration: none !important;
 }
-a:hover {
-  color: inherit !important;
-}
+a:hover { color: inherit !important; }
 
 /* =============================== */
-/*         GOAL PROGRESS BAR       */
+/*         GOAL PROGRESS BAR        */
 /* =============================== */
 
 .goal-progress-bar {
   width: 100%;
   height: 12px;
-  background: #1a1a1a;
+  background: #111;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(255, 0, 0, 0.2);
+  border: 1px solid rgba(255, 0, 0, 0.25);
   margin-top: 6px;
 }
 
@@ -177,198 +189,28 @@ a:hover {
   height: 100%;
   background: var(--red-soft);
   border-radius: 20px;
-  transition: width 0.4s ease;
-}
-
-/* CLEAN FINAL GLOW */
-.progress-glow {
-  box-shadow: 0 0 12px rgba(224, 0, 0, 0.45);
-  transition: width 0.5s ease, box-shadow 0.3s ease;
-}
-
-/* =============================== */
-/*     PREMIUM GOAL PROGRESS BAR   */
-/* =============================== */
-
-.premium-progress-bar {
-  width: 100%;
-  height: 14px;
-  background: #111;
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 0, 0, 0.25);
-  box-shadow: inset 0 0 8px rgba(255, 0, 0, 0.15);
-  margin-top: 6px;
-}
-
-.premium-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg,
-    #800000,
-    #e00000,
-    #ff2a2a,
-    #e00000,
-    #800000
-  );
-  background-size: 300% 100%;
-  animation: premiumGradientMove 3s linear infinite;
-  border-radius: 20px;
-  box-shadow: 0 0 12px rgba(255, 0, 0, 0.55);
   transition: width 0.45s ease;
 }
 
-@keyframes premiumGradientMove {
-  0% { background-position: 0% 0; }
-  100% { background-position: 300% 0; }
-}
-
-/* GOAL BAR FRAME */
-.goal-progress-bar {
-  width: 100%;
-  height: 12px;
-  background: #111;
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 0, 0, 0.25);
-}
-
-/* FILL */
-.goal-progress-fill {
-  height: 100%;
-  border-radius: 20px;
-  transition: width 0.45s ease, background 0.45s ease, box-shadow 0.3s ease;
-}
-
-/* Glow */
-.progress-glow {
-  box-shadow: 0 0 10px rgba(255, 0, 0, 0.45);
-}
-
-/* =============================== */
-/*      GOAL PROGRESS BAR v2       */
-/* =============================== */
-
-.goal-progress-bar {
-  width: 100%;
-  height: 12px;
-  background: #1a1a1a;
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 0, 0, 0.25);
-  margin-top: 6px;
-  position: relative;
-}
-
-.goal-progress-fill {
-  height: 100%;
-  background: var(--red-soft);
-  border-radius: 20px;
-  transition: width 0.6s cubic-bezier(0.25, 0.8, 0.4, 1);
-}
-
-/* Glow */
-.progress-glow {
-  box-shadow: 0 0 12px rgba(224, 0, 0, 0.55);
-}
-
-/* Pulse */
-.pulse {
-  animation: pulseGlow 3.5s infinite ease-in-out;
-}
-
-@keyframes pulseGlow {
-  0%   { box-shadow: 0 0 8px rgba(224,0,0,0.4); }
-  50%  { box-shadow: 0 0 14px rgba(255,0,0,0.75); }
-  100% { box-shadow: 0 0 8px rgba(224,0,0,0.4); }
-}
-
-/* GOLD overflow pulse */
-@keyframes pulseGlow {
-  0%   { box-shadow: 0 0 6px rgba(255,220,0,0.4); }
-  50%  { box-shadow: 0 0 14px rgba(255,220,0,0.9); }
-  100% { box-shadow: 0 0 6px rgba(255,220,0,0.4); }
-}
-
+/* Over-goal glow */
 .over-goal-fill {
   box-shadow: 0 0 12px rgba(255,200,0,0.8);
 }
 
-/* Scrollbar Hiders */
+/* =============================== */
+/*         NO GLASS / NO FOG        */
+/* =============================== */
+/* glass-card, neon-input, pulses REMOVED because they polluted PR page */
+
+/* =============================== */
+/*           UTILITY               */
+/* =============================== */
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Slide Animation */
 @keyframes slideUp {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-
-.animate-slideUp {
-  animation: slideUp 0.25s ease-out;
-}
-/* =============================== */
-/*      ARMPAL GLASS + NEON UI     */
-/* =============================== */
-
-.glass-card {
-  background:
-    radial-gradient(circle at top left, rgba(224, 0, 0, 0.18), transparent 55%),
-    #050505;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow:
-    0 18px 35px rgba(0, 0, 0, 0.9),
-    0 0 26px rgba(224, 0, 0, 0.25);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease,
-    border-color 0.18s ease,
-    background 0.18s ease;
-}
-
-.glass-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(255, 42, 42, 0.9);
-  box-shadow:
-    0 22px 40px rgba(0, 0, 0, 0.95),
-    0 0 32px rgba(255, 42, 42, 0.45);
-}
-
-/* Inputs with subtle neon red focus */
-.neon-input {
-  width: 100%;
-  background: #050505;
-  color: var(--text);
-  border-radius: 10px;
-  border: 1px solid #2a2a2a;
-  padding: 8px 10px;
-  font-size: 0.85rem;
-  outline: none;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    background 0.16s ease,
-    transform 0.12s ease;
-}
-
-.neon-input::placeholder {
-  color: #6f6f6f;
-}
-
-.neon-input:focus {
-  border-color: var(--red-soft);
-  box-shadow: 0 0 0 1px rgba(255, 60, 60, 0.7),
-    0 0 14px rgba(255, 0, 0, 0.55);
-  background: #080808;
-  transform: translateY(-1px);
-}
-
-.neon-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(200, 200, 200, 0.8);
-}
+.animate-slideUp { animation: slideUp 0.25s ease-out; }

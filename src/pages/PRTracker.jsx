@@ -1,30 +1,45 @@
-// =============================================
-//  PRTracker.jsx — ArmPal Premium PR System
-//  PART 1 / 2  (paste PART 2 below this)
-// =============================================
-import React, { useContext, useState, useMemo } from "react";
+// src/pages/PRTracker.jsx
+import React, { useContext, useState, useMemo, useEffect } from "react";
 import { AppContext } from "../context/AppContext";
 import { FaTrashAlt, FaEdit } from "react-icons/fa";
 
-// ============================
-// GLOW CARD (B - medium glow)
-// ============================
-function GlowCard({ children, isDragging }) {
+/* ============================================================
+   ARMPAL NEON GLOW CARD (B-STYLE: Medium Strength Neon Pulse)
+   ============================================================ */
+function GlowCard({ children, dragging }) {
   return (
     <div
-      className={`relative rounded-2xl p-4 mb-4 transition-all duration-200 
-        bg-[#0a0a0a] border border-[#1a1a1a]
-        ${isDragging ? "scale-[0.97] opacity-[0.85]" : "scale-100"}
+      className={`
+        relative rounded-2xl p-4 mb-4
+        bg-[#080808]
+        border border-[rgba(255,0,0,0.16)]
+        transition-all duration-200
+        ${dragging ? "scale-[0.96] opacity-[0.82]" : "scale-100"}
       `}
       style={{
-        boxShadow:
-          "0 0 14px rgba(255,0,0,0.32), inset 0 0 8px rgba(255,0,0,0.18)",
+        background:
+          "radial-gradient(circle at top left, rgba(255,0,0,0.18), rgba(0,0,0,0.85))",
+        boxShadow: `
+          0 0 22px rgba(255, 35, 35, 0.55),
+          inset 0 0 16px rgba(255, 0, 0, 0.25)
+        `,
+        animation: "pulseGlow 3.4s ease-in-out infinite",
       }}
     >
       {children}
     </div>
   );
 }
+
+// Neon pulse style injection (only once)
+const style = document.createElement("style");
+style.innerHTML = `
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 10px rgba(255,45,45,0.35), inset 0 0 14px rgba(255,0,0,0.25); }
+  50% { box-shadow: 0 0 26px rgba(255,45,45,0.9), inset 0 0 18px rgba(255,0,0,0.32); }
+  100% { box-shadow: 0 0 10px rgba(255,45,45,0.35), inset 0 0 14px rgba(255,0,0,0.25); }
+}`;
+document.head.appendChild(style);
 
 export default function PRTracker() {
   const {
@@ -33,20 +48,17 @@ export default function PRTracker() {
     editPR,
     removePR,
     reorderPRs,
-    groups,
   } = useContext(AppContext);
 
-  // Add PR state
+  // NEW PR
   const [newLift, setNewLift] = useState("");
   const [newWeight, setNewWeight] = useState("");
   const [newReps, setNewReps] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [newUnit, setNewUnit] = useState("lbs");
-  const [newDate, setNewDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
 
-  // Edit state
+  // EDITING
   const [editingId, setEditingId] = useState(null);
   const [editLift, setEditLift] = useState("");
   const [editWeight, setEditWeight] = useState("");
@@ -55,29 +67,22 @@ export default function PRTracker() {
   const [editUnit, setEditUnit] = useState("lbs");
   const [editDate, setEditDate] = useState("");
 
-  // Delete confirmation state
+  // DELETING
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  // Drag-reorder state
+  // DRAGGING
   const [draggingId, setDraggingId] = useState(null);
+  let pressTimer = null;
 
-  // ============================
-  // SORT PRs by order_index
-  // ============================
   const flatPRs = useMemo(() => {
     return [...prs].sort(
       (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
     );
   }, [prs]);
 
-  // ============================
-  // Add a PR
-  // ============================
+  // ADD
   async function handleAddPR() {
-    if (!newLift.trim() || !newWeight.trim()) {
-      alert("Lift name & weight required");
-      return;
-    }
+    if (!newLift || !newWeight) return;
 
     await createPR(
       newLift.trim(),
@@ -96,24 +101,18 @@ export default function PRTracker() {
     setNewDate(new Date().toISOString().split("T")[0]);
   }
 
-  // ============================
-  // Start Editing PR
-  // ============================
-  function startEdit(pr) {
+  // START EDIT
+  function beginEdit(pr) {
     setEditingId(pr.id);
     setEditLift(pr.lift_name);
     setEditWeight(pr.weight);
     setEditReps(pr.reps ?? "");
     setEditNotes(pr.notes || "");
-    setEditUnit(pr.unit || "lbs");
-    setEditDate(
-      pr.date || new Date().toISOString().split("T")[0]
-    );
+    setEditUnit(pr.unit);
+    setEditDate(pr.date);
   }
 
-  // ============================
-  // Save Edit
-  // ============================
+  // SAVE EDIT
   async function saveEdit() {
     await editPR(editingId, {
       lift_name: editLift.trim(),
@@ -123,68 +122,59 @@ export default function PRTracker() {
       notes: editNotes || null,
       date: editDate,
     });
+
     setEditingId(null);
   }
 
-  // ============================
-  // Drag & Drop logic
-  // ============================
-  function handleDragStart(id) {
-    setDraggingId(id);
+  // DRAGGING
+  function handleTouchStart(id) {
+    pressTimer = setTimeout(() => {
+      setDraggingId(id);
+    }, 220);
   }
-
+  function handleTouchEnd() {
+    clearTimeout(pressTimer);
+  }
   function handleDragOver(e) {
     e.preventDefault();
   }
-
   async function handleDrop(targetId) {
-    if (draggingId === targetId) {
-      setDraggingId(null);
-      return;
-    }
+    if (draggingId === targetId) return setDraggingId(null);
 
     const list = [...flatPRs];
     const from = list.findIndex((p) => p.id === draggingId);
     const to = list.findIndex((p) => p.id === targetId);
 
-    if (from === -1 || to === -1) {
-      setDraggingId(null);
-      return;
-    }
-
     const [moved] = list.splice(from, 1);
     list.splice(to, 0, moved);
 
-    const updates = list.map((p, i) => ({
-      id: p.id,
-      order_index: i,
-    }));
+    await reorderPRs(
+      list.map((p, i) => ({ id: p.id, order_index: i }))
+    );
 
-    await reorderPRs(updates);
     setDraggingId(null);
   }
 
-  // ============================
-  // PR Card Component
-  // ============================
+  // RENDER PR CARD
   function PRCard(pr) {
-    const isEditing = editingId === pr.id;
-    const isConfirmDelete = confirmDeleteId === pr.id;
+    const editing = editingId === pr.id;
+    const deleting = confirmDeleteId === pr.id;
 
     return (
       <div
         key={pr.id}
         draggable
-        onDragStart={() => handleDragStart(pr.id)}
         onDragOver={handleDragOver}
         onDrop={() => handleDrop(pr.id)}
+        onTouchStart={() => handleTouchStart(pr.id)}
+        onTouchEnd={handleTouchEnd}
       >
-        <GlowCard isDragging={draggingId === pr.id}>
-          {/* ============= EDIT MODE ============= */}
-          {isEditing ? (
+        <GlowCard dragging={draggingId === pr.id}>
+          {editing ? (
+            /* EDIT MODE */
             <div className="space-y-3">
               <input
-                className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                className="neon-input"
                 value={editLift}
                 onChange={(e) => setEditLift(e.target.value)}
               />
@@ -192,15 +182,13 @@ export default function PRTracker() {
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="number"
-                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-                  placeholder="Weight"
+                  className="neon-input"
                   value={editWeight}
                   onChange={(e) => setEditWeight(e.target.value)}
                 />
                 <input
                   type="number"
-                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-                  placeholder="Reps"
+                  className="neon-input"
                   value={editReps}
                   onChange={(e) => setEditReps(e.target.value)}
                 />
@@ -208,7 +196,7 @@ export default function PRTracker() {
 
               <div className="grid grid-cols-2 gap-3">
                 <select
-                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                  className="neon-input"
                   value={editUnit}
                   onChange={(e) => setEditUnit(e.target.value)}
                 >
@@ -218,36 +206,35 @@ export default function PRTracker() {
 
                 <input
                   type="date"
-                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                  className="neon-input"
                   value={editDate}
                   onChange={(e) => setEditDate(e.target.value)}
                 />
               </div>
 
               <textarea
-                className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-                placeholder="Notes…"
+                className="neon-input"
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
               />
 
               <div className="flex justify-end gap-3">
                 <button
-                  className="px-4 py-2 text-xs bg-neutral-700 rounded-lg"
+                  className="px-4 py-2 bg-neutral-700 rounded-lg text-xs"
                   onClick={() => setEditingId(null)}
                 >
                   Cancel
                 </button>
                 <button
-                  className="px-4 py-2 text-xs bg-red-600 rounded-lg"
+                  className="px-4 py-2 bg-red-600 rounded-lg text-xs"
                   onClick={saveEdit}
                 >
                   Save
                 </button>
               </div>
             </div>
-          ) : isConfirmDelete ? (
-            /* ============= DELETE CONFIRM ============= */
+          ) : deleting ? (
+            /* DELETE CONFIRM */
             <div className="text-center space-y-4">
               <p className="text-sm">Delete this PR?</p>
               <div className="flex justify-center gap-4">
@@ -269,31 +256,30 @@ export default function PRTracker() {
               </div>
             </div>
           ) : (
-            /* ============= NORMAL VIEW ============= */
+            /* NORMAL CARD VIEW */
             <div className="space-y-2">
               <div className="flex items-start justify-between">
                 <p className="font-semibold text-[15px] leading-tight">
                   {pr.lift_name}
                 </p>
 
-                <div className="flex gap-3">
-                  <button onClick={() => startEdit(pr)}>
-                    <FaEdit size={16} className="text-red-400" />
+                <div className="flex gap-4">
+                  <button onClick={() => beginEdit(pr)}>
+                    <FaEdit size={15} className="text-red-400" />
                   </button>
                   <button onClick={() => setConfirmDeleteId(pr.id)}>
-                    <FaTrashAlt size={16} className="text-red-500" />
+                    <FaTrashAlt size={15} className="text-red-500" />
                   </button>
                 </div>
               </div>
 
-              <p className="text-xs text-neutral-400">
-                {pr.weight} {pr.unit} •{" "}
-                {pr.reps ? `${pr.reps} reps • ` : ""}
-                {pr.date}
+              <p className="text-neutral-400 text-xs">
+                {pr.weight} {pr.unit}
+                {pr.reps ? ` • ${pr.reps} reps` : ""} • {pr.date}
               </p>
 
               {pr.notes && (
-                <p className="text-xs text-neutral-500 italic">
+                <p className="text-neutral-500 text-xs italic">
                   Notes: {pr.notes}
                 </p>
               )}
@@ -304,53 +290,43 @@ export default function PRTracker() {
     );
   }
 
-  // ============================
-  // MAIN RENDER
-  // ============================
   return (
-    <div className="p-5 pb-24 bg-black min-h-screen text-white">
-
-      {/* PAGE TITLE */}
+    <div className="p-5 pb-24 min-h-screen bg-black text-white">
       <h1 className="text-3xl font-bold text-red-500 mb-4">
         Personal Records
       </h1>
 
-      {/* ADD PR CARD */}
+      {/* ADD NEW PR */}
       <GlowCard>
-        <h2 className="text-lg font-semibold text-red-400 mb-3">
-          Add New PR
-        </h2>
+        <h2 className="text-lg font-semibold text-red-400 mb-4">Add New PR</h2>
 
-        {/* Lift */}
         <input
-          className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
-          placeholder="Lift name (Bench, Curl, Squat...)"
+          className="neon-input mb-3"
+          placeholder="Lift name"
           value={newLift}
           onChange={(e) => setNewLift(e.target.value)}
         />
 
-        {/* Weight + Reps */}
         <div className="grid grid-cols-2 gap-3 mb-3">
           <input
             type="number"
-            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            className="neon-input"
             placeholder="Weight"
             value={newWeight}
             onChange={(e) => setNewWeight(e.target.value)}
           />
           <input
             type="number"
-            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            className="neon-input"
             placeholder="Reps"
             value={newReps}
             onChange={(e) => setNewReps(e.target.value)}
           />
         </div>
 
-        {/* Unit + Date */}
         <div className="grid grid-cols-2 gap-3 mb-3">
           <select
-            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            className="neon-input"
             value={newUnit}
             onChange={(e) => setNewUnit(e.target.value)}
           >
@@ -360,21 +336,19 @@ export default function PRTracker() {
 
           <input
             type="date"
-            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            className="neon-input"
             value={newDate}
             onChange={(e) => setNewDate(e.target.value)}
           />
         </div>
 
-        {/* Notes */}
         <textarea
-          className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
+          className="neon-input mb-3"
           placeholder="Notes (optional)"
           value={newNotes}
           onChange={(e) => setNewNotes(e.target.value)}
         />
 
-        {/* Save button */}
         <button
           onClick={handleAddPR}
           className="w-full py-2 bg-red-600 rounded-lg font-bold text-sm"
@@ -383,47 +357,9 @@ export default function PRTracker() {
         </button>
       </GlowCard>
 
-      {/* GROUPS SECTION (ONLY USER-CREATED GROUPS) */}
-      {groups.length > 0 &&
-        groups.map((group) => {
-          // All PRs belonging to this group
-          const inside = flatPRs.filter((p) => p.group_id === group.id);
-
-          return (
-            <div key={group.id} className="mt-6">
-              <GlowCard>
-                {/* Group title */}
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-lg font-bold text-red-400">
-                    {group.name}
-                  </p>
-
-                  <button
-                    className="text-xs text-neutral-500 underline"
-                    onClick={() => removeGroup(group.id)}
-                  >
-                    Delete Group
-                  </button>
-                </div>
-
-                {/* PRs inside group */}
-                {inside.length === 0 ? (
-                  <p className="text-xs text-neutral-500">
-                    No PRs in this group yet.
-                  </p>
-                ) : (
-                  inside.map((pr) => PRCard(pr))
-                )}
-              </GlowCard>
-            </div>
-          );
-        })}
-
-      {/* ALL PRs (NOT IN ANY GROUP) */}
+      {/* PR LIST */}
       <div className="mt-6">
-        {flatPRs
-          .filter((p) => !p.group_id)
-          .map((pr) => PRCard(pr))}
+        {flatPRs.map((p) => PRCard(p))}
       </div>
     </div>
   );
