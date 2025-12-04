@@ -1,130 +1,149 @@
-// src/pages/PRTracker.jsx
-import React, { useContext, useMemo, useState, useEffect } from "react";
+// =============================================
+//  PRTracker.jsx — ArmPal Premium PR System
+//  PART 1 / 2  (paste PART 2 below this)
+// =============================================
+import React, { useContext, useState, useMemo } from "react";
 import { AppContext } from "../context/AppContext";
-import { FaEdit, FaTrashAlt } from "react-icons/fa";
+import { FaTrashAlt, FaEdit } from "react-icons/fa";
+
+// ============================
+// GLOW CARD (B - medium glow)
+// ============================
+function GlowCard({ children, isDragging }) {
+  return (
+    <div
+      className={`relative rounded-2xl p-4 mb-4 transition-all duration-200 
+        bg-[#0a0a0a] border border-[#1a1a1a]
+        ${isDragging ? "scale-[0.97] opacity-[0.85]" : "scale-100"}
+      `}
+      style={{
+        boxShadow:
+          "0 0 14px rgba(255,0,0,0.32), inset 0 0 8px rgba(255,0,0,0.18)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function PRTracker() {
-  const { prs, createPR, removePR, editPR, reorderPRs } =
-    useContext(AppContext);
+  const {
+    prs,
+    createPR,
+    editPR,
+    removePR,
+    reorderPRs,
+    groups,
+  } = useContext(AppContext);
 
-  // NEW: PRs are a flat list now (no categories)
-  const [sortMode, setSortMode] = useState("custom");
+  // Add PR state
+  const [newLift, setNewLift] = useState("");
+  const [newWeight, setNewWeight] = useState("");
+  const [newReps, setNewReps] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [newUnit, setNewUnit] = useState("lbs");
+  const [newDate, setNewDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
 
-  // Dragging
-  const [draggingId, setDraggingId] = useState(null);
-
-  // Add PR fields
-  const [lift, setLift] = useState("");
-  const [weight, setWeight] = useState("");
-  const [unit, setUnit] = useState("lbs");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [reps, setReps] = useState("");
-  const [notes, setNotes] = useState("");
-
-  // Edit modal
-  const [editing, setEditing] = useState(null);
+  // Edit state
+  const [editingId, setEditingId] = useState(null);
   const [editLift, setEditLift] = useState("");
   const [editWeight, setEditWeight] = useState("");
-  const [editUnit, setEditUnit] = useState("lbs");
-  const [editDate, setEditDate] = useState("");
   const [editReps, setEditReps] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editUnit, setEditUnit] = useState("lbs");
+  const [editDate, setEditDate] = useState("");
 
-  // ---------------------------
-  // Sort Logic
-  // ---------------------------
-  const sorted = useMemo(() => {
-    const list = [...prs];
+  // Delete confirmation state
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-    switch (sortMode) {
-      case "alpha":
-        return list.sort((a, b) =>
-          (a.lift_name || "").localeCompare(b.lift_name || "")
-        );
-      case "newest":
-        return list.sort(
-          (a, b) => new Date(b.date || 0) - new Date(a.date || 0)
-        );
-      case "heaviest":
-        return list.sort((a, b) => (b.weight || 0) - (a.weight || 0));
-      default:
-        return list.sort(
-          (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
-        );
+  // Drag-reorder state
+  const [draggingId, setDraggingId] = useState(null);
+
+  // ============================
+  // SORT PRs by order_index
+  // ============================
+  const flatPRs = useMemo(() => {
+    return [...prs].sort(
+      (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
+    );
+  }, [prs]);
+
+  // ============================
+  // Add a PR
+  // ============================
+  async function handleAddPR() {
+    if (!newLift.trim() || !newWeight.trim()) {
+      alert("Lift name & weight required");
+      return;
     }
-  }, [prs, sortMode]);
-
-  // ---------------------------
-  // Add PR
-  // ---------------------------
-  async function saveNewPR() {
-    if (!lift.trim() || !weight.trim()) return;
 
     await createPR(
-      lift.trim(),
-      Number(weight),
-      unit,
-      date,
-      reps ? Number(reps) : null,
-      notes || null
+      newLift.trim(),
+      Number(newWeight),
+      newUnit,
+      newDate,
+      newReps ? Number(newReps) : null,
+      newNotes || null
     );
 
-    setLift("");
-    setWeight("");
-    setUnit("lbs");
-    setReps("");
-    setNotes("");
-    setDate(new Date().toISOString().split("T")[0]);
+    setNewLift("");
+    setNewWeight("");
+    setNewReps("");
+    setNewNotes("");
+    setNewUnit("lbs");
+    setNewDate(new Date().toISOString().split("T")[0]);
   }
 
-  // ---------------------------
-  // Edit PR
-  // ---------------------------
-  function openEdit(pr) {
-    setEditing(pr);
+  // ============================
+  // Start Editing PR
+  // ============================
+  function startEdit(pr) {
+    setEditingId(pr.id);
     setEditLift(pr.lift_name);
     setEditWeight(pr.weight);
-    setEditUnit(pr.unit || "lbs");
-    setEditDate(pr.date);
-    setEditReps(pr.reps || "");
+    setEditReps(pr.reps ?? "");
     setEditNotes(pr.notes || "");
+    setEditUnit(pr.unit || "lbs");
+    setEditDate(
+      pr.date || new Date().toISOString().split("T")[0]
+    );
   }
 
+  // ============================
+  // Save Edit
+  // ============================
   async function saveEdit() {
-    if (!editing) return;
-
-    await editPR(editing.id, {
+    await editPR(editingId, {
       lift_name: editLift.trim(),
       weight: Number(editWeight),
       unit: editUnit,
-      date: editDate,
       reps: editReps ? Number(editReps) : null,
       notes: editNotes || null,
+      date: editDate,
     });
-
-    setEditing(null);
+    setEditingId(null);
   }
 
-  // ---------------------------
-  // Drag + Drop: Hold anywhere on the card
-  // ---------------------------
-  function startDrag(id) {
-    if (sortMode !== "custom") return;
+  // ============================
+  // Drag & Drop logic
+  // ============================
+  function handleDragStart(id) {
     setDraggingId(id);
   }
 
-  function dragOver(e) {
-    if (sortMode !== "custom") return;
+  function handleDragOver(e) {
     e.preventDefault();
   }
 
-  async function dropCard(targetId) {
-    if (!draggingId || draggingId === targetId) {
+  async function handleDrop(targetId) {
+    if (draggingId === targetId) {
       setDraggingId(null);
       return;
     }
 
-    const list = [...sorted];
+    const list = [...flatPRs];
     const from = list.findIndex((p) => p.id === draggingId);
     const to = list.findIndex((p) => p.id === targetId);
 
@@ -136,60 +155,204 @@ export default function PRTracker() {
     const [moved] = list.splice(from, 1);
     list.splice(to, 0, moved);
 
-    await reorderPRs(
-      list.map((p, i) => ({
-        id: p.id,
-        order_index: i,
-      }))
-    );
+    const updates = list.map((p, i) => ({
+      id: p.id,
+      order_index: i,
+    }));
 
+    await reorderPRs(updates);
     setDraggingId(null);
   }
 
-  return (
-    <div className="p-5 pb-24 min-h-screen bg-black text-white">
+  // ============================
+  // PR Card Component
+  // ============================
+  function PRCard(pr) {
+    const isEditing = editingId === pr.id;
+    const isConfirmDelete = confirmDeleteId === pr.id;
 
-      {/* Title + Sort */}
-      <div className="flex items-center justify-between mb-6 fade-in">
-        <h1 className="text-3xl font-bold text-red-500">Personal Records</h1>
+    return (
+      <div
+        key={pr.id}
+        draggable
+        onDragStart={() => handleDragStart(pr.id)}
+        onDragOver={handleDragOver}
+        onDrop={() => handleDrop(pr.id)}
+      >
+        <GlowCard isDragging={draggingId === pr.id}>
+          {/* ============= EDIT MODE ============= */}
+          {isEditing ? (
+            <div className="space-y-3">
+              <input
+                className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                value={editLift}
+                onChange={(e) => setEditLift(e.target.value)}
+              />
 
-        <select
-          value={sortMode}
-          onChange={(e) => setSortMode(e.target.value)}
-          className="bg-neutral-900 border border-neutral-700 text-xs rounded-xl px-3 py-2"
-        >
-          <option value="custom">Custom</option>
-          <option value="alpha">A → Z</option>
-          <option value="newest">Newest</option>
-          <option value="heaviest">Heaviest</option>
-        </select>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                  placeholder="Weight"
+                  value={editWeight}
+                  onChange={(e) => setEditWeight(e.target.value)}
+                />
+                <input
+                  type="number"
+                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                  placeholder="Reps"
+                  value={editReps}
+                  onChange={(e) => setEditReps(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                  value={editUnit}
+                  onChange={(e) => setEditUnit(e.target.value)}
+                >
+                  <option value="lbs">lbs</option>
+                  <option value="kg">kg</option>
+                </select>
+
+                <input
+                  type="date"
+                  className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                />
+              </div>
+
+              <textarea
+                className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+                placeholder="Notes…"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+              />
+
+              <div className="flex justify-end gap-3">
+                <button
+                  className="px-4 py-2 text-xs bg-neutral-700 rounded-lg"
+                  onClick={() => setEditingId(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 text-xs bg-red-600 rounded-lg"
+                  onClick={saveEdit}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : isConfirmDelete ? (
+            /* ============= DELETE CONFIRM ============= */
+            <div className="text-center space-y-4">
+              <p className="text-sm">Delete this PR?</p>
+              <div className="flex justify-center gap-4">
+                <button
+                  className="px-4 py-2 bg-neutral-700 rounded-lg text-xs"
+                  onClick={() => setConfirmDeleteId(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-600 rounded-lg text-xs"
+                  onClick={async () => {
+                    await removePR(pr.id);
+                    setConfirmDeleteId(null);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ============= NORMAL VIEW ============= */
+            <div className="space-y-2">
+              <div className="flex items-start justify-between">
+                <p className="font-semibold text-[15px] leading-tight">
+                  {pr.lift_name}
+                </p>
+
+                <div className="flex gap-3">
+                  <button onClick={() => startEdit(pr)}>
+                    <FaEdit size={16} className="text-red-400" />
+                  </button>
+                  <button onClick={() => setConfirmDeleteId(pr.id)}>
+                    <FaTrashAlt size={16} className="text-red-500" />
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-neutral-400">
+                {pr.weight} {pr.unit} •{" "}
+                {pr.reps ? `${pr.reps} reps • ` : ""}
+                {pr.date}
+              </p>
+
+              {pr.notes && (
+                <p className="text-xs text-neutral-500 italic">
+                  Notes: {pr.notes}
+                </p>
+              )}
+            </div>
+          )}
+        </GlowCard>
       </div>
+    );
+  }
 
-      {/* Add PR Card */}
-      <div className="rounded-2xl p-5 mb-8 border border-red-900/40 bg-black/40 pulse-soft">
-        <h2 className="text-lg font-semibold text-red-400 mb-4">Add PR</h2>
+  // ============================
+  // MAIN RENDER
+  // ============================
+  return (
+    <div className="p-5 pb-24 bg-black min-h-screen text-white">
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+      {/* PAGE TITLE */}
+      <h1 className="text-3xl font-bold text-red-500 mb-4">
+        Personal Records
+      </h1>
+
+      {/* ADD PR CARD */}
+      <GlowCard>
+        <h2 className="text-lg font-semibold text-red-400 mb-3">
+          Add New PR
+        </h2>
+
+        {/* Lift */}
+        <input
+          className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
+          placeholder="Lift name (Bench, Curl, Squat...)"
+          value={newLift}
+          onChange={(e) => setNewLift(e.target.value)}
+        />
+
+        {/* Weight + Reps */}
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <input
-            className="neon-input"
-            placeholder="Lift (Bench, Curl...)"
-            value={lift}
-            onChange={(e) => setLift(e.target.value)}
+            type="number"
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            placeholder="Weight"
+            value={newWeight}
+            onChange={(e) => setNewWeight(e.target.value)}
           />
           <input
-            className="neon-input"
             type="number"
-            placeholder="Weight"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            placeholder="Reps"
+            value={newReps}
+            onChange={(e) => setNewReps(e.target.value)}
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+        {/* Unit + Date */}
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <select
-            className="neon-input"
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            value={newUnit}
+            onChange={(e) => setNewUnit(e.target.value)}
           >
             <option value="lbs">lbs</option>
             <option value="kg">kg</option>
@@ -197,200 +360,71 @@ export default function PRTracker() {
 
           <input
             type="date"
-            className="neon-input"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-
-          <input
-            className="neon-input"
-            type="number"
-            placeholder="Reps"
-            value={reps}
-            onChange={(e) => setReps(e.target.value)}
-          />
-
-          <input
-            className="neon-input"
-            placeholder="Notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            value={newDate}
+            onChange={(e) => setNewDate(e.target.value)}
           />
         </div>
 
+        {/* Notes */}
+        <textarea
+          className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
+          placeholder="Notes (optional)"
+          value={newNotes}
+          onChange={(e) => setNewNotes(e.target.value)}
+        />
+
+        {/* Save button */}
         <button
-          onClick={saveNewPR}
-          className="w-full bg-red-600 py-3 rounded-xl font-bold hover:bg-red-700 shadow-red-500/40 shadow"
+          onClick={handleAddPR}
+          className="w-full py-2 bg-red-600 rounded-lg font-bold text-sm"
         >
           Save PR
         </button>
-      </div>
-      {/* PR LIST */}
-      {sorted.length === 0 ? (
-        <p className="text-neutral-500 text-sm fade-in">
-          No PRs yet — add your first above.
-        </p>
-      ) : (
-        <div className="space-y-4 fade-in">
+      </GlowCard>
 
-          {sorted.map((pr) => (
-            <div
-              key={pr.id}
-              draggable={sortMode === "custom"}
-              onDragStart={() => startDrag(pr.id)}
-              onDragOver={dragOver}
-              onDrop={() => dropCard(pr.id)}
-              className={`
-                rounded-2xl p-4 border 
-                bg-neutral-900/40 
-                ${draggingId === pr.id
-                  ? "border-red-500 shadow-red-700/40 shadow-lg"
-                  : "border-neutral-800 hover:border-red-600"}
-                transition-all active:scale-[0.98]
-              `}
-            >
-              <div className="flex items-center justify-between">
+      {/* GROUPS SECTION (ONLY USER-CREATED GROUPS) */}
+      {groups.length > 0 &&
+        groups.map((group) => {
+          // All PRs belonging to this group
+          const inside = flatPRs.filter((p) => p.group_id === group.id);
 
-                {/* LEFT SECTION */}
-                <div>
-                  <p className="text-lg font-semibold">{pr.lift_name}</p>
-                  <p className="text-xs text-neutral-400 mt-1">
-                    {pr.weight} {pr.unit || "lbs"} 
-                    {pr.reps ? ` · ${pr.reps} reps` : ""} 
-                    {pr.date ? ` · ${pr.date}` : ""}
+          return (
+            <div key={group.id} className="mt-6">
+              <GlowCard>
+                {/* Group title */}
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-lg font-bold text-red-400">
+                    {group.name}
                   </p>
-                  {pr.notes && (
-                    <p className="text-xs text-neutral-500 mt-1">
-                      {pr.notes}
-                    </p>
-                  )}
-                </div>
 
-                {/* RIGHT ACTION BUTTONS */}
-                <div className="flex items-center gap-3">
-
-                  {/* EDIT ICON */}
                   <button
-                    onClick={() => openEdit(pr)}
-                    className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition"
+                    className="text-xs text-neutral-500 underline"
+                    onClick={() => removeGroup(group.id)}
                   >
-                    <FaEdit size={16} className="text-red-400" />
+                    Delete Group
                   </button>
-
-                  {/* DELETE ICON */}
-                  <button
-                    onClick={() => {
-                      if (window.confirm("Delete this PR?")) {
-                        removePR(pr.id);
-                      }
-                    }}
-                    className="p-2 rounded-xl bg-red-700 hover:bg-red-800 transition"
-                  >
-                    <FaTrashAlt size={16} className="text-white" />
-                  </button>
-
                 </div>
-              </div>
+
+                {/* PRs inside group */}
+                {inside.length === 0 ? (
+                  <p className="text-xs text-neutral-500">
+                    No PRs in this group yet.
+                  </p>
+                ) : (
+                  inside.map((pr) => PRCard(pr))
+                )}
+              </GlowCard>
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
 
-      {/* EDIT MODAL */}
-      {editing && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 fade-in">
-          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-red-500 mb-4">Edit PR</h2>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="text-sm text-neutral-400 mb-1 block">Lift</label>
-                <input
-                  className="neon-input w-full"
-                  value={editLift}
-                  onChange={(e) => setEditLift(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-neutral-400 mb-1 block">
-                    Weight
-                  </label>
-                  <input
-                    type="number"
-                    className="neon-input w-full"
-                    value={editWeight}
-                    onChange={(e) => setEditWeight(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-neutral-400 mb-1 block">
-                    Unit
-                  </label>
-                  <select
-                    className="neon-input w-full"
-                    value={editUnit}
-                    onChange={(e) => setEditUnit(e.target.value)}
-                  >
-                    <option value="lbs">lbs</option>
-                    <option value="kg">kg</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm text-neutral-400 mb-1 block">Date</label>
-                <input
-                  type="date"
-                  className="neon-input w-full"
-                  value={editDate}
-                  onChange={(e) => setEditDate(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-neutral-400 mb-1 block">Reps</label>
-                  <input
-                    type="number"
-                    className="neon-input w-full"
-                    value={editReps}
-                    onChange={(e) => setEditReps(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-neutral-400 mb-1 block">Notes</label>
-                  <input
-                    className="neon-input w-full"
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Buttons */}
-            <div className="flex justify-end gap-3">
-              <button
-                className="px-4 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 text-sm"
-                onClick={() => setEditing(null)}
-              >
-                Cancel
-              </button>
-
-              <button
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-sm font-semibold"
-                onClick={saveEdit}
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* ALL PRs (NOT IN ANY GROUP) */}
+      <div className="mt-6">
+        {flatPRs
+          .filter((p) => !p.group_id)
+          .map((pr) => PRCard(pr))}
+      </div>
     </div>
   );
 }

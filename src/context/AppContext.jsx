@@ -1,252 +1,222 @@
 // src/context/AppContext.jsx
-import React, { createContext, useState, useEffect } from "react";
+import React, { createContext, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-
-import {
-  getWorkoutsWithExercises,
-  addWorkout,
-  updateWorkout,
-  deleteWorkout
-} from "../api/workouts";
-
-import {
-  addExercise,
-  updateExercise,
-  deleteExercise
-} from "../api/exercises";
-
-import {
-  getPRs,
-  addPR,
-  deletePR,
-  updatePR,
-  updatePROrder
-} from "../api/prs";
-
-import {
-  getMeasurements,
-  addMeasurement,
-  deleteMeasurement
-} from "../api/measurements";
 
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
+  // ============================
+  // USER SESSION
+  // ============================
   const [user, setUser] = useState(null);
 
-  const [workouts, setWorkouts] = useState([]);
+  // ============================
+  // PRs + GROUPS
+  // ============================
   const [prs, setPRs] = useState([]);
-  const [measurements, setMeasurements] = useState([]);
+  const [groups, setGroups] = useState([]);
 
-  const [isLoading, setIsLoading] = useState(true);
-
-  // ---------------------------
-  // AUTH: Load User
-  // ---------------------------
+  // ============================
+  // Load user session
+  // ============================
   useEffect(() => {
     async function loadUser() {
       const { data } = await supabase.auth.getUser();
-      if (data?.user) setUser(data.user);
-      setIsLoading(false);
+      setUser(data?.user || null);
     }
-
     loadUser();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_, session) => setUser(session?.user ?? null)
-    );
-
-    return () => listener.subscription.unsubscribe();
   }, []);
 
-  // ---------------------------
-  // Load All Data After Login
-  // ---------------------------
+  // ============================
+  // Load PRs + Groups
+  // ============================
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
-    async function loadAllData() {
-      const uid = user.id;
+    loadPRs();
+    loadGroups();
+  }, [user]);
 
-      setWorkouts((await getWorkoutsWithExercises(uid)) || []);
-      setPRs((await getPRs(uid)) || []);
-      setMeasurements((await getMeasurements(uid)) || []);
+  async function loadPRs() {
+    const { data, error } = await supabase
+      .from("PRs")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("order_index", { ascending: true });
+
+    if (!error && data) setPRs(data);
+  }
+
+  async function loadGroups() {
+    const { data, error } = await supabase
+      .from("pr_groups")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) setGroups(data);
+  }
+
+  // ============================
+  // CREATE NEW PR
+  // ============================
+  async function createPR(lift, weight, unit, date, reps, notes) {
+    const { data, error } = await supabase
+      .from("PRs")
+      .insert({
+        user_id: user.id,
+        lift_name: lift,
+        weight,
+        unit,
+        date,
+        reps,
+        notes,
+        order_index: prs.length,
+      })
+      .select();
+
+    if (!error && data) {
+      setPRs((prev) => [...prev, data[0]]);
     }
-
-    loadAllData();
-  }, [user]);
-
-  // ---------------------------
-  // Refresh Helpers
-  // ---------------------------
-  async function refreshWorkouts() {
-    if (!user) return;
-    setWorkouts((await getWorkoutsWithExercises(user.id)) || []);
   }
 
-  async function refreshPRs() {
-    if (!user) return;
-    setPRs((await getPRs(user.id)) || []);
+  // ============================
+  // EDIT EXISTING PR
+  // ============================
+  async function editPR(id, fields) {
+    const { data, error } = await supabase
+      .from("PRs")
+      .update(fields)
+      .eq("id", id)
+      .select();
+
+    if (!error && data) {
+      setPRs((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...data[0] } : p))
+      );
+    }
   }
 
-  async function refreshMeasurements() {
-    if (!user) return;
-    setMeasurements((await getMeasurements(user.id)) || []);
-  }
-
-  // ---------------------------
-  // REALTIME SUBSCRIPTIONS
-  // ---------------------------
-  useEffect(() => {
-    if (!user) return;
-
-    const uid = user.id;
-
-    const workoutsSub = supabase
-      .channel("workouts-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "workouts", filter: `user_id=eq.${uid}` },
-        refreshWorkouts
-      )
-      .subscribe();
-
-    const exercisesSub = supabase
-      .channel("exercises-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "exercises", filter: `user_id=eq.${uid}` },
-        refreshWorkouts
-      )
-      .subscribe();
-
-    const prsSub = supabase
-      .channel("prs-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "PRs", filter: `user_id=eq.${uid}` },
-        refreshPRs
-      )
-      .subscribe();
-
-    const measurementsSub = supabase
-      .channel("measurements-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "measurements", filter: `user_id=eq.${uid}` },
-        refreshMeasurements
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(workoutsSub);
-      supabase.removeChannel(exercisesSub);
-      supabase.removeChannel(prsSub);
-      supabase.removeChannel(measurementsSub);
-    };
-  }, [user]);
-
-  // ---------------------------
-  // WORKOUT ACTIONS
-  // ---------------------------
-  async function createWorkout(name) {
-    const newItem = await addWorkout({ userId: user.id, name });
-    if (newItem) refreshWorkouts();
-  }
-
-  async function removeWorkout(id) {
-    await deleteWorkout(id);
-    refreshWorkouts();
-  }
-
-  async function createExercise(workoutId, name, sets, reps, weight) {
-    const newItem = await addExercise({
-      userId: user.id,
-      workoutId,
-      name,
-      sets,
-      reps,
-      weight,
-    });
-    if (newItem) refreshWorkouts();
-  }
-
-  async function removeExercise(id) {
-    await deleteExercise(id);
-    refreshWorkouts();
-  }
-
-  // ---------------------------
-  // PR ACTIONS (FULL UPGRADE)
-  // ---------------------------
-  async function createPR(lift_name, weight, unit, date) {
-    const newItem = await addPR({
-      userId: user.id,
-      lift_name,
-      weight,
-      unit,
-      date,
-    });
-    if (newItem) refreshPRs();
-  }
-
+  // ============================
+  // DELETE PR
+  // ============================
   async function removePR(id) {
-    await deletePR(id);
-    refreshPRs();
+    const { error } = await supabase.from("PRs").delete().eq("id", id);
+    if (!error) {
+      setPRs((prev) => prev.filter((p) => p.id !== id));
+    }
   }
 
-  async function editPR(id, values) {
-    await updatePR(id, values);
-    refreshPRs();
+  // ============================
+  // REORDER PRs
+  // (updates order_index for all)
+  // ============================
+  async function reorderPRs(updates) {
+    const { error } = await supabase.from("PRs").upsert(updates);
+    if (!error) {
+      setPRs((prev) =>
+        prev
+          .map((pr) => {
+            const update = updates.find((u) => u.id === pr.id);
+            return update ? { ...pr, order_index: update.order_index } : pr;
+          })
+          .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+      );
+    }
   }
 
-  async function reorderPRs(newOrder) {
-    // newOrder: [{ id, order_index }]
-    await updatePROrder(newOrder);
-    refreshPRs();
+  // ============================
+  // GROUPS — optional feature
+  // ============================
+
+  // CREATE GROUP
+  async function createGroup(name) {
+    const { data, error } = await supabase
+      .from("pr_groups")
+      .insert({
+        user_id: user.id,
+        name,
+      })
+      .select();
+
+    if (!error && data) {
+      setGroups((prev) => [...prev, data[0]]);
+    }
   }
 
-  // ---------------------------
-  // MEASUREMENTS
-  // ---------------------------
-  async function createMeasurement(name, value, unit, date) {
-    const newItem = await addMeasurement({
-      userId: user.id,
-      name,
-      value,
-      unit,
-      date,
-    });
-    if (newItem) refreshMeasurements();
+  // REMOVE GROUP (and remove group_id from contained PRs)
+  async function removeGroup(groupId) {
+    // clear PR memberships
+    await supabase
+      .from("PRs")
+      .update({ group_id: null })
+      .eq("group_id", groupId);
+
+    // delete group
+    const { error } = await supabase
+      .from("pr_groups")
+      .delete()
+      .eq("id", groupId);
+
+    if (!error) {
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setPRs((prev) =>
+        prev.map((p) =>
+          p.group_id === groupId ? { ...p, group_id: null } : p
+        )
+      );
+    }
   }
 
-  async function removeMeasurement(id) {
-    await deleteMeasurement(id);
-    refreshMeasurements();
+  // ASSIGN PR TO GROUP
+  async function assignToGroup(prId, groupId) {
+    const { data, error } = await supabase
+      .from("PRs")
+      .update({ group_id: groupId })
+      .eq("id", prId)
+      .select();
+
+    if (!error && data) {
+      setPRs((prev) =>
+        prev.map((p) => (p.id === prId ? { ...p, group_id: groupId } : p))
+      );
+    }
   }
 
+  // REMOVE PR FROM GROUP
+  async function removeFromGroup(prId) {
+    const { data, error } = await supabase
+      .from("PRs")
+      .update({ group_id: null })
+      .eq("id", prId)
+      .select();
+
+    if (!error && data) {
+      setPRs((prev) =>
+        prev.map((p) => (p.id === prId ? { ...p, group_id: null } : p))
+      );
+    }
+  }
+
+  // ============================
+  // CONTEXT EXPORT
+  // ============================
   return (
     <AppContext.Provider
       value={{
         user,
-        workouts,
         prs,
-        measurements,
-
-        createWorkout,
-        removeWorkout,
-        createExercise,
-        removeExercise,
+        groups,
 
         createPR,
-        removePR,
         editPR,
+        removePR,
         reorderPRs,
 
-        createMeasurement,
-        removeMeasurement,
-
-        isLoading,
+        createGroup,
+        removeGroup,
+        assignToGroup,
+        removeFromGroup,
       }}
     >
       {children}
