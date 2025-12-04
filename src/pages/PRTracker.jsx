@@ -1,24 +1,21 @@
+console.log("🔥 USING THIS PRTracker.jsx FILE");
 import React, { useContext, useState, useMemo } from "react";
 import { AppContext } from "../context/AppContext";
 import { FaTrashAlt, FaEdit } from "react-icons/fa";
 
-// Glow card
+// Clean glow card
 function GlowCard({ children, dragging }) {
   return (
     <div
       className={`
-        w-full
-        relative mb-4 rounded-xl p-4
+        w-full rounded-xl p-4 mb-4
         bg-[#0b0b0b]
         border border-[#1b1b1b]
         transition-all duration-200
         ${dragging ? "scale-[0.97] opacity-80" : "scale-100"}
       `}
       style={{
-        boxShadow: `
-          0 0 12px rgba(255,0,0,0.25),
-          0 0 22px rgba(255,0,0,0.15)
-        `,
+        boxShadow: "0 0 12px rgba(255,0,0,0.22)",
       }}
     >
       {children}
@@ -58,11 +55,9 @@ export default function PRTracker() {
     [prs]
   );
 
+  // ADD PR
   async function handleAddPR() {
-    if (!newLift.trim() || !newWeight.trim()) {
-      alert("Lift name and weight required.");
-      return;
-    }
+    if (!newLift.trim() || !newWeight.trim()) return;
 
     await createPR(
       newLift.trim(),
@@ -81,19 +76,20 @@ export default function PRTracker() {
     setNewDate(new Date().toISOString().split("T")[0]);
   }
 
+  // EDIT
   function beginEdit(pr) {
     setEditingId(pr.id);
-    setEditLift(pr.lift_name || "");
-    setEditWeight(pr.weight ?? "");
+    setEditLift(pr.lift_name);
+    setEditWeight(pr.weight);
     setEditReps(pr.reps ?? "");
     setEditNotes(pr.notes || "");
     setEditUnit(pr.unit || "lbs");
-    setEditDate(pr.date || new Date().toISOString().split("T")[0]);
+    setEditDate(pr.date);
   }
 
   async function saveEdit() {
     await editPR(editingId, {
-      lift_name: editLift.trim(),
+      lift_name: editLift,
       weight: Number(editWeight),
       unit: editUnit,
       reps: editReps ? Number(editReps) : null,
@@ -103,54 +99,47 @@ export default function PRTracker() {
     setEditingId(null);
   }
 
-  function handleDragStart(id) {
+  // DRAG
+  function onDragStart(id) {
     setDraggingId(id);
   }
-
-  function handleDragOver(e) {
+  function onDragOver(e) {
     e.preventDefault();
   }
-
-  async function handleDrop(targetId) {
-    if (!draggingId || draggingId === targetId) {
-      setDraggingId(null);
-      return;
-    }
+  async function onDrop(targetId) {
+    if (!draggingId || draggingId === targetId) return;
 
     const list = [...flatPRs];
-    const fromIndex = list.findIndex((p) => p.id === draggingId);
-    const toIndex = list.findIndex((p) => p.id === targetId);
+    const from = list.findIndex((p) => p.id === draggingId);
+    const to = list.findIndex((p) => p.id === targetId);
 
-    const [moved] = list.splice(fromIndex, 1);
-    list.splice(toIndex, 0, moved);
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
 
-    const updates = list.map((p, i) => ({
-      id: p.id,
-      order_index: i,
-    }));
+    await reorderPRs(
+      list.map((p, i) => ({ id: p.id, order_index: i }))
+    );
 
-    await reorderPRs(updates);
     setDraggingId(null);
   }
 
+  // CARD
   function PRCard(pr) {
     const editing = editingId === pr.id;
     const deleting = confirmDeleteId === pr.id;
-    const isDragging = draggingId === pr.id;
 
     return (
       <div
         key={pr.id}
         draggable
-        onDragStart={() => handleDragStart(pr.id)}
-        onDragOver={handleDragOver}
-        onDrop={() => handleDrop(pr.id)}
-        className="w-full"
+        onDragStart={() => onDragStart(pr.id)}
+        onDragOver={onDragOver}
+        onDrop={() => onDrop(pr.id)}
       >
-        <GlowCard dragging={isDragging}>
+        <GlowCard dragging={draggingId === pr.id}>
           {editing ? (
+            // EDIT MODE
             <div className="space-y-3">
-              {/* EDIT MODE CONTENT */}
               <input
                 className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
                 value={editLift}
@@ -181,6 +170,7 @@ export default function PRTracker() {
                   <option value="lbs">lbs</option>
                   <option value="kg">kg</option>
                 </select>
+
                 <input
                   type="date"
                   className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
@@ -211,6 +201,7 @@ export default function PRTracker() {
               </div>
             </div>
           ) : deleting ? (
+            // DELETE MODE
             <div className="text-center space-y-3">
               <p className="text-sm">Delete this PR?</p>
               <div className="flex justify-center gap-4">
@@ -234,24 +225,18 @@ export default function PRTracker() {
           ) : (
             // NORMAL VIEW
             <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-[15px]">{pr.lift_name}</p>
 
-              {/* 🔥 FIXED — PERMANENT RIGHT-SIDE ICONS */}
-              <div className="flex items-start justify-between w-full min-w-0">
-
-                <p className="font-semibold text-[15px] truncate">
-                  {pr.lift_name}
-                </p>
-
-                {/* 🔥 ICONS NEVER COLLAPSE, ALWAYS RIGHT */}
-                <div className="flex-shrink-0 flex gap-4">
+                {/* BUTTONS ON THE RIGHT 🔥 */}
+                <div className="flex gap-4">
                   <button onClick={() => beginEdit(pr)}>
-                    <FaEdit size={16} className="text-red-400" />
+                    <FaEdit className="text-red-400" size={16} />
                   </button>
                   <button onClick={() => setConfirmDeleteId(pr.id)}>
-                    <FaTrashAlt size={16} className="text-red-500" />
+                    <FaTrashAlt className="text-red-500" size={16} />
                   </button>
                 </div>
-
               </div>
 
               <p className="text-neutral-400 text-xs">
@@ -273,80 +258,76 @@ export default function PRTracker() {
   }
 
   return (
-    <div className="p-5 pb-24 min-h-screen bg-black text-white flex flex-col items-center">
-      <div className="w-full max-w-xl">
-        <h1 className="text-3xl font-bold text-red-500 mb-4">
-          Personal Records
-        </h1>
+    <div className="p-5 pb-24 min-h-screen bg-black text-white">
+      <h1 className="text-3xl font-bold text-red-500 mb-4">
+        Personal Records
+      </h1>
 
-        {/* ADD FORM */}
-        <GlowCard>
-          <h2 className="text-lg font-semibold text-red-400 mb-4">
-            Add New PR
-          </h2>
+      {/* ADD FORM */}
+      <GlowCard>
+        <h2 className="text-lg font-semibold text-red-400 mb-4">
+          Add New PR
+        </h2>
+
+        <input
+          className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
+          placeholder="Lift"
+          value={newLift}
+          onChange={(e) => setNewLift(e.target.value)}
+        />
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <input
+            type="number"
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            placeholder="Weight"
+            value={newWeight}
+            onChange={(e) => setNewWeight(e.target.value)}
+          />
+          <input
+            type="number"
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            placeholder="Reps"
+            value={newReps}
+            onChange={(e) => setNewReps(e.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <select
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            value={newUnit}
+            onChange={(e) => setNewUnit(e.target.value)}
+          >
+            <option value="lbs">lbs</option>
+            <option value="kg">kg</option>
+          </select>
 
           <input
-            className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
-            placeholder="Lift name (Bench, Curl, Squat...)"
-            value={newLift}
-            onChange={(e) => setNewLift(e.target.value)}
+            type="date"
+            className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
+            value={newDate}
+            onChange={(e) => setNewDate(e.target.value)}
           />
-
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <input
-              type="number"
-              className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-              placeholder="Weight"
-              value={newWeight}
-              onChange={(e) => setNewWeight(e.target.value)}
-            />
-            <input
-              type="number"
-              className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-              placeholder="Reps"
-              value={newReps}
-              onChange={(e) => setNewReps(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <select
-              className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-              value={newUnit}
-              onChange={(e) => setNewUnit(e.target.value)}
-            >
-              <option value="lbs">lbs</option>
-              <option value="kg">kg</option>
-            </select>
-
-            <input
-              type="date"
-              className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-              value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
-            />
-          </div>
-
-          <textarea
-            className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
-            placeholder="Notes (optional)"
-            value={newNotes}
-            onChange={(e) => setNewNotes(e.target.value)}
-          />
-
-          <button
-            onClick={handleAddPR}
-            className="w-full py-2 bg-red-600 rounded-lg font-bold text-sm"
-          >
-            Save PR
-          </button>
-        </GlowCard>
-
-        {/* LIST */}
-        <div className="mt-6 w-full">
-          {flatPRs.map((p) => PRCard(p))}
         </div>
-      </div>
+
+        <textarea
+          className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
+          placeholder="Notes"
+          value={newNotes}
+          onChange={(e) => setNewNotes(e.target.value)}
+        />
+
+        <button
+          onClick={handleAddPR}
+          className="w-full py-2 bg-red-600 rounded-lg font-bold text-sm"
+        >
+          Save PR
+        </button>
+      </GlowCard>
+
+      {/* PR LIST */}
+      <div className="mt-6">{flatPRs.map((p) => PRCard(p))}</div>
     </div>
   );
 }
