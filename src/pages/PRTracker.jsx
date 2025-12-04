@@ -3,27 +3,28 @@ import React, { useContext, useState, useMemo } from "react";
 import { AppContext } from "../context/AppContext";
 import { FaTrashAlt, FaEdit } from "react-icons/fa";
 
-// ============================
-// Subtle ArmPal Glow Card
-// ============================
+// ====================================================================
+//  CLEAN ORMPAL GLOW CARD — FIXED (NO STRIPES, ICONS ALWAYS ON RIGHT)
+// ====================================================================
 function GlowCard({ children, dragging }) {
   return (
     <div
       className={`
         relative mb-4 rounded-2xl p-4
-        bg-[#050505]
-        border border-[#1b1b1b]
+        bg-[#0a0a0a]
+        border border-[#1d1d1d]
         transition-all duration-200
         ${dragging ? "scale-[0.97] opacity-80" : "scale-100"}
       `}
       style={{
-        boxShadow: `
-          0 0 10px rgba(224,0,0,0.30),
-          0 0 22px rgba(224,0,0,0.20)
-        `,
+        boxShadow: dragging
+          ? "0 0 12px rgba(255,0,0,0.45)"
+          : "0 0 8px rgba(255,0,0,0.22)",
       }}
     >
-      {children}
+      <div className="rounded-xl overflow-hidden">
+        {children}
+      </div>
     </div>
   );
 }
@@ -32,17 +33,15 @@ export default function PRTracker() {
   const { prs, createPR, editPR, removePR, reorderPRs } =
     useContext(AppContext);
 
-  // ---------- New PR ----------
+  // NEW PR STATE
   const [newLift, setNewLift] = useState("");
   const [newWeight, setNewWeight] = useState("");
   const [newReps, setNewReps] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [newUnit, setNewUnit] = useState("lbs");
-  const [newDate, setNewDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
 
-  // ---------- Editing ----------
+  // EDITING
   const [editingId, setEditingId] = useState(null);
   const [editLift, setEditLift] = useState("");
   const [editWeight, setEditWeight] = useState("");
@@ -51,24 +50,22 @@ export default function PRTracker() {
   const [editUnit, setEditUnit] = useState("lbs");
   const [editDate, setEditDate] = useState("");
 
-  // ---------- Delete confirm ----------
+  // DELETE CONFIRM
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  // ---------- Drag ----------
+  // DRAGGING
   const [draggingId, setDraggingId] = useState(null);
 
+  // SORTED PR LIST
   const flatPRs = useMemo(
-    () =>
-      [...prs].sort(
-        (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)
-      ),
+    () => [...prs].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)),
     [prs]
   );
 
-  // ---------- Create PR ----------
+  // CREATE PR
   async function handleAddPR() {
     if (!newLift.trim() || !newWeight.trim()) {
-      alert("Lift name and weight are required.");
+      alert("Lift & weight required.");
       return;
     }
 
@@ -89,17 +86,18 @@ export default function PRTracker() {
     setNewDate(new Date().toISOString().split("T")[0]);
   }
 
-  // ---------- Edit PR ----------
+  // BEGIN EDIT
   function beginEdit(pr) {
     setEditingId(pr.id);
-    setEditLift(pr.lift_name || "");
-    setEditWeight(pr.weight ?? "");
+    setEditLift(pr.lift_name);
+    setEditWeight(pr.weight);
     setEditReps(pr.reps ?? "");
     setEditNotes(pr.notes || "");
     setEditUnit(pr.unit || "lbs");
-    setEditDate(pr.date || new Date().toISOString().split("T")[0]);
+    setEditDate(pr.date);
   }
 
+  // SAVE EDIT
   async function saveEdit() {
     await editPR(editingId, {
       lift_name: editLift.trim(),
@@ -112,7 +110,7 @@ export default function PRTracker() {
     setEditingId(null);
   }
 
-  // ---------- Drag handlers ----------
+  // DRAGGING
   function handleDragStart(id) {
     setDraggingId(id);
   }
@@ -128,30 +126,25 @@ export default function PRTracker() {
     }
 
     const list = [...flatPRs];
-    const fromIndex = list.findIndex((p) => p.id === draggingId);
-    const toIndex = list.findIndex((p) => p.id === targetId);
+    const from = list.findIndex((p) => p.id === draggingId);
+    const to = list.findIndex((p) => p.id === targetId);
 
-    if (fromIndex === -1 || toIndex === -1) {
-      setDraggingId(null);
-      return;
-    }
+    if (from === -1 || to === -1) return setDraggingId(null);
 
-    const [moved] = list.splice(fromIndex, 1);
-    list.splice(toIndex, 0, moved);
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
 
-    const updates = list.map((p, i) => ({
-      id: p.id,
-      order_index: i,
-    }));
+    await reorderPRs(list.map((p, i) => ({ id: p.id, order_index: i })));
 
-    await reorderPRs(updates);
     setDraggingId(null);
   }
 
-  // ---------- PR Card ----------
+  // ====================================================================
+  // PR CARD (WITH ICONS LOCKED RIGHT SIDE)
+  // ====================================================================
   function PRCard(pr) {
-    const editing = editingId === pr.id;
-    const deleting = confirmDeleteId === pr.id;
+    const isEditing = editingId === pr.id;
+    const isDeleting = confirmDeleteId === pr.id;
     const isDragging = draggingId === pr.id;
 
     return (
@@ -163,8 +156,8 @@ export default function PRTracker() {
         onDrop={() => handleDrop(pr.id)}
       >
         <GlowCard dragging={isDragging}>
-          {editing ? (
-            // EDIT VIEW – inline inside card
+          {isEditing ? (
+            // ======================= EDIT MODE =======================
             <div className="space-y-3">
               <input
                 className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
@@ -172,23 +165,23 @@ export default function PRTracker() {
                 onChange={(e) => setEditLift(e.target.value)}
               />
 
+              {/* Weight + Reps */}
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="number"
                   className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-                  placeholder="Weight"
                   value={editWeight}
                   onChange={(e) => setEditWeight(e.target.value)}
                 />
                 <input
                   type="number"
                   className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-                  placeholder="Reps"
                   value={editReps}
                   onChange={(e) => setEditReps(e.target.value)}
                 />
               </div>
 
+              {/* Unit + Date */}
               <div className="grid grid-cols-2 gap-3">
                 <select
                   className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
@@ -198,6 +191,7 @@ export default function PRTracker() {
                   <option value="lbs">lbs</option>
                   <option value="kg">kg</option>
                 </select>
+
                 <input
                   type="date"
                   className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
@@ -208,12 +202,12 @@ export default function PRTracker() {
 
               <textarea
                 className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm"
-                placeholder="Notes"
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Notes"
               />
 
-              <div className="flex justify-end gap-3 pt-1">
+              <div className="flex justify-end gap-3">
                 <button
                   className="px-4 py-2 bg-neutral-700 rounded-lg text-xs"
                   onClick={() => setEditingId(null)}
@@ -228,8 +222,8 @@ export default function PRTracker() {
                 </button>
               </div>
             </div>
-          ) : deleting ? (
-            // DELETE CONFIRM
+          ) : isDeleting ? (
+            // ================== DELETE CONFIRM ==================
             <div className="text-center space-y-3">
               <p className="text-sm">Delete this PR?</p>
               <div className="flex justify-center gap-4">
@@ -251,38 +245,32 @@ export default function PRTracker() {
               </div>
             </div>
           ) : (
-            // NORMAL VIEW
+            // ======================= NORMAL VIEW =======================
             <div className="space-y-2">
-              {/* top row: name left, icons right */}
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start justify-between">
                 <p className="font-semibold text-[15px] leading-tight">
                   {pr.lift_name}
                 </p>
 
-                <div className="flex items-center gap-3">
+                {/* ICONS ALWAYS ON RIGHT */}
+                <div className="flex gap-3">
                   <button onClick={() => beginEdit(pr)}>
-                    <FaEdit
-                      size={15}
-                      className="text-red-400 active:scale-90"
-                    />
+                    <FaEdit className="text-red-400 active:scale-90" size={15} />
                   </button>
                   <button onClick={() => setConfirmDeleteId(pr.id)}>
-                    <FaTrashAlt
-                      size={15}
-                      className="text-red-500 active:scale-90"
-                    />
+                    <FaTrashAlt className="text-red-500 active:scale-90" size={15} />
                   </button>
                 </div>
               </div>
 
-              {/* subtitle row */}
+              {/* DETAILS */}
               <p className="text-neutral-400 text-xs">
-                {pr.weight} {pr.unit || "lbs"} •{" "}
+                {pr.weight} {pr.unit} •{" "}
                 {pr.reps ? `${pr.reps} reps • ` : ""}
                 {pr.date}
               </p>
 
-              {/* notes */}
+              {/* NOTES */}
               {pr.notes && (
                 <p className="text-neutral-500 text-xs italic">
                   Notes: {pr.notes}
@@ -295,22 +283,24 @@ export default function PRTracker() {
     );
   }
 
-  // ---------- MAIN ----------
+  // ====================================================================
+  // MAIN RENDER
+  // ====================================================================
   return (
     <div className="p-5 pb-24 min-h-screen bg-black text-white">
       <h1 className="text-3xl font-bold text-red-500 mb-4">
         Personal Records
       </h1>
 
-      {/* Add PR */}
-      <GlowCard dragging={false}>
+      {/* ADD PR CARD */}
+      <GlowCard>
         <h2 className="text-lg font-semibold text-red-400 mb-4">
           Add New PR
         </h2>
 
         <input
           className="w-full p-2 rounded-lg bg-black border border-neutral-700 text-sm mb-3"
-          placeholder="Lift name (Bench, Curl, Squat...)"
+          placeholder="Lift name"
           value={newLift}
           onChange={(e) => setNewLift(e.target.value)}
         />
@@ -341,6 +331,7 @@ export default function PRTracker() {
             <option value="lbs">lbs</option>
             <option value="kg">kg</option>
           </select>
+
           <input
             type="date"
             className="p-2 rounded-lg bg-black border border-neutral-700 text-sm"
@@ -364,7 +355,7 @@ export default function PRTracker() {
         </button>
       </GlowCard>
 
-      {/* PR LIST */}
+      {/* ACTUAL PR CARDS */}
       <div className="mt-6">
         {flatPRs.map((pr) => PRCard(pr))}
       </div>
