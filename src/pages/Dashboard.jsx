@@ -5,12 +5,19 @@ import { Link } from "react-router-dom";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
+  const [displayName, setDisplayName] = useState("Athlete");
   const [goals, setGoals] = useState([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
 
   // Strength Calculator State
-  const [oneRepMaxInput, setOneRepMaxInput] = useState("");
-  const [estimated1RM, setEstimated1RM] = useState(null);
+  const [exerciseName, setExerciseName] = useState("");
+  const [weightInput, setWeightInput] = useState("");
+  const [repsInput, setRepsInput] = useState("");
+  const [calculated1RM, setCalculated1RM] = useState(null);
+
+  // PR comparison
+  const [bestPR, setBestPR] = useState(null);
+  const [prDifference, setPrDifference] = useState(null);
 
   useEffect(() => {
     loadUserAndGoals();
@@ -24,11 +31,25 @@ export default function Dashboard() {
       const currentUser = data?.user || null;
       setUser(currentUser);
 
+      // Default fallback name
+      let name =
+        currentUser?.user_metadata?.username ||
+        (currentUser?.email ? currentUser.email.split("@")[0] : "Athlete");
+
+      // Load profile username
       if (currentUser?.id) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", currentUser.id)
+          .single();
+
+        if (profile?.username) name = profile.username;
+
         await loadGoals(currentUser.id);
-      } else {
-        setLoadingGoals(false);
       }
+
+      setDisplayName(name);
     } catch (err) {
       console.error("Error loading user:", err.message);
       setLoadingGoals(false);
@@ -58,57 +79,122 @@ export default function Dashboard() {
     const current = Number(goal.current_value) || 0;
     const target = Number(goal.target_value) || 0;
     if (!target || target <= 0) return 0;
-
     const pct = Math.round((current / target) * 100);
-    if (pct < 0) return 0;
-    if (pct > 100) return 100;
-    return pct;
+    return Math.min(100, Math.max(0, pct));
   }
 
-  function handleOneRepMaxChange(e) {
-    const value = e.target.value;
-    setOneRepMaxInput(value);
+  // -----------------------
+  //   STRENGTH CALCULATOR
+  // -----------------------
 
-    const numeric = parseFloat(value);
-    if (isNaN(numeric) || numeric <= 0) {
-      setEstimated1RM(null);
-    } else {
-      setEstimated1RM(numeric);
+  function updateCalculated1RM(weightVal, repsVal) {
+    const w = parseFloat(weightVal);
+    const r = parseInt(repsVal, 10);
+
+    if (!w || !r || w <= 0 || r <= 0) {
+      setCalculated1RM(null);
+      return;
+    }
+
+    // Epley formula
+    const est = Math.round(w * (1 + r / 30));
+    setCalculated1RM(est);
+
+    // Fetch updated PR comparison
+    if (exerciseName) fetchBestPR(exerciseName, est);
+  }
+
+  function handleWeightChange(e) {
+    const value = e.target.value;
+    setWeightInput(value);
+    updateCalculated1RM(value, repsInput);
+  }
+
+  function handleRepsChange(e) {
+    const value = e.target.value;
+    setRepsInput(value);
+    updateCalculated1RM(weightInput, value);
+  }
+
+  async function fetchBestPR(name, new1RM = null) {
+    if (!user?.id || !name) return;
+
+    const { data: pr, error } = await supabase
+      .from("PRs")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("lift_name", name)
+      .order("weight", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !pr) {
+      setBestPR(null);
+      setPrDifference(null);
+      return;
+    }
+
+    setBestPR(pr.weight);
+
+    if (new1RM) {
+      setPrDifference(new1RM - pr.weight);
     }
   }
 
-  function getStrengthRows() {
-    if (!estimated1RM) return [];
+  async function handleSavePR() {
+    if (!user?.id || !exerciseName || !calculated1RM) return;
 
-    const percents = [95, 90, 85, 80, 75, 70, 65, 60];
-    const repsByPercent = {
-      95: 2,
-      90: 3,
-      85: 5,
-      80: 8,
-      75: 10,
-      70: 12,
-      65: 15,
-      60: 20,
-    };
+    const today = new Date().toISOString().split("T")[0];
 
-    return percents.map((p) => {
-      const weight = Math.round(estimated1RM * (p / 100));
-      const reps = repsByPercent[p] || "";
-      return {
-        percent: p,
-        weight,
-        reps,
-      };
+    const { error } = await supabase.from("PRs").insert({
+      user_id: user.id,
+      lift_name: exerciseName,
+      weight: calculated1RM,
+      reps: 1,
+      unit: "lb",
+      date: today,
+      notes: "",
+      order_index: 0,
     });
+
+    if (error) {
+      console.error("Error saving PR:", error.message);
+      return;
+    }
+
+    // Refresh PR comparison
+    fetchBestPR(exerciseName, calculated1RM);
   }
 
-  const strengthRows = getStrengthRows();
+  function getPercentRows() {
+    if (!calculated1RM) return [];
 
-  const username =
-    user?.user_metadata?.username ||
-    (user?.email ? user.email.split("@")[0] : "Athlete");
+    // EXTENDED to 15 rows for even symmetry
+    const percents = [
+      95, 90, 85, 80, 75, 70, 65, 60,
+      58, 56, 54, 52, 50, 48, 46,
+    ];
 
+    return percents.map((p) => ({
+      percent: p,
+      weight: Math.round(calculated1RM * (p / 100)),
+    }));
+  }
+
+  function getRepRows() {
+    if (!calculated1RM) return [];
+
+    // 1–15 reps
+    const repsList = Array.from({ length: 15 }, (_, i) => i + 1);
+
+    return repsList.map((r) => ({
+      reps: r,
+      weight: Math.round(calculated1RM / (1 + r / 30)),
+    }));
+  }
+
+  const percentRows = getPercentRows();
+  const repRows = getRepRows();
   return (
     <div
       className="dashboard-page"
@@ -116,43 +202,23 @@ export default function Dashboard() {
         paddingTop: "16px",
         paddingLeft: "16px",
         paddingRight: "16px",
-        paddingBottom: "90px", // safe for BottomNav
+        paddingBottom: "90px",
         maxWidth: "900px",
         margin: "0 auto",
       }}
     >
-      {/* Header */}
+      {/* HEADER */}
       <header style={{ marginBottom: "16px" }}>
-        <p
-          style={{
-            fontSize: "14px",
-            opacity: 0.8,
-            margin: 0,
-          }}
-        >
-          Welcome back,
-        </p>
-        <h1
-          style={{
-            fontSize: "24px",
-            fontWeight: 700,
-            margin: "2px 0 0",
-          }}
-        >
-          {username}
+        <p style={{ fontSize: "14px", opacity: 0.8, margin: 0 }}>Welcome back,</p>
+        <h1 style={{ fontSize: "24px", fontWeight: 700, margin: "2px 0 0" }}>
+          {displayName}
         </h1>
-        <p
-          style={{
-            fontSize: "13px",
-            opacity: 0.7,
-            marginTop: "4px",
-          }}
-        >
+        <p style={{ fontSize: "13px", opacity: 0.7, marginTop: "4px" }}>
           Track your progress. Crush your PRs. Stay locked in.
         </p>
       </header>
 
-      {/* Goals Section */}
+      {/* GOALS SECTION */}
       <section style={{ marginBottom: "18px" }}>
         <div
           style={{
@@ -165,14 +231,9 @@ export default function Dashboard() {
           <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>
             Top Goals
           </h2>
-
           <Link
             to="/goals"
-            style={{
-              fontSize: "12px",
-              textDecoration: "none",
-              opacity: 0.8,
-            }}
+            style={{ fontSize: "12px", textDecoration: "none", opacity: 0.8 }}
           >
             View all
           </Link>
@@ -222,22 +283,15 @@ export default function Dashboard() {
                           fontWeight: 600,
                         }}
                       >
-                        {goal.title || "Goal"}
+                        {goal.title}
                       </p>
                       {goal.target_value ? (
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: "11px",
-                            opacity: 0.7,
-                          }}
-                        >
+                        <p style={{ margin: 0, fontSize: "11px", opacity: 0.7 }}>
                           {goal.current_value ?? 0} / {goal.target_value}{" "}
                           {goal.unit || ""}
                         </p>
                       ) : null}
                     </div>
-
                     <span style={{ fontSize: "12px", opacity: 0.8 }}>
                       {progress}%
                     </span>
@@ -256,8 +310,7 @@ export default function Dashboard() {
                       style={{
                         width: `${progress}%`,
                         height: "100%",
-                        background:
-                          "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
+                        background: "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
                         borderRadius: "999px",
                         transition: "width 0.2s ease-out",
                       }}
@@ -270,30 +323,11 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Strength Calculator */}
+      {/* STRENGTH CALCULATOR */}
       <section style={{ marginBottom: "18px" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginBottom: "8px",
-          }}
-        >
-          <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>
-            Strength Calculator
-          </h2>
-
-          <Link
-            to="/strength-calculator"
-            style={{
-              fontSize: "12px",
-              textDecoration: "none",
-              opacity: 0.8,
-            }}
-          >
-            Full view
-          </Link>
-        </div>
+        <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "8px" }}>
+          Strength Calculator
+        </h2>
 
         <div
           style={{
@@ -303,22 +337,20 @@ export default function Dashboard() {
             border: "1px solid rgba(255,255,255,0.06)",
           }}
         >
+          {/* Exercise input */}
           <label
-            style={{
-              display: "block",
-              fontSize: "12px",
-              marginBottom: "6px",
-              opacity: 0.9,
-            }}
+            style={{ display: "block", fontSize: "12px", opacity: 0.9, marginBottom: "4px" }}
           >
-            Estimated 1RM (lbs)
+            Exercise name
           </label>
-
           <input
-            type="number"
-            value={oneRepMaxInput}
-            onChange={handleOneRepMaxChange}
-            placeholder="Enter your 1 rep max"
+            type="text"
+            value={exerciseName}
+            onChange={(e) => {
+              setExerciseName(e.target.value);
+              if (calculated1RM) fetchBestPR(e.target.value, calculated1RM);
+            }}
+            placeholder="e.g. bench press, squat, deadlift"
             style={{
               width: "100%",
               padding: "8px 10px",
@@ -326,83 +358,235 @@ export default function Dashboard() {
               color: "white",
               borderRadius: "8px",
               border: "1px solid rgba(255,255,255,0.15)",
-              marginBottom: "12px",
+              marginBottom: "10px",
+              fontSize: "13px",
             }}
           />
 
-          {estimated1RM && strengthRows.length > 0 ? (
+          {/* two-column layout */}
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+              marginBottom: "12px",
+            }}
+          >
+            {/* Left: weight + reps */}
+            <div style={{ flex: 1 }}>
+              <label
+                style={{ display: "block", fontSize: "12px", opacity: 0.9, marginBottom: "4px" }}
+              >
+                Weight (lbs)
+              </label>
+              <input
+                type="number"
+                value={weightInput}
+                onChange={handleWeightChange}
+                placeholder="e.g. 225"
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  background: "#080808",
+                  color: "white",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  marginBottom: "6px",
+                }}
+              />
+
+              <label
+                style={{ display: "block", fontSize: "12px", opacity: 0.9, marginBottom: "4px" }}
+              >
+                Reps
+              </label>
+              <input
+                type="number"
+                value={repsInput}
+                onChange={handleRepsChange}
+                placeholder="e.g. 5"
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  background: "#080808",
+                  color: "white",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                }}
+              />
+            </div>
+
+            {/* Right: 1RM / PR compare / save button */}
             <div
               style={{
-                borderRadius: "10px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                overflow: "hidden",
+                flex: 1,
+                minWidth: "160px",
+                padding: "10px",
+                background: "#0c0c0c",
+                borderRadius: "8px",
+                border: "1px solid rgba(255,255,255,0.12)",
               }}
             >
-              <div
+              <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>Estimated 1RM</p>
+
+              <p
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
-                  fontSize: "11px",
-                  padding: "6px 8px",
-                  background: "#141414",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  fontWeight: 600,
+                  margin: "4px 0 6px",
+                  fontSize: "20px",
+                  fontWeight: 700,
                 }}
               >
-                <span>% of 1RM</span>
-                <span style={{ textAlign: "center" }}>Weight</span>
-                <span style={{ textAlign: "right" }}>Reps</span>
-              </div>
+                {calculated1RM ? `${calculated1RM} lb` : "--"}
+              </p>
 
-              {strengthRows.map((row) => (
+              {/* PR Comparison */}
+              {exerciseName && calculated1RM ? (
+                bestPR ? (
+                  <p style={{ fontSize: "12px", opacity: 0.8, margin: "4px 0" }}>
+                    Your best: <b>{bestPR} lb</b>{" "}
+                    {prDifference !== null ? (
+                      <span style={{ opacity: 0.7 }}>
+                        ({prDifference >= 0 ? "+" : ""}
+                        {prDifference})
+                      </span>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p style={{ fontSize: "12px", opacity: 0.7, margin: "4px 0" }}>
+                    No PR saved yet for this exercise.
+                  </p>
+                )
+              ) : null}
+
+              {/* Save PR button */}
+              <button
+                onClick={handleSavePR}
+                disabled={!exerciseName || !calculated1RM}
+                style={{
+                  width: "100%",
+                  marginTop: "6px",
+                  padding: "8px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: !exerciseName || !calculated1RM ? "#444" : "#ff2f2f",
+                  color: "white",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  cursor: !exerciseName || !calculated1RM ? "not-allowed" : "pointer",
+                }}
+              >
+                Save PR
+              </button>
+            </div>
+          </div>
+
+          {/* TABLES */}
+          {calculated1RM ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "10px",
+              }}
+            >
+              {/* Percent table */}
+              <div
+                style={{
+                  borderRadius: "10px",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  overflow: "hidden",
+                }}
+              >
                 <div
-                  key={row.percent}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    padding: "6px 8px",
+                    gridTemplateColumns: "1fr 1fr",
                     fontSize: "11px",
-                    borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    padding: "6px 8px",
+                    background: "#141414",
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    fontWeight: 600,
                   }}
                 >
-                  <span>{row.percent}%</span>
-                  <span style={{ textAlign: "center" }}>
-                    {row.weight} lb
-                  </span>
-                  <span style={{ textAlign: "right" }}>
-                    {row.reps || "-"}
-                  </span>
+                  <span>% of 1RM</span>
+                  <span style={{ textAlign: "right" }}>Weight</span>
                 </div>
-              ))}
+
+                {percentRows.map((row) => (
+                  <div
+                    key={row.percent}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      padding: "6px 8px",
+                      fontSize: "11px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <span>{row.percent}%</span>
+                    <span style={{ textAlign: "right" }}>{row.weight} lb</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Rep table */}
+              <div
+                style={{
+                  borderRadius: "10px",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    fontSize: "11px",
+                    padding: "6px 8px",
+                    background: "#141414",
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>Reps</span>
+                  <span style={{ textAlign: "right" }}>Est. Weight</span>
+                </div>
+
+                {repRows.map((row) => (
+                  <div
+                    key={row.reps}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      padding: "6px 8px",
+                      fontSize: "11px",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <span>{row.reps}</span>
+                    <span style={{ textAlign: "right" }}>{row.weight} lb</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
-            <p style={{ fontSize: "12px", opacity: 0.7, margin: 0 }}>
-              Enter a 1RM to calculate your working weights.
+            <p style={{ fontSize: "12px", opacity: 0.7 }}>
+              Enter weight and reps to calculate 1RM and detailed breakdown.
             </p>
           )}
         </div>
       </section>
 
-      {/* Upcoming Workouts */}
+      {/* UPCOMING WORKOUTS */}
       <section style={{ marginBottom: "18px" }}>
         <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginBottom: "8px",
-          }}
+          style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}
         >
-          <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>
-            Upcoming Workouts
-          </h2>
-
+          <h2 style={{ fontSize: "16px", fontWeight: 600, margin: 0 }}>Upcoming Workouts</h2>
           <Link
             to="/workouts"
-            style={{
-              fontSize: "12px",
-              textDecoration: "none",
-              opacity: 0.8,
-            }}
+            style={{ fontSize: "12px", textDecoration: "none", opacity: 0.8 }}
           >
             Open workouts
           </Link>
@@ -419,19 +603,13 @@ export default function Dashboard() {
           <p style={{ fontSize: "13px", opacity: 0.8, margin: 0 }}>
             No upcoming workouts yet.
           </p>
-          <p
-            style={{
-              fontSize: "12px",
-              opacity: 0.7,
-              marginTop: "4px",
-            }}
-          >
+          <p style={{ fontSize: "12px", opacity: 0.7, marginTop: "4px" }}>
             Plan your next session on the Workouts page.
           </p>
         </div>
       </section>
 
-      {/* Quick Links */}
+      {/* QUICK LINKS */}
       <section style={{ marginBottom: "8px" }}>
         <div
           style={{

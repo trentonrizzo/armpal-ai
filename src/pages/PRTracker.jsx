@@ -1,9 +1,4 @@
-// src/pages/PRTracker.jsx
-import React, {
-  useContext,
-  useMemo,
-  useState
-} from "react";
+import React, { useContext, useMemo, useState } from "react";
 import { AppContext } from "../context/AppContext";
 import { FaEdit, FaTrashAlt, FaArrowsAlt } from "react-icons/fa";
 import { IoChevronDown, IoChevronUp } from "react-icons/io5";
@@ -17,21 +12,19 @@ export default function PRTracker() {
     reorderPRs,
   } = useContext(AppContext);
 
-  // Add PR form
+  // Add PR form inputs
   const [lift, setLift] = useState("");
   const [weight, setWeight] = useState("");
   const [unit, setUnit] = useState("lbs");
-  const [date, setDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [reps, setReps] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Sorting + drag
-  const [sortMode, setSortMode] = useState("custom"); // custom | alpha | newest | heaviest
-  const [draggedId, setDraggedId] = useState(null);
+  // Sorting mode + custom groups toggle
+  const [sortMode, setSortMode] = useState("custom");
+  const [draggedPR, setDraggedPR] = useState(null);
 
-  // Edit modal
+  // Editing modal
   const [editingPR, setEditingPR] = useState(null);
   const [editLift, setEditLift] = useState("");
   const [editWeight, setEditWeight] = useState("");
@@ -40,176 +33,100 @@ export default function PRTracker() {
   const [editReps, setEditReps] = useState("");
   const [editNotes, setEditNotes] = useState("");
 
-  // Collapsed categories
+  // Group collapse states
   const [collapsed, setCollapsed] = useState({});
+  const [customGrouping, setCustomGrouping] = useState(false);
 
-  // -----------------------------
-  // Categorize lifts (auto)
-  // -----------------------------
-  function categorizeLift(name) {
+  // CATEGORY SYSTEM (OPTIONAL)
+  function autoCategory(name) {
     if (!name) return "Other";
 
     const n = name.toLowerCase();
-
-    if (
-      n.includes("bench") ||
-      n.includes("press") ||
-      n.includes("chest")
-    ) {
-      return "Bench / Press";
-    }
-
-    if (
-      n.includes("curl") ||
-      n.includes("bicep") ||
-      n.includes("biceps") ||
-      n.includes("hammer")
-    ) {
-      return "Curls / Biceps";
-    }
-
-    if (
-      n.includes("deadlift") ||
-      n.includes("rdl") ||
-      n.includes("hinge")
-    ) {
-      return "Deadlifts / Posterior";
-    }
-
-    if (
-      n.includes("squat") ||
-      n.includes("leg press") ||
-      n.includes("hack") ||
-      n.includes("quad")
-    ) {
-      return "Squats / Legs";
-    }
-
-    if (
-      n.includes("row") ||
-      n.includes("lat") ||
-      n.includes("pulldown") ||
-      n.includes("pull-up") ||
-      n.includes("pull up")
-    ) {
-      return "Back / Rows / Lats";
-    }
-
-    if (
-      n.includes("wrist") ||
-      n.includes("forearm") ||
-      n.includes("grip") ||
-      n.includes("armwrestling") ||
-      n.includes("arm wrestling") ||
-      n.includes("hook") ||
-      n.includes("toproll") ||
-      n.includes("top roll")
-    ) {
-      return "Grip / Forearm / Armwrestling";
-    }
-
-    return "Other Lifts";
+    if (n.includes("bench") || n.includes("press")) return "Bench / Press";
+    if (n.includes("curl") || n.includes("bicep")) return "Curls / Biceps";
+    if (n.includes("deadlift") || n.includes("rdl")) return "Deadlifts";
+    if (n.includes("squat") || n.includes("leg")) return "Squats";
+    if (n.includes("row") || n.includes("lat") || n.includes("pull")) return "Back / Lats";
+    if (n.includes("wrist") || n.includes("forearm") || n.includes("grip")) return "Grip / Arm Wrestling";
+    return "Other";
   }
 
-  const categoryOrder = [
+  const defaultCatOrder = [
     "Bench / Press",
     "Curls / Biceps",
-    "Squats / Legs",
-    "Deadlifts / Posterior",
-    "Back / Rows / Lats",
-    "Grip / Forearm / Armwrestling",
-    "Other Lifts",
+    "Squats",
+    "Deadlifts",
+    "Back / Lats",
+    "Grip / Arm Wrestling",
+    "Other",
   ];
 
-  // -----------------------------
-  // Sort PRs based on mode
-  // -----------------------------
+  // SORTING
   const sortedPRs = useMemo(() => {
-    let list = [...(prs || [])];
-
+    let list = [...prs];
     if (sortMode === "alpha") {
-      list.sort((a, b) =>
-        (a.lift_name || "").localeCompare(b.lift_name || "")
-      );
+      list.sort((a, b) => (a.lift_name || "").localeCompare(b.lift_name || ""));
     } else if (sortMode === "newest") {
-      list.sort((a, b) =>
-        new Date(b.date || "1970-01-01") -
-        new Date(a.date || "1970-01-01")
-      );
+      list.sort((a, b) => new Date(b.date) - new Date(a.date));
     } else if (sortMode === "heaviest") {
-      list.sort((a, b) =>
-        (b.weight || 0) - (a.weight || 0)
-      );
+      list.sort((a, b) => (b.weight || 0) - (a.weight || 0));
     } else {
-      // custom -> follow order_index (then newest)
+      // CUSTOM ORDER INDEX
       list.sort((a, b) => {
         const ao = a.order_index ?? 0;
         const bo = b.order_index ?? 0;
-        if (ao !== bo) return ao - bo;
-        return (
-          new Date(b.date || "1970-01-01") -
-          new Date(a.date || "1970-01-01")
-        );
+        return ao - bo;
       });
     }
-
     return list;
   }, [prs, sortMode]);
 
-  // -----------------------------
-  // Group by category
-  // -----------------------------
+  // GROUPING (OPTIONAL)
   const grouped = useMemo(() => {
     const map = {};
     for (const pr of sortedPRs) {
-      const cat = categorizeLift(pr.lift_name);
+      const cat = customGrouping ? pr.group_name || "Ungrouped" : autoCategory(pr.lift_name);
       if (!map[cat]) map[cat] = [];
       map[cat].push(pr);
     }
     return map;
-  }, [sortedPRs]);
+  }, [sortedPRs, customGrouping]);
 
   const orderedCategories = useMemo(() => {
-    const existing = Object.keys(grouped);
-    const inOrder = categoryOrder.filter((c) =>
-      existing.includes(c)
-    );
-    const leftovers = existing.filter(
-      (c) => !categoryOrder.includes(c)
-    );
-    return [...inOrder, ...leftovers];
-  }, [grouped]);
-
-  // -----------------------------
-  // Add PR
-  // -----------------------------
-  async function handleSaveNew() {
-    if (!lift.trim() || !weight.trim()) {
-      alert("Enter lift name and weight.");
-      return;
+    const found = Object.keys(grouped);
+    if (!customGrouping) {
+      const inOrder = defaultCatOrder.filter((c) => found.includes(c));
+      const leftovers = found.filter((c) => !defaultCatOrder.includes(c));
+      return [...inOrder, ...leftovers];
     }
+    return found;
+  }, [grouped, customGrouping]);
+
+  // SAVE NEW PR
+  async function handleSaveNew() {
+    if (!lift.trim() || !weight.trim()) return alert("Enter lift and weight");
 
     await createPR(
       lift.trim(),
       Number(weight),
       unit,
-      date
+      date,
+      reps ? Number(reps) : null,
+      notes
     );
 
     setLift("");
     setWeight("");
-    setUnit("lbs");
-    setDate(new Date().toISOString().split("T")[0]);
     setReps("");
     setNotes("");
+    setUnit("lbs");
+    setDate(new Date().toISOString().split("T")[0]);
   }
 
-  // -----------------------------
-  // Drag + Drop (custom only)
-  // -----------------------------
+  // DRAG + DROP
   function handleDragStart(id) {
     if (sortMode !== "custom") return;
-    setDraggedId(id);
+    setDraggedPR(id);
   }
 
   function handleDragOver(e) {
@@ -217,84 +134,43 @@ export default function PRTracker() {
     e.preventDefault();
   }
 
-  async function handleDrop(targetId, categoryName) {
-    if (sortMode !== "custom") {
-      setDraggedId(null);
-      return;
-    }
-
-    if (!draggedId || draggedId === targetId) {
-      setDraggedId(null);
-      return;
-    }
+  async function handleDrop(targetId) {
+    if (sortMode !== "custom") return;
+    if (!draggedPR) return;
 
     const list = [...sortedPRs];
+    const fromIndex = list.findIndex((x) => x.id === draggedPR);
+    const toIndex = list.findIndex((x) => x.id === targetId);
 
-    const fromIndex = list.findIndex(
-      (p) => p.id === draggedId
-    );
-    const toIndex = list.findIndex(
-      (p) => p.id === targetId
-    );
-
-    if (fromIndex === -1 || toIndex === -1) {
-      setDraggedId(null);
-      return;
-    }
-
-    // Force drag only within same category for now
-    const fromCat = categorizeLift(
-      list[fromIndex].lift_name
-    );
-    const toCat = categorizeLift(
-      list[toIndex].lift_name
-    );
-    if (fromCat !== toCat || fromCat !== categoryName) {
-      setDraggedId(null);
-      return;
-    }
+    if (fromIndex === -1 || toIndex === -1) return;
 
     const [moved] = list.splice(fromIndex, 1);
     list.splice(toIndex, 0, moved);
 
-    const updates = list.map((pr, index) => ({
-      id: pr.id,
-      order_index: index,
-    }));
-
+    const updates = list.map((pr, index) => ({ id: pr.id, order_index: index }));
     await reorderPRs(updates);
-    setDraggedId(null);
+
+    setDraggedPR(null);
   }
 
-  // -----------------------------
-  // Edit modal
-  // -----------------------------
-  function openEditModal(pr) {
+  // EDIT MODAL OPEN
+  function openEdit(pr) {
     setEditingPR(pr);
-    setEditLift(pr.lift_name || "");
-    setEditWeight(pr.weight ?? "");
-    setEditUnit(pr.unit || "lbs");
-    setEditDate(pr.date || new Date().toISOString().split("T")[0]);
-    setEditReps(pr.reps ?? "");
-    setEditNotes(pr.notes || "");
+    setEditLift(pr.lift_name);
+    setEditWeight(pr.weight);
+    setEditUnit(pr.unit);
+    setEditDate(pr.date);
+    setEditReps(pr.reps);
+    setEditNotes(pr.notes);
   }
 
-  function closeEditModal() {
+  function closeEdit() {
     setEditingPR(null);
-    setEditLift("");
-    setEditWeight("");
-    setEditUnit("lbs");
-    setEditDate("");
-    setEditReps("");
-    setEditNotes("");
   }
 
-  async function handleSaveEdit() {
-    if (!editingPR) return;
-
-    if (!editLift.trim() || String(editWeight).trim() === "") {
-      alert("Lift and weight are required.");
-      return;
+  async function saveEdit() {
+    if (!editLift.trim() || !editWeight.toString().trim()) {
+      return alert("Lift & Weight required.");
     }
 
     await editPR(editingPR.id, {
@@ -306,110 +182,57 @@ export default function PRTracker() {
       notes: editNotes || null,
     });
 
-    closeEditModal();
+    closeEdit();
   }
 
-  // -----------------------------
-  // Collapse toggle
-  // -----------------------------
   function toggleCollapse(cat) {
-    setCollapsed((prev) => ({
-      ...prev,
-      [cat]: !prev[cat],
-    }));
+    setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }));
   }
 
   return (
     <div className="p-5 pb-24 min-h-screen bg-black text-white">
-      {/* Header / Title */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-red-500">
-            Personal Records
-          </h1>
-          <p className="text-sm text-neutral-400 mt-1">
-            Track, sort, edit, and organize all your PRs.
-          </p>
-        </div>
 
-        {/* Sort dropdown */}
-        <div className="glass-card px-3 py-2 rounded-xl border border-neutral-700 text-xs">
-          <label className="block text-neutral-400 mb-1">
-            Sort
-          </label>
-          <select
-            className="bg-black text-sm rounded-lg border border-neutral-700 px-2 py-1"
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value)}
-          >
-            <option value="custom">Custom (Your Order)</option>
-            <option value="alpha">A → Z</option>
-            <option value="newest">Newest</option>
-            <option value="heaviest">Heaviest</option>
-          </select>
-        </div>
+      {/* HEADER */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold text-red-500 tracking-wide">
+          Personal Records
+        </h1>
+
+        {/* SORT MENU */}
+        <select
+          className="bg-neutral-900 text-sm border border-neutral-700 rounded-xl px-3 py-2 shadow-md shadow-red-500/20"
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value)}
+        >
+          <option value="custom">Custom order</option>
+          <option value="alpha">A → Z</option>
+          <option value="newest">Newest</option>
+          <option value="heaviest">Heaviest</option>
+        </select>
       </div>
 
-      {/* Info line */}
-      <p className="text-xs text-neutral-500 mb-4">
-        Drag using the arrows icon to reorder <span className="font-semibold text-neutral-300">within a group</span> (Custom mode only).
-      </p>
-
-      {/* Add PR Card */}
-      <div className="glass-card mb-8 p-5 rounded-2xl border border-neutral-800">
-        <h2 className="text-lg font-semibold text-red-400 mb-4">
-          Add New PR
+      {/* NEW PR CARD */}
+      <div className="glass-card mb-8 p-5 rounded-2xl border border-neutral-800 shadow-xl shadow-red-500/20">
+        <h2 className="text-lg font-semibold text-red-400 mb-3">
+          Add PR
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <input
-            type="text"
-            className="neon-input"
-            placeholder="Lift name (Bench, Curl...)"
-            value={lift}
-            onChange={(e) => setLift(e.target.value)}
-          />
-          <input
-            type="number"
-            className="neon-input"
-            placeholder="Weight"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-          />
+          <input className="neon-input" placeholder="Lift" value={lift} onChange={(e) => setLift(e.target.value)} />
+          <input className="neon-input" placeholder="Weight" type="number" value={weight} onChange={(e) => setWeight(e.target.value)} />
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <select
-            className="neon-input"
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-          >
+          <select className="neon-input" value={unit} onChange={(e) => setUnit(e.target.value)}>
             <option value="lbs">lbs</option>
             <option value="kg">kg</option>
           </select>
 
-          <input
-            type="date"
-            className="neon-input"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <input className="neon-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
 
-          <input
-            type="number"
-            className="neon-input"
-            placeholder="Reps (optional)"
-            value={reps}
-            onChange={(e) => setReps(e.target.value)}
-          />
+          <input className="neon-input" placeholder="Reps" type="number" value={reps} onChange={(e) => setReps(e.target.value)} />
 
-          <input
-            type="text"
-            className="neon-input"
-            placeholder="Notes (optional)"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
+          <input className="neon-input" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
 
         <button
@@ -419,12 +242,9 @@ export default function PRTracker() {
           Save PR
         </button>
       </div>
-
-      {/* PR Groups */}
+      {/* PR LIST */}
       {sortedPRs.length === 0 ? (
-        <p className="text-neutral-500">
-          You don&apos;t have any PRs yet. Add your first one above.
-        </p>
+        <p className="text-neutral-500 text-sm">No PRs yet.</p>
       ) : (
         <div className="space-y-4">
           {orderedCategories.map((cat) => {
@@ -434,34 +254,25 @@ export default function PRTracker() {
             const isCollapsed = collapsed[cat];
 
             return (
-              <div
-                key={cat}
-                className="glass-card rounded-2xl border border-neutral-800 overflow-hidden"
-              >
-                {/* Category Header */}
+              <div key={cat} className="glass-card rounded-2xl border border-neutral-800 shadow-md shadow-red-500/10 overflow-hidden">
+                
+                {/* CATEGORY HEADER */}
                 <button
                   onClick={() => toggleCollapse(cat)}
                   className="w-full flex items-center justify-between px-4 py-3 bg-neutral-950/70 border-b border-neutral-800"
                 >
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-red-400">
-                      PR Group
-                    </p>
-                    <h3 className="text-lg font-semibold">
-                      {cat}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-neutral-400">
-                    <span>{items.length} PR{items.length !== 1 ? "s" : ""}</span>
-                    {isCollapsed ? (
-                      <IoChevronDown size={18} />
-                    ) : (
-                      <IoChevronUp size={18} />
-                    )}
-                  </div>
+                  <h3 className="text-lg font-semibold text-red-400">
+                    {cat}
+                  </h3>
+
+                  {isCollapsed ? (
+                    <IoChevronDown size={18} className="text-neutral-400" />
+                  ) : (
+                    <IoChevronUp size={18} className="text-neutral-400" />
+                  )}
                 </button>
 
-                {/* Items */}
+                {/* ITEMS */}
                 {!isCollapsed && (
                   <ul className="divide-y divide-neutral-800">
                     {items.map((pr) => (
@@ -470,54 +281,58 @@ export default function PRTracker() {
                         draggable={sortMode === "custom"}
                         onDragStart={() => handleDragStart(pr.id)}
                         onDragOver={handleDragOver}
-                        onDrop={() => handleDrop(pr.id, cat)}
-                        className={`
-                          flex items-center justify-between gap-3 px-4 py-3
-                          ${draggedId === pr.id ? "bg-neutral-900/80" : "bg-neutral-900/40"}
-                        `}
+                        onDrop={() => handleDrop(pr.id)}
+                        className={`flex items-center justify-between px-4 py-3 ${
+                          draggedPR === pr.id
+                            ? "bg-neutral-900/80"
+                            : "bg-neutral-900/40"
+                        }`}
                       >
                         <div className="flex items-center gap-3">
-                          {/* drag handle */}
+                          {/* DRAG HANDLE */}
                           {sortMode === "custom" && (
-                            <div className="cursor-grab active:cursor-grabbing text-neutral-500">
+                            <div className="cursor-grab text-neutral-500 active:cursor-grabbing">
                               <FaArrowsAlt size={16} />
                             </div>
                           )}
 
+                          {/* PR INFO */}
                           <div>
                             <p className="font-semibold text-sm">
                               {pr.lift_name}
                             </p>
-                            <p className="text-xs text-neutral-400 mt-0.5">
-                              {pr.date} · {pr.weight} {pr.unit || "lbs"}
-                              {pr.reps ? ` · ${pr.reps} reps` : ""}
+
+                            <p className="text-xs text-neutral-400">
+                              {pr.date} • {pr.weight} {pr.unit}
+                              {pr.reps ? ` • ${pr.reps} reps` : ""}
                             </p>
+
                             {pr.notes && (
-                              <p className="text-xs text-neutral-500 mt-0.5">
+                              <p className="text-xs text-neutral-500">
                                 {pr.notes}
                               </p>
                             )}
                           </div>
                         </div>
 
+                        {/* ACTIONS */}
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => openEditModal(pr)}
-                            className="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs flex items-center gap-1"
+                            onClick={() => openEdit(pr)}
+                            className="bg-neutral-800 hover:bg-neutral-700 px-2 py-1 rounded text-xs flex items-center gap-1"
                           >
-                            <FaEdit size={12} />
-                            Edit
+                            <FaEdit size={12} /> Edit
                           </button>
+
                           <button
                             onClick={() => {
                               if (window.confirm("Delete this PR?")) {
                                 removePR(pr.id);
                               }
                             }}
-                            className="px-2 py-1 rounded-lg bg-red-700 hover:bg-red-800 text-xs flex items-center gap-1"
+                            className="bg-red-700 hover:bg-red-800 px-2 py-1 rounded text-xs flex items-center gap-1"
                           >
-                            <FaTrashAlt size={12} />
-                            Delete
+                            <FaTrashAlt size={12} /> Delete
                           </button>
                         </div>
                       </li>
@@ -530,47 +345,26 @@ export default function PRTracker() {
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* EDIT MODAL */}
       {editingPR && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-red-400 mb-4">
-              Edit PR
-            </h2>
+          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 w-full max-w-md shadow-xl shadow-red-500/20">
+            <h2 className="text-xl font-bold text-red-400 mb-4">Edit PR</h2>
 
             <div className="space-y-3 mb-4">
               <div>
-                <label className="neon-label mb-1 block">
-                  Lift Name
-                </label>
-                <input
-                  className="neon-input w-full"
-                  value={editLift}
-                  onChange={(e) => setEditLift(e.target.value)}
-                />
+                <label className="neon-label mb-1 block">Lift</label>
+                <input className="neon-input w-full" value={editLift} onChange={(e) => setEditLift(e.target.value)} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="neon-label mb-1 block">
-                    Weight
-                  </label>
-                  <input
-                    type="number"
-                    className="neon-input w-full"
-                    value={editWeight}
-                    onChange={(e) => setEditWeight(e.target.value)}
-                  />
+                  <label className="neon-label mb-1 block">Weight</label>
+                  <input className="neon-input w-full" type="number" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} />
                 </div>
                 <div>
-                  <label className="neon-label mb-1 block">
-                    Unit
-                  </label>
-                  <select
-                    className="neon-input w-full"
-                    value={editUnit}
-                    onChange={(e) => setEditUnit(e.target.value)}
-                  >
+                  <label className="neon-label mb-1 block">Unit</label>
+                  <select className="neon-input w-full" value={editUnit} onChange={(e) => setEditUnit(e.target.value)}>
                     <option value="lbs">lbs</option>
                     <option value="kg">kg</option>
                   </select>
@@ -578,56 +372,25 @@ export default function PRTracker() {
               </div>
 
               <div>
-                <label className="neon-label mb-1 block">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  className="neon-input w-full"
-                  value={editDate}
-                  onChange={(e) => setEditDate(e.target.value)}
-                />
+                <label className="neon-label mb-1 block">Date</label>
+                <input className="neon-input w-full" type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="neon-label mb-1 block">
-                    Reps (optional)
-                  </label>
-                  <input
-                    type="number"
-                    className="neon-input w-full"
-                    value={editReps}
-                    onChange={(e) => setEditReps(e.target.value)}
-                  />
+                  <label className="neon-label mb-1 block">Reps</label>
+                  <input className="neon-input w-full" type="number" value={editReps} onChange={(e) => setEditReps(e.target.value)} />
                 </div>
                 <div>
-                  <label className="neon-label mb-1 block">
-                    Notes (optional)
-                  </label>
-                  <input
-                    type="text"
-                    className="neon-input w-full"
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                  />
+                  <label className="neon-label mb-1 block">Notes</label>
+                  <input className="neon-input w-full" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
                 </div>
               </div>
             </div>
 
             <div className="flex justify-end gap-3 mt-4">
-              <button
-                className="px-4 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 text-sm"
-                onClick={closeEditModal}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-sm font-semibold"
-                onClick={handleSaveEdit}
-              >
-                Save Changes
-              </button>
+              <button className="px-4 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600" onClick={closeEdit}>Cancel</button>
+              <button className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 font-semibold" onClick={saveEdit}>Save</button>
             </div>
           </div>
         </div>
