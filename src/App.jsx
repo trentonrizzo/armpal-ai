@@ -88,22 +88,21 @@ export default function App() {
     <AppProvider>
       <div className="min-h-screen bg-black text-white pb-20">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/home" element={<HomePage />} />
+  <Route path="/" element={<Dashboard />} />
+  <Route path="/home" element={<HomePage />} />
 
-          {/* THE ONLY PR PAGE NOW */}
-          <Route path="/prs" element={<PRTracker />} />
-          <Route path="/prslist" element={<PRTracker />} /> {/* FIXED ROUTE */}
+  {/* ONLY ONE PR PAGE — BOTH URLs GO HERE */}
+  <Route path="/prs" element={<PRTracker />} />
+  <Route path="/prslist" element={<PRTracker />} />
 
-          <Route path="/measure" element={<MeasurementsPage />} />
-          <Route path="/workouts" element={<WorkoutsPage />} />
-          <Route path="/workoutlogger" element={<WorkoutLogger />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/goals" element={<GoalsPage />} />
+  <Route path="/measure" element={<MeasurementsPage />} />
+  <Route path="/workouts" element={<WorkoutsPage />} />
+  <Route path="/workoutlogger" element={<WorkoutLogger />} />
+  <Route path="/profile" element={<ProfilePage />} />
+  <Route path="/goals" element={<GoalsPage />} />
 
-          {/* Strength Calculator */}
-          <Route path="/strength" element={<StrengthCalculator />} />
-        </Routes>
+  <Route path="/strength" element={<StrengthCalculator />} />
+</Routes>
 
         <BottomNav />
       </div>

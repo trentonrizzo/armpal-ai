@@ -2,18 +2,13 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 import "./BottomNav.css";
 
-// Icons → Using SF-style filled icons via react-icons (safe & consistent)
-import {
-  AiFillHome,
-  AiFillTrophy,
-  AiFillFlag,
-  AiFillDashboard
-} from "react-icons/ai";
+import { AiFillHome, AiFillTrophy, AiFillFlag } from "react-icons/ai";
 import { FaDumbbell, FaRulerVertical, FaUserAlt } from "react-icons/fa";
 
 const BottomNav = () => {
   return (
     <nav className="bottom-nav">
+      {/* Dashboard */}
       <NavLink to="/" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
@@ -26,6 +21,7 @@ const BottomNav = () => {
         )}
       </NavLink>
 
+      {/* Workouts */}
       <NavLink to="/workouts" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
@@ -38,8 +34,8 @@ const BottomNav = () => {
         )}
       </NavLink>
 
-      {/* ⭐ FIXED ROUTE HERE */}
-      <NavLink to="/prslist" className="nav-item">
+      {/* PRs — FIXED FOREVER */}
+      <NavLink to="/prs" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
             {isActive && <div className="active-glow"></div>}
@@ -51,6 +47,7 @@ const BottomNav = () => {
         )}
       </NavLink>
 
+      {/* Measure */}
       <NavLink to="/measure" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
@@ -63,6 +60,7 @@ const BottomNav = () => {
         )}
       </NavLink>
 
+      {/* Goals */}
       <NavLink to="/goals" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
@@ -75,6 +73,7 @@ const BottomNav = () => {
         )}
       </NavLink>
 
+      {/* Profile */}
       <NavLink to="/profile" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
