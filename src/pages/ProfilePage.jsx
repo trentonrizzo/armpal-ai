@@ -54,31 +54,51 @@ export default function ProfilePage() {
     }
   }
 
-  // Converts crop selection to real image blob
+  // FIXED VERSION — WORKS ON iPhone/PWA SAFARI
   const getCroppedImg = async (imageSrc, pixelCrop) => {
-    const img = new Image();
-    img.src = imageSrc;
-    await new Promise((resolve) => (img.onload = resolve));
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous"; // 🔥 THE FIX
+      img.src = imageSrc;
 
-    const canvas = document.createElement("canvas");
-    canvas.width = pixelCrop.width;
-    canvas.height = pixelCrop.height;
-    const ctx = canvas.getContext("2d");
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = pixelCrop.width;
+          canvas.height = pixelCrop.height;
+          const ctx = canvas.getContext("2d");
 
-    ctx.drawImage(
-      img,
-      pixelCrop.x,
-      pixelCrop.y,
-      pixelCrop.width,
-      pixelCrop.height,
-      0,
-      0,
-      pixelCrop.width,
-      pixelCrop.height
-    );
+          ctx.drawImage(
+            img,
+            pixelCrop.x,
+            pixelCrop.y,
+            pixelCrop.width,
+            pixelCrop.height,
+            0,
+            0,
+            pixelCrop.width,
+            pixelCrop.height
+          );
 
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.9);
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error("Canvas is empty"));
+                return;
+              }
+              resolve(blob);
+            },
+            "image/jpeg",
+            0.9
+          );
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      img.onerror = (err) => {
+        reject(err);
+      };
     });
   };
 
@@ -89,7 +109,9 @@ export default function ProfilePage() {
   function onSelectFile(e) {
     const file = e.target.files[0];
     if (!file) return;
-    setSelectedImage(URL.createObjectURL(file));
+
+    const localURL = URL.createObjectURL(file);
+    setSelectedImage(localURL);
     setShowCropper(true);
   }
 
@@ -97,10 +119,8 @@ export default function ProfilePage() {
     try {
       setUploading(true);
 
-      // Convert cropped area into blob
       const croppedBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
 
-      // Compress image
       const compressed = await imageCompression(croppedBlob, {
         maxSizeMB: 0.4,
         maxWidthOrHeight: 600,
@@ -110,14 +130,12 @@ export default function ProfilePage() {
       const fileExt = "jpg";
       const filePath = `${user.id}-${Date.now()}.${fileExt}`;
 
-      // Upload to storage
       let { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(filePath, compressed, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const {
         data: { publicUrl },
       } = supabase.storage.from("avatars").getPublicUrl(filePath);
@@ -125,7 +143,7 @@ export default function ProfilePage() {
       setAvatarUrl(publicUrl);
       setShowCropper(false);
     } catch (err) {
-      console.error(err);
+      console.error("Crop/Upload error:", err);
       alert("Error processing image.");
     } finally {
       setUploading(false);
