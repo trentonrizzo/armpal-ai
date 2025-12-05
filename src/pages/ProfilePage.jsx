@@ -1,6 +1,8 @@
 // src/pages/ProfilePage.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../supabaseClient";
+import Cropper from "react-easy-crop";
+import imageCompression from "browser-image-compression";
 
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
@@ -10,6 +12,13 @@ export default function ProfilePage() {
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  // CROPPER STATES
+  const [showCropper, setShowCropper] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
   useEffect(() => {
     loadProfile();
@@ -45,31 +54,86 @@ export default function ProfilePage() {
     }
   }
 
-  async function uploadAvatar(event) {
+  // Converts crop selection to real image blob
+  const getCroppedImg = async (imageSrc, pixelCrop) => {
+    const img = new Image();
+    img.src = imageSrc;
+    await new Promise((resolve) => (img.onload = resolve));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(
+      img,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.9);
+    });
+  };
+
+  const onCropComplete = useCallback((_, croppedPixels) => {
+    setCroppedAreaPixels(croppedPixels);
+  }, []);
+
+  function onSelectFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setSelectedImage(URL.createObjectURL(file));
+    setShowCropper(true);
+  }
+
+  async function doSaveCroppedImage() {
     try {
       setUploading(true);
-      const file = event.target.files[0];
-      if (!file) return;
 
-      const fileExt = file.name.split(".").pop();
+      // Convert cropped area into blob
+      const croppedBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
+
+      // Compress image
+      const compressed = await imageCompression(croppedBlob, {
+        maxSizeMB: 0.4,
+        maxWidthOrHeight: 600,
+        useWebWorker: true,
+      });
+
+      const fileExt = "jpg";
       const filePath = `${user.id}-${Date.now()}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
+      // Upload to storage
+      let { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(filePath, file);
+        .upload(filePath, compressed, { upsert: true });
 
       if (uploadError) throw uploadError;
 
+      // Get public URL
       const {
         data: { publicUrl },
       } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
       setAvatarUrl(publicUrl);
+      setShowCropper(false);
     } catch (err) {
-      console.error("Avatar upload error:", err.message);
+      console.error(err);
+      alert("Error processing image.");
     } finally {
       setUploading(false);
     }
+  }
+
+  async function removeAvatar() {
+    setAvatarUrl("");
   }
 
   async function saveProfile() {
@@ -149,21 +213,38 @@ export default function ProfilePage() {
               borderRadius: "8px",
               border: "1px solid rgba(255,255,255,0.1)",
               cursor: "pointer",
+              marginRight: "8px",
             }}
           >
-            {uploading ? "Uploading..." : "Change Avatar"}
+            Change Avatar
             <input
               type="file"
               accept="image/*"
-              onChange={uploadAvatar}
+              onChange={onSelectFile}
               style={{ display: "none" }}
-              disabled={uploading}
             />
           </label>
+
+          {avatarUrl && (
+            <button
+              onClick={removeAvatar}
+              style={{
+                padding: "6px 12px",
+                fontSize: "13px",
+                background: "#331111",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "8px",
+                color: "white",
+                cursor: "pointer",
+              }}
+            >
+              Remove
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Username */}
+      {/* USERNAME */}
       <div style={{ marginBottom: "16px" }}>
         <label
           style={{
@@ -190,7 +271,7 @@ export default function ProfilePage() {
         />
       </div>
 
-      {/* Bio */}
+      {/* BIO */}
       <div style={{ marginBottom: "16px" }}>
         <label
           style={{
@@ -218,7 +299,7 @@ export default function ProfilePage() {
         ></textarea>
       </div>
 
-      {/* Save Button */}
+      {/* SAVE */}
       <button
         onClick={saveProfile}
         style={{
@@ -237,7 +318,7 @@ export default function ProfilePage() {
         Save Profile
       </button>
 
-      {/* Logout Button */}
+      {/* LOGOUT */}
       <button
         onClick={logout}
         style={{
@@ -253,6 +334,88 @@ export default function ProfilePage() {
       >
         Logout
       </button>
+
+      {/* ---- CROPPER MODAL ---- */}
+      {showCropper && (
+        <div
+          style={{
+            position: "fixed",
+            inset: "0",
+            background: "rgba(0,0,0,0.8)",
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              width: "90%",
+              maxWidth: "350px",
+              height: "350px",
+              background: "#000",
+              borderRadius: "12px",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <Cropper
+              image={selectedImage}
+              crop={crop}
+              zoom={zoom}
+              cropShape="round"
+              aspect={1}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          </div>
+
+          {/* Controls */}
+          <input
+            type="range"
+            min={1}
+            max={3}
+            step={0.05}
+            value={zoom}
+            onChange={(e) => setZoom(e.target.value)}
+            style={{ width: "80%", marginTop: "20px" }}
+          />
+
+          <div style={{ marginTop: "20px", display: "flex", gap: "12px" }}>
+            <button
+              onClick={() => setShowCropper(false)}
+              style={{
+                padding: "10px 20px",
+                background: "#222",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: "10px",
+                color: "white",
+                fontSize: "14px",
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={doSaveCroppedImage}
+              style={{
+                padding: "10px 20px",
+                background: "#ff2f2f",
+                borderRadius: "10px",
+                border: "none",
+                color: "white",
+                fontSize: "14px",
+                fontWeight: 600,
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
