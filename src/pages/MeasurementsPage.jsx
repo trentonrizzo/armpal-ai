@@ -1,295 +1,478 @@
 import React, { useEffect, useState } from "react";
-import "../glass.css";
-import { supabase } from "../supabaseClient";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
 import {
   getMeasurements,
   addMeasurement,
-  deleteMeasurement,
   updateMeasurement,
+  deleteMeasurement,
 } from "../api/measurements";
-import BottomSheet from "../components/BottomSheet";
-import { ChevronDown, ChevronUp, Trash2, Edit3 } from "lucide-react";
 
-export default function MeasurementsPage() {
-  const [measurements, setMeasurements] = useState([]);
+import { supabase } from "../supabaseClient";
+import {
+  Edit,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  X,
+  Check,
+} from "lucide-react";
 
-  // bottom sheet / modal
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+import "../glass.css";
 
-  const [modalName, setModalName] = useState("");
-  const [modalValue, setModalValue] = useState("");
-  const [modalUnit, setModalUnit] = useState("in");
-  const [modalDate, setModalDate] = useState(
-    new Date().toISOString().slice(0, 10)
+
+/* -------------------------------------------------------
+   Sortable wrapper for DRAGGING groups (A-mode)
+------------------------------------------------------- */
+function SortableGroupWrapper({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
   );
-  const [noDate, setNoDate] = useState(false);
+}
 
-  // which groups are expanded
+
+/* -------------------------------------------------------
+   MAIN PAGE — CLEAN. SEXY. WORKOUT STYLE.
+------------------------------------------------------- */
+export default function MeasurementsPage() {
+  const [measurements, setMeasurements] = useState({});
+  const [groupOrder, setGroupOrder] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+
+  // Collapsed/expanded section
   const [expanded, setExpanded] = useState({});
 
+  // Modal states
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editId, setEditId] = useState(null); // if editing a specific entry
+
+  const [mName, setMName] = useState("");
+  const [mValue, setMValue] = useState("");
+  const [mUnit, setMUnit] = useState("in");
+  const [mDate, setMDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+
+  // Delete confirm modal
+  const [deleteId, setDeleteId] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
+
+  /* -------------------------------------------------------
+     Load Measurements
+  ------------------------------------------------------- */
   useEffect(() => {
-    loadMeasurements();
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const rows = await getMeasurements(user.id);
+      const grouped = {};
+
+      rows.forEach((m) => {
+        if (!grouped[m.name]) grouped[m.name] = [];
+        grouped[m.name].push(m);
+      });
+
+      // sort entries newest → oldest
+      Object.keys(grouped).forEach((key) => {
+        grouped[key].sort(
+          (a, b) => new Date(b.date) - new Date(a.date)
+        );
+      });
+
+      setMeasurements(grouped);
+      setGroupOrder(Object.keys(grouped));
+      setLoading(false);
+    })();
   }, []);
 
-  async function loadMeasurements() {
+  /* -------------------------------------------------------
+     Drag end — reorder groups
+  ------------------------------------------------------- */
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = groupOrder.indexOf(active.id);
+    const newIndex = groupOrder.indexOf(over.id);
+
+    setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
+  }
+
+  /* -------------------------------------------------------
+     Open Add/Edit modal
+  ------------------------------------------------------- */
+  function openModalForAdd() {
+    setEditId(null);
+    setMName("");
+    setMValue("");
+    setMUnit("in");
+    setMDate(new Date().toISOString().slice(0, 10));
+    setModalOpen(true);
+  }
+
+  function openModalForEdit(entry) {
+    setEditId(entry.id);
+    setMName(entry.name);
+    setMValue(entry.value);
+    setMUnit(entry.unit);
+    setMDate(entry.date);
+    setModalOpen(true);
+  }
+
+  /* -------------------------------------------------------
+     Save Add/Edit
+  ------------------------------------------------------- */
+  async function saveMeasurement() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const rows = await getMeasurements(user.id);
+    if (!mName || !mValue) return;
 
-    // sort newest first
-    rows.sort((a, b) => {
-      if (!a.date && !b.date) return 0;
-      if (!a.date) return 1;
-      if (!b.date) return -1;
-      return new Date(b.date) - new Date(a.date);
-    });
-
-    setMeasurements(rows);
-  }
-
-  // group by name
-  const grouped = measurements.reduce((acc, m) => {
-    if (!acc[m.name]) acc[m.name] = [];
-    acc[m.name].push(m);
-    return acc;
-  }, {});
-
-  function toggleGroup(name) {
-    setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
-  }
-
-  // open modal for add / edit
-  function openModal(measurement = null) {
-    if (measurement) {
-      setEditingId(measurement.id);
-      setModalName(measurement.name);
-      setModalValue(measurement.value);
-      setModalUnit(measurement.unit || "in");
-      setModalDate(measurement.date || new Date().toISOString().slice(0, 10));
-      setNoDate(!measurement.date);
+    if (editId) {
+      // update
+      await updateMeasurement({
+        id: editId,
+        name: mName,
+        value: mValue,
+        unit: mUnit,
+        date: mDate,
+      });
     } else {
-      setEditingId(null);
-      setModalName("");
-      setModalValue("");
-      setModalUnit("in");
-      setModalDate(new Date().toISOString().slice(0, 10));
-      setNoDate(false);
-    }
-    setShowModal(true);
-  }
-
-  async function handleSave() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    if (!modalName || !modalValue) return;
-
-    const payload = {
-      name: modalName,
-      value: modalValue,
-      unit: modalUnit,
-      date: noDate ? null : modalDate,
-    };
-
-    if (editingId) {
-      await updateMeasurement(editingId, payload);
-    } else {
+      // add
       await addMeasurement({
         userId: user.id,
-        ...payload,
+        name: mName,
+        value: mValue,
+        unit: mUnit,
+        date: mDate,
       });
     }
 
-    setShowModal(false);
-    await loadMeasurements();
+    // reload
+    const rows = await getMeasurements(user.id);
+    const grouped = {};
+    rows.forEach((m) => {
+      if (!grouped[m.name]) grouped[m.name] = [];
+      grouped[m.name].push(m);
+    });
+
+    // sort newest first
+    Object.keys(grouped).forEach((key) => {
+      grouped[key].sort(
+        (a, b) => new Date(b.date) - new Date(a.date)
+      );
+    });
+
+    setMeasurements(grouped);
+    setGroupOrder(Object.keys(grouped));
+    setModalOpen(false);
   }
 
-  async function handleDelete(id) {
-    await deleteMeasurement(id);
-    setMeasurements((prev) => prev.filter((m) => m.id !== id));
+  /* -------------------------------------------------------
+     Delete Confirm
+  ------------------------------------------------------- */
+  async function confirmDelete() {
+    await deleteMeasurement(deleteId);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const rows = await getMeasurements(user.id);
+    const grouped = {};
+    rows.forEach((m) => {
+      if (!grouped[m.name]) grouped[m.name] = [];
+      grouped[m.name].push(m);
+    });
+
+    Object.keys(grouped).forEach((key) => {
+      grouped[key].sort(
+        (a, b) => new Date(b.date) - new Date(a.date)
+      );
+    });
+
+    setMeasurements(grouped);
+    setGroupOrder(Object.keys(grouped));
+
+    setDeleteId(null);
   }
+
+  if (loading)
+    return <p className="p-4 text-white">Loading...</p>;
 
   return (
-    <div className="text-white p-4 pb-24 max-w-3xl mx-auto">
-      {/* Header */}
-      <h1 className="text-2xl font-bold mb-4">Measurements</h1>
+    <div className="p-4 text-white pb-24">
 
-      {/* Add button */}
-      <div className="mb-4 flex justify-start">
+      {/* Header */}
+      <div className="glass-chip mb-4 text-glow flex justify-between items-center">
+        <span className="glass-chip-dot" /> Measurements
         <button
-          onClick={() => openModal()}
-          className="px-5 py-2 bg-red-600 rounded-full shadow shadow-red-500/40 hover:bg-red-700 text-sm font-semibold"
+          onClick={openModalForAdd}
+          className="px-3 py-2 bg-red-600 rounded-xl flex items-center gap-1"
         >
-          + Add Measurement
+          <Plus size={18} /> Add
         </button>
       </div>
 
-      {/* History / groups */}
-      {Object.keys(grouped).length === 0 ? (
-        <div className="mt-8 text-center text-gray-400">
-          No measurements yet.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {Object.keys(grouped).map((name) => {
-            const list = grouped[name];
-            const newest = list[0];
-            const isOpen = expanded[name] || false;
+      {/* DRAGGABLE LIST OF GROUPS */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={groupOrder}
+          strategy={verticalListSortingStrategy}
+        >
+          {groupOrder.map((groupName) => {
+            const items = measurements[groupName] || [];
+            const latest = items[0];
 
-            const newestDateLabel = newest.date ? newest.date : "No date";
+            const isOpen = expanded[groupName];
 
             return (
-              <div
-                key={name}
-                className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg overflow-hidden"
-              >
-                {/* Card header – like a workout card */}
-                <div
-                  className="px-4 py-3 flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleGroup(name)}
-                >
-                  <div>
-                    <div className="text-sm text-gray-400">MEASUREMENT</div>
-                    <div className="text-lg font-semibold uppercase tracking-wide">
-                      {name}
+              <SortableGroupWrapper key={groupName} id={groupName}>
+                <div className="glass-section p-4 rounded-2xl mb-4">
+
+                  {/* TOP ROW — group summary */}
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-xl font-semibold text-red-400">
+                        {groupName}
+                      </h2>
+                      <p className="text-gray-300">
+                        {latest.value} {latest.unit} — {latest.date}
+                      </p>
                     </div>
-                    <div className="text-sm text-gray-300">
-                      {newest.value} {newest.unit} — {newestDateLabel}
+
+                    <div className="flex items-center gap-3">
+
+                      {/* EDIT BUTTON — right side */}
+                      <button
+                        onClick={() => openModalForEdit(latest)}
+                        className="text-white hover:text-red-400"
+                      >
+                        <Edit size={20} />
+                      </button>
+
+                      {/* DELETE BUTTON — right side */}
+                      <button
+                        onClick={() => setDeleteId(latest.id)}
+                        className="text-red-400 hover:text-red-600"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+
+                      {/* EXPAND */}
+                      <button
+                        onClick={() =>
+                          setExpanded((prev) => ({
+                            ...prev,
+                            [groupName]: !prev[groupName],
+                          }))
+                        }
+                        className="ml-2 text-gray-300 hover:text-white"
+                      >
+                        {isOpen ? (
+                          <ChevronUp size={24} />
+                        ) : (
+                          <ChevronDown size={24} />
+                        )}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {isOpen ? (
-                      <ChevronUp className="text-gray-300" />
-                    ) : (
-                      <ChevronDown className="text-gray-300" />
-                    )}
-                  </div>
-                </div>
-
-                {/* Expanded history list */}
-                {isOpen && (
-                  <div className="border-t border-neutral-800">
-                    {list.map((m) => {
-                      const labelDate = m.date ? m.date : "No date";
-                      return (
+                  {/* DROP-DOWN HISTORY */}
+                  {isOpen && (
+                    <div className="mt-4 space-y-2">
+                      {items.slice(1).map((entry) => (
                         <div
-                          key={m.id}
-                          className="px-4 py-3 flex items-center justify-between border-t border-neutral-800"
+                          key={entry.id}
+                          className="p-3 rounded-xl bg-neutral-900/60 border border-neutral-700 flex justify-between items-center"
                         >
-                          <div className="text-sm text-gray-200">
-                            {m.value} {m.unit} — {labelDate}
+                          <div>
+                            <p className="text-white">
+                              {entry.value} {entry.unit}
+                            </p>
+                            <p className="text-gray-400 text-sm">
+                              {entry.date}
+                            </p>
                           </div>
 
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => openModal(m)}
-                              className="p-1 rounded-full hover:bg-neutral-800"
+                              onClick={() => openModalForEdit(entry)}
+                              className="text-white hover:text-red-400"
                             >
-                              <Edit3 className="w-4 h-4 text-gray-200" />
+                              <Edit size={18} />
                             </button>
+
                             <button
-                              onClick={() => handleDelete(m.id)}
-                              className="p-1 rounded-full hover:bg-neutral-800"
+                              onClick={() => setDeleteId(entry.id)}
+                              className="text-red-400 hover:text-red-600"
                             >
-                              <Trash2 className="w-4 h-4 text-red-400" />
+                              <Trash2 size={18} />
                             </button>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </SortableGroupWrapper>
             );
           })}
+        </SortableContext>
+      </DndContext>
+
+      {/* ---------------------------------------------------
+         MODAL — ADD / EDIT
+      --------------------------------------------------- */}
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
+
+            <h2 className="text-xl font-bold mb-4">
+              {editId ? "Edit Measurement" : "Add Measurement"}
+            </h2>
+
+            <div className="space-y-3">
+
+              <div>
+                <label className="text-sm opacity-80">Name</label>
+                <input
+                  type="text"
+                  placeholder="Bicep, Chest, etc."
+                  value={mName}
+                  onChange={(e) => setMName(e.target.value)}
+                  className="neon-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm opacity-80">Value</label>
+                <input
+                  type="number"
+                  value={mValue}
+                  onChange={(e) => setMValue(e.target.value)}
+                  className="neon-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm opacity-80">Unit</label>
+                <select
+                  value={mUnit}
+                  onChange={(e) => setMUnit(e.target.value)}
+                  className="neon-input w-full"
+                >
+                  <option value="in">in</option>
+                  <option value="cm">cm</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm opacity-80">Date</label>
+                <input
+                  type="date"
+                  value={mDate}
+                  onChange={(e) => setMDate(e.target.value)}
+                  className="neon-input w-full"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between mt-6">
+
+              {/* CANCEL */}
+              <button
+                onClick={() => setModalOpen(false)}
+                className="px-4 py-2 bg-neutral-700 rounded-xl flex items-center gap-1"
+              >
+                <X size={18} /> Cancel
+              </button>
+
+              {/* SAVE */}
+              <button
+                onClick={saveMeasurement}
+                className="px-4 py-2 bg-red-600 rounded-xl flex items-center gap-1"
+              >
+                <Check size={18} /> Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* BottomSheet modal for add / edit */}
-      <BottomSheet open={showModal} onClose={() => setShowModal(false)}>
-        <h3 className="text-xl font-bold mb-4 text-white">
-          {editingId ? "Edit Measurement" : "Add Measurement"}
-        </h3>
+      {/* ---------------------------------------------------
+         DELETE CONFIRM MODAL
+      --------------------------------------------------- */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
 
-        {/* Name */}
-        <div className="mb-3">
-          <label className="neon-label">Name</label>
-          <input
-            type="text"
-            className="neon-input w-full"
-            value={modalName}
-            onChange={(e) => setModalName(e.target.value)}
-            placeholder="Bicep, Chest, Wrist..."
-          />
-        </div>
+            <h2 className="text-xl font-bold mb-4 text-red-400">
+              Confirm Delete?
+            </h2>
 
-        {/* Value */}
-        <div className="mb-3">
-          <label className="neon-label">Value</label>
-          <input
-            type="number"
-            className="neon-input w-full"
-            value={modalValue}
-            onChange={(e) => setModalValue(e.target.value)}
-          />
-        </div>
+            <p className="text-gray-300 mb-6">
+              This action cannot be undone.
+            </p>
 
-        {/* Unit */}
-        <div className="mb-3">
-          <label className="neon-label">Unit</label>
-          <select
-            className="neon-input w-full"
-            value={modalUnit}
-            onChange={(e) => setModalUnit(e.target.value)}
-          >
-            <option value="in">in</option>
-            <option value="cm">cm</option>
-          </select>
-        </div>
+            <div className="flex justify-between">
 
-        {/* Date + no-date toggle */}
-        <div className="mb-3">
-          <label className="neon-label">Date</label>
-          <input
-            type="date"
-            className="neon-input w-full"
-            value={noDate ? "" : modalDate}
-            onChange={(e) => setModalDate(e.target.value)}
-            disabled={noDate}
-          />
-          <div className="mt-1 flex items-center gap-2 text-xs text-gray-300">
-            <input
-              id="no-date"
-              type="checkbox"
-              checked={noDate}
-              onChange={(e) => setNoDate(e.target.checked)}
-            />
-            <label htmlFor="no-date">No date</label>
+              <button
+                onClick={() => setDeleteId(null)}
+                className="px-4 py-2 bg-neutral-700 rounded-xl"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 rounded-xl"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
-
-        <div className="flex justify-between mt-5">
-          <button
-            className="px-4 py-2 rounded-xl bg-neutral-700 text-sm"
-            onClick={() => setShowModal(false)}
-          >
-            Cancel
-          </button>
-          <button
-            className="px-5 py-2 rounded-xl bg-red-600 text-sm font-semibold shadow shadow-red-500/40 hover:bg-red-700"
-            onClick={handleSave}
-          >
-            Save
-          </button>
-        </div>
-      </BottomSheet>
+      )}
     </div>
   );
 }
