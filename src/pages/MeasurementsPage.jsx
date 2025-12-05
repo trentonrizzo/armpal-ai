@@ -5,45 +5,46 @@ import {
   getMeasurements,
   addMeasurement,
   deleteMeasurement,
+  updateMeasurement,
 } from "../api/measurements";
 import BottomSheet from "../components/BottomSheet";
+import { ChevronDown, ChevronUp, Trash2, Edit3 } from "lucide-react";
 
 export default function MeasurementsPage() {
-  const [unitToggle, setUnitToggle] = useState("in");
-
-  // Default measurement fields
-  const [bicep, setBicep] = useState("");
-  const [forearm, setForearm] = useState("");
-  const [wrist, setWrist] = useState("");
-  const [defaultDate, setDefaultDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-
-  // Bottom sheet modal fields
-  const [showModal, setShowModal] = useState(false);
-  const [customName, setCustomName] = useState("");
-  const [customValue, setCustomValue] = useState("");
-  const [customUnit, setCustomUnit] = useState("in");
-  const [customDate, setCustomDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-
   const [measurements, setMeasurements] = useState([]);
 
-  // Load measurements
+  // BottomSheet modal state
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  // Modal inputs
+  const [modalName, setModalName] = useState("");
+  const [modalValue, setModalValue] = useState("");
+  const [modalUnit, setModalUnit] = useState("in");
+  const [modalDate, setModalDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+
+  // Expand/collapse groups
+  const [expanded, setExpanded] = useState({});
+
   useEffect(() => {
-    const load = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const rows = await getMeasurements(user.id);
-      setMeasurements(rows);
-    };
-
-    load();
+    loadMeasurements();
   }, []);
+
+  const loadMeasurements = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const rows = await getMeasurements(user.id);
+
+    // Sort newest first inside each group
+    rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    setMeasurements(rows);
+  };
 
   // Group by name
   const grouped = measurements.reduce((acc, m) => {
@@ -52,64 +53,51 @@ export default function MeasurementsPage() {
     return acc;
   }, {});
 
-  // Save default measurements
-  const handleSaveDefaults = async () => {
+  // Open modal for add or edit
+  const openModal = (m = null) => {
+    if (m) {
+      setEditingId(m.id);
+      setModalName(m.name);
+      setModalValue(m.value);
+      setModalUnit(m.unit);
+      setModalDate(m.date);
+    } else {
+      setEditingId(null);
+      setModalName("");
+      setModalValue("");
+      setModalUnit("in");
+      setModalDate(new Date().toISOString().slice(0, 10));
+    }
+    setShowModal(true);
+  };
+
+  const saveMeasurement = async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const itemsToSave = [
-      { name: "Bicep", value: bicep, unit: unitToggle, date: defaultDate },
-      { name: "Forearm", value: forearm, unit: unitToggle, date: defaultDate },
-      { name: "Wrist", value: wrist, unit: unitToggle, date: defaultDate },
-    ];
+    if (!modalName || !modalValue) return;
 
-    for (const item of itemsToSave) {
-      if (!item.value) continue;
-
+    if (editingId) {
+      await updateMeasurement(editingId, {
+        name: modalName,
+        value: modalValue,
+        unit: modalUnit,
+        date: modalDate,
+      });
+    } else {
       await addMeasurement({
         userId: user.id,
-        name: item.name,
-        value: item.value,
-        unit: item.unit,
-        date: item.date,
+        name: modalName,
+        value: modalValue,
+        unit: modalUnit,
+        date: modalDate,
       });
     }
 
-    setBicep("");
-    setForearm("");
-    setWrist("");
-
-    const rows = await getMeasurements(user.id);
-    setMeasurements(rows);
-  };
-
-  // Save custom measurement
-  const handleSaveCustom = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    if (!customName || !customValue) return;
-
-    await addMeasurement({
-      userId: user.id,
-      name: customName,
-      value: customValue,
-      unit: customUnit,
-      date: customDate,
-    });
-
-    // Reset
-    setCustomName("");
-    setCustomValue("");
-    setCustomUnit("in");
     setShowModal(false);
-
-    const rows = await getMeasurements(user.id);
-    setMeasurements(rows);
+    loadMeasurements();
   };
 
   const handleDelete = async (id) => {
@@ -118,193 +106,144 @@ export default function MeasurementsPage() {
   };
 
   return (
-    <div className="text-white p-4">
-      {/* Title */}
+    <div className="text-white p-4 pb-24">
+      {/* Header */}
       <div className="glass-chip mb-4 text-glow">
         <span className="glass-chip-dot" /> Measurements
       </div>
 
-      {/* Unit Toggle */}
-      <div className="flex gap-4 mb-4">
+      {/* Add Button */}
+      <div className="flex justify-end mb-4">
         <button
-          onClick={() => setUnitToggle("in")}
-          className={`px-4 py-2 rounded-xl ${
-            unitToggle === "in"
-              ? "bg-red-600"
-              : "bg-neutral-800 border border-neutral-700"
-          }`}
+          onClick={() => openModal()}
+          className="px-4 py-2 bg-red-600 rounded-xl hover:bg-red-700 shadow shadow-red-500/40"
         >
-          in
-        </button>
-
-        <button
-          onClick={() => setUnitToggle("cm")}
-          className={`px-4 py-2 rounded-xl ${
-            unitToggle === "cm"
-              ? "bg-red-600"
-              : "bg-neutral-800 border border-neutral-700"
-          }`}
-        >
-          cm
+          + Add Measurement
         </button>
       </div>
 
-      {/* Default Measurements */}
-      <div className="glass-section mb-6 p-4 rounded-2xl">
-        <div className="glass-chip mb-3 text-glow">
-          <span className="glass-chip-dot" /> Default Measurements
-        </div>
-
-        {/* Inputs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="neon-label">Bicep ({unitToggle})</label>
-            <input
-              type="number"
-              className="neon-input"
-              value={bicep}
-              onChange={(e) => setBicep(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="neon-label">Forearm ({unitToggle})</label>
-            <input
-              type="number"
-              className="neon-input"
-              value={forearm}
-              onChange={(e) => setForearm(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="neon-label">Wrist ({unitToggle})</label>
-            <input
-              type="number"
-              className="neon-input"
-              value={wrist}
-              onChange={(e) => setWrist(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* Date */}
-        <div className="mb-4">
-          <label className="neon-label">Date</label>
-          <input
-            type="date"
-            className="neon-input"
-            value={defaultDate}
-            onChange={(e) => setDefaultDate(e.target.value)}
-          />
-        </div>
-
-        <button
-          onClick={handleSaveDefaults}
-          className="px-5 py-2 bg-red-600 rounded-xl shadow shadow-red-500/40 hover:bg-red-700"
-        >
-          Save Default Measurements
-        </button>
-      </div>
-
-      {/* Custom Measurements header */}
-      <div className="glass-section p-4 rounded-2xl mb-6">
-        <div className="flex justify-between items-center">
-          <div className="glass-chip text-glow">
-            <span className="glass-chip-dot" /> Custom Measurements
-          </div>
-
-          <button
-            className="px-4 py-2 bg-red-600 rounded-xl hover:bg-red-700"
-            onClick={() => setShowModal(true)}
-          >
-            + Add Custom
-          </button>
-        </div>
-      </div>
-
-      {/* History */}
+      {/* History Section */}
       <div className="glass-section p-4 rounded-2xl">
         <div className="glass-chip mb-4 text-glow">
           <span className="glass-chip-dot" /> History
         </div>
 
         {Object.keys(grouped).length === 0 ? (
-          <p className="text-gray-400">No measurements yet.</p>
+          <p className="text-gray-400 text-center">No measurements yet.</p>
         ) : (
-          Object.keys(grouped).map((name) => (
-            <div key={name} className="mb-6">
-              <h3 className="text-xl font-semibold text-red-400 mb-2">
-                {name}
-              </h3>
+          Object.keys(grouped).map((name) => {
+            const list = grouped[name];
+            const newest = list[0];
+            const isOpen = expanded[name] || false;
 
-              <ul className="space-y-3">
-                {grouped[name].map((m) => (
-                  <li
-                    key={m.id}
-                    className="p-3 bg-neutral-900/70 rounded-xl border border-red-900/40 flex justify-between items-center"
-                  >
-                    <span>
-                      {m.value} {m.unit} — {m.date}
-                    </span>
+            return (
+              <div key={name} className="mb-6">
+                {/* Group Header */}
+                <div
+                  className="flex justify-between items-center p-3 bg-neutral-900/70 border border-red-900/40 rounded-xl mb-2"
+                  onClick={() =>
+                    setExpanded((prev) => ({ ...prev, [name]: !isOpen }))
+                  }
+                >
+                  <div>
+                    <h3 className="text-xl font-semibold text-red-400">
+                      {name}
+                    </h3>
+                    <p className="text-gray-300 text-sm">
+                      {newest.value} {newest.unit} — {newest.date}
+                    </p>
+                  </div>
 
-                    <button
-                      onClick={() => handleDelete(m.id)}
-                      className="text-red-400 hover:text-red-600"
-                    >
-                      ✖
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
+                  {isOpen ? (
+                    <ChevronUp className="text-red-400" />
+                  ) : (
+                    <ChevronDown className="text-red-400" />
+                  )}
+                </div>
+
+                {/* Expanded list */}
+                {isOpen && (
+                  <ul className="space-y-3">
+                    {list.map((m) => (
+                      <li
+                        key={m.id}
+                        className="p-3 rounded-xl bg-neutral-900/60 border border-neutral-700 flex justify-between items-center"
+                      >
+                        <div>
+                          {m.value} {m.unit} — {m.date}
+                        </div>
+
+                        <div className="flex gap-3">
+                          <Edit3
+                            className="text-blue-400 hover:text-blue-600"
+                            onClick={() => openModal(m)}
+                          />
+
+                          <Trash2
+                            className="text-red-400 hover:text-red-600"
+                            onClick={() => handleDelete(m.id)}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
 
-      {/* 🔥 Bottom Sheet Modal */}
+      {/* Modal */}
       <BottomSheet open={showModal} onClose={() => setShowModal(false)}>
-        <h3 className="text-xl font-bold mb-4 text-white">Add Custom Measurement</h3>
+        <h3 className="text-xl font-bold mb-4 text-white">
+          {editingId ? "Edit Measurement" : "Add Measurement"}
+        </h3>
 
+        {/* Name */}
         <div className="mb-3">
           <label className="neon-label">Name</label>
           <input
             type="text"
             className="neon-input w-full"
-            value={customName}
-            onChange={(e) => setCustomName(e.target.value)}
+            value={modalName}
+            onChange={(e) => setModalName(e.target.value)}
+            placeholder="Bicep, Chest, Wrist..."
           />
         </div>
 
+        {/* Value */}
         <div className="mb-3">
           <label className="neon-label">Value</label>
           <input
             type="number"
             className="neon-input w-full"
-            value={customValue}
-            onChange={(e) => setCustomValue(e.target.value)}
+            value={modalValue}
+            onChange={(e) => setModalValue(e.target.value)}
           />
         </div>
 
+        {/* Unit */}
         <div className="mb-3">
           <label className="neon-label">Unit</label>
           <select
             className="neon-input w-full"
-            value={customUnit}
-            onChange={(e) => setCustomUnit(e.target.value)}
+            value={modalUnit}
+            onChange={(e) => setModalUnit(e.target.value)}
           >
             <option value="in">in</option>
             <option value="cm">cm</option>
           </select>
         </div>
 
+        {/* Date */}
         <div className="mb-3">
           <label className="neon-label">Date</label>
           <input
             type="date"
             className="neon-input w-full"
-            value={customDate}
-            onChange={(e) => setCustomDate(e.target.value)}
+            value={modalDate}
+            onChange={(e) => setModalDate(e.target.value)}
           />
         </div>
 
@@ -317,8 +256,8 @@ export default function MeasurementsPage() {
           </button>
 
           <button
-            className="px-4 py-2 bg-red-600 rounded-xl"
-            onClick={handleSaveCustom}
+            className="px-4 py-2 bg-red-600 rounded-xl shadow shadow-red-500/40 hover:bg-red-700"
+            onClick={saveMeasurement}
           >
             Save
           </button>

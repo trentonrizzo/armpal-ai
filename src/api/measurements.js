@@ -1,6 +1,6 @@
 import { supabase } from "../supabaseClient";
 
-// Fetch measurements for the user
+// Get all measurements for a user
 export async function getMeasurements(userId) {
   const { data, error } = await supabase
     .from("measurements")
@@ -9,44 +9,58 @@ export async function getMeasurements(userId) {
     .order("date", { ascending: false });
 
   if (error) {
-    console.error("Error fetching measurements:", error);
+    console.error("Error loading measurements:", error);
     return [];
   }
+  return data || [];
+}
 
+// Add measurement
+export async function addMeasurement(measurement) {
+  const { data, error } = await supabase.from("measurements").insert({
+    user_id: measurement.userId,
+    name: measurement.name,
+    value: measurement.value,
+    unit: measurement.unit,
+    date: measurement.date,
+  });
+
+  if (error) {
+    console.error("Error adding measurement:", error);
+    return null;
+  }
   return data;
 }
 
-// Add a new measurement
-export async function addMeasurement({ userId, name, value, unit, date }) {
+// Update measurement (NEW)
+export async function updateMeasurement(id, updates) {
   const { data, error } = await supabase
     .from("measurements")
-    .insert([
-      {
-        user_id: userId,
-        name,
-        value: Number(value),
-        unit,
-        date,
-      },
-    ])
-    .select();
+    .update({
+      name: updates.name,
+      value: updates.value,
+      unit: updates.unit,
+      date: updates.date,
+    })
+    .eq("id", id);
 
   if (error) {
-    console.error("Error inserting measurement:", error);
+    console.error("Error updating measurement:", error);
     return null;
   }
-
-  return data[0];
+  return data;
 }
 
-// Delete a measurement
+// Delete measurement
 export async function deleteMeasurement(id) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("measurements")
     .delete()
     .eq("id", id);
 
   if (error) {
     console.error("Error deleting measurement:", error);
+    return null;
   }
+  return data;
 }
