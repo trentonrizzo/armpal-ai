@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import Cropper from "react-easy-crop";
-import imageCompression from "browser-image-compression";
 
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
@@ -15,7 +14,7 @@ export default function ProfilePage() {
 
   // CROPPER STATES
   const [showCropper, setShowCropper] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null); // now dataURL
+  const [selectedImage, setSelectedImage] = useState(null); // dataURL
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
@@ -48,48 +47,59 @@ export default function ProfilePage() {
       setBio(data.bio || "");
       setAvatarUrl(data.avatar_url || "");
     } catch (err) {
-      console.error("Error loading profile:", err.message);
+      console.error("Error loading profile:", err);
     } finally {
       setLoading(false);
     }
   }
 
-  // FIXED FOR PWA: Converts crop selection to real image blob safely
+  // PWA-safe: imageSrc is a dataURL, safe for canvas
   const getCroppedImg = async (imageSrc, pixelCrop) => {
     return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous"; // required
-      img.src = imageSrc; // now base64, SAFE in PWAs
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = imageSrc;
 
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = pixelCrop.width;
-        canvas.height = pixelCrop.height;
-        const ctx = canvas.getContext("2d");
+        img.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = pixelCrop.width;
+            canvas.height = pixelCrop.height;
+            const ctx = canvas.getContext("2d");
 
-        ctx.drawImage(
-          img,
-          pixelCrop.x,
-          pixelCrop.y,
-          pixelCrop.width,
-          pixelCrop.height,
-          0,
-          0,
-          pixelCrop.width,
-          pixelCrop.height
-        );
+            ctx.drawImage(
+              img,
+              pixelCrop.x,
+              pixelCrop.y,
+              pixelCrop.width,
+              pixelCrop.height,
+              0,
+              0,
+              pixelCrop.width,
+              pixelCrop.height
+            );
 
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) reject("Canvas is empty");
-            resolve(blob);
-          },
-          "image/jpeg",
-          0.9
-        );
-      };
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(new Error("Canvas is empty"));
+                  return;
+                }
+                resolve(blob);
+              },
+              "image/jpeg",
+              0.9
+            );
+          } catch (e) {
+            reject(e);
+          }
+        };
 
-      img.onerror = (err) => reject(err);
+        img.onerror = (e) => reject(e);
+      } catch (e) {
+        reject(e);
+      }
     });
   };
 
@@ -97,37 +107,36 @@ export default function ProfilePage() {
     setCroppedAreaPixels(croppedPixels);
   }, []);
 
-  // 🔥 iPHONE + PWA SAFE FILE READER → dataURL (base64)
+  // iPhone/PWA safe: FileReader → dataURL instead of createObjectURL
   function onSelectFile(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      setSelectedImage(reader.result); // BASE64 string
+      setSelectedImage(reader.result); // base64 dataURL
       setShowCropper(true);
     };
-    reader.readAsDataURL(file); // SAFE for canvas
+    reader.readAsDataURL(file);
   }
 
   async function doSaveCroppedImage() {
     try {
+      if (!selectedImage || !croppedAreaPixels) {
+        alert("Please adjust the crop before saving.");
+        return;
+      }
+
       setUploading(true);
 
       const croppedBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
 
-      const compressed = await imageCompression(croppedBlob, {
-        maxSizeMB: 0.4,
-        maxWidthOrHeight: 600,
-        useWebWorker: true,
-      });
-
       const fileExt = "jpg";
       const filePath = `${user.id}-${Date.now()}.${fileExt}`;
 
-      let { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(filePath, compressed, { upsert: true });
+        .upload(filePath, croppedBlob, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -139,7 +148,7 @@ export default function ProfilePage() {
       setShowCropper(false);
     } catch (err) {
       console.error("Crop/Upload error:", err);
-      alert("Error processing image.");
+      alert("Error processing image: " + (err?.message || String(err)));
     } finally {
       setUploading(false);
     }
@@ -165,8 +174,8 @@ export default function ProfilePage() {
 
       alert("Profile saved successfully!");
     } catch (err) {
-      console.error("Save error:", err.message);
-      alert("Error saving profile.");
+      console.error("Save error:", err);
+      alert("Error saving profile: " + (err?.message || String(err)));
     }
   }
 
@@ -216,7 +225,7 @@ export default function ProfilePage() {
           }}
         />
 
-        <div style={{ marginTop: "10px" }}>
+      <div style={{ marginTop: "10px" }}>
           <label
             style={{
               fontSize: "13px",
@@ -229,12 +238,13 @@ export default function ProfilePage() {
               marginRight: "8px",
             }}
           >
-            Change Avatar
+            {uploading ? "Processing..." : "Change Avatar"}
             <input
               type="file"
               accept="image/*"
               onChange={onSelectFile}
               style={{ display: "none" }}
+              disabled={uploading}
             />
           </label>
 
@@ -423,8 +433,9 @@ export default function ProfilePage() {
                 fontSize: "14px",
                 fontWeight: 600,
               }}
+              disabled={uploading}
             >
-              Save
+              {uploading ? "Saving..." : "Save"}
             </button>
           </div>
         </div>
