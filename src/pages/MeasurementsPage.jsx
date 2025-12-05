@@ -1,8 +1,7 @@
-// ———————————————————————————————
-//  MEASUREMENT PAGE — WORKOUTS STYLE
-// ———————————————————————————————
-
 import React, { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
+
+// dnd-kit
 import {
   DndContext,
   closestCenter,
@@ -11,13 +10,22 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import {
-  arrayMove,
   SortableContext,
-  verticalListSortingStrategy,
   useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+// icons
+import {
+  FaChevronDown,
+  FaChevronUp,
+  FaEdit,
+  FaTrash,
+} from "react-icons/fa";
+
+// API
 import {
   getMeasurements,
   addMeasurement,
@@ -25,30 +33,15 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-import { supabase } from "../supabaseClient";
-import {
-  Edit,
-  Trash2,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  X,
-  Check,
-} from "lucide-react";
-
-import "../glass.css";
-
-
-// ———————————————————————————————
-//  SORTABLE WRAPPER
-// ———————————————————————————————
-function SortableGroup({ id, children }) {
+// Sortable wrapper
+function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    touchAction: "none",
   };
 
   return (
@@ -58,74 +51,77 @@ function SortableGroup({ id, children }) {
   );
 }
 
-
-// ———————————————————————————————
-//  MAIN PAGE
-// ———————————————————————————————
 export default function MeasurementsPage() {
-  const [measurements, setMeasurements] = useState({});
-  const [groupOrder, setGroupOrder] = useState([]);
-  const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Modal
-  const [modalOpen, setModalOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
+  const [groups, setGroups] = useState({});
+  const [groupOrder, setGroupOrder] = useState([]);
 
+  const [expanded, setExpanded] = useState({});
+
+  // Modal (add/edit)
+  const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
+
   const [mName, setMName] = useState("");
   const [mValue, setMValue] = useState("");
   const [mUnit, setMUnit] = useState("in");
-  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  const [mDate, setMDate] = useState(
+    new Date().toISOString().slice(0, 10)
   );
 
-  // ———————————————————————————————
-  // LOAD DATA
-  // ———————————————————————————————
+  // Delete confirm
+  const [deleteId, setDeleteId] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
+
+  // Load
   useEffect(() => {
     (async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) return;
 
       const rows = await getMeasurements(user.id);
-      const grouped = {};
 
+      const grouped = {};
       rows.forEach((m) => {
         if (!grouped[m.name]) grouped[m.name] = [];
         grouped[m.name].push(m);
       });
 
-      Object.keys(grouped).forEach((key) =>
-        grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date))
-      );
+      // newest first
+      for (const key of Object.keys(grouped)) {
+        grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
+      }
 
-      setMeasurements(grouped);
+      setGroups(grouped);
       setGroupOrder(Object.keys(grouped));
       setLoading(false);
     })();
   }, []);
 
-  // ———————————————————————————————
-  // DRAG END
-  // ———————————————————————————————
-  function handleDragEnd(e) {
-    const { active, over } = e;
+  // Drag reorder groups
+  function handleDragEnd(event) {
+    const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    setGroupOrder((prev) =>
-      arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id))
-    );
+    const oldIndex = groupOrder.indexOf(active.id);
+    const newIndex = groupOrder.indexOf(over.id);
+
+    setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
-  // ———————————————————————————————
-  // OPEN MODALS
-  // ———————————————————————————————
-  function openAdd() {
+  /** -------------------------
+   *  MODAL HANDLERS
+   -------------------------- */
+  function openNew() {
     setEditId(null);
     setMName("");
     setMValue("");
@@ -143,9 +139,6 @@ export default function MeasurementsPage() {
     setModalOpen(true);
   }
 
-  // ———————————————————————————————
-  // SAVE ADD / EDIT
-  // ———————————————————————————————
   async function saveMeasurement() {
     const {
       data: { user },
@@ -175,24 +168,19 @@ export default function MeasurementsPage() {
     // reload
     const rows = await getMeasurements(user.id);
     const grouped = {};
-
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
       grouped[m.name].push(m);
     });
-
-    Object.keys(grouped).forEach((key) =>
-      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date))
-    );
-
-    setMeasurements(grouped);
+    for (const key of Object.keys(grouped)) {
+      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
+    setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
+
     setModalOpen(false);
   }
 
-  // ———————————————————————————————
-  // DELETE CONFIRM
-  // ———————————————————————————————
   async function confirmDelete() {
     await deleteMeasurement(deleteId);
 
@@ -202,200 +190,365 @@ export default function MeasurementsPage() {
 
     const rows = await getMeasurements(user.id);
     const grouped = {};
-
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
       grouped[m.name].push(m);
     });
+    for (const key of Object.keys(grouped)) {
+      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
 
-    Object.keys(grouped).forEach((key) =>
-      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date))
-    );
-
-    setMeasurements(grouped);
+    setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
     setDeleteId(null);
   }
 
-  if (loading) return <p className="p-4 text-white">Loading...</p>;
+  if (loading)
+    return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
 
-  // ———————————————————————————————
-  // PAGE UI
-  // ———————————————————————————————
   return (
-    <div className="p-4 text-white pb-24">
-
+    <div
+      style={{
+        padding: "20px 16px 90px",
+        maxWidth: 900,
+        margin: "0 auto",
+      }}
+    >
       {/* HEADER */}
-      <div className="glass-chip flex justify-between items-center mb-4">
-        <span className="glass-chip-dot" /> Measurements
-        <button
-          onClick={openAdd}
-          className="px-3 py-2 bg-red-600 rounded-xl flex items-center gap-1"
-        >
-          <Plus size={18} /> Add
-        </button>
-      </div>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
+        Measurements
+      </h1>
 
-      {/* LIST */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
+      <button
+        onClick={openNew}
+        style={{
+          padding: "10px 20px",
+          background: "#ff2f2f",
+          borderRadius: 999,
+          border: "none",
+          fontSize: 14,
+          fontWeight: 600,
+          color: "white",
+          marginBottom: 18,
+          boxShadow: "0 0 14px rgba(255,47,47,0.35)",
+        }}
+      >
+        + Add Measurement
+      </button>
+
+      {/* DRAGGABLE GROUP LIST */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={groupOrder}
+          strategy={verticalListSortingStrategy}
+        >
+          {groupOrder.length === 0 && (
+            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
+          )}
+
           {groupOrder.map((groupName) => {
-            const entries = measurements[groupName] || [];
-            const latest = entries[0];
+            const list = groups[groupName] || [];
+            const latest = list[0];
             const isOpen = expanded[groupName];
 
             return (
-              <SortableGroup key={groupName} id={groupName}>
-                <div className="glass-section p-4 rounded-2xl mb-4">
-
-                  {/* TITLE BAR */}
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h2 className="text-lg font-semibold">{groupName}</h2>
-                      <p className="text-gray-300">
-                        {latest.value} {latest.unit} • {latest.date}
+              <SortableItem key={groupName} id={groupName}>
+                <div
+                  style={{
+                    background: "#0f0f0f",
+                    borderRadius: 12,
+                    padding: 14,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    marginBottom: 10,
+                  }}
+                >
+                  {/* HEADER ROW */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    {/* Left side */}
+                    <div
+                      style={{ flex: 1, cursor: "pointer" }}
+                      onClick={() =>
+                        setExpanded((prev) => ({
+                          ...prev,
+                          [groupName]: !prev[groupName],
+                        }))
+                      }
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 15,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {groupName}
+                      </p>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          opacity: 0.7,
+                        }}
+                      >
+                        {latest.value} {latest.unit} — {latest.date}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    {/* RIGHT SIDE BUTTONS (EDIT, DELETE, CHEVRON) */}
+                    <FaEdit
+                      style={{ fontSize: 14, cursor: "pointer" }}
+                      onClick={() => openEdit(latest)}
+                    />
+                    <FaTrash
+                      style={{
+                        fontSize: 14,
+                        cursor: "pointer",
+                        color: "#ff4d4d",
+                        marginLeft: 10,
+                      }}
+                      onClick={() => setDeleteId(latest.id)}
+                    />
 
-                      <button onClick={() => openEdit(latest)} className="text-white hover:text-red-400">
-                        <Edit size={20} />
-                      </button>
-
-                      <button onClick={() => setDeleteId(latest.id)} className="text-red-400 hover:text-red-600">
-                        <Trash2 size={20} />
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setExpanded((prev) => ({ ...prev, [groupName]: !prev[groupName] }))
-                        }
-                        className="text-gray-300 hover:text-white"
-                      >
-                        {isOpen ? <ChevronUp size={22} /> : <ChevronDown size={22} />}
-                      </button>
-                    </div>
+                    {isOpen ? (
+                      <FaChevronUp
+                        style={{ marginLeft: 10, opacity: 0.7 }}
+                      />
+                    ) : (
+                      <FaChevronDown
+                        style={{ marginLeft: 10, opacity: 0.7 }}
+                      />
+                    )}
                   </div>
 
                   {/* HISTORY */}
                   {isOpen && (
-                    <div className="mt-4 space-y-2">
-                      {entries.slice(1).map((entry) => (
+                    <div style={{ marginTop: 10 }}>
+                      {list.slice(1).map((entry) => (
                         <div
                           key={entry.id}
-                          className="p-3 bg-neutral-900/60 border border-neutral-700 rounded-xl flex justify-between items-center"
+                          style={{
+                            background: "#151515",
+                            borderRadius: 10,
+                            padding: 10,
+                            marginBottom: 8,
+                            border: "1px solid rgba(255,255,255,0.06)",
+                          }}
                         >
-                          <div>
-                            <p className="text-white">
-                              {entry.value} {entry.unit}
-                            </p>
-                            <p className="text-gray-400 text-sm">{entry.date}</p>
-                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <div>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: 14,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {entry.value} {entry.unit}
+                              </p>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: 11,
+                                  opacity: 0.7,
+                                }}
+                              >
+                                {entry.date}
+                              </p>
+                            </div>
 
-                          <div className="flex items-center gap-3">
-                            <button onClick={() => openEdit(entry)} className="text-white hover:text-red-400">
-                              <Edit size={18} />
-                            </button>
-
-                            <button onClick={() => setDeleteId(entry.id)} className="text-red-400 hover:text-red-600">
-                              <Trash2 size={18} />
-                            </button>
+                            <div style={{ display: "flex", gap: 12 }}>
+                              <FaEdit
+                                style={{
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => openEdit(entry)}
+                              />
+                              <FaTrash
+                                style={{
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                  color: "#ff4d4d",
+                                }}
+                                onClick={() => setDeleteId(entry.id)}
+                              />
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              </SortableGroup>
+              </SortableItem>
             );
           })}
         </SortableContext>
       </DndContext>
 
-      {/* ADD / EDIT MODAL */}
+      {/* ----------------------
+          ADD/EDIT MODAL
+      ----------------------- */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
-            <h2 className="text-xl font-bold mb-4">
-              {editId ? "Edit Measurement" : "Add Measurement"}
+        <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>
+              {editId ? "Edit Measurement" : "New Measurement"}
             </h2>
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm opacity-80">Name</label>
-                <input
-                  className="neon-input w-full"
-                  value={mName}
-                  onChange={(e) => setMName(e.target.value)}
-                />
-              </div>
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={mName}
+              onChange={(e) => setMName(e.target.value)}
+              placeholder="Bicep, Chest, etc."
+            />
 
-              <div>
-                <label className="text-sm opacity-80">Value</label>
-                <input
-                  type="number"
-                  className="neon-input w-full"
-                  value={mValue}
-                  onChange={(e) => setMValue(e.target.value)}
-                />
-              </div>
+            <label style={labelStyle}>Value</label>
+            <input
+              style={inputStyle}
+              type="number"
+              value={mValue}
+              onChange={(e) => setMValue(e.target.value)}
+            />
 
-              <div>
-                <label className="text-sm opacity-80">Unit</label>
-                <select
-                  className="neon-input w-full"
-                  value={mUnit}
-                  onChange={(e) => setMUnit(e.target.value)}
-                >
-                  <option value="in">in</option>
-                  <option value="cm">cm</option>
-                </select>
-              </div>
+            <label style={labelStyle}>Unit</label>
+            <select
+              style={inputStyle}
+              value={mUnit}
+              onChange={(e) => setMUnit(e.target.value)}
+            >
+              <option value="in">in</option>
+              <option value="cm">cm</option>
+            </select>
 
-              <div>
-                <label className="text-sm opacity-80">Date</label>
-                <input
-                  type="date"
-                  className="neon-input w-full"
-                  value={mDate}
-                  onChange={(e) => setMDate(e.target.value)}
-                />
-              </div>
-            </div>
+            <label style={labelStyle}>Date</label>
+            <input
+              style={inputStyle}
+              type="date"
+              value={mDate}
+              onChange={(e) => setMDate(e.target.value)}
+            />
 
-            <div className="flex justify-between mt-6">
-              <button onClick={() => setModalOpen(false)} className="px-4 py-2 bg-neutral-700 rounded-xl flex items-center gap-1">
-                <X size={18} /> Cancel
-              </button>
-
-              <button onClick={saveMeasurement} className="px-4 py-2 bg-red-600 rounded-xl flex items-center gap-1">
-                <Check size={18} /> Save
-              </button>
-            </div>
+            <button
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                border: "none",
+                background: "#ff2f2f",
+                color: "white",
+                fontWeight: 600,
+                marginTop: 10,
+              }}
+              onClick={saveMeasurement}
+            >
+              Save Measurement
+            </button>
           </div>
         </div>
       )}
 
-      {/* DELETE CONFIRM MODAL */}
+      {/* ----------------------
+          DELETE CONFIRM MODAL
+      ----------------------- */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
-            <h2 className="text-xl font-bold text-red-400 mb-4">Confirm Delete?</h2>
-            <p className="text-gray-300 mb-6">This action cannot be undone.</p>
+        <div
+          style={modalBackdrop}
+          onClick={() => setDeleteId(null)}
+        >
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
 
-            <div className="flex justify-between">
-              <button onClick={() => setDeleteId(null)} className="px-4 py-2 bg-neutral-700 rounded-xl">
-                Cancel
-              </button>
+            <p style={{ opacity: 0.8, marginBottom: 16 }}>
+              This action cannot be undone.
+            </p>
 
-              <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 rounded-xl">
-                Delete
-              </button>
-            </div>
+            <button
+              onClick={() => setDeleteId(null)}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#333",
+                border: "none",
+                color: "white",
+                marginBottom: 10,
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={confirmDelete}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#ff2f2f",
+                border: "none",
+                color: "white",
+                fontWeight: 600,
+              }}
+            >
+              Delete
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+const modalBackdrop = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.65)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+  zIndex: 999,
+};
+
+const modalCard = {
+  background: "#111",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  padding: 18,
+  width: "100%",
+  maxWidth: 420,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.15)",
+  background: "#000",
+  color: "white",
+  marginBottom: 10,
+};
+
+const labelStyle = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 4,
+};
