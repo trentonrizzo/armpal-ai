@@ -1,6 +1,9 @@
-console.log("🔥 USING THIS BRAND NEW PRTracker.jsx FILE");
+// src/pages/PRTracker.jsx
+console.log("🔥 USING THIS PRTracker.jsx FILE (Supabase direct)");
 
 import React, { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
+
 import {
   DndContext,
   closestCenter,
@@ -8,40 +11,25 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-
 import {
   SortableContext,
-  verticalListSortingStrategy,
   useSortable,
   arrayMove,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-
 import { CSS } from "@dnd-kit/utilities";
 
-import { supabase } from "../supabaseClient";
-import {
-  Edit,
-  Trash2,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  X,
-  Check,
-} from "lucide-react";
+import { FaEdit, FaTrashAlt } from "react-icons/fa";
 
-import "../glass.css";
-
-
-/* -------------------------------------------------------
-   Sortable WRAPPER for DRAGGING PR groups
-------------------------------------------------------- */
-function SortableGroupWrapper({ id, children }) {
-  const { setNodeRef, attributes, listeners, transform, transition } =
+/* ---------- Sortable wrapper (like workouts) ---------- */
+function SortableItem({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    touchAction: "none",
   };
 
   return (
@@ -51,22 +39,15 @@ function SortableGroupWrapper({ id, children }) {
   );
 }
 
-
-/* -------------------------------------------------------
-   MAIN PAGE
-------------------------------------------------------- */
 export default function PRTracker() {
-  const [prs, setPRs] = useState({});
-  const [groupOrder, setGroupOrder] = useState([]);
-
-  const [expanded, setExpanded] = useState({});
+  const [user, setUser] = useState(null);
+  const [prs, setPrs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // MODALS
+  // modal state
   const [modalOpen, setModalOpen] = useState(false);
-  const [editId, setEditId] = useState(null);
+  const [editingPr, setEditingPr] = useState(null);
 
-  // FORM FIELDS
   const [liftName, setLiftName] = useState("");
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
@@ -74,69 +55,65 @@ export default function PRTracker() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
 
-  // DELETE confirm modal
+  // delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
+  // drag sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-
-  /* -------------------------------------------------------
-     LOAD PRs
-  ------------------------------------------------------- */
+  /* ---------- Load user + PRs ---------- */
   useEffect(() => {
     (async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data } = await supabase
-        .from("prs")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("date", { ascending: false });
-
-      const grouped = {};
-      data?.forEach((pr) => {
-        if (!grouped[pr.lift_name]) grouped[pr.lift_name] = [];
-        grouped[pr.lift_name].push(pr);
-      });
-
-      // Sort newest → oldest inside each group
-      Object.keys(grouped).forEach((key) => {
-        grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-      });
-
-      setPRs(grouped);
-      setGroupOrder(Object.keys(grouped));
+      setUser(user);
+      if (user) await loadPRs(user.id);
       setLoading(false);
     })();
   }, []);
 
+  async function loadPRs(uid) {
+    const { data, error } = await supabase
+      .from("PRs") // table name
+      .select("*")
+      .eq("user_id", uid)
+      .order("order_index", { ascending: true })
+      .order("date", { ascending: false });
 
-  /* -------------------------------------------------------
-     DRAG END — reorder lift groups
-  ------------------------------------------------------- */
-  function handleDragEnd(event) {
+    if (error) {
+      console.error("Error loading PRs:", error.message);
+      return;
+    }
+    setPrs(data || []);
+  }
+
+  /* ---------- Drag reorder ---------- */
+  async function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = groupOrder.indexOf(active.id);
-    const newIndex = groupOrder.indexOf(over.id);
+    const oldIndex = prs.findIndex((p) => p.id === active.id);
+    const newIndex = prs.findIndex((p) => p.id === over.id);
+    const reordered = arrayMove(prs, oldIndex, newIndex);
+    setPrs(reordered);
 
-    setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
+    // save new order_index to Supabase
+    for (let i = 0; i < reordered.length; i++) {
+      await supabase
+        .from("PRs")
+        .update({ order_index: i })
+        .eq("id", reordered[i].id);
+    }
   }
 
-
-  /* -------------------------------------------------------
-     OPEN MODALS
-  ------------------------------------------------------- */
-  function openModalForAdd() {
-    setEditId(null);
+  /* ---------- Open modals ---------- */
+  function openAddModal() {
+    setEditingPr(null);
     setLiftName("");
     setWeight("");
     setReps("");
@@ -146,377 +123,249 @@ export default function PRTracker() {
     setModalOpen(true);
   }
 
-  function openModalForEdit(entry) {
-    setEditId(entry.id);
-    setLiftName(entry.lift_name);
-    setWeight(entry.weight);
-    setReps(entry.reps ?? "");
-    setUnit(entry.unit);
-    setDate(entry.date);
-    setNotes(entry.notes || "");
+  function openEditModal(pr) {
+    setEditingPr(pr);
+    setLiftName(pr.lift_name || "");
+    setWeight(pr.weight ?? "");
+    setReps(pr.reps ?? "");
+    setUnit(pr.unit || "lbs");
+    setDate(pr.date || new Date().toISOString().slice(0, 10));
+    setNotes(pr.notes || "");
     setModalOpen(true);
   }
 
-
-  /* -------------------------------------------------------
-     SAVE (ADD or EDIT)
-  ------------------------------------------------------- */
+  /* ---------- Save (add / edit) ---------- */
   async function savePR() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
     if (!user) return;
+    if (!liftName.trim() || !weight) return;
 
-    if (!liftName.trim() || !weight.trim()) return;
+    const payload = {
+      user_id: user.id,
+      lift_name: liftName.trim(),
+      weight: Number(weight),
+      unit,
+      reps: reps === "" ? null : Number(reps),
+      date,
+      notes: notes || null,
+    };
 
-    if (editId) {
-      await supabase
-        .from("prs")
-        .update({
-          lift_name: liftName.trim(),
-          weight: Number(weight),
-          reps: reps ? Number(reps) : null,
-          unit,
-          date,
-          notes: notes || null,
-        })
-        .eq("id", editId);
+    if (editingPr) {
+      await supabase.from("PRs").update(payload).eq("id", editingPr.id);
     } else {
-      await supabase.from("prs").insert({
-        user_id: user.id,
-        lift_name: liftName.trim(),
-        weight: Number(weight),
-        reps: reps ? Number(reps) : null,
-        unit,
-        date,
-        notes: notes || null,
-      });
+      payload.order_index = prs.length;
+      await supabase.from("PRs").insert(payload);
     }
 
-    // reload
-    const { data } = await supabase
-      .from("prs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("date", { ascending: false });
-
-    const grouped = {};
-    data?.forEach((pr) => {
-      if (!grouped[pr.lift_name]) grouped[pr.lift_name] = [];
-      grouped[pr.lift_name].push(pr);
-    });
-
-    Object.keys(grouped).forEach((key) => {
-      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-    });
-
-    setPRs(grouped);
-    setGroupOrder(Object.keys(grouped));
-
+    await loadPRs(user.id);
     setModalOpen(false);
+    setEditingPr(null);
   }
 
-
-  /* -------------------------------------------------------
-     CONFIRM DELETE
-  ------------------------------------------------------- */
+  /* ---------- Delete ---------- */
   async function confirmDelete() {
-    await supabase.from("prs").delete().eq("id", deleteId);
+    if (!deleteId) return;
+    await supabase.from("PRs").delete().eq("id", deleteId);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data } = await supabase
-      .from("prs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("date", { ascending: false });
-
-    const grouped = {};
-    data.forEach((pr) => {
-      if (!grouped[pr.lift_name]) grouped[pr.lift_name] = [];
-      grouped[pr.lift_name].push(pr);
-    });
-
-    Object.keys(grouped).forEach((key) => {
-      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-    });
-
-    setPRs(grouped);
-    setGroupOrder(Object.keys(grouped));
-
+    if (user) await loadPRs(user.id);
     setDeleteId(null);
   }
 
+  if (loading) {
+    return (
+      <div className="p-4 text-white pb-24">
+        <p>Loading PRs...</p>
+      </div>
+    );
+  }
 
-  if (loading)
-    return <p className="p-4 text-white">Loading...</p>;
-
-
-  /* -------------------------------------------------------
-     UI RENDER
-  ------------------------------------------------------- */
   return (
-    <div className="p-4 text-white pb-24">
-
-      {/* Header */}
+    <div className="p-4 text-white pb-24 min-h-screen">
+      {/* Header chip like Measurements */}
       <div className="glass-chip mb-4 text-glow flex justify-between items-center">
-        <span className="glass-chip-dot" /> Personal Records
+        <div className="flex items-center gap-2">
+          <span className="glass-chip-dot" />
+          <span>Personal Records</span>
+        </div>
+
         <button
-          onClick={openModalForAdd}
-          className="px-3 py-2 bg-red-600 rounded-xl flex items-center gap-1"
+          onClick={openAddModal}
+          className="px-3 py-2 bg-red-600 rounded-xl text-sm font-semibold flex items-center gap-1"
         >
-          <Plus size={18} /> Add
+          + Add
         </button>
       </div>
 
-
-      {/* DRAGGABLE PR GROUPS */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={groupOrder}
-          strategy={verticalListSortingStrategy}
+      {/* PR LIST */}
+      {prs.length === 0 ? (
+        <p className="text-gray-400">No PRs yet. Tap “Add” to create one.</p>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          {groupOrder.map((lift) => {
-            const items = prs[lift] || [];
-            const latest = items[0];
-            const isOpen = expanded[lift];
-
-            return (
-              <SortableGroupWrapper key={lift} id={lift}>
-                <div className="glass-section p-4 rounded-2xl mb-4">
-
-                  {/* TOP ROW */}
-                  <div className="flex justify-between items-center">
+          <SortableContext
+            items={prs.map((p) => p.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {prs.map((pr) => (
+              <SortableItem key={pr.id} id={pr.id}>
+                <div className="glass-section p-4 rounded-2xl mb-3 border border-neutral-800 bg-neutral-950/80">
+                  {/* Top row: name + buttons on the RIGHT */}
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-xl font-semibold text-red-400">
-                        {lift}
-                      </h2>
-                      <p className="text-gray-300">
-                        {latest.weight} {latest.unit} —{" "}
-                        {latest.reps ? `${latest.reps} reps — ` : ""}
-                        {latest.date}
+                      <p className="font-semibold text-[15px]">
+                        {pr.lift_name}
                       </p>
+                      <p className="text-neutral-400 text-xs">
+                        {pr.weight} {pr.unit}{" "}
+                        {pr.reps ? `• ${pr.reps} reps ` : ""}• {pr.date}
+                      </p>
+                      {pr.notes && (
+                        <p className="text-neutral-500 text-xs italic mt-1">
+                          {pr.notes}
+                        </p>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-3">
-
-                      {/* EDIT */}
+                    <div className="flex items-center gap-4 ml-4">
                       <button
-                        onClick={() => openModalForEdit(latest)}
-                        className="text-white hover:text-red-400"
+                        onClick={() => openEditModal(pr)}
+                        className="text-red-400 hover:text-red-300"
                       >
-                        <Edit size={20} />
+                        <FaEdit size={16} />
                       </button>
-
-                      {/* DELETE */}
                       <button
-                        onClick={() => setDeleteId(latest.id)}
-                        className="text-red-400 hover:text-red-600"
+                        onClick={() => setDeleteId(pr.id)}
+                        className="text-red-500 hover:text-red-400"
                       >
-                        <Trash2 size={20} />
-                      </button>
-
-                      {/* TOGGLE */}
-                      <button
-                        onClick={() =>
-                          setExpanded((prev) => ({
-                            ...prev,
-                            [lift]: !prev[lift],
-                          }))
-                        }
-                        className="ml-2 text-gray-300 hover:text-white"
-                      >
-                        {isOpen ? (
-                          <ChevronUp size={24} />
-                        ) : (
-                          <ChevronDown size={24} />
-                        )}
+                        <FaTrashAlt size={16} />
                       </button>
                     </div>
                   </div>
-
-                  {/* HISTORY */}
-                  {isOpen && (
-                    <div className="mt-4 space-y-2">
-                      {items.slice(1).map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="p-3 rounded-xl bg-neutral-900/60 border border-neutral-700 flex justify-between items-center"
-                        >
-                          <div>
-                            <p className="text-white">
-                              {entry.weight} {entry.unit} —{" "}
-                              {entry.reps ? `${entry.reps} reps` : ""}
-                            </p>
-                            <p className="text-gray-400 text-sm">
-                              {entry.date}
-                            </p>
-                            {entry.notes && (
-                              <p className="text-xs text-neutral-400 italic mt-1">
-                                Notes: {entry.notes}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => openModalForEdit(entry)}
-                              className="text-white hover:text-red-400"
-                            >
-                              <Edit size={18} />
-                            </button>
-
-                            <button
-                              onClick={() => setDeleteId(entry.id)}
-                              className="text-red-400 hover:text-red-600"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              </SortableGroupWrapper>
-            );
-          })}
-        </SortableContext>
-      </DndContext>
+              </SortableItem>
+            ))}
+          </SortableContext>
+        </DndContext>
+      )}
 
-
-      {/* ---------------------------------------------------
-         ADD / EDIT MODAL
-      --------------------------------------------------- */}
+      {/* ADD / EDIT MODAL */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
-
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-700 p-5 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">
-              {editId ? "Edit PR" : "Add PR"}
+              {editingPr ? "Edit PR" : "Add PR"}
             </h2>
 
             <div className="space-y-3">
-
               <div>
-                <label className="text-sm opacity-80">Lift Name</label>
+                <label className="text-xs opacity-80">Lift Name</label>
                 <input
-                  value={liftName}
-                  onChange={(e) => setLiftName(e.target.value)}
                   className="neon-input w-full"
                   placeholder="Bench Press, Squat, Curl..."
+                  value={liftName}
+                  onChange={(e) => setLiftName(e.target.value)}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm opacity-80">Weight</label>
+                  <label className="text-xs opacity-80">Weight</label>
                   <input
                     type="number"
+                    className="neon-input w-full"
                     value={weight}
                     onChange={(e) => setWeight(e.target.value)}
-                    className="neon-input w-full"
                   />
                 </div>
-
                 <div>
-                  <label className="text-sm opacity-80">Reps</label>
+                  <label className="text-xs opacity-80">Reps</label>
                   <input
                     type="number"
+                    className="neon-input w-full"
                     value={reps}
                     onChange={(e) => setReps(e.target.value)}
-                    className="neon-input w-full"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm opacity-80">Unit</label>
+                  <label className="text-xs opacity-80">Unit</label>
                   <select
+                    className="neon-input w-full"
                     value={unit}
                     onChange={(e) => setUnit(e.target.value)}
-                    className="neon-input w-full"
                   >
                     <option value="lbs">lbs</option>
                     <option value="kg">kg</option>
                   </select>
                 </div>
-
                 <div>
-                  <label className="text-sm opacity-80">Date</label>
+                  <label className="text-xs opacity-80">Date</label>
                   <input
                     type="date"
+                    className="neon-input w-full"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="neon-input w-full"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-sm opacity-80">Notes</label>
+                <label className="text-xs opacity-80">Notes</label>
                 <textarea
+                  className="neon-input w-full"
+                  rows={3}
+                  placeholder="Optional notes..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Optional notes..."
-                  className="neon-input w-full"
                 />
               </div>
             </div>
 
             <div className="flex justify-between mt-6">
               <button
-                onClick={() => setModalOpen(false)}
-                className="px-4 py-2 bg-neutral-700 rounded-xl flex items-center gap-1"
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingPr(null);
+                }}
+                className="px-4 py-2 bg-neutral-700 rounded-xl"
               >
-                <X size={18} /> Cancel
+                Cancel
               </button>
-
               <button
                 onClick={savePR}
-                className="px-4 py-2 bg-red-600 rounded-xl flex items-center gap-1"
+                className="px-4 py-2 bg-red-600 rounded-xl font-semibold"
               >
-                <Check size={18} /> Save
+                Save
               </button>
             </div>
           </div>
         </div>
       )}
 
-
-      {/* ---------------------------------------------------
-         DELETE CONFIRM MODAL
-      --------------------------------------------------- */}
+      {/* DELETE CONFIRM MODAL */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
-
-            <h2 className="text-xl font-bold mb-4 text-red-400">
-              Confirm Delete?
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-700 p-5 w-full max-w-sm">
+            <h2 className="text-xl font-bold mb-3 text-red-400">
+              Delete this PR?
             </h2>
-
-            <p className="text-gray-300 mb-6">
+            <p className="text-sm text-gray-300 mb-6">
               This action cannot be undone.
             </p>
-
             <div className="flex justify-between">
               <button
-                onClick={() => setDeleteId(null)}
                 className="px-4 py-2 bg-neutral-700 rounded-xl"
+                onClick={() => setDeleteId(null)}
               >
                 Cancel
               </button>
-
               <button
-                onClick={confirmDelete}
                 className="px-4 py-2 bg-red-600 rounded-xl"
+                onClick={confirmDelete}
               >
                 Delete
               </button>
@@ -524,7 +373,6 @@ export default function PRTracker() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
