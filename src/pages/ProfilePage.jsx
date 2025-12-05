@@ -15,7 +15,7 @@ export default function ProfilePage() {
 
   // CROPPER STATES
   const [showCropper, setShowCropper] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null); // now dataURL
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
@@ -54,51 +54,42 @@ export default function ProfilePage() {
     }
   }
 
-  // FIXED VERSION — WORKS ON iPhone/PWA SAFARI
+  // FIXED FOR PWA: Converts crop selection to real image blob safely
   const getCroppedImg = async (imageSrc, pixelCrop) => {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = "anonymous"; // 🔥 THE FIX
-      img.src = imageSrc;
+      img.crossOrigin = "anonymous"; // required
+      img.src = imageSrc; // now base64, SAFE in PWAs
 
       img.onload = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = pixelCrop.width;
-          canvas.height = pixelCrop.height;
-          const ctx = canvas.getContext("2d");
+        const canvas = document.createElement("canvas");
+        canvas.width = pixelCrop.width;
+        canvas.height = pixelCrop.height;
+        const ctx = canvas.getContext("2d");
 
-          ctx.drawImage(
-            img,
-            pixelCrop.x,
-            pixelCrop.y,
-            pixelCrop.width,
-            pixelCrop.height,
-            0,
-            0,
-            pixelCrop.width,
-            pixelCrop.height
-          );
+        ctx.drawImage(
+          img,
+          pixelCrop.x,
+          pixelCrop.y,
+          pixelCrop.width,
+          pixelCrop.height,
+          0,
+          0,
+          pixelCrop.width,
+          pixelCrop.height
+        );
 
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                reject(new Error("Canvas is empty"));
-                return;
-              }
-              resolve(blob);
-            },
-            "image/jpeg",
-            0.9
-          );
-        } catch (err) {
-          reject(err);
-        }
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) reject("Canvas is empty");
+            resolve(blob);
+          },
+          "image/jpeg",
+          0.9
+        );
       };
 
-      img.onerror = (err) => {
-        reject(err);
-      };
+      img.onerror = (err) => reject(err);
     });
   };
 
@@ -106,13 +97,17 @@ export default function ProfilePage() {
     setCroppedAreaPixels(croppedPixels);
   }, []);
 
+  // 🔥 iPHONE + PWA SAFE FILE READER → dataURL (base64)
   function onSelectFile(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const localURL = URL.createObjectURL(file);
-    setSelectedImage(localURL);
-    setShowCropper(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setSelectedImage(reader.result); // BASE64 string
+      setShowCropper(true);
+    };
+    reader.readAsDataURL(file); // SAFE for canvas
   }
 
   async function doSaveCroppedImage() {
@@ -204,7 +199,7 @@ export default function ProfilePage() {
         Profile
       </h1>
 
-      {/* Avatar */}
+      {/* Avatar Preview */}
       <div style={{ marginBottom: "20px", textAlign: "center" }}>
         <img
           src={
