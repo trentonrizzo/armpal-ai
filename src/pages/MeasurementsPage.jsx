@@ -13,26 +13,26 @@ import { ChevronDown, ChevronUp, Trash2, Edit3 } from "lucide-react";
 export default function MeasurementsPage() {
   const [measurements, setMeasurements] = useState([]);
 
-  // BottomSheet modal state
+  // bottom sheet / modal
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
-  // Modal inputs
   const [modalName, setModalName] = useState("");
   const [modalValue, setModalValue] = useState("");
   const [modalUnit, setModalUnit] = useState("in");
   const [modalDate, setModalDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
+  const [noDate, setNoDate] = useState(false);
 
-  // Expand/collapse groups
+  // which groups are expanded
   const [expanded, setExpanded] = useState({});
 
   useEffect(() => {
     loadMeasurements();
   }, []);
 
-  const loadMeasurements = async () => {
+  async function loadMeasurements() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -40,38 +40,49 @@ export default function MeasurementsPage() {
 
     const rows = await getMeasurements(user.id);
 
-    // Sort newest first inside each group
-    rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // sort newest first
+    rows.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return new Date(b.date) - new Date(a.date);
+    });
 
     setMeasurements(rows);
-  };
+  }
 
-  // Group by name
+  // group by name
   const grouped = measurements.reduce((acc, m) => {
     if (!acc[m.name]) acc[m.name] = [];
     acc[m.name].push(m);
     return acc;
   }, {});
 
-  // Open modal for add or edit
-  const openModal = (m = null) => {
-    if (m) {
-      setEditingId(m.id);
-      setModalName(m.name);
-      setModalValue(m.value);
-      setModalUnit(m.unit);
-      setModalDate(m.date);
+  function toggleGroup(name) {
+    setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
+  }
+
+  // open modal for add / edit
+  function openModal(measurement = null) {
+    if (measurement) {
+      setEditingId(measurement.id);
+      setModalName(measurement.name);
+      setModalValue(measurement.value);
+      setModalUnit(measurement.unit || "in");
+      setModalDate(measurement.date || new Date().toISOString().slice(0, 10));
+      setNoDate(!measurement.date);
     } else {
       setEditingId(null);
       setModalName("");
       setModalValue("");
       setModalUnit("in");
       setModalDate(new Date().toISOString().slice(0, 10));
+      setNoDate(false);
     }
     setShowModal(true);
-  };
+  }
 
-  const saveMeasurement = async () => {
+  async function handleSave() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -79,122 +90,129 @@ export default function MeasurementsPage() {
 
     if (!modalName || !modalValue) return;
 
+    const payload = {
+      name: modalName,
+      value: modalValue,
+      unit: modalUnit,
+      date: noDate ? null : modalDate,
+    };
+
     if (editingId) {
-      await updateMeasurement(editingId, {
-        name: modalName,
-        value: modalValue,
-        unit: modalUnit,
-        date: modalDate,
-      });
+      await updateMeasurement(editingId, payload);
     } else {
       await addMeasurement({
         userId: user.id,
-        name: modalName,
-        value: modalValue,
-        unit: modalUnit,
-        date: modalDate,
+        ...payload,
       });
     }
 
     setShowModal(false);
-    loadMeasurements();
-  };
+    await loadMeasurements();
+  }
 
-  const handleDelete = async (id) => {
+  async function handleDelete(id) {
     await deleteMeasurement(id);
     setMeasurements((prev) => prev.filter((m) => m.id !== id));
-  };
+  }
 
   return (
-    <div className="text-white p-4 pb-24">
+    <div className="text-white p-4 pb-24 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="glass-chip mb-4 text-glow">
-        <span className="glass-chip-dot" /> Measurements
-      </div>
+      <h1 className="text-2xl font-bold mb-4">Measurements</h1>
 
-      {/* Add Button */}
-      <div className="flex justify-end mb-4">
+      {/* Add button */}
+      <div className="mb-4 flex justify-start">
         <button
           onClick={() => openModal()}
-          className="px-4 py-2 bg-red-600 rounded-xl hover:bg-red-700 shadow shadow-red-500/40"
+          className="px-5 py-2 bg-red-600 rounded-full shadow shadow-red-500/40 hover:bg-red-700 text-sm font-semibold"
         >
           + Add Measurement
         </button>
       </div>
 
-      {/* History Section */}
-      <div className="glass-section p-4 rounded-2xl">
-        <div className="glass-chip mb-4 text-glow">
-          <span className="glass-chip-dot" /> History
+      {/* History / groups */}
+      {Object.keys(grouped).length === 0 ? (
+        <div className="mt-8 text-center text-gray-400">
+          No measurements yet.
         </div>
-
-        {Object.keys(grouped).length === 0 ? (
-          <p className="text-gray-400 text-center">No measurements yet.</p>
-        ) : (
-          Object.keys(grouped).map((name) => {
+      ) : (
+        <div className="space-y-4">
+          {Object.keys(grouped).map((name) => {
             const list = grouped[name];
             const newest = list[0];
             const isOpen = expanded[name] || false;
 
+            const newestDateLabel = newest.date ? newest.date : "No date";
+
             return (
-              <div key={name} className="mb-6">
-                {/* Group Header */}
+              <div
+                key={name}
+                className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg overflow-hidden"
+              >
+                {/* Card header – like a workout card */}
                 <div
-                  className="flex justify-between items-center p-3 bg-neutral-900/70 border border-red-900/40 rounded-xl mb-2"
-                  onClick={() =>
-                    setExpanded((prev) => ({ ...prev, [name]: !isOpen }))
-                  }
+                  className="px-4 py-3 flex items-center justify-between cursor-pointer"
+                  onClick={() => toggleGroup(name)}
                 >
                   <div>
-                    <h3 className="text-xl font-semibold text-red-400">
+                    <div className="text-sm text-gray-400">MEASUREMENT</div>
+                    <div className="text-lg font-semibold uppercase tracking-wide">
                       {name}
-                    </h3>
-                    <p className="text-gray-300 text-sm">
-                      {newest.value} {newest.unit} — {newest.date}
-                    </p>
+                    </div>
+                    <div className="text-sm text-gray-300">
+                      {newest.value} {newest.unit} — {newestDateLabel}
+                    </div>
                   </div>
 
-                  {isOpen ? (
-                    <ChevronUp className="text-red-400" />
-                  ) : (
-                    <ChevronDown className="text-red-400" />
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isOpen ? (
+                      <ChevronUp className="text-gray-300" />
+                    ) : (
+                      <ChevronDown className="text-gray-300" />
+                    )}
+                  </div>
                 </div>
 
-                {/* Expanded list */}
+                {/* Expanded history list */}
                 {isOpen && (
-                  <ul className="space-y-3">
-                    {list.map((m) => (
-                      <li
-                        key={m.id}
-                        className="p-3 rounded-xl bg-neutral-900/60 border border-neutral-700 flex justify-between items-center"
-                      >
-                        <div>
-                          {m.value} {m.unit} — {m.date}
-                        </div>
+                  <div className="border-t border-neutral-800">
+                    {list.map((m) => {
+                      const labelDate = m.date ? m.date : "No date";
+                      return (
+                        <div
+                          key={m.id}
+                          className="px-4 py-3 flex items-center justify-between border-t border-neutral-800"
+                        >
+                          <div className="text-sm text-gray-200">
+                            {m.value} {m.unit} — {labelDate}
+                          </div>
 
-                        <div className="flex gap-3">
-                          <Edit3
-                            className="text-blue-400 hover:text-blue-600"
-                            onClick={() => openModal(m)}
-                          />
-
-                          <Trash2
-                            className="text-red-400 hover:text-red-600"
-                            onClick={() => handleDelete(m.id)}
-                          />
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => openModal(m)}
+                              className="p-1 rounded-full hover:bg-neutral-800"
+                            >
+                              <Edit3 className="w-4 h-4 text-gray-200" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(m.id)}
+                              className="p-1 rounded-full hover:bg-neutral-800"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
-      {/* Modal */}
+      {/* BottomSheet modal for add / edit */}
       <BottomSheet open={showModal} onClose={() => setShowModal(false)}>
         <h3 className="text-xl font-bold mb-4 text-white">
           {editingId ? "Edit Measurement" : "Add Measurement"}
@@ -236,28 +254,37 @@ export default function MeasurementsPage() {
           </select>
         </div>
 
-        {/* Date */}
+        {/* Date + no-date toggle */}
         <div className="mb-3">
           <label className="neon-label">Date</label>
           <input
             type="date"
             className="neon-input w-full"
-            value={modalDate}
+            value={noDate ? "" : modalDate}
             onChange={(e) => setModalDate(e.target.value)}
+            disabled={noDate}
           />
+          <div className="mt-1 flex items-center gap-2 text-xs text-gray-300">
+            <input
+              id="no-date"
+              type="checkbox"
+              checked={noDate}
+              onChange={(e) => setNoDate(e.target.checked)}
+            />
+            <label htmlFor="no-date">No date</label>
+          </div>
         </div>
 
-        <div className="flex justify-between mt-4">
+        <div className="flex justify-between mt-5">
           <button
-            className="px-4 py-2 bg-neutral-700 rounded-xl"
+            className="px-4 py-2 rounded-xl bg-neutral-700 text-sm"
             onClick={() => setShowModal(false)}
           >
             Cancel
           </button>
-
           <button
-            className="px-4 py-2 bg-red-600 rounded-xl shadow shadow-red-500/40 hover:bg-red-700"
-            onClick={saveMeasurement}
+            className="px-5 py-2 rounded-xl bg-red-600 text-sm font-semibold shadow shadow-red-500/40 hover:bg-red-700"
+            onClick={handleSave}
           >
             Save
           </button>
