@@ -214,3 +214,17 @@ a:hover { color: inherit !important; }
   to { transform: translateY(0); opacity: 1; }
 }
 .animate-slideUp { animation: slideUp 0.25s ease-out; }
+html, body {
+  margin: 0;
+  padding: 0;
+
+  /* Prevent top cutoff on iPhones */
+  padding-top: env(safe-area-inset-top);
+
+  /* Prevent sides cutoff */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+
+  /* Your app background */
+  background: #000;
+}
