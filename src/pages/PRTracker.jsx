@@ -54,7 +54,7 @@ export default function PRTracker() {
   const [loading, setLoading] = useState(true);
 
   const [groups, setGroups] = useState([]); // [{lift_name, entries}]
-  const [expanded, setExpanded] = useState({}); // expand/collapse
+  const [expanded, setExpanded] = useState({});
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -112,15 +112,13 @@ export default function PRTracker() {
       return;
     }
 
-    // group by lift_name
+    // Group by lift name
     const map = {};
-
     data.forEach((pr) => {
       if (!map[pr.lift_name]) map[pr.lift_name] = [];
       map[pr.lift_name].push(pr);
     });
 
-    // convert to array format similar to workouts page
     const grouped = Object.keys(map).map((lift) => ({
       lift_name: lift,
       entries: map[lift].sort(
@@ -155,7 +153,7 @@ export default function PRTracker() {
   }
 
   /* ----------------------------------------------
-     DRAG REORDER PR ENTRIES
+     DRAG REORDER ENTRIES
   ---------------------------------------------- */
   function handleEntryDragEnd(lift, event) {
     const { active, over } = event;
@@ -168,7 +166,6 @@ export default function PRTracker() {
     const oldIndex = list.findIndex((e) => e.id === active.id);
     const newIndex = list.findIndex((e) => e.id === over.id);
 
-    // reorder visually only (like workouts)
     const newList = arrayMove(list, oldIndex, newIndex);
 
     setGroups((prev) =>
@@ -179,7 +176,7 @@ export default function PRTracker() {
   }
 
   /* ----------------------------------------------
-     OPEN ADD / EDIT MODAL
+     OPEN ADD / EDIT
   ---------------------------------------------- */
   function openAddModal() {
     setEditingPR(null);
@@ -188,7 +185,10 @@ export default function PRTracker() {
     setPrReps("");
     setPrUnit("lbs");
     setPrNotes("");
+
+    // always ISO format
     setPrDate(new Date().toISOString().slice(0, 10));
+
     setModalOpen(true);
   }
 
@@ -198,17 +198,27 @@ export default function PRTracker() {
     setPrWeight(pr.weight);
     setPrReps(pr.reps ?? "");
     setPrUnit(pr.unit);
-    setPrDate(pr.date);
     setPrNotes(pr.notes || "");
+
+    // convert to ISO if needed
+    const iso =
+      pr.date.includes("-")
+        ? pr.date.slice(0, 10)
+        : new Date(pr.date).toISOString().slice(0, 10);
+
+    setPrDate(iso);
+
     setModalOpen(true);
   }
 
   /* ----------------------------------------------
-     SAVE PR
+     SAVE PR (DATE FIXED)
   ---------------------------------------------- */
   async function savePR() {
     if (!user) return;
     if (!prLift || !prWeight) return;
+
+    const isoDate = new Date(prDate).toISOString().slice(0, 10);
 
     const payload = {
       user_id: user.id,
@@ -216,7 +226,7 @@ export default function PRTracker() {
       weight: Number(prWeight),
       reps: prReps ? Number(prReps) : null,
       unit: prUnit,
-      date: prDate,
+      date: isoDate,
       notes: prNotes || null,
     };
 
@@ -235,11 +245,10 @@ export default function PRTracker() {
   }
 
   /* ----------------------------------------------
-     DELETE PR
+     DELETE
   ---------------------------------------------- */
   async function confirmDelete() {
     await supabase.from("prs").delete().eq("id", deleteId);
-
     if (user) await loadPRs(user.id);
 
     setDeleteId(null);
@@ -302,7 +311,6 @@ export default function PRTracker() {
               const lift = group.lift_name;
               const entries = group.entries;
               const expandedList = expanded[lift];
-
               const latest = entries[0];
 
               return (
@@ -352,9 +360,13 @@ export default function PRTracker() {
                       </div>
 
                       <FaEdit
-                        style={{ fontSize: 14, cursor: "pointer" }}
+                        style={{
+                          fontSize: 14,
+                          cursor: "pointer",
+                        }}
                         onClick={() => openEditModal(latest)}
                       />
+
                       <FaTrash
                         style={{
                           fontSize: 14,
@@ -366,6 +378,7 @@ export default function PRTracker() {
                           setDeleteLift(lift);
                         }}
                       />
+
                       {expandedList ? (
                         <FaChevronUp style={{ marginLeft: 6, fontSize: 12 }} />
                       ) : (
@@ -375,7 +388,7 @@ export default function PRTracker() {
                       )}
                     </div>
 
-                    {/* Expanded list */}
+                    {/* Expanded PR entries */}
                     {expandedList && (
                       <div style={{ marginTop: 10 }}>
                         <DndContext
@@ -390,7 +403,8 @@ export default function PRTracker() {
                             strategy={verticalListSortingStrategy}
                           >
                             {entries.map((pr, index) => {
-                              if (index === 0) return null; // skip latest
+                              if (index === 0) return null;
+
                               return (
                                 <SortableItem key={pr.id} id={pr.id}>
                                   <div
@@ -453,6 +467,7 @@ export default function PRTracker() {
                                         }}
                                         onClick={() => openEditModal(pr)}
                                       />
+
                                       <FaTrash
                                         style={{
                                           fontSize: 13,
@@ -531,7 +546,12 @@ export default function PRTracker() {
               type="date"
               style={inputStyle}
               value={prDate}
-              onChange={(e) => setPrDate(e.target.value)}
+              onChange={(e) => {
+                const iso = new Date(e.target.value)
+                  .toISOString()
+                  .slice(0, 10);
+                setPrDate(iso);
+              }}
             />
 
             <label style={labelStyle}>Notes</label>
