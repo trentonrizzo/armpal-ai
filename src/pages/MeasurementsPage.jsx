@@ -29,7 +29,7 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-// Sortable wrapper with HANDLER ZONE
+// Sortable wrapper with HANDLE (left side only)
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
@@ -49,11 +49,13 @@ function SortableItem({ id, children }) {
 
 export default function MeasurementsPage() {
   const [loading, setLoading] = useState(true);
+
   const [groups, setGroups] = useState({});
   const [groupOrder, setGroupOrder] = useState([]);
+
   const [expanded, setExpanded] = useState({});
 
-  // Modal
+  // Modal (add/edit)
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
 
@@ -68,7 +70,9 @@ export default function MeasurementsPage() {
   const [deleteId, setDeleteId] = useState(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
   );
 
   // Load
@@ -77,6 +81,7 @@ export default function MeasurementsPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) return;
 
       const rows = await getMeasurements(user.id);
@@ -87,6 +92,7 @@ export default function MeasurementsPage() {
         grouped[m.name].push(m);
       });
 
+      // newest first
       for (const key of Object.keys(grouped)) {
         grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
       }
@@ -97,7 +103,7 @@ export default function MeasurementsPage() {
     })();
   }, []);
 
-  // Reorder groups
+  // Drag reorder groups
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -108,7 +114,9 @@ export default function MeasurementsPage() {
     setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
-  /** MODAL HANDLERS */
+  /** -------------------------
+   *  MODAL HANDLERS
+   -------------------------- */
   function openNew() {
     setEditId(null);
     setMName("");
@@ -153,6 +161,7 @@ export default function MeasurementsPage() {
       });
     }
 
+    // reload
     const rows = await getMeasurements(user.id);
     const grouped = {};
     rows.forEach((m) => {
@@ -162,9 +171,9 @@ export default function MeasurementsPage() {
     for (const key of Object.keys(grouped)) {
       grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
     }
-
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
+
     setModalOpen(false);
   }
 
@@ -194,7 +203,14 @@ export default function MeasurementsPage() {
     return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
 
   return (
-    <div style={{ padding: "20px 16px 90px", maxWidth: 900, margin: "0 auto" }}>
+    <div
+      style={{
+        padding: "20px 16px 90px",
+        maxWidth: 900,
+        margin: "0 auto",
+      }}
+    >
+      {/* HEADER */}
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Measurements
       </h1>
@@ -216,6 +232,7 @@ export default function MeasurementsPage() {
         + Add Measurement
       </button>
 
+      {/* DRAGGABLE GROUP LIST */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -225,6 +242,10 @@ export default function MeasurementsPage() {
           items={groupOrder}
           strategy={verticalListSortingStrategy}
         >
+          {groupOrder.length === 0 && (
+            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
+          )}
+
           {groupOrder.map((groupName) => {
             const list = groups[groupName] || [];
             const latest = list[0];
@@ -242,6 +263,7 @@ export default function MeasurementsPage() {
                       marginBottom: 10,
                     }}
                   >
+                    {/* HEADER ROW */}
                     <div
                       style={{
                         display: "flex",
@@ -249,13 +271,14 @@ export default function MeasurementsPage() {
                         alignItems: "center",
                       }}
                     >
-                      {/* DRAGGABLE zone (50% width) */}
+                      {/* LEFT: drag + expand (about half width) */}
                       <div
                         style={{
-                          width: "50%",
+                          flex: 1,
+                          maxWidth: "55%",
+                          cursor: "grab",
                           userSelect: "none",
                           WebkitUserSelect: "none",
-                          cursor: "grab",
                         }}
                         {...attributes}
                         {...listeners}
@@ -266,15 +289,27 @@ export default function MeasurementsPage() {
                           }))
                         }
                       >
-                        <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 15,
+                            fontWeight: 600,
+                          }}
+                        >
                           {groupName}
                         </p>
-                        <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 12,
+                            opacity: 0.7,
+                          }}
+                        >
                           {latest.value} {latest.unit} — {latest.date}
                         </p>
                       </div>
 
-                      {/* icons */}
+                      {/* RIGHT SIDE BUTTONS */}
                       <FaEdit
                         style={{ fontSize: 14, cursor: "pointer" }}
                         onClick={() => openEdit(latest)}
@@ -288,6 +323,7 @@ export default function MeasurementsPage() {
                         }}
                         onClick={() => setDeleteId(latest.id)}
                       />
+
                       {isOpen ? (
                         <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
                       ) : (
@@ -297,6 +333,7 @@ export default function MeasurementsPage() {
                       )}
                     </div>
 
+                    {/* HISTORY */}
                     {isOpen && (
                       <div style={{ marginTop: 10 }}>
                         {list.slice(1).map((entry) => (
@@ -340,7 +377,10 @@ export default function MeasurementsPage() {
 
                               <div style={{ display: "flex", gap: 12 }}>
                                 <FaEdit
-                                  style={{ fontSize: 13, cursor: "pointer" }}
+                                  style={{
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                  }}
                                   onClick={() => openEdit(entry)}
                                 />
                                 <FaTrash
@@ -364,6 +404,148 @@ export default function MeasurementsPage() {
           })}
         </SortableContext>
       </DndContext>
+
+      {/* ADD/EDIT MODAL */}
+      {modalOpen && (
+        <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>
+              {editId ? "Edit Measurement" : "New Measurement"}
+            </h2>
+
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={mName}
+              onChange={(e) => setMName(e.target.value)}
+              placeholder="Bicep, Chest, etc."
+            />
+
+            <label style={labelStyle}>Value</label>
+            <input
+              style={inputStyle}
+              type="number"
+              value={mValue}
+              onChange={(e) => setMValue(e.target.value)}
+            />
+
+            <label style={labelStyle}>Unit</label>
+            <select
+              style={inputStyle}
+              value={mUnit}
+              onChange={(e) => setMUnit(e.target.value)}
+            >
+              <option value="in">in</option>
+              <option value="cm">cm</option>
+            </select>
+
+            <label style={labelStyle}>Date</label>
+            <input
+              style={inputStyle}
+              type="date"
+              value={mDate}
+              onChange={(e) => setMDate(e.target.value)}
+            />
+
+            <button
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                border: "none",
+                background: "#ff2f2f",
+                color: "white",
+                fontWeight: 600,
+                marginTop: 10,
+              }}
+              onClick={saveMeasurement}
+            >
+              Save Measurement
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRM MODAL */}
+      {deleteId && (
+        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
+
+            <p style={{ opacity: 0.8, marginBottom: 16 }}>
+              This action cannot be undone.
+            </p>
+
+            <button
+              onClick={() => setDeleteId(null)}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#333",
+                border: "none",
+                color: "white",
+                marginBottom: 10,
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={confirmDelete}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#ff2f2f",
+                border: "none",
+                color: "white",
+                fontWeight: 600,
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const modalBackdrop = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.65)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+  zIndex: 999,
+};
+
+const modalCard = {
+  background: "#111",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  padding: 18,
+  width: "100%",
+  maxWidth: 420,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.15)",
+  background: "#000",
+  color: "white",
+  marginBottom: 10,
+};
+
+const labelStyle = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 4,
+};
