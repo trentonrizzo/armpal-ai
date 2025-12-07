@@ -1,9 +1,9 @@
 .bottom-nav {
   position: fixed;
-  bottom: env(safe-area-inset-bottom); /* sit right on top of safe area */
+  bottom: 0; /* 🔥 stick bar to the actual screen edge */
   left: 0;
   width: 100%;
-  height: 64px; /* a bit shorter so it feels less huge */
+  height: 64px;
 
   background: #000000;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -14,8 +14,8 @@
 
   z-index: 999;
 
-  /* was env(safe-area-inset-bottom) – that was lifting icons too high */
-  padding-bottom: 0;
+  /* 🔥 safe-area INSIDE the bar, not under it */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Nav link styles */
@@ -36,13 +36,13 @@
 
 /* slightly smaller icons */
 .nav-icon {
-  font-size: 22px; /* was 26px */
+  font-size: 22px;
   z-index: 2;
 }
 
 /* Labels */
 .nav-label {
-  font-size: 10px; /* a touch smaller */
+  font-size: 10px;
   margin-top: 3px;
   color: rgba(255, 255, 255, 0.5);
 }
@@ -52,17 +52,17 @@
   font-weight: 600;
 }
 
-/* Slightly smaller glow to match */
+/* active glow */
 .active-glow {
   position: absolute;
-  width: 32px;  /* was 36px */
-  height: 32px; /* was 36px */
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
 
   background: rgba(255, 0, 0, 0.45);
   box-shadow: 0 0 12px 6px rgba(255, 0, 0, 0.45);
 
-  top: -1px; /* tiny nudge so it sits right behind the icon */
+  top: -1px;
   z-index: 1;
 
   animation: fadeIn 0.2s ease-out;
