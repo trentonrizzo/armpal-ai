@@ -107,7 +107,7 @@ export default function ProfilePage() {
     setCroppedAreaPixels(croppedPixels);
   }, []);
 
-  // iPhone/PWA safe: FileReader → dataURL instead of createObjectURL
+  // File reader to dataURL
   function onSelectFile(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -191,255 +191,256 @@ export default function ProfilePage() {
   }
 
   return (
-    <div
-      style={{
-        padding: "20px 16px 100px",
-        maxWidth: "900px",
-        margin: "0 auto",
-      }}
-    >
-      <h1
+    <div className="fade-in">
+      <div
         style={{
-          fontSize: "22px",
-          marginBottom: "16px",
-          fontWeight: 700,
+          padding: "20px 16px 100px",
+          maxWidth: "900px",
+          margin: "0 auto",
         }}
       >
-        Profile
-      </h1>
-
-      {/* Avatar Preview */}
-      <div style={{ marginBottom: "20px", textAlign: "center" }}>
-        <img
-          src={
-            avatarUrl ||
-            "https://via.placeholder.com/120?text=No+Avatar"
-          }
-          alt="Avatar"
+        <h1
           style={{
-            width: "120px",
-            height: "120px",
-            objectFit: "cover",
-            borderRadius: "999px",
-            border: "2px solid rgba(255,255,255,0.1)",
+            fontSize: "22px",
+            marginBottom: "16px",
+            fontWeight: 700,
           }}
-        />
+        >
+          Profile
+        </h1>
 
-      <div style={{ marginTop: "10px" }}>
-          <label
+        {/* Avatar Preview */}
+        <div style={{ marginBottom: "20px", textAlign: "center" }}>
+          <img
+            src={
+              avatarUrl ||
+              "https://via.placeholder.com/120?text=No+Avatar"
+            }
+            alt="Avatar"
             style={{
-              fontSize: "13px",
-              display: "inline-block",
-              padding: "6px 12px",
-              background: "#111",
-              borderRadius: "8px",
-              border: "1px solid rgba(255,255,255,0.1)",
-              cursor: "pointer",
-              marginRight: "8px",
+              width: "120px",
+              height: "120px",
+              objectFit: "cover",
+              borderRadius: "999px",
+              border: "2px solid rgba(255,255,255,0.1)",
             }}
-          >
-            {uploading ? "Processing..." : "Change Avatar"}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={onSelectFile}
-              style={{ display: "none" }}
-              disabled={uploading}
-            />
-          </label>
-
-          {avatarUrl && (
-            <button
-              onClick={removeAvatar}
-              style={{
-                padding: "6px 12px",
-                fontSize: "13px",
-                background: "#331111",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "8px",
-                color: "white",
-                cursor: "pointer",
-              }}
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* USERNAME */}
-      <div style={{ marginBottom: "16px" }}>
-        <label
-          style={{
-            display: "block",
-            marginBottom: "6px",
-            fontSize: "13px",
-            opacity: 0.9,
-          }}
-        >
-          Username
-        </label>
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px",
-            borderRadius: "8px",
-            background: "#0d0d0d",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "white",
-          }}
-        />
-      </div>
-
-      {/* BIO */}
-      <div style={{ marginBottom: "16px" }}>
-        <label
-          style={{
-            display: "block",
-            marginBottom: "6px",
-            fontSize: "13px",
-            opacity: 0.9,
-          }}
-        >
-          Bio
-        </label>
-        <textarea
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          rows="3"
-          style={{
-            width: "100%",
-            padding: "10px",
-            borderRadius: "8px",
-            background: "#0d0d0d",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "white",
-            resize: "none",
-          }}
-        ></textarea>
-      </div>
-
-      {/* SAVE */}
-      <button
-        onClick={saveProfile}
-        style={{
-          width: "100%",
-          padding: "12px",
-          background: "#ff2f2f",
-          borderRadius: "10px",
-          border: "none",
-          color: "white",
-          fontSize: "15px",
-          fontWeight: 600,
-          marginBottom: "14px",
-          cursor: "pointer",
-        }}
-      >
-        Save Profile
-      </button>
-
-      {/* LOGOUT */}
-      <button
-        onClick={logout}
-        style={{
-          width: "100%",
-          padding: "12px",
-          background: "#111",
-          borderRadius: "10px",
-          border: "1px solid rgba(255,255,255,0.1)",
-          color: "white",
-          fontSize: "14px",
-          cursor: "pointer",
-        }}
-      >
-        Logout
-      </button>
-
-      {/* ---- CROPPER MODAL ---- */}
-      {showCropper && (
-        <div
-          style={{
-            position: "fixed",
-            inset: "0",
-            background: "rgba(0,0,0,0.8)",
-            zIndex: 9999,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: "20px",
-          }}
-        >
-          <div
-            style={{
-              width: "90%",
-              maxWidth: "350px",
-              height: "350px",
-              background: "#000",
-              borderRadius: "12px",
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            <Cropper
-              image={selectedImage}
-              crop={crop}
-              zoom={zoom}
-              cropShape="round"
-              aspect={1}
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
-              onCropComplete={onCropComplete}
-            />
-          </div>
-
-          {/* Controls */}
-          <input
-            type="range"
-            min={1}
-            max={3}
-            step={0.05}
-            value={zoom}
-            onChange={(e) => setZoom(e.target.value)}
-            style={{ width: "80%", marginTop: "20px" }}
           />
 
-          <div style={{ marginTop: "20px", display: "flex", gap: "12px" }}>
-            <button
-              onClick={() => setShowCropper(false)}
+          <div style={{ marginTop: "10px" }}>
+            <label
               style={{
-                padding: "10px 20px",
-                background: "#222",
-                border: "1px solid rgba(255,255,255,0.15)",
-                borderRadius: "10px",
-                color: "white",
-                fontSize: "14px",
+                fontSize: "13px",
+                display: "inline-block",
+                padding: "6px 12px",
+                background: "#111",
+                borderRadius: "8px",
+                border: "1px solid rgba(255,255,255,0.1)",
+                cursor: "pointer",
+                marginRight: "8px",
               }}
             >
-              Cancel
-            </button>
+              {uploading ? "Processing..." : "Change Avatar"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onSelectFile}
+                style={{ display: "none" }}
+                disabled={uploading}
+              />
+            </label>
 
-            <button
-              onClick={doSaveCroppedImage}
-              style={{
-                padding: "10px 20px",
-                background: "#ff2f2f",
-                borderRadius: "10px",
-                border: "none",
-                color: "white",
-                fontSize: "14px",
-                fontWeight: 600,
-              }}
-              disabled={uploading}
-            >
-              {uploading ? "Saving..." : "Save"}
-            </button>
+            {avatarUrl && (
+              <button
+                onClick={removeAvatar}
+                style={{
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  background: "#331111",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "8px",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+              >
+                Remove
+              </button>
+            )}
           </div>
         </div>
-      )}
+
+        {/* USERNAME */}
+        <div style={{ marginBottom: "16px" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "6px",
+              fontSize: "13px",
+              opacity: 0.9,
+            }}
+          >
+            Username
+          </label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "8px",
+              background: "#0d0d0d",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "white",
+            }}
+          />
+        </div>
+
+        {/* BIO */}
+        <div style={{ marginBottom: "16px" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "6px",
+              fontSize: "13px",
+              opacity: 0.9,
+            }}
+          >
+            Bio
+          </label>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            rows="3"
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "8px",
+              background: "#0d0d0d",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "white",
+              resize: "none",
+            }}
+          ></textarea>
+        </div>
+
+        {/* SAVE */}
+        <button
+          onClick={saveProfile}
+          style={{
+            width: "100%",
+            padding: "12px",
+            background: "#ff2f2f",
+            borderRadius: "10px",
+            border: "none",
+            color: "white",
+            fontSize: "15px",
+            fontWeight: 600,
+            marginBottom: "14px",
+            cursor: "pointer",
+          }}
+        >
+          Save Profile
+        </button>
+
+        {/* LOGOUT */}
+        <button
+          onClick={logout}
+          style={{
+            width: "100%",
+            padding: "12px",
+            background: "#111",
+            borderRadius: "10px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: "white",
+            fontSize: "14px",
+            cursor: "pointer",
+          }}
+        >
+          Logout
+        </button>
+
+        {/* ---- CROPPER MODAL ---- */}
+        {showCropper && (
+          <div
+            style={{
+              position: "fixed",
+              inset: "0",
+              background: "rgba(0,0,0,0.8)",
+              zIndex: 9999,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: "20px",
+            }}
+          >
+            <div
+              style={{
+                width: "90%",
+                maxWidth: "350px",
+                height: "350px",
+                background: "#000",
+                borderRadius: "12px",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <Cropper
+                image={selectedImage}
+                crop={crop}
+                zoom={zoom}
+                cropShape="round"
+                aspect={1}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
+              />
+            </div>
+
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.05}
+              value={zoom}
+              onChange={(e) => setZoom(e.target.value)}
+              style={{ width: "80%", marginTop: "20px" }}
+            />
+
+            <div style={{ marginTop: "20px", display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setShowCropper(false)}
+                style={{
+                  padding: "10px 20px",
+                  background: "#222",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: "10px",
+                  color: "white",
+                  fontSize: "14px",
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={doSaveCroppedImage}
+                style={{
+                  padding: "10px 20px",
+                  background: "#ff2f2f",
+                  borderRadius: "10px",
+                  border: "none",
+                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                }}
+                disabled={uploading}
+              >
+                {uploading ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
