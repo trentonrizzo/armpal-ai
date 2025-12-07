@@ -18,12 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // icons
-import {
-  FaChevronDown,
-  FaChevronUp,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
 // API
 import {
@@ -33,21 +28,33 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-/* -----------------------------
-   SORTABLE WRAPPER
-   (drag logic only — no click capture)
------------------------------- */
+// Sortable wrapper with LEFT DRAG HANDLE ONLY
 function SortableItem({ id, children }) {
-  const { attributes, setNodeRef, transform, transition } =
+  const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    position: "relative",
   };
 
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
+      {/* LEFT DRAG HANDLE ONLY (30px wide) */}
+      <div
+        {...listeners}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 30,
+          height: "100%",
+          cursor: "grab",
+          zIndex: 50,
+        }}
+      ></div>
+
       {children}
     </div>
   );
@@ -58,9 +65,10 @@ export default function MeasurementsPage() {
 
   const [groups, setGroups] = useState({});
   const [groupOrder, setGroupOrder] = useState([]);
+
   const [expanded, setExpanded] = useState({});
 
-  // Modal state
+  // Modal (add/edit)
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
 
@@ -74,16 +82,13 @@ export default function MeasurementsPage() {
   // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
-  // dnd sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  /* -------------------------
-     LOAD MEASUREMENTS
-  -------------------------- */
+  // Load
   useEffect(() => {
     (async () => {
       const {
@@ -100,6 +105,7 @@ export default function MeasurementsPage() {
         grouped[m.name].push(m);
       });
 
+      // newest first
       for (const key of Object.keys(grouped)) {
         grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
       }
@@ -110,9 +116,7 @@ export default function MeasurementsPage() {
     })();
   }, []);
 
-  /* -------------------------
-     HANDLE DRAG END
-  -------------------------- */
+  // Drag reorder groups
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -123,9 +127,9 @@ export default function MeasurementsPage() {
     setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
-  /* -------------------------
-     MODALS
-  -------------------------- */
+  /** -------------------------
+   *  MODAL HANDLERS
+   -------------------------- */
   function openNew() {
     setEditId(null);
     setMName("");
@@ -170,20 +174,19 @@ export default function MeasurementsPage() {
       });
     }
 
+    // reload
     const rows = await getMeasurements(user.id);
-
     const grouped = {};
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
       grouped[m.name].push(m);
     });
-
     for (const key of Object.keys(grouped)) {
       grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
     }
-
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
+
     setModalOpen(false);
   }
 
@@ -195,15 +198,14 @@ export default function MeasurementsPage() {
     } = await supabase.auth.getUser();
 
     const rows = await getMeasurements(user.id);
-
     const grouped = {};
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
       grouped[m.name].push(m);
     });
-
-    for (const key of Object.keys(grouped))
+    for (const key of Object.keys(grouped)) {
       grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
 
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
@@ -221,6 +223,7 @@ export default function MeasurementsPage() {
         margin: "0 auto",
       }}
     >
+      {/* HEADER */}
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Measurements
       </h1>
@@ -242,7 +245,7 @@ export default function MeasurementsPage() {
         + Add Measurement
       </button>
 
-      {/* DRAG AREA */}
+      {/* DRAGGABLE GROUP LIST */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -252,13 +255,14 @@ export default function MeasurementsPage() {
           items={groupOrder}
           strategy={verticalListSortingStrategy}
         >
+          {groupOrder.length === 0 && (
+            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
+          )}
+
           {groupOrder.map((groupName) => {
             const list = groups[groupName] || [];
             const latest = list[0];
             const isOpen = expanded[groupName];
-
-            // listeners for draggable handle
-            const { listeners } = useSortable({ id: groupName });
 
             return (
               <SortableItem key={groupName} id={groupName}>
@@ -266,168 +270,142 @@ export default function MeasurementsPage() {
                   style={{
                     background: "#0f0f0f",
                     borderRadius: 12,
+                    padding: 14,
                     border: "1px solid rgba(255,255,255,0.08)",
                     marginBottom: 10,
-                    display: "flex",
-                    alignItems: "stretch",
-                    padding: 0,
                   }}
                 >
-                  {/* LEFT DRAG HANDLE */}
+                  {/* HEADER ROW */}
                   <div
-                    {...listeners}
                     style={{
-                      width: 26,
-                      background: "rgba(255,255,255,0.04)",
-                      borderTopLeftRadius: 12,
-                      borderBottomLeftRadius: 12,
                       display: "flex",
+                      justifyContent: "space-between",
                       alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "grab",
-                      userSelect: "none",
                     }}
                   >
-                    <span style={{ fontSize: 16, opacity: 0.35 }}>⋮⋮</span>
-                  </div>
-
-                  {/* MAIN CARD CONTENT */}
-                  <div
-                    style={{
-                      flex: 1,
-                      padding: 14,
-                    }}
-                  >
-                    {/* HEADER ROW */}
+                    {/* Left side */}
                     <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
+                      style={{ flex: 1, cursor: "pointer" }}
+                      onClick={() =>
+                        setExpanded((prev) => ({
+                          ...prev,
+                          [groupName]: !prev[groupName],
+                        }))
+                      }
                     >
-                      <div
-                        style={{ flex: 1, cursor: "pointer" }}
-                        onClick={() =>
-                          setExpanded((prev) => ({
-                            ...prev,
-                            [groupName]: !prev[groupName],
-                          }))
-                        }
-                      >
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 15,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {groupName}
-                        </p>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 12,
-                            opacity: 0.7,
-                          }}
-                        >
-                          {latest.value} {latest.unit} — {latest.date}
-                        </p>
-                      </div>
-
-                      <FaEdit
-                        style={{ fontSize: 14, cursor: "pointer" }}
-                        onClick={() => openEdit(latest)}
-                      />
-                      <FaTrash
+                      <p
                         style={{
-                          fontSize: 14,
-                          cursor: "pointer",
-                          color: "#ff4d4d",
-                          marginLeft: 10,
+                          margin: 0,
+                          fontSize: 15,
+                          fontWeight: 600,
                         }}
-                        onClick={() => setDeleteId(latest.id)}
-                      />
-
-                      {isOpen ? (
-                        <FaChevronUp
-                          style={{ marginLeft: 10, opacity: 0.7 }}
-                        />
-                      ) : (
-                        <FaChevronDown
-                          style={{ marginLeft: 10, opacity: 0.7 }}
-                        />
-                      )}
+                      >
+                        {groupName}
+                      </p>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          opacity: 0.7,
+                        }}
+                      >
+                        {latest.value} {latest.unit} — {latest.date}
+                      </p>
                     </div>
 
-                    {/* HISTORY */}
-                    {isOpen && (
-                      <div style={{ marginTop: 10 }}>
-                        {list.slice(1).map((entry) => (
-                          <div
-                            key={entry.id}
-                            style={{
-                              background: "#151515",
-                              borderRadius: 10,
-                              padding: 10,
-                              marginBottom: 8,
-                              border:
-                                "1px solid rgba(255,255,255,0.06)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                              }}
-                            >
-                              <div>
-                                <p
-                                  style={{
-                                    margin: 0,
-                                    fontSize: 14,
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {entry.value} {entry.unit}
-                                </p>
-                                <p
-                                  style={{
-                                    margin: 0,
-                                    fontSize: 11,
-                                    opacity: 0.7,
-                                  }}
-                                >
-                                  {entry.date}
-                                </p>
-                              </div>
+                    {/* RIGHT SIDE BUTTONS (EDIT, DELETE, CHEVRON) */}
+                    <FaEdit
+                      style={{ fontSize: 14, cursor: "pointer" }}
+                      onClick={() => openEdit(latest)}
+                    />
+                    <FaTrash
+                      style={{
+                        fontSize: 14,
+                        cursor: "pointer",
+                        color: "#ff4d4d",
+                        marginLeft: 10,
+                      }}
+                      onClick={() => setDeleteId(latest.id)}
+                    />
 
-                              <div style={{ display: "flex", gap: 12 }}>
-                                <FaEdit
-                                  style={{
-                                    fontSize: 13,
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={() => openEdit(entry)}
-                                />
-                                <FaTrash
-                                  style={{
-                                    fontSize: 13,
-                                    cursor: "pointer",
-                                    color: "#ff4d4d",
-                                  }}
-                                  onClick={() =>
-                                    setDeleteId(entry.id)
-                                  }
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    {isOpen ? (
+                      <FaChevronUp
+                        style={{ marginLeft: 10, opacity: 0.7 }}
+                      />
+                    ) : (
+                      <FaChevronDown
+                        style={{ marginLeft: 10, opacity: 0.7 }}
+                      />
                     )}
                   </div>
+
+                  {/* HISTORY */}
+                  {isOpen && (
+                    <div style={{ marginTop: 10 }}>
+                      {list.slice(1).map((entry) => (
+                        <div
+                          key={entry.id}
+                          style={{
+                            background: "#151515",
+                            borderRadius: 10,
+                            padding: 10,
+                            marginBottom: 8,
+                            border:
+                              "1px solid rgba(255,255,255,0.06)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <div>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: 14,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {entry.value} {entry.unit}
+                              </p>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: 11,
+                                  opacity: 0.7,
+                                }}
+                              >
+                                {entry.date}
+                              </p>
+                            </div>
+
+                            <div style={{ display: "flex", gap: 12 }}>
+                              <FaEdit
+                                style={{
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => openEdit(entry)}
+                              />
+                              <FaTrash
+                                style={{
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                  color: "#ff4d4d",
+                                }}
+                                onClick={() =>
+                                  setDeleteId(entry.id)
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </SortableItem>
             );
@@ -435,10 +413,15 @@ export default function MeasurementsPage() {
         </SortableContext>
       </DndContext>
 
-      {/* ADD / EDIT MODAL */}
+      {/* ----------------------
+          ADD/EDIT MODAL
+      ----------------------- */}
       {modalOpen && (
         <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 style={{ marginTop: 0 }}>
               {editId ? "Edit Measurement" : "New Measurement"}
             </h2>
@@ -496,10 +479,18 @@ export default function MeasurementsPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRM */}
+      {/* ----------------------
+          DELETE CONFIRM MODAL
+      ----------------------- */}
       {deleteId && (
-        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+        <div
+          style={modalBackdrop}
+          onClick={() => setDeleteId(null)}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
               Confirm Delete?
             </h2>
@@ -543,6 +534,10 @@ export default function MeasurementsPage() {
     </div>
   );
 }
+
+// ---------------------------
+// STYLES
+// ---------------------------
 
 const modalBackdrop = {
   position: "fixed",
