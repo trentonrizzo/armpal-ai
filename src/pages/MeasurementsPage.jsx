@@ -33,19 +33,21 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-// Sortable wrapper
+/* -----------------------------
+   SORTABLE WRAPPER
+   (drag logic only — no click capture)
+------------------------------ */
 function SortableItem({ id, children }) {
-  const { attributes, listeners, setNodeRef, transform, transition } =
+  const { attributes, setNodeRef, transform, transition } =
     useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    touchAction: "none",
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes}>
       {children}
     </div>
   );
@@ -56,10 +58,9 @@ export default function MeasurementsPage() {
 
   const [groups, setGroups] = useState({});
   const [groupOrder, setGroupOrder] = useState([]);
-
   const [expanded, setExpanded] = useState({});
 
-  // Modal (add/edit)
+  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
 
@@ -73,13 +74,16 @@ export default function MeasurementsPage() {
   // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
+  // dnd sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  // Load
+  /* -------------------------
+     LOAD MEASUREMENTS
+  -------------------------- */
   useEffect(() => {
     (async () => {
       const {
@@ -96,7 +100,6 @@ export default function MeasurementsPage() {
         grouped[m.name].push(m);
       });
 
-      // newest first
       for (const key of Object.keys(grouped)) {
         grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
       }
@@ -107,7 +110,9 @@ export default function MeasurementsPage() {
     })();
   }, []);
 
-  // Drag reorder groups
+  /* -------------------------
+     HANDLE DRAG END
+  -------------------------- */
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -118,9 +123,9 @@ export default function MeasurementsPage() {
     setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
-  /** -------------------------
-   *  MODAL HANDLERS
-   -------------------------- */
+  /* -------------------------
+     MODALS
+  -------------------------- */
   function openNew() {
     setEditId(null);
     setMName("");
@@ -165,19 +170,20 @@ export default function MeasurementsPage() {
       });
     }
 
-    // reload
     const rows = await getMeasurements(user.id);
+
     const grouped = {};
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
       grouped[m.name].push(m);
     });
+
     for (const key of Object.keys(grouped)) {
       grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
     }
+
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
-
     setModalOpen(false);
   }
 
@@ -189,14 +195,15 @@ export default function MeasurementsPage() {
     } = await supabase.auth.getUser();
 
     const rows = await getMeasurements(user.id);
+
     const grouped = {};
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
       grouped[m.name].push(m);
     });
-    for (const key of Object.keys(grouped)) {
+
+    for (const key of Object.keys(grouped))
       grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-    }
 
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
@@ -214,7 +221,6 @@ export default function MeasurementsPage() {
         margin: "0 auto",
       }}
     >
-      {/* HEADER */}
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Measurements
       </h1>
@@ -236,7 +242,7 @@ export default function MeasurementsPage() {
         + Add Measurement
       </button>
 
-      {/* DRAGGABLE GROUP LIST */}
+      {/* DRAG AREA */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -246,14 +252,13 @@ export default function MeasurementsPage() {
           items={groupOrder}
           strategy={verticalListSortingStrategy}
         >
-          {groupOrder.length === 0 && (
-            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
-          )}
-
           {groupOrder.map((groupName) => {
             const list = groups[groupName] || [];
             const latest = list[0];
             const isOpen = expanded[groupName];
+
+            // listeners for draggable handle
+            const { listeners } = useSortable({ id: groupName });
 
             return (
               <SortableItem key={groupName} id={groupName}>
@@ -261,139 +266,168 @@ export default function MeasurementsPage() {
                   style={{
                     background: "#0f0f0f",
                     borderRadius: 12,
-                    padding: 14,
                     border: "1px solid rgba(255,255,255,0.08)",
                     marginBottom: 10,
+                    display: "flex",
+                    alignItems: "stretch",
+                    padding: 0,
                   }}
                 >
-                  {/* HEADER ROW */}
+                  {/* LEFT DRAG HANDLE */}
                   <div
+                    {...listeners}
                     style={{
+                      width: 26,
+                      background: "rgba(255,255,255,0.04)",
+                      borderTopLeftRadius: 12,
+                      borderBottomLeftRadius: 12,
                       display: "flex",
-                      justifyContent: "space-between",
                       alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "grab",
+                      userSelect: "none",
                     }}
                   >
-                    {/* Left side */}
-                    <div
-                      style={{ flex: 1, cursor: "pointer" }}
-                      onClick={() =>
-                        setExpanded((prev) => ({
-                          ...prev,
-                          [groupName]: !prev[groupName],
-                        }))
-                      }
-                    >
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {groupName}
-                      </p>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 12,
-                          opacity: 0.7,
-                        }}
-                      >
-                        {latest.value} {latest.unit} — {latest.date}
-                      </p>
-                    </div>
-
-                    {/* RIGHT SIDE BUTTONS (EDIT, DELETE, CHEVRON) */}
-                    <FaEdit
-                      style={{ fontSize: 14, cursor: "pointer" }}
-                      onClick={() => openEdit(latest)}
-                    />
-                    <FaTrash
-                      style={{
-                        fontSize: 14,
-                        cursor: "pointer",
-                        color: "#ff4d4d",
-                        marginLeft: 10,
-                      }}
-                      onClick={() => setDeleteId(latest.id)}
-                    />
-
-                    {isOpen ? (
-                      <FaChevronUp
-                        style={{ marginLeft: 10, opacity: 0.7 }}
-                      />
-                    ) : (
-                      <FaChevronDown
-                        style={{ marginLeft: 10, opacity: 0.7 }}
-                      />
-                    )}
+                    <span style={{ fontSize: 16, opacity: 0.35 }}>⋮⋮</span>
                   </div>
 
-                  {/* HISTORY */}
-                  {isOpen && (
-                    <div style={{ marginTop: 10 }}>
-                      {list.slice(1).map((entry) => (
-                        <div
-                          key={entry.id}
+                  {/* MAIN CARD CONTENT */}
+                  <div
+                    style={{
+                      flex: 1,
+                      padding: 14,
+                    }}
+                  >
+                    {/* HEADER ROW */}
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div
+                        style={{ flex: 1, cursor: "pointer" }}
+                        onClick={() =>
+                          setExpanded((prev) => ({
+                            ...prev,
+                            [groupName]: !prev[groupName],
+                          }))
+                        }
+                      >
+                        <p
                           style={{
-                            background: "#151515",
-                            borderRadius: 10,
-                            padding: 10,
-                            marginBottom: 8,
-                            border: "1px solid rgba(255,255,255,0.06)",
+                            margin: 0,
+                            fontSize: 15,
+                            fontWeight: 600,
                           }}
                         >
+                          {groupName}
+                        </p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 12,
+                            opacity: 0.7,
+                          }}
+                        >
+                          {latest.value} {latest.unit} — {latest.date}
+                        </p>
+                      </div>
+
+                      <FaEdit
+                        style={{ fontSize: 14, cursor: "pointer" }}
+                        onClick={() => openEdit(latest)}
+                      />
+                      <FaTrash
+                        style={{
+                          fontSize: 14,
+                          cursor: "pointer",
+                          color: "#ff4d4d",
+                          marginLeft: 10,
+                        }}
+                        onClick={() => setDeleteId(latest.id)}
+                      />
+
+                      {isOpen ? (
+                        <FaChevronUp
+                          style={{ marginLeft: 10, opacity: 0.7 }}
+                        />
+                      ) : (
+                        <FaChevronDown
+                          style={{ marginLeft: 10, opacity: 0.7 }}
+                        />
+                      )}
+                    </div>
+
+                    {/* HISTORY */}
+                    {isOpen && (
+                      <div style={{ marginTop: 10 }}>
+                        {list.slice(1).map((entry) => (
                           <div
+                            key={entry.id}
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
+                              background: "#151515",
+                              borderRadius: 10,
+                              padding: 10,
+                              marginBottom: 8,
+                              border:
+                                "1px solid rgba(255,255,255,0.06)",
                             }}
                           >
-                            <div>
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: 14,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {entry.value} {entry.unit}
-                              </p>
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: 11,
-                                  opacity: 0.7,
-                                }}
-                              >
-                                {entry.date}
-                              </p>
-                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                              }}
+                            >
+                              <div>
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 14,
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {entry.value} {entry.unit}
+                                </p>
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 11,
+                                    opacity: 0.7,
+                                  }}
+                                >
+                                  {entry.date}
+                                </p>
+                              </div>
 
-                            <div style={{ display: "flex", gap: 12 }}>
-                              <FaEdit
-                                style={{
-                                  fontSize: 13,
-                                  cursor: "pointer",
-                                }}
-                                onClick={() => openEdit(entry)}
-                              />
-                              <FaTrash
-                                style={{
-                                  fontSize: 13,
-                                  cursor: "pointer",
-                                  color: "#ff4d4d",
-                                }}
-                                onClick={() => setDeleteId(entry.id)}
-                              />
+                              <div style={{ display: "flex", gap: 12 }}>
+                                <FaEdit
+                                  style={{
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() => openEdit(entry)}
+                                />
+                                <FaTrash
+                                  style={{
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                    color: "#ff4d4d",
+                                  }}
+                                  onClick={() =>
+                                    setDeleteId(entry.id)
+                                  }
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </SortableItem>
             );
@@ -401,9 +435,7 @@ export default function MeasurementsPage() {
         </SortableContext>
       </DndContext>
 
-      {/* ----------------------
-          ADD/EDIT MODAL
-      ----------------------- */}
+      {/* ADD / EDIT MODAL */}
       {modalOpen && (
         <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -464,14 +496,9 @@ export default function MeasurementsPage() {
         </div>
       )}
 
-      {/* ----------------------
-          DELETE CONFIRM MODAL
-      ----------------------- */}
+      {/* DELETE CONFIRM */}
       {deleteId && (
-        <div
-          style={modalBackdrop}
-          onClick={() => setDeleteId(null)}
-        >
+        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
               Confirm Delete?
