@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
+// dnd-kit
 import {
   DndContext,
   closestCenter,
@@ -9,28 +10,23 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-
 import {
   SortableContext,
   useSortable,
   arrayMove,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-
 import { CSS } from "@dnd-kit/utilities";
 
+// icons
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
-/* =========================================================
-   SORTABLE ITEM WRAPPER (SAFE TOUCH & SCROLL)
-========================================================= */
+/* --------------------------------------------
+   SORTABLE ITEM WITH HANDLE (LEFT SIDE ONLY)
+--------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({
-      id,
-      // Required so only the dragZone triggers drag:
-      handle: true,
-    });
+    useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -39,25 +35,25 @@ function SortableItem({ id, children }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      {children(listeners)}
+    <div ref={setNodeRef} style={style}>
+      {children({ attributes, listeners })}
     </div>
   );
 }
 
-/* =========================================================
-   MAIN COMPONENT
-========================================================= */
+/* --------------------------------------------
+   MAIN PAGE
+--------------------------------------------- */
 export default function PRTracker() {
-  const [user, setUser] = useState(null);
-  const [groups, setGroups] = useState([]);
-  const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
 
-  // Modal states
+  const [groups, setGroups] = useState([]); // [{ lift_name, entries }]
+  const [expanded, setExpanded] = useState({});
+
+  // Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPR, setEditingPR] = useState(null);
-
   const [prLift, setPrLift] = useState("");
   const [prWeight, setPrWeight] = useState("");
   const [prReps, setPrReps] = useState("");
@@ -65,18 +61,17 @@ export default function PRTracker() {
   const [prDate, setPrDate] = useState("");
   const [prNotes, setPrNotes] = useState("");
 
-  // Delete modal
+  // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
+  // Drag sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  /* =========================================================
-     LOAD PRs ON MOUNT
-  ========================================================= */
+  /* --------------------------------------------
+     LOAD USER & PRs
+  --------------------------------------------- */
   useEffect(() => {
     (async () => {
       const {
@@ -84,16 +79,12 @@ export default function PRTracker() {
       } = await supabase.auth.getUser();
 
       setUser(user);
-
       if (user) await loadPRs(user.id);
 
       setLoading(false);
     })();
   }, []);
 
-  /* =========================================================
-     FETCH PRs
-  ========================================================= */
   async function loadPRs(uid) {
     const { data, error } = await supabase
       .from("prs")
@@ -102,64 +93,43 @@ export default function PRTracker() {
       .order("date", { ascending: false });
 
     if (error) {
-      console.error("PR load error:", error);
+      console.error("PR LOAD ERROR:", error.message);
       return;
     }
 
+    // Group by lift
     const map = {};
-    data.forEach((r) => {
-      if (!map[r.lift_name]) map[r.lift_name] = [];
-      map[r.lift_name].push(r);
+    data.forEach((pr) => {
+      if (!map[pr.lift_name]) map[pr.lift_name] = [];
+      map[pr.lift_name].push(pr);
     });
 
-    const final = Object.keys(map).map((lift) => ({
+    const finalGroups = Object.keys(map).map((lift) => ({
       lift_name: lift,
       entries: map[lift].sort(
         (a, b) => new Date(b.date) - new Date(a.date)
       ),
     }));
 
-    setGroups(final);
+    setGroups(finalGroups);
   }
 
-  /* =========================================================
-     DRAG REORDER GROUPS
-  ========================================================= */
-  function handleGroupDragEnd(event) {
+  /* --------------------------------------------
+     HANDLE DRAG ORDER OF LIFTS
+  --------------------------------------------- */
+  function handleGroupDrag(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = groups.findIndex((g) => g.lift_name === active.id);
-    const newIndex = groups.findIndex((g) => g.lift_name === over.id);
+    const oldIdx = groups.findIndex((g) => g.lift_name === active.id);
+    const newIdx = groups.findIndex((g) => g.lift_name === over.id);
 
-    setGroups((prev) => arrayMove(prev, oldIndex, newIndex));
+    setGroups((prev) => arrayMove(prev, oldIdx, newIdx));
   }
 
-  /* =========================================================
-     DRAG REORDER ENTRIES
-  ========================================================= */
-  function handleEntryDragEnd(lift, event) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    setGroups((prev) =>
-      prev.map((g) => {
-        if (g.lift_name !== lift) return g;
-
-        const oldIndex = g.entries.findIndex((e) => e.id === active.id);
-        const newIndex = g.entries.findIndex((e) => e.id === over.id);
-
-        return {
-          ...g,
-          entries: arrayMove(g.entries, oldIndex, newIndex),
-        };
-      })
-    );
-  }
-
-  /* =========================================================
-     MODAL LOGIC — ADD & EDIT
-  ========================================================= */
+  /* --------------------------------------------
+     EDIT / ADD MODAL
+  --------------------------------------------- */
   function openAddModal() {
     setEditingPR(null);
     setPrLift("");
@@ -177,18 +147,23 @@ export default function PRTracker() {
     setPrWeight(pr.weight);
     setPrReps(pr.reps ?? "");
     setPrUnit(pr.unit);
-    setPrNotes(pr.notes || "");
+    setPrNotes(pr.notes ?? "");
 
-    const iso = pr.date.includes("-")
-      ? pr.date.slice(0, 10)
-      : new Date(pr.date).toISOString().slice(0, 10);
+    const iso =
+      pr.date.includes("-")
+        ? pr.date.slice(0, 10)
+        : new Date(pr.date).toISOString().slice(0, 10);
 
     setPrDate(iso);
     setModalOpen(true);
   }
 
+  /* --------------------------------------------
+     SAVE PR
+  --------------------------------------------- */
   async function savePR() {
     if (!user) return;
+    if (!prLift || !prWeight) return;
 
     const isoDate = new Date(prDate).toISOString().slice(0, 10);
 
@@ -208,28 +183,29 @@ export default function PRTracker() {
       await supabase.from("prs").insert(payload);
     }
 
-    setModalOpen(false);
-    setEditingPR(null);
     await loadPRs(user.id);
+    setModalOpen(false);
   }
 
-  /* =========================================================
-     DELETE PR
-  ========================================================= */
+  /* --------------------------------------------
+     DELETE CONFIRM
+  --------------------------------------------- */
   async function confirmDelete() {
     await supabase.from("prs").delete().eq("id", deleteId);
+
     if (user) await loadPRs(user.id);
+
     setDeleteId(null);
   }
 
-  /* =========================================================
-     RENDER UI
-  ========================================================= */
+  /* --------------------------------------------
+     PAGE UI
+  --------------------------------------------- */
   return (
     <div
       style={{
         padding: "20px 16px 90px",
-        maxWidth: 900,
+        maxWidth: "900px",
         margin: "0 auto",
       }}
     >
@@ -255,14 +231,14 @@ export default function PRTracker() {
       </button>
 
       {loading ? (
-        <p style={{ opacity: 0.7 }}>Loading PRs...</p>
+        <p style={{ opacity: 0.7 }}>Loading...</p>
       ) : groups.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>No PRs yet. Add your first one.</p>
+        <p style={{ opacity: 0.7 }}>No PRs yet.</p>
       ) : (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          onDragEnd={handleGroupDragEnd}
+          onDragEnd={handleGroupDrag}
         >
           <SortableContext
             items={groups.map((g) => g.lift_name)}
@@ -271,12 +247,12 @@ export default function PRTracker() {
             {groups.map((group) => {
               const lift = group.lift_name;
               const entries = group.entries;
-              const expandedList = expanded[lift];
               const latest = entries[0];
+              const isOpen = expanded[lift];
 
               return (
                 <SortableItem key={lift} id={lift}>
-                  {(listeners) => (
+                  {({ attributes, listeners }) => (
                     <div
                       style={{
                         background: "#0f0f0f",
@@ -284,7 +260,6 @@ export default function PRTracker() {
                         padding: 14,
                         border: "1px solid rgba(255,255,255,0.08)",
                         marginBottom: 10,
-                        touchAction: "pan-y", // ← prevents stuck scrolling
                       }}
                     >
                       {/* HEADER */}
@@ -295,15 +270,17 @@ export default function PRTracker() {
                           alignItems: "center",
                         }}
                       >
-                        {/* LEFT 55% = DRAG AREA */}
+                        {/* LEFT drag + expand */}
                         <div
-                          {...listeners} // Only this triggers drag
                           style={{
-                            width: "55%",
+                            flex: 1,
+                            maxWidth: "55%",
                             cursor: "grab",
-                            paddingRight: 10,
                             userSelect: "none",
+                            WebkitUserSelect: "none",
                           }}
+                          {...attributes}
+                          {...listeners}
                           onClick={() =>
                             setExpanded((prev) => ({
                               ...prev,
@@ -328,143 +305,112 @@ export default function PRTracker() {
                             }}
                           >
                             {latest.weight} {latest.unit}
-                            {latest.reps ? ` × ${latest.reps}` : ""} —{" "}
+                            {latest.reps ? ` × ${latest.reps}` : ""}
+                            {" — "}
                             {latest.date}
                           </p>
                         </div>
 
-                        {/* RIGHT ICONS */}
+                        {/* RIGHT: edit/delete */}
                         <FaEdit
-                          style={{ cursor: "pointer", marginRight: 12 }}
+                          style={{ fontSize: 14, cursor: "pointer" }}
                           onClick={() => openEditModal(latest)}
                         />
                         <FaTrash
                           style={{
+                            fontSize: 14,
                             cursor: "pointer",
-                            marginRight: 12,
                             color: "#ff4d4d",
+                            marginLeft: 10,
                           }}
                           onClick={() => setDeleteId(latest.id)}
                         />
 
-                        {expandedList ? (
-                          <FaChevronUp style={{ opacity: 0.7 }} />
+                        {isOpen ? (
+                          <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
                         ) : (
-                          <FaChevronDown style={{ opacity: 0.7 }} />
+                          <FaChevronDown
+                            style={{ marginLeft: 10, opacity: 0.7 }}
+                          />
                         )}
                       </div>
 
-                      {/* EXPANDED HISTORY */}
-                      {expandedList && (
+                      {/* HISTORY LIST */}
+                      {isOpen && (
                         <div style={{ marginTop: 10 }}>
-                          <DndContext
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={(event) =>
-                              handleEntryDragEnd(lift, event)
-                            }
-                          >
-                            <SortableContext
-                              items={entries.map((e) => e.id)}
-                              strategy={verticalListSortingStrategy}
+                          {entries.slice(1).map((entry) => (
+                            <div
+                              key={entry.id}
+                              style={{
+                                background: "#151515",
+                                borderRadius: 10,
+                                padding: 10,
+                                marginBottom: 8,
+                                border: "1px solid rgba(255,255,255,0.06)",
+                              }}
                             >
-                              {entries.map((pr, index) => {
-                                if (index === 0) return null;
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <div>
+                                  <p
+                                    style={{
+                                      margin: 0,
+                                      fontSize: 14,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {entry.weight} {entry.unit}
+                                    {entry.reps ? ` × ${entry.reps}` : ""}
+                                  </p>
+                                  <p
+                                    style={{
+                                      margin: 0,
+                                      fontSize: 11,
+                                      opacity: 0.7,
+                                    }}
+                                  >
+                                    {entry.date}
+                                  </p>
 
-                                return (
-                                  <SortableItem key={pr.id} id={pr.id}>
-                                    {(entryListeners) => (
-                                      <div
-                                        style={{
-                                          background: "#151515",
-                                          borderRadius: 10,
-                                          padding: 10,
-                                          marginBottom: 8,
-                                          border:
-                                            "1px solid rgba(255,255,255,0.06)",
-                                          touchAction: "pan-y",
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            display: "flex",
-                                            justifyContent:
-                                              "space-between",
-                                            alignItems: "center",
-                                          }}
-                                        >
-                                          <div
-                                            {...entryListeners}
-                                            style={{
-                                              width: "55%",
-                                              cursor: "grab",
-                                              userSelect: "none",
-                                              paddingRight: 10,
-                                            }}
-                                          >
-                                            <p
-                                              style={{
-                                                margin: 0,
-                                                fontSize: 14,
-                                                fontWeight: 600,
-                                              }}
-                                            >
-                                              {pr.weight} {pr.unit}
-                                              {pr.reps
-                                                ? ` × ${pr.reps}`
-                                                : ""}
-                                            </p>
-                                            <p
-                                              style={{
-                                                margin: 0,
-                                                fontSize: 11,
-                                                opacity: 0.7,
-                                              }}
-                                            >
-                                              {pr.date}
-                                            </p>
+                                  {entry.notes && (
+                                    <p
+                                      style={{
+                                        margin: 0,
+                                        fontSize: 11,
+                                        opacity: 0.5,
+                                        fontStyle: "italic",
+                                      }}
+                                    >
+                                      {entry.notes}
+                                    </p>
+                                  )}
+                                </div>
 
-                                            {pr.notes && (
-                                              <p
-                                                style={{
-                                                  margin: 0,
-                                                  fontSize: 11,
-                                                  opacity: 0.5,
-                                                  fontStyle: "italic",
-                                                }}
-                                              >
-                                                {pr.notes}
-                                              </p>
-                                            )}
-                                          </div>
-
-                                          <FaEdit
-                                            style={{
-                                              cursor: "pointer",
-                                              marginRight: 10,
-                                            }}
-                                            onClick={() =>
-                                              openEditModal(pr)
-                                            }
-                                          />
-
-                                          <FaTrash
-                                            style={{
-                                              cursor: "pointer",
-                                              color: "#ff4d4d",
-                                            }}
-                                            onClick={() =>
-                                              setDeleteId(pr.id)
-                                            }
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-                                  </SortableItem>
-                                );
-                              })}
-                            </SortableContext>
-                          </DndContext>
+                                <div style={{ display: "flex", gap: 12 }}>
+                                  <FaEdit
+                                    style={{
+                                      fontSize: 13,
+                                      cursor: "pointer",
+                                    }}
+                                    onClick={() => openEditModal(entry)}
+                                  />
+                                  <FaTrash
+                                    style={{
+                                      fontSize: 13,
+                                      cursor: "pointer",
+                                      color: "#ff4d4d",
+                                    }}
+                                    onClick={() => setDeleteId(entry.id)}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -476,16 +422,15 @@ export default function PRTracker() {
         </DndContext>
       )}
 
-      {/* MODALS BELOW */}
-
+      {/* MODAL: ADD / EDIT PR */}
       {modalOpen && (
-        <div style={modalBackdrop}>
+        <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0 }}>
               {editingPR ? "Edit PR" : "New PR"}
             </h2>
 
-            <label style={labelStyle}>Lift Name</label>
+            <label style={labelStyle}>Lift</label>
             <input
               style={inputStyle}
               value={prLift}
@@ -507,6 +452,7 @@ export default function PRTracker() {
               style={inputStyle}
               value={prReps}
               onChange={(e) => setPrReps(e.target.value)}
+              placeholder="Optional"
             />
 
             <label style={labelStyle}>Unit</label>
@@ -524,12 +470,9 @@ export default function PRTracker() {
               type="date"
               style={inputStyle}
               value={prDate}
-              onChange={(e) => {
-                const iso = new Date(e.target.value)
-                  .toISOString()
-                  .slice(0, 10);
-                setPrDate(iso);
-              }}
+              onChange={(e) =>
+                setPrDate(new Date(e.target.value).toISOString().slice(0, 10))
+              }
             />
 
             <label style={labelStyle}>Notes</label>
@@ -540,33 +483,65 @@ export default function PRTracker() {
               placeholder="Optional notes..."
             />
 
-            <button style={primaryBtn} onClick={savePR}>
+            <button
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                border: "none",
+                background: "#ff2f2f",
+                color: "white",
+                fontWeight: 600,
+                marginTop: 10,
+              }}
+              onClick={savePR}
+            >
               Save PR
             </button>
           </div>
         </div>
       )}
 
+      {/* DELETE CONFIRM */}
       {deleteId && (
-        <div style={modalBackdrop}>
+        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>Delete PR?</h2>
-            <p style={{ opacity: 0.7 }}>
-              Are you sure you want to delete this PR?
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
+
+            <p style={{ opacity: 0.8, marginBottom: 16 }}>
+              This action cannot be undone.
             </p>
 
             <button
-              style={{ ...primaryBtn, background: "#ff4d4d" }}
-              onClick={confirmDelete}
+              onClick={() => setDeleteId(null)}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#333",
+                border: "none",
+                color: "white",
+                marginBottom: 10,
+              }}
             >
-              Delete
+              Cancel
             </button>
 
             <button
-              style={{ ...primaryBtn, background: "#222" }}
-              onClick={() => setDeleteId(null)}
+              onClick={confirmDelete}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#ff2f2f",
+                border: "none",
+                color: "white",
+                fontWeight: 600,
+              }}
             >
-              Cancel
+              Delete
             </button>
           </div>
         </div>
@@ -575,13 +550,13 @@ export default function PRTracker() {
   );
 }
 
-/* =======================
-   SHARED MODAL STYLES
-======================= */
+/* --------------------------------------------
+   SHARED STYLES
+--------------------------------------------- */
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.7)",
+  background: "rgba(0,0,0,0.65)",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
@@ -612,15 +587,4 @@ const labelStyle = {
   fontSize: 12,
   opacity: 0.85,
   marginBottom: 4,
-};
-
-const primaryBtn = {
-  width: "100%",
-  padding: 10,
-  borderRadius: 10,
-  border: "none",
-  background: "#ff2f2f",
-  color: "white",
-  fontWeight: 600,
-  marginTop: 8,
 };
