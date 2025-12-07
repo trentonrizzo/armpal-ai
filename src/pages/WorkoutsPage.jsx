@@ -15,6 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
 // Draggable wrapper
@@ -38,7 +39,7 @@ function SortableItem({ id, children }) {
 export default function WorkoutsPage() {
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
-  const [expandedExercises, setExpandedExercises] = useState({}); // { workoutId: [exercises] }
+  const [expandedExercises, setExpandedExercises] = useState({});
   const [loading, setLoading] = useState(true);
 
   // Workout modal
@@ -55,6 +56,13 @@ export default function WorkoutsPage() {
   const [exerciseSets, setExerciseSets] = useState("");
   const [exerciseReps, setExerciseReps] = useState("");
   const [exerciseWeight, setExerciseWeight] = useState("");
+
+  // CONFIRM DELETE: Workouts (full modal)
+  const [deleteWorkoutId, setDeleteWorkoutId] = useState(null);
+
+  // CONFIRM DELETE: Exercises (small slide-up)
+  const [deleteExerciseData, setDeleteExerciseData] = useState(null);
+  // deleteExerciseData = { id: X, workoutId: Y }
 
   // Drag sensors
   const sensors = useSensors(
@@ -105,15 +113,13 @@ export default function WorkoutsPage() {
     return data || [];
   }
 
-  // Expand/collapse workout -> load exercises
+  // Expand workout
   async function toggleExpand(workoutId) {
     if (expandedExercises[workoutId]) {
-      // currently open -> collapse
       const copy = { ...expandedExercises };
       delete copy[workoutId];
       setExpandedExercises(copy);
     } else {
-      // open and load exercises
       const ex = await loadExercises(workoutId);
       setExpandedExercises((prev) => ({ ...prev, [workoutId]: ex }));
     }
@@ -129,7 +135,6 @@ export default function WorkoutsPage() {
     const reordered = arrayMove(workouts, oldIndex, newIndex);
     setWorkouts(reordered);
 
-    // Save new order
     for (let i = 0; i < reordered.length; i++) {
       await supabase
         .from("workouts")
@@ -148,7 +153,6 @@ export default function WorkoutsPage() {
     const newIndex = list.findIndex((e) => e.id === over.id);
     const reordered = arrayMove(list, oldIndex, newIndex);
 
-    // Save new order
     for (let i = 0; i < reordered.length; i++) {
       await supabase
         .from("exercises")
@@ -162,19 +166,16 @@ export default function WorkoutsPage() {
     }));
   }
 
-  // Open workout modal
+  // Workout modal
   function openWorkoutModal(workout = null) {
     setEditingWorkout(workout);
     setWorkoutName(workout?.name || "");
     setWorkoutSchedule(
-      workout?.scheduled_for
-        ? workout.scheduled_for.slice(0, 16)
-        : ""
+      workout?.scheduled_for ? workout.scheduled_for.slice(0, 16) : ""
     );
     setWorkoutModalOpen(true);
   }
 
-  // Save workout
   async function saveWorkout() {
     if (!user) return;
 
@@ -187,10 +188,7 @@ export default function WorkoutsPage() {
     };
 
     if (editingWorkout) {
-      await supabase
-        .from("workouts")
-        .update(payload)
-        .eq("id", editingWorkout.id);
+      await supabase.from("workouts").update(payload).eq("id", editingWorkout.id);
     } else {
       payload.position = workouts.length;
       await supabase.from("workouts").insert(payload);
@@ -201,67 +199,28 @@ export default function WorkoutsPage() {
     await loadWorkouts(user.id);
   }
 
-  // Delete workout
-  async function deleteWorkout(id) {
-    await supabase.from("workouts").delete().eq("id", id);
+  // WORKOUT DELETE (modal confirm)
+  async function confirmDeleteWorkout() {
+    await supabase.from("workouts").delete().eq("id", deleteWorkoutId);
+    setDeleteWorkoutId(null);
     if (user) await loadWorkouts(user.id);
   }
 
-  // Open exercise modal
-  function openExerciseModal(workoutId, exercise = null) {
-    setExerciseWorkoutId(workoutId);
-    setEditingExercise(exercise);
-    setExerciseName(exercise?.name || "");
-    setExerciseSets(exercise?.sets ?? "");
-    setExerciseReps(exercise?.reps ?? "");
-    setExerciseWeight(exercise?.weight ?? "");
-    setExerciseModalOpen(true);
-  }
+  // EXERCISE DELETE (slide-up)
+  async function confirmDeleteExercise() {
+    if (!deleteExerciseData) return;
 
-  // Save exercise
-  async function saveExercise() {
-    if (!user || !exerciseWorkoutId) return;
+    const { id, workoutId } = deleteExerciseData;
 
-    const list = expandedExercises[exerciseWorkoutId] || [];
-
-    const payload = {
-      user_id: user.id,
-      workout_id: exerciseWorkoutId,
-      name: exerciseName || "Exercise",
-      sets: exerciseSets === "" ? null : Number(exerciseSets),
-      reps: exerciseReps === "" ? null : Number(exerciseReps),
-      weight: exerciseWeight === "" ? null : exerciseWeight,
-    };
-
-    if (editingExercise) {
-      await supabase
-        .from("exercises")
-        .update(payload)
-        .eq("id", editingExercise.id);
-    } else {
-      payload.position = list.length;
-      await supabase.from("exercises").insert(payload);
-    }
-
-    // reload exercises for this workout
-    const ex = await loadExercises(exerciseWorkoutId);
-    setExpandedExercises((prev) => ({
-      ...prev,
-      [exerciseWorkoutId]: ex,
-    }));
-
-    setExerciseModalOpen(false);
-    setEditingExercise(null);
-  }
-
-  // Delete exercise
-  async function deleteExercise(id, workoutId) {
     await supabase.from("exercises").delete().eq("id", id);
-    const ex = await loadExercises(workoutId);
+
+    const refreshed = await loadExercises(workoutId);
     setExpandedExercises((prev) => ({
       ...prev,
-      [workoutId]: ex,
+      [workoutId]: refreshed,
     }));
+
+    setDeleteExerciseData(null);
   }
 
   function formatSchedule(value) {
@@ -375,18 +334,19 @@ export default function WorkoutsPage() {
                         style={{ fontSize: 14, cursor: "pointer" }}
                         onClick={() => openWorkoutModal(workout)}
                       />
+
+                      {/* DELETE triggers modal */}
                       <FaTrash
                         style={{
                           fontSize: 14,
                           cursor: "pointer",
                           color: "#ff4d4d",
                         }}
-                        onClick={() => deleteWorkout(workout.id)}
+                        onClick={() => setDeleteWorkoutId(workout.id)}
                       />
+
                       {exercises ? (
-                        <FaChevronUp
-                          style={{ marginLeft: 6, fontSize: 12 }}
-                        />
+                        <FaChevronUp style={{ marginLeft: 6, fontSize: 12 }} />
                       ) : (
                         <FaChevronDown
                           style={{ marginLeft: 6, fontSize: 12 }}
@@ -394,7 +354,7 @@ export default function WorkoutsPage() {
                       )}
                     </div>
 
-                    {/* Exercises section */}
+                    {/* EXERCISES */}
                     {exercises && (
                       <div style={{ marginTop: 10 }}>
                         <DndContext
@@ -416,8 +376,7 @@ export default function WorkoutsPage() {
                                     borderRadius: 10,
                                     padding: 10,
                                     marginBottom: 8,
-                                    border:
-                                      "1px solid rgba(255,255,255,0.06)",
+                                    border: "1px solid rgba(255,255,255,0.06)",
                                   }}
                                 >
                                   <div
@@ -463,6 +422,8 @@ export default function WorkoutsPage() {
                                         openExerciseModal(workout.id, ex)
                                       }
                                     />
+
+                                    {/* DELETE -> slide-up confirm */}
                                     <FaTrash
                                       style={{
                                         fontSize: 13,
@@ -470,7 +431,10 @@ export default function WorkoutsPage() {
                                         color: "#ff4d4d",
                                       }}
                                       onClick={() =>
-                                        deleteExercise(ex.id, workout.id)
+                                        setDeleteExerciseData({
+                                          id: ex.id,
+                                          workoutId: workout.id,
+                                        })
                                       }
                                     />
                                   </div>
@@ -481,17 +445,14 @@ export default function WorkoutsPage() {
                         </DndContext>
 
                         <button
-                          onClick={() =>
-                            openExerciseModal(workout.id, null)
-                          }
+                          onClick={() => openExerciseModal(workout.id, null)}
                           style={{
                             width: "100%",
                             padding: 8,
                             fontSize: 12,
                             background: "transparent",
                             borderRadius: 999,
-                            border:
-                              "1px solid rgba(255,255,255,0.14)",
+                            border: "1px solid rgba(255,255,255,0.14)",
                             color: "#ccc",
                             marginTop: 4,
                           }}
@@ -508,7 +469,7 @@ export default function WorkoutsPage() {
         </DndContext>
       )}
 
-      {/* Workout modal */}
+      {/* WORKOUT MODAL */}
       {workoutModalOpen && (
         <div
           style={modalBackdrop}
@@ -517,10 +478,7 @@ export default function WorkoutsPage() {
             setEditingWorkout(null);
           }}
         >
-          <div
-            style={modalCard}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0 }}>
               {editingWorkout ? "Edit Workout" : "New Workout"}
             </h2>
@@ -548,7 +506,7 @@ export default function WorkoutsPage() {
         </div>
       )}
 
-      {/* Exercise modal */}
+      {/* EXERCISE MODAL */}
       {exerciseModalOpen && (
         <div
           style={modalBackdrop}
@@ -557,10 +515,7 @@ export default function WorkoutsPage() {
             setEditingExercise(null);
           }}
         >
-          <div
-            style={modalCard}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0 }}>
               {editingExercise ? "Edit Exercise" : "New Exercise"}
             </h2>
@@ -603,11 +558,106 @@ export default function WorkoutsPage() {
           </div>
         </div>
       )}
+
+      {/* WORKOUT DELETE CONFIRM (FULL MODAL) */}
+      {deleteWorkoutId && (
+        <div style={modalBackdrop} onClick={() => setDeleteWorkoutId(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
+
+            <p style={{ opacity: 0.8, marginBottom: 16 }}>
+              This action cannot be undone.
+            </p>
+
+            <button
+              onClick={() => setDeleteWorkoutId(null)}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#333",
+                border: "none",
+                color: "white",
+                marginBottom: 10,
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={confirmDeleteWorkout}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#ff2f2f",
+                border: "none",
+                color: "white",
+                fontWeight: 600,
+              }}
+            >
+              Delete Workout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* EXERCISE DELETE CONFIRM (SMALL SLIDE-UP) */}
+      {deleteExerciseData && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            width: "100%",
+            background: "#111",
+            borderTop: "1px solid rgba(255,255,255,0.15)",
+            padding: 16,
+            zIndex: 999,
+          }}
+        >
+          <p style={{ margin: 0, marginBottom: 10, color: "#ff4d4d" }}>
+            Delete this exercise?
+          </p>
+
+          <button
+            onClick={() => setDeleteExerciseData(null)}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 10,
+              background: "#333",
+              border: "none",
+              color: "white",
+              marginBottom: 10,
+            }}
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={confirmDeleteExercise}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 10,
+              background: "#ff2f2f",
+              border: "none",
+              color: "white",
+              fontWeight: 600,
+            }}
+          >
+            Delete Exercise
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-// shared styles for modals
+// Shared styles
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
