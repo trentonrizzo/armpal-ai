@@ -1,4 +1,4 @@
-// src/pages/MeasurementsPage.jsx
+// src/pages/PRTracker.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
@@ -21,15 +21,9 @@ import { CSS } from "@dnd-kit/utilities";
 // icons
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
-// API
-import {
-  getMeasurements,
-  addMeasurement,
-  updateMeasurement,
-  deleteMeasurement,
-} from "../api/measurements";
-
-// Sortable wrapper with HANDLE (left side only)
+/* --------------------------------------------
+   SORTABLE ITEM WITH HANDLE (LEFT SIDE ONLY)
+--------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
@@ -47,176 +41,180 @@ function SortableItem({ id, children }) {
   );
 }
 
-export default function MeasurementsPage() {
+/* --------------------------------------------
+   MAIN PAGE
+--------------------------------------------- */
+export default function PRTracker() {
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
 
-  const [groups, setGroups] = useState({});
-  const [groupOrder, setGroupOrder] = useState([]);
-
+  const [groups, setGroups] = useState([]); // [{ lift_name, entries }]
   const [expanded, setExpanded] = useState({});
 
-  // Modal (add/edit)
+  // Modal
   const [modalOpen, setModalOpen] = useState(false);
-  const [editId, setEditId] = useState(null);
-
-  const [mName, setMName] = useState("");
-  const [mValue, setMValue] = useState("");
-  const [mUnit, setMUnit] = useState("in");
-  const [mDate, setMDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [editingPR, setEditingPR] = useState(null);
+  const [prLift, setPrLift] = useState("");
+  const [prWeight, setPrWeight] = useState("");
+  const [prReps, setPrReps] = useState("");
+  const [prUnit, setPrUnit] = useState("lbs");
+  const [prDate, setPrDate] = useState("");
+  const [prNotes, setPrNotes] = useState("");
 
   // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
+  // Drag sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // Load
+  /* --------------------------------------------
+     LOAD USER & PRs
+  --------------------------------------------- */
   useEffect(() => {
     (async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return;
+      setUser(user);
+      if (user) await loadPRs(user.id);
 
-      const rows = await getMeasurements(user.id);
-
-      const grouped = {};
-      rows.forEach((m) => {
-        if (!grouped[m.name]) grouped[m.name] = [];
-        grouped[m.name].push(m);
-      });
-
-      // newest first
-      for (const key of Object.keys(grouped)) {
-        grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-      }
-
-      setGroups(grouped);
-      setGroupOrder(Object.keys(grouped));
       setLoading(false);
     })();
   }, []);
 
-  // Drag reorder groups
-  function handleDragEnd(event) {
+  async function loadPRs(uid) {
+    const { data, error } = await supabase
+      .from("prs")
+      .select("*")
+      .eq("user_id", uid)
+      .order("date", { ascending: false });
+
+    if (error) {
+      console.error("PR LOAD ERROR:", error.message);
+      return;
+    }
+
+    // Group by lift
+    const map = {};
+    data.forEach((pr) => {
+      if (!map[pr.lift_name]) map[pr.lift_name] = [];
+      map[pr.lift_name].push(pr);
+    });
+
+    const finalGroups = Object.keys(map).map((lift) => ({
+      lift_name: lift,
+      entries: map[lift].sort(
+        (a, b) => new Date(b.date) - new Date(a.date)
+      ),
+    }));
+
+    setGroups(finalGroups);
+  }
+
+  /* --------------------------------------------
+     HANDLE DRAG ORDER OF LIFTS
+  --------------------------------------------- */
+  function handleGroupDrag(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = groupOrder.indexOf(active.id);
-    const newIndex = groupOrder.indexOf(over.id);
+    const oldIdx = groups.findIndex((g) => g.lift_name === active.id);
+    const newIdx = groups.findIndex((g) => g.lift_name === over.id);
 
-    setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
+    setGroups((prev) => arrayMove(prev, oldIdx, newIdx));
   }
 
-  /** -------------------------
-   *  MODAL HANDLERS
-   -------------------------- */
-  function openNew() {
-    setEditId(null);
-    setMName("");
-    setMValue("");
-    setMUnit("in");
-    setMDate(new Date().toISOString().slice(0, 10));
+  /* --------------------------------------------
+     EDIT / ADD MODAL
+  --------------------------------------------- */
+  function openAddModal() {
+    setEditingPR(null);
+    setPrLift("");
+    setPrWeight("");
+    setPrReps("");
+    setPrUnit("lbs");
+    setPrNotes("");
+    setPrDate(new Date().toISOString().slice(0, 10));
     setModalOpen(true);
   }
 
-  function openEdit(entry) {
-    setEditId(entry.id);
-    setMName(entry.name);
-    setMValue(entry.value);
-    setMUnit(entry.unit);
-    setMDate(entry.date);
+  function openEditModal(pr) {
+    setEditingPR(pr);
+    setPrLift(pr.lift_name);
+    setPrWeight(pr.weight);
+    setPrReps(pr.reps ?? "");
+    setPrUnit(pr.unit);
+    setPrNotes(pr.notes ?? "");
+
+    const iso =
+      pr.date.includes("-")
+        ? pr.date.slice(0, 10)
+        : new Date(pr.date).toISOString().slice(0, 10);
+
+    setPrDate(iso);
     setModalOpen(true);
   }
 
-  async function saveMeasurement() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  /* --------------------------------------------
+     SAVE PR
+  --------------------------------------------- */
+  async function savePR() {
     if (!user) return;
+    if (!prLift || !prWeight) return;
 
-    if (!mName || !mValue) return;
+    const isoDate = new Date(prDate).toISOString().slice(0, 10);
 
-    if (editId) {
-      await updateMeasurement({
-        id: editId,
-        name: mName,
-        value: mValue,
-        unit: mUnit,
-        date: mDate,
-      });
+    const payload = {
+      user_id: user.id,
+      lift_name: prLift,
+      weight: Number(prWeight),
+      reps: prReps ? Number(prReps) : null,
+      unit: prUnit,
+      date: isoDate,
+      notes: prNotes || null,
+    };
+
+    if (editingPR) {
+      await supabase.from("prs").update(payload).eq("id", editingPR.id);
     } else {
-      await addMeasurement({
-        userId: user.id,
-        name: mName,
-        value: mValue,
-        unit: mUnit,
-        date: mDate,
-      });
+      await supabase.from("prs").insert(payload);
     }
 
-    // reload
-    const rows = await getMeasurements(user.id);
-    const grouped = {};
-    rows.forEach((m) => {
-      if (!grouped[m.name]) grouped[m.name] = [];
-      grouped[m.name].push(m);
-    });
-    for (const key of Object.keys(grouped)) {
-      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-    }
-    setGroups(grouped);
-    setGroupOrder(Object.keys(grouped));
-
+    await loadPRs(user.id);
     setModalOpen(false);
   }
 
+  /* --------------------------------------------
+     DELETE CONFIRM
+  --------------------------------------------- */
   async function confirmDelete() {
-    await deleteMeasurement(deleteId);
+    await supabase.from("prs").delete().eq("id", deleteId);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    if (user) await loadPRs(user.id);
 
-    const rows = await getMeasurements(user.id);
-    const grouped = {};
-    rows.forEach((m) => {
-      if (!grouped[m.name]) grouped[m.name] = [];
-      grouped[m.name].push(m);
-    });
-    for (const key of Object.keys(grouped)) {
-      grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-    }
-
-    setGroups(grouped);
-    setGroupOrder(Object.keys(grouped));
     setDeleteId(null);
   }
 
-  if (loading)
-    return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
-
+  /* --------------------------------------------
+     PAGE UI
+  --------------------------------------------- */
   return (
     <div
       style={{
         padding: "20px 16px 90px",
-        maxWidth: 900,
+        maxWidth: "900px",
         margin: "0 auto",
       }}
     >
-      {/* HEADER */}
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
-        Measurements
+        Personal Records
       </h1>
 
       <button
-        onClick={openNew}
+        onClick={openAddModal}
         style={{
           padding: "10px 20px",
           background: "#ff2f2f",
@@ -229,222 +227,260 @@ export default function MeasurementsPage() {
           boxShadow: "0 0 14px rgba(255,47,47,0.35)",
         }}
       >
-        + Add Measurement
+        + Add PR
       </button>
 
-      {/* DRAGGABLE GROUP LIST */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={groupOrder}
-          strategy={verticalListSortingStrategy}
+      {loading ? (
+        <p style={{ opacity: 0.7 }}>Loading...</p>
+      ) : groups.length === 0 ? (
+        <p style={{ opacity: 0.7 }}>No PRs yet.</p>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleGroupDrag}
         >
-          {groupOrder.length === 0 && (
-            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
-          )}
+          <SortableContext
+            items={groups.map((g) => g.lift_name)}
+            strategy={verticalListSortingStrategy}
+          >
+            {groups.map((group) => {
+              const lift = group.lift_name;
+              const entries = group.entries;
+              const latest = entries[0];
+              const isOpen = expanded[lift];
 
-          {groupOrder.map((groupName) => {
-            const list = groups[groupName] || [];
-            const latest = list[0];
-            const isOpen = expanded[groupName];
-
-            return (
-              <SortableItem key={groupName} id={groupName}>
-                {({ attributes, listeners }) => (
-                  <div
-                    style={{
-                      background: "#0f0f0f",
-                      borderRadius: 12,
-                      padding: 14,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      marginBottom: 10,
-                    }}
-                  >
-                    {/* HEADER ROW */}
+              return (
+                <SortableItem key={lift} id={lift}>
+                  {({ attributes, listeners }) => (
                     <div
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
+                        background: "#0f0f0f",
+                        borderRadius: 12,
+                        padding: 14,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        marginBottom: 10,
                       }}
                     >
-                      {/* LEFT: drag + expand (about half width) */}
+                      {/* HEADER */}
                       <div
                         style={{
-                          flex: 1,
-                          maxWidth: "55%",
-                          cursor: "grab",
-                          userSelect: "none",
-                          WebkitUserSelect: "none",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
                         }}
-                        {...attributes}
-                        {...listeners}
-                        onClick={() =>
-                          setExpanded((prev) => ({
-                            ...prev,
-                            [groupName]: !prev[groupName],
-                          }))
-                        }
                       >
-                        <p
+                        {/* LEFT drag + expand */}
+                        <div
                           style={{
-                            margin: 0,
-                            fontSize: 15,
-                            fontWeight: 600,
+                            flex: 1,
+                            maxWidth: "55%",
+                            cursor: "grab",
+                            userSelect: "none",
+                            WebkitUserSelect: "none",
                           }}
+                          {...attributes}
+                          {...listeners}
+                          onClick={() =>
+                            setExpanded((prev) => ({
+                              ...prev,
+                              [lift]: !prev[lift],
+                            }))
+                          }
                         >
-                          {groupName}
-                        </p>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 12,
-                            opacity: 0.7,
-                          }}
-                        >
-                          {latest.value} {latest.unit} — {latest.date}
-                        </p>
-                      </div>
-
-                      {/* RIGHT SIDE BUTTONS */}
-                      <FaEdit
-                        style={{ fontSize: 14, cursor: "pointer" }}
-                        onClick={() => openEdit(latest)}
-                      />
-                      <FaTrash
-                        style={{
-                          fontSize: 14,
-                          cursor: "pointer",
-                          color: "#ff4d4d",
-                          marginLeft: 10,
-                        }}
-                        onClick={() => setDeleteId(latest.id)}
-                      />
-
-                      {isOpen ? (
-                        <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
-                      ) : (
-                        <FaChevronDown
-                          style={{ marginLeft: 10, opacity: 0.7 }}
-                        />
-                      )}
-                    </div>
-
-                    {/* HISTORY */}
-                    {isOpen && (
-                      <div style={{ marginTop: 10 }}>
-                        {list.slice(1).map((entry) => (
-                          <div
-                            key={entry.id}
+                          <p
                             style={{
-                              background: "#151515",
-                              borderRadius: 10,
-                              padding: 10,
-                              marginBottom: 8,
-                              border: "1px solid rgba(255,255,255,0.06)",
+                              margin: 0,
+                              fontSize: 15,
+                              fontWeight: 600,
                             }}
                           >
+                            {lift}
+                          </p>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 12,
+                              opacity: 0.7,
+                            }}
+                          >
+                            {latest.weight} {latest.unit}
+                            {latest.reps ? ` × ${latest.reps}` : ""}
+                            {" — "}
+                            {latest.date}
+                          </p>
+                        </div>
+
+                        {/* RIGHT: edit/delete */}
+                        <FaEdit
+                          style={{ fontSize: 14, cursor: "pointer" }}
+                          onClick={() => openEditModal(latest)}
+                        />
+                        <FaTrash
+                          style={{
+                            fontSize: 14,
+                            cursor: "pointer",
+                            color: "#ff4d4d",
+                            marginLeft: 10,
+                          }}
+                          onClick={() => setDeleteId(latest.id)}
+                        />
+
+                        {isOpen ? (
+                          <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
+                        ) : (
+                          <FaChevronDown
+                            style={{ marginLeft: 10, opacity: 0.7 }}
+                          />
+                        )}
+                      </div>
+
+                      {/* HISTORY LIST */}
+                      {isOpen && (
+                        <div style={{ marginTop: 10 }}>
+                          {entries.slice(1).map((entry) => (
                             <div
+                              key={entry.id}
                               style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
+                                background: "#151515",
+                                borderRadius: 10,
+                                padding: 10,
+                                marginBottom: 8,
+                                border: "1px solid rgba(255,255,255,0.06)",
                               }}
                             >
-                              <div>
-                                <p
-                                  style={{
-                                    margin: 0,
-                                    fontSize: 14,
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {entry.value} {entry.unit}
-                                </p>
-                                <p
-                                  style={{
-                                    margin: 0,
-                                    fontSize: 11,
-                                    opacity: 0.7,
-                                  }}
-                                >
-                                  {entry.date}
-                                </p>
-                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <div>
+                                  <p
+                                    style={{
+                                      margin: 0,
+                                      fontSize: 14,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {entry.weight} {entry.unit}
+                                    {entry.reps ? ` × ${entry.reps}` : ""}
+                                  </p>
+                                  <p
+                                    style={{
+                                      margin: 0,
+                                      fontSize: 11,
+                                      opacity: 0.7,
+                                    }}
+                                  >
+                                    {entry.date}
+                                  </p>
 
-                              <div style={{ display: "flex", gap: 12 }}>
-                                <FaEdit
-                                  style={{
-                                    fontSize: 13,
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={() => openEdit(entry)}
-                                />
-                                <FaTrash
-                                  style={{
-                                    fontSize: 13,
-                                    cursor: "pointer",
-                                    color: "#ff4d4d",
-                                  }}
-                                  onClick={() => setDeleteId(entry.id)}
-                                />
+                                  {entry.notes && (
+                                    <p
+                                      style={{
+                                        margin: 0,
+                                        fontSize: 11,
+                                        opacity: 0.5,
+                                        fontStyle: "italic",
+                                      }}
+                                    >
+                                      {entry.notes}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div style={{ display: "flex", gap: 12 }}>
+                                  <FaEdit
+                                    style={{
+                                      fontSize: 13,
+                                      cursor: "pointer",
+                                    }}
+                                    onClick={() => openEditModal(entry)}
+                                  />
+                                  <FaTrash
+                                    style={{
+                                      fontSize: 13,
+                                      cursor: "pointer",
+                                      color: "#ff4d4d",
+                                    }}
+                                    onClick={() => setDeleteId(entry.id)}
+                                  />
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </SortableItem>
-            );
-          })}
-        </SortableContext>
-      </DndContext>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </SortableItem>
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+      )}
 
-      {/* ADD/EDIT MODAL */}
+      {/* MODAL: ADD / EDIT PR */}
       {modalOpen && (
         <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0 }}>
-              {editId ? "Edit Measurement" : "New Measurement"}
+              {editingPR ? "Edit PR" : "New PR"}
             </h2>
 
-            <label style={labelStyle}>Name</label>
+            <label style={labelStyle}>Lift</label>
             <input
               style={inputStyle}
-              value={mName}
-              onChange={(e) => setMName(e.target.value)}
-              placeholder="Bicep, Chest, etc."
+              value={prLift}
+              onChange={(e) => setPrLift(e.target.value)}
+              placeholder="Bench Press, Squat, etc."
             />
 
-            <label style={labelStyle}>Value</label>
+            <label style={labelStyle}>Weight</label>
             <input
-              style={inputStyle}
               type="number"
-              value={mValue}
-              onChange={(e) => setMValue(e.target.value)}
+              style={inputStyle}
+              value={prWeight}
+              onChange={(e) => setPrWeight(e.target.value)}
+            />
+
+            <label style={labelStyle}>Reps</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={prReps}
+              onChange={(e) => setPrReps(e.target.value)}
+              placeholder="Optional"
             />
 
             <label style={labelStyle}>Unit</label>
             <select
               style={inputStyle}
-              value={mUnit}
-              onChange={(e) => setMUnit(e.target.value)}
+              value={prUnit}
+              onChange={(e) => setPrUnit(e.target.value)}
             >
-              <option value="in">in</option>
-              <option value="cm">cm</option>
+              <option value="lbs">lbs</option>
+              <option value="kg">kg</option>
             </select>
 
             <label style={labelStyle}>Date</label>
             <input
-              style={inputStyle}
               type="date"
-              value={mDate}
-              onChange={(e) => setMDate(e.target.value)}
+              style={inputStyle}
+              value={prDate}
+              onChange={(e) =>
+                setPrDate(new Date(e.target.value).toISOString().slice(0, 10))
+              }
+            />
+
+            <label style={labelStyle}>Notes</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 60 }}
+              value={prNotes}
+              onChange={(e) => setPrNotes(e.target.value)}
+              placeholder="Optional notes..."
             />
 
             <button
@@ -458,15 +494,15 @@ export default function MeasurementsPage() {
                 fontWeight: 600,
                 marginTop: 10,
               }}
-              onClick={saveMeasurement}
+              onClick={savePR}
             >
-              Save Measurement
+              Save PR
             </button>
           </div>
         </div>
       )}
 
-      {/* DELETE CONFIRM MODAL */}
+      {/* DELETE CONFIRM */}
       {deleteId && (
         <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -514,6 +550,9 @@ export default function MeasurementsPage() {
   );
 }
 
+/* --------------------------------------------
+   SHARED STYLES
+--------------------------------------------- */
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
