@@ -242,3 +242,24 @@ html, body {
     transform: translateY(0);
   }
 }
+/* Smooth focus glow on form controls */
+input,
+textarea,
+select {
+  transition:
+    border-color 0.15s ease-out,
+    box-shadow 0.15s ease-out,
+    background 0.15s ease-out;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #ff2f2f;
+  box-shadow: 0 0 0 1px rgba(255, 47, 47, 0.7);
+  background: #050505;
+}
+html {
+  scroll-behavior: smooth;
+}
