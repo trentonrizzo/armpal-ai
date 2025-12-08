@@ -1,4 +1,3 @@
-// src/pages/WorkoutsPage.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
@@ -9,25 +8,20 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-
 import {
   SortableContext,
   useSortable,
-  arrayMove,
   verticalListSortingStrategy,
+  arrayMove,
 } from "@dnd-kit/sortable";
 
 import { CSS } from "@dnd-kit/utilities";
-
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
-/* ---------------------------------------------------------
-   SORTABLE ITEM — ONLY DRAG ON LEFT SIDE ("HANDLE MODE")
---------------------------------------------------------- */
-function SortableItem({ id, handleListeners, handleAttributes, children }) {
-  const { setNodeRef, transform, transition } = useSortable({
-    id,
-  });
+// Wrapper for drag items
+function SortableItem({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -36,15 +30,12 @@ function SortableItem({ id, handleListeners, handleAttributes, children }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
-      {children(handleAttributes, handleListeners)}
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
     </div>
   );
 }
 
-/* ---------------------------------------------------------
-   MAIN PAGE
---------------------------------------------------------- */
 export default function WorkoutsPage() {
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
@@ -66,69 +57,66 @@ export default function WorkoutsPage() {
   const [exerciseReps, setExerciseReps] = useState("");
   const [exerciseWeight, setExerciseWeight] = useState("");
 
-  // Confirm delete modals
+  // Confirm delete
   const [deleteWorkoutId, setDeleteWorkoutId] = useState(null);
   const [deleteExerciseData, setDeleteExerciseData] = useState(null);
 
-  // drag sensors
+  // Sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  /* ---------------------------------------------------------
-     LOAD USER + WORKOUTS
-  --------------------------------------------------------- */
+  // Load user + workouts
   useEffect(() => {
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
-      if (user) await loadWorkouts(user.id);
+      const { data } = await supabase.auth.getUser();
+      setUser(data?.user);
+
+      if (data?.user) {
+        await loadWorkouts(data.user.id);
+      }
       setLoading(false);
     })();
   }, []);
 
   async function loadWorkouts(uid) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("workouts")
       .select("*")
       .eq("user_id", uid)
-      .order("position", { ascending: true })
-      .order("created_at", { ascending: true });
+      .order("position", { ascending: true });
+
+    if (error) console.error(error);
 
     setWorkouts(data || []);
   }
 
   async function loadExercises(workoutId) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("exercises")
       .select("*")
       .eq("workout_id", workoutId)
       .order("position", { ascending: true });
 
+    if (error) console.error(error);
     return data || [];
   }
 
-  /* ---------------------------------------------------------
-     EXPAND WORKOUT -> LOAD EXERCISES
-  --------------------------------------------------------- */
+  // Expand workout + load exercises
   async function toggleExpand(workoutId) {
     if (expandedExercises[workoutId]) {
+      // collapse
       const copy = { ...expandedExercises };
       delete copy[workoutId];
       setExpandedExercises(copy);
     } else {
-      const list = await loadExercises(workoutId);
-      setExpandedExercises((prev) => ({ ...prev, [workoutId]: list }));
+      // expand + load
+      const ex = await loadExercises(workoutId);
+      setExpandedExercises((prev) => ({ ...prev, [workoutId]: ex }));
     }
   }
 
-  /* ---------------------------------------------------------
-     DRAG WORKOUTS
-  --------------------------------------------------------- */
+  // Drag reorder workouts
   async function handleWorkoutDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -144,21 +132,19 @@ export default function WorkoutsPage() {
     });
   }
 
-  /* ---------------------------------------------------------
-     DRAG EXERCISES
-  --------------------------------------------------------- */
+  // Drag reorder exercises
   async function handleExerciseDragEnd(workoutId, event) {
-    const list = expandedExercises[workoutId] || [];
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
+    const list = expandedExercises[workoutId] || [];
     const oldIndex = list.findIndex((e) => e.id === active.id);
     const newIndex = list.findIndex((e) => e.id === over.id);
 
     const reordered = arrayMove(list, oldIndex, newIndex);
 
-    reordered.forEach(async (e, i) => {
-      await supabase.from("exercises").update({ position: i }).eq("id", e.id);
+    reordered.forEach(async (ex, i) => {
+      await supabase.from("exercises").update({ position: i }).eq("id", ex.id);
     });
 
     setExpandedExercises((prev) => ({
@@ -167,13 +153,13 @@ export default function WorkoutsPage() {
     }));
   }
 
-  /* ---------------------------------------------------------
-     WORKOUT MODAL
-  --------------------------------------------------------- */
-  function openWorkoutModal(w) {
-    setEditingWorkout(w);
-    setWorkoutName(w?.name || "");
-    setWorkoutSchedule(w?.scheduled_for ? w.scheduled_for.slice(0, 16) : "");
+  // Workout modal
+  function openWorkoutModal(workout = null) {
+    setEditingWorkout(workout);
+    setWorkoutName(workout?.name || "");
+    setWorkoutSchedule(
+      workout?.scheduled_for ? workout.scheduled_for.slice(0, 16) : ""
+    );
     setWorkoutModalOpen(true);
   }
 
@@ -200,27 +186,21 @@ export default function WorkoutsPage() {
     await loadWorkouts(user.id);
   }
 
-  /* ---------------------------------------------------------
-     WORKOUT DELETE
-  --------------------------------------------------------- */
+  // Delete workout confirm
   async function confirmDeleteWorkout() {
     await supabase.from("workouts").delete().eq("id", deleteWorkoutId);
     setDeleteWorkoutId(null);
-    if (user) await loadWorkouts(user.id);
+    await loadWorkouts(user.id);
   }
 
-  /* ---------------------------------------------------------
-     EXERCISE MODAL
-  --------------------------------------------------------- */
+  // Exercise modal
   function openExerciseModal(workoutId, ex = null) {
     setExerciseWorkoutId(workoutId);
     setEditingExercise(ex);
-
     setExerciseName(ex?.name || "");
     setExerciseSets(ex?.sets ?? "");
     setExerciseReps(ex?.reps ?? "");
     setExerciseWeight(ex?.weight ?? "");
-
     setExerciseModalOpen(true);
   }
 
@@ -230,10 +210,10 @@ export default function WorkoutsPage() {
     const payload = {
       user_id: user.id,
       workout_id: exerciseWorkoutId,
-      name: exerciseName,
+      name: exerciseName || "Exercise",
       sets: exerciseSets === "" ? null : Number(exerciseSets),
       reps: exerciseReps === "" ? null : Number(exerciseReps),
-      weight: exerciseWeight === "" ? null : exerciseWeight,
+      weight: exerciseWeight || null,
     };
 
     if (editingExercise) {
@@ -242,8 +222,7 @@ export default function WorkoutsPage() {
         .update(payload)
         .eq("id", editingExercise.id);
     } else {
-      const list = expandedExercises[exerciseWorkoutId] || [];
-      payload.position = list.length;
+      payload.position = expandedExercises[exerciseWorkoutId]?.length || 0;
       await supabase.from("exercises").insert(payload);
     }
 
@@ -258,12 +237,8 @@ export default function WorkoutsPage() {
     setEditingExercise(null);
   }
 
-  /* ---------------------------------------------------------
-     EXERCISE DELETE
-  --------------------------------------------------------- */
+  // Delete exercise
   async function confirmDeleteExercise() {
-    if (!deleteExerciseData) return;
-
     const { id, workoutId } = deleteExerciseData;
 
     await supabase.from("exercises").delete().eq("id", id);
@@ -278,13 +253,9 @@ export default function WorkoutsPage() {
     setDeleteExerciseData(null);
   }
 
-  /* ---------------------------------------------------------
-     FORMAT DATE
-  --------------------------------------------------------- */
   function formatSchedule(value) {
     if (!value) return "Not scheduled";
-    const d = new Date(value);
-    return d.toLocaleString(undefined, {
+    return new Date(value).toLocaleString(undefined, {
       month: "short",
       day: "numeric",
       hour: "2-digit",
@@ -292,24 +263,9 @@ export default function WorkoutsPage() {
     });
   }
 
-  /* ---------------------------------------------------------
-     RENDER
-  --------------------------------------------------------- */
   return (
-    <div
-      style={{
-        padding: "20px 16px 90px",
-        maxWidth: "900px",
-        margin: "0 auto",
-      }}
-    >
-      <h1
-        style={{
-          fontSize: 22,
-          fontWeight: 700,
-          marginBottom: 16,
-        }}
-      >
+    <div style={{ padding: "20px 16px 90px", maxWidth: 900, margin: "0 auto" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Workouts
       </h1>
 
@@ -318,7 +274,7 @@ export default function WorkoutsPage() {
         style={{
           padding: "10px 20px",
           background: "#ff2f2f",
-          borderRadius: "999px",
+          borderRadius: 999,
           border: "none",
           fontSize: 14,
           fontWeight: 600,
@@ -330,13 +286,10 @@ export default function WorkoutsPage() {
         + Add Workout
       </button>
 
-      {/* ——————————————————————————————— */}
-      {/* LOADING & EMPTY STATES */}
-      {/* ——————————————————————————————— */}
       {loading ? (
         <p style={{ opacity: 0.7 }}>Loading workouts...</p>
       ) : workouts.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>No workouts yet. Add your first one.</p>
+        <p style={{ opacity: 0.7 }}>No workouts yet. Add one!</p>
       ) : (
         <DndContext
           sensors={sensors}
@@ -347,210 +300,165 @@ export default function WorkoutsPage() {
             items={workouts.map((w) => w.id)}
             strategy={verticalListSortingStrategy}
           >
-            {workouts.map((workout) => {
-              const exercises = expandedExercises[workout.id] || null;
+            {workouts.map((w) => {
+              const exercises = expandedExercises[w.id] || null;
 
               return (
-                <SortableItem
-                  key={workout.id}
-                  id={workout.id}
-                  handleListeners={{}}
-                  handleAttributes={{}}
-                >
-                  {(attributes, listeners) => (
+                <SortableItem key={w.id} id={w.id}>
+                  <div
+                    style={{
+                      background: "#0f0f0f",
+                      padding: 14,
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {/* Header */}
                     <div
                       style={{
-                        background: "#0f0f0f",
-                        borderRadius: 12,
-                        padding: 14,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        marginBottom: 10,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
                       }}
                     >
-                      {/* HEADER ROW */}
                       <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
+                        style={{ flex: 1, cursor: "pointer" }}
+                        onClick={() => toggleExpand(w.id)}
                       >
-                        {/* LEFT SIDE (DRAG + EXPAND) */}
-                        <div
-                          style={{
-                            flex: 1,
-                            maxWidth: "55%",
-                            cursor: "grab",
-                            userSelect: "none",
-                            WebkitUserSelect: "none",
-                          }}
-                          {...listeners}
-                          {...attributes}
-                          onClick={() => toggleExpand(workout.id)}
-                        >
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: 15,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {workout.name || "Workout"}
-                          </p>
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: 12,
-                              opacity: 0.7,
-                            }}
-                          >
-                            {formatSchedule(workout.scheduled_for)}
-                          </p>
-                        </div>
-
-                        {/* RIGHT SIDE */}
-                        <FaEdit
-                          style={{ fontSize: 14, cursor: "pointer" }}
-                          onClick={() => openWorkoutModal(workout)}
-                        />
-
-                        <FaTrash
-                          style={{
-                            fontSize: 14,
-                            cursor: "pointer",
-                            color: "#ff4d4d",
-                          }}
-                          onClick={() => setDeleteWorkoutId(workout.id)}
-                        />
-
-                        {exercises ? (
-                          <FaChevronUp style={{ marginLeft: 6 }} />
-                        ) : (
-                          <FaChevronDown style={{ marginLeft: 6 }} />
-                        )}
+                        <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                          {w.name}
+                        </p>
+                        <p style={{ margin: 0, fontSize: 11, opacity: 0.7 }}>
+                          {formatSchedule(w.scheduled_for)}
+                        </p>
                       </div>
 
-                      {/* EXERCISES */}
-                      {exercises && (
-                        <div style={{ marginTop: 10 }}>
-                          <DndContext
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={(e) =>
-                              handleExerciseDragEnd(workout.id, e)
-                            }
-                          >
-                            <SortableContext
-                              items={exercises.map((e) => e.id)}
-                              strategy={verticalListSortingStrategy}
-                            >
-                              {exercises.map((ex) => (
-                                <SortableItem
-                                  key={ex.id}
-                                  id={ex.id}
-                                  handleListeners={{}}
-                                  handleAttributes={{}}
-                                >
-                                  {(atts, listens) => (
-                                    <div
-                                      style={{
-                                        background: "#151515",
-                                        borderRadius: 10,
-                                        padding: 10,
-                                        marginBottom: 8,
-                                        border:
-                                          "1px solid rgba(255,255,255,0.06)",
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          justifyContent: "space-between",
-                                          alignItems: "center",
-                                        }}
-                                      >
-                                        {/* LEFT (NO DRAG HERE) */}
-                                        <div
-                                          style={{
-                                            flex: 1,
-                                          }}
-                                        >
-                                          <p
-                                            style={{
-                                              margin: 0,
-                                              fontSize: 14,
-                                              fontWeight: 600,
-                                            }}
-                                          >
-                                            {ex.name}
-                                          </p>
-                                          <p
-                                            style={{
-                                              margin: 0,
-                                              fontSize: 11,
-                                              opacity: 0.7,
-                                            }}
-                                          >
-                                            {(ex.sets ?? "-") +
-                                              " x " +
-                                              (ex.reps ?? "-") +
-                                              (ex.weight
-                                                ? ` — ${ex.weight}`
-                                                : "")}
-                                          </p>
-                                        </div>
+                      <FaEdit
+                        style={{ cursor: "pointer", fontSize: 14 }}
+                        onClick={() => openWorkoutModal(w)}
+                      />
 
-                                        <FaEdit
-                                          style={{
-                                            fontSize: 13,
-                                            cursor: "pointer",
-                                          }}
-                                          onClick={() =>
-                                            openExerciseModal(workout.id, ex)
-                                          }
-                                        />
+                      <FaTrash
+                        style={{
+                          cursor: "pointer",
+                          fontSize: 14,
+                          color: "#ff4d4d",
+                        }}
+                        onClick={() => setDeleteWorkoutId(w.id)}
+                      />
 
-                                        <FaTrash
-                                          style={{
-                                            fontSize: 13,
-                                            cursor: "pointer",
-                                            color: "#ff4d4d",
-                                          }}
-                                          onClick={() =>
-                                            setDeleteExerciseData({
-                                              id: ex.id,
-                                              workoutId: workout.id,
-                                            })
-                                          }
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-                                </SortableItem>
-                              ))}
-                            </SortableContext>
-                          </DndContext>
-
-                          <button
-                            onClick={() => openExerciseModal(workout.id, null)}
-                            style={{
-                              width: "100%",
-                              padding: 8,
-                              marginTop: 6,
-                              fontSize: 12,
-                              background: "transparent",
-                              borderRadius: 999,
-                              border: "1px solid rgba(255,255,255,0.2)",
-                              color: "#ccc",
-                            }}
-                          >
-                            + Add Exercise
-                          </button>
-                        </div>
+                      {exercises ? (
+                        <FaChevronUp style={{ fontSize: 12 }} />
+                      ) : (
+                        <FaChevronDown style={{ fontSize: 12 }} />
                       )}
                     </div>
-                  )}
+
+                    {/* Exercises */}
+                    {exercises && (
+                      <div style={{ marginTop: 10 }}>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(e) =>
+                            handleExerciseDragEnd(w.id, e)
+                          }
+                        >
+                          <SortableContext
+                            items={exercises.map((e) => e.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            {exercises.map((ex) => (
+                              <SortableItem key={ex.id} id={ex.id}>
+                                <div
+                                  style={{
+                                    background: "#151515",
+                                    border: "1px solid rgba(255,255,255,0.06)",
+                                    borderRadius: 10,
+                                    padding: 10,
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <div>
+                                      <p
+                                        style={{
+                                          margin: 0,
+                                          fontSize: 14,
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {ex.name}
+                                      </p>
+                                      <p
+                                        style={{
+                                          margin: 0,
+                                          fontSize: 11,
+                                          opacity: 0.7,
+                                        }}
+                                      >
+                                        {(ex.sets ?? "-") +
+                                          " x " +
+                                          (ex.reps ?? "-") +
+                                          (ex.weight
+                                            ? ` — ${ex.weight}`
+                                            : "")}
+                                      </p>
+                                    </div>
+
+                                    <FaEdit
+                                      style={{ cursor: "pointer", fontSize: 13 }}
+                                      onClick={() =>
+                                        openExerciseModal(w.id, ex)
+                                      }
+                                    />
+
+                                    <FaTrash
+                                      style={{
+                                        cursor: "pointer",
+                                        fontSize: 13,
+                                        color: "#ff4d4d",
+                                      }}
+                                      onClick={() =>
+                                        setDeleteExerciseData({
+                                          id: ex.id,
+                                          workoutId: w.id,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </SortableItem>
+                            ))}
+                          </SortableContext>
+                        </DndContext>
+
+                        <button
+                          onClick={() => openExerciseModal(w.id, null)}
+                          style={{
+                            width: "100%",
+                            padding: 8,
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.14)",
+                            background: "transparent",
+                            color: "#ccc",
+                            fontSize: 12,
+                          }}
+                        >
+                          + Add Exercise
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </SortableItem>
               );
             })}
@@ -558,98 +466,113 @@ export default function WorkoutsPage() {
         </DndContext>
       )}
 
-      {/* ——————————————————————————————— */}
-      {/* WORKOUT DELETE MODAL */}
-      {/* ——————————————————————————————— */}
+      {/* Workout modal */}
+      {workoutModalOpen && (
+        <div style={modalBackdrop} onClick={() => setWorkoutModalOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2>{editingWorkout ? "Edit Workout" : "New Workout"}</h2>
+
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={workoutName}
+              onChange={(e) => setWorkoutName(e.target.value)}
+            />
+
+            <label style={labelStyle}>Scheduled For</label>
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={workoutSchedule}
+              onChange={(e) => setWorkoutSchedule(e.target.value)}
+            />
+
+            <button style={primaryBtn} onClick={saveWorkout}>
+              Save Workout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Exercise modal */}
+      {exerciseModalOpen && (
+        <div style={modalBackdrop} onClick={() => setExerciseModalOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2>{editingExercise ? "Edit Exercise" : "New Exercise"}</h2>
+
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={exerciseName}
+              onChange={(e) => setExerciseName(e.target.value)}
+            />
+
+            <label style={labelStyle}>Sets</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={exerciseSets}
+              onChange={(e) => setExerciseSets(e.target.value)}
+            />
+
+            <label style={labelStyle}>Reps</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={exerciseReps}
+              onChange={(e) => setExerciseReps(e.target.value)}
+            />
+
+            <label style={labelStyle}>Weight</label>
+            <input
+              style={inputStyle}
+              value={exerciseWeight}
+              onChange={(e) => setExerciseWeight(e.target.value)}
+              placeholder="225 lb"
+            />
+
+            <button style={primaryBtn} onClick={saveExercise}>
+              Save Exercise
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Workout Delete */}
       {deleteWorkoutId && (
         <div style={modalBackdrop} onClick={() => setDeleteWorkoutId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>Confirm Delete?</h2>
-
-            <p style={{ opacity: 0.8, marginBottom: 16 }}>
-              This action cannot be undone.
-            </p>
+            <h2 style={{ color: "#ff4d4d" }}>Confirm Delete?</h2>
 
             <button
               onClick={() => setDeleteWorkoutId(null)}
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 10,
-                background: "#333",
-                border: "none",
-                color: "white",
-                marginBottom: 10,
-              }}
+              style={secondaryBtn}
             >
               Cancel
             </button>
 
-            <button
-              onClick={confirmDeleteWorkout}
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 10,
-                background: "#ff2f2f",
-                border: "none",
-                color: "white",
-                fontWeight: 600,
-              }}
-            >
+            <button onClick={confirmDeleteWorkout} style={primaryBtn}>
               Delete Workout
             </button>
           </div>
         </div>
       )}
 
-      {/* ——————————————————————————————— */}
-      {/* EXERCISE DELETE SLIDE-UP */}
-      {/* ——————————————————————————————— */}
+      {/* Exercise Delete */}
       {deleteExerciseData && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 0,
-            left: 0,
-            width: "100%",
-            background: "#111",
-            borderTop: "1px solid rgba(255,255,255,0.15)",
-            padding: 16,
-            zIndex: 999,
-          }}
-        >
-          <p style={{ margin: 0, marginBottom: 10, color: "#ff4d4d" }}>
+        <div style={slideUpContainer}>
+          <p style={{ color: "#ff4d4d", marginBottom: 10 }}>
             Delete this exercise?
           </p>
 
           <button
             onClick={() => setDeleteExerciseData(null)}
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 10,
-              background: "#333",
-              border: "none",
-              color: "white",
-              marginBottom: 10,
-            }}
+            style={secondaryBtn}
           >
             Cancel
           </button>
 
-          <button
-            onClick={confirmDeleteExercise}
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 10,
-              background: "#ff2f2f",
-              border: "none",
-              color: "white",
-              fontWeight: 600,
-            }}
-          >
+          <button onClick={confirmDeleteExercise} style={primaryBtn}>
             Delete Exercise
           </button>
         </div>
@@ -658,24 +581,22 @@ export default function WorkoutsPage() {
   );
 }
 
-/* ---------------------------------------------------------
-   SHARED MODAL STYLES
---------------------------------------------------------- */
+//
+// Styles
+//
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.7)",
+  background: "rgba(0,0,0,0.6)",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  padding: 20,
   zIndex: 999,
 };
 
 const modalCard = {
   background: "#111",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
   padding: 18,
   width: "100%",
   maxWidth: 420,
@@ -685,25 +606,42 @@ const inputStyle = {
   width: "100%",
   padding: 8,
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.15)",
   background: "#000",
+  border: "1px solid rgba(255,255,255,0.12)",
   color: "white",
   marginBottom: 10,
 };
 
-const labelStyle = {
-  fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 4,
-};
+const labelStyle = { fontSize: 12, opacity: 0.8, marginBottom: 4 };
 
 const primaryBtn = {
   width: "100%",
   padding: 10,
+  background: "#ff2f2f",
   borderRadius: 10,
   border: "none",
-  background: "#ff2f2f",
   color: "white",
   fontWeight: 600,
   marginTop: 8,
+};
+
+const secondaryBtn = {
+  width: "100%",
+  padding: 10,
+  background: "#333",
+  borderRadius: 10,
+  border: "none",
+  color: "white",
+  marginBottom: 10,
+};
+
+const slideUpContainer = {
+  position: "fixed",
+  bottom: 0,
+  left: 0,
+  width: "100%",
+  background: "#111",
+  padding: 16,
+  borderTop: "1px solid rgba(255,255,255,0.15)",
+  zIndex: 999,
 };
