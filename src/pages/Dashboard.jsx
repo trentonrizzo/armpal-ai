@@ -6,16 +6,16 @@ import { Link } from "react-router-dom";
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [displayName, setDisplayName] = useState("Athlete");
+
   const [goals, setGoals] = useState([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
 
-  // Strength Calculator State
+  // Strength Calculator
   const [exerciseName, setExerciseName] = useState("");
   const [weightInput, setWeightInput] = useState("");
-  the [repsInput, setRepsInput] = useState("");
+  const [repsInput, setRepsInput] = useState("");
   const [calculated1RM, setCalculated1RM] = useState(null);
 
-  // PR comparison
   const [bestPR, setBestPR] = useState(null);
   const [prDifference, setPrDifference] = useState(null);
 
@@ -54,52 +54,46 @@ export default function Dashboard() {
   }
 
   async function loadGoals(uid) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("goals")
       .select("*")
       .eq("user_id", uid)
       .order("updated_at", { ascending: false })
       .limit(3);
 
-    if (!error) setGoals(data || []);
+    setGoals(data || []);
     setLoadingGoals(false);
   }
 
-  // FIXED UPCOMING WORKOUT LOGIC — ONLY FUTURE TIMES COUNT
+  /* ---------------------------------------------------
+     FIXED: Upcoming workout (only future workouts)
+  --------------------------------------------------- */
   async function loadUpcomingWorkout(uid) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("workouts")
       .select("*")
       .eq("user_id", uid)
       .not("scheduled_for", "is", null);
 
-    if (error || !data) return setUpcomingWorkout(null);
+    if (!data) return setUpcomingWorkout(null);
 
     const now = new Date();
 
-    // RAW TIMESTAMP FORMAT: "2025-12-10T07:00"
     const futureWorkouts = data
       .filter((w) => {
         if (!w.scheduled_for) return false;
         return new Date(w.scheduled_for) > now;
       })
-      .sort((a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for));
+      .sort(
+        (a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for)
+      );
 
     setUpcomingWorkout(futureWorkouts[0] || null);
   }
 
-  function getProgress(goal) {
-    const current = Number(goal.current_value) || 0;
-    const target = Number(goal.target_value) || 0;
-    if (!target) return 0;
-    const pct = Math.round((current / target) * 100);
-    return Math.min(100, Math.max(0, pct));
-  }
-
-  // -----------------------
-  //   STRENGTH CALCULATOR
-  // -----------------------
-
+  /* ---------------------------------------------------
+     Strength Calculator
+  --------------------------------------------------- */
   function updateCalculated1RM(weightVal, repsVal) {
     const w = parseFloat(weightVal);
     const r = parseInt(repsVal, 10);
@@ -116,21 +110,21 @@ export default function Dashboard() {
   }
 
   function handleWeightChange(e) {
-    const value = e.target.value;
-    setWeightInput(value);
-    updateCalculated1RM(value, repsInput);
+    const val = e.target.value;
+    setWeightInput(val);
+    updateCalculated1RM(val, repsInput);
   }
 
   function handleRepsChange(e) {
-    const value = e.target.value;
-    setRepsInput(value);
-    updateCalculated1RM(weightInput, value);
+    const val = e.target.value;
+    setRepsInput(val);
+    updateCalculated1RM(weightInput, val);
   }
 
   async function fetchBestPR(name, new1RM = null) {
     if (!user?.id || !name) return;
 
-    const { data: pr, error } = await supabase
+    const { data: pr } = await supabase
       .from("PRs")
       .select("*")
       .eq("user_id", user.id)
@@ -139,7 +133,7 @@ export default function Dashboard() {
       .limit(1)
       .single();
 
-    if (error || !pr) {
+    if (!pr) {
       setBestPR(null);
       setPrDifference(null);
       return;
@@ -147,7 +141,9 @@ export default function Dashboard() {
 
     setBestPR(pr.weight);
 
-    if (new1RM) setPrDifference(new1RM - pr.weight);
+    if (new1RM !== null) {
+      setPrDifference(new1RM - pr.weight);
+    }
   }
 
   async function handleSavePR() {
@@ -170,10 +166,12 @@ export default function Dashboard() {
   }
 
   const percentRows = calculated1RM
-    ? [95, 90, 85, 80, 75, 70, 65, 60, 58, 56, 54, 52, 50, 48, 46].map((p) => ({
-        percent: p,
-        weight: Math.round(calculated1RM * (p / 100)),
-      }))
+    ? [95, 90, 85, 80, 75, 70, 65, 60, 58, 56, 54, 52, 50, 48, 46].map(
+        (p) => ({
+          percent: p,
+          weight: Math.round(calculated1RM * (p / 100)),
+        })
+      )
     : [];
 
   const repRows = calculated1RM
@@ -183,6 +181,9 @@ export default function Dashboard() {
       }))
     : [];
 
+  /* ---------------------------------------------------
+     UI
+  --------------------------------------------------- */
   return (
     <div
       style={{
@@ -202,7 +203,7 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {/* Today's Focus */}
+      {/* TODAY'S FOCUS */}
       <section style={{ marginBottom: 18 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Today’s Focus
@@ -430,10 +431,7 @@ export default function Dashboard() {
           <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
             Upcoming Workout
           </h2>
-          <Link
-            to="/workouts"
-            style={{ fontSize: 12, opacity: 0.8 }}
-          >
+          <Link to="/workouts" style={{ fontSize: 12, opacity: 0.8 }}>
             Open workouts
           </Link>
         </div>
@@ -453,7 +451,9 @@ export default function Dashboard() {
               </p>
 
               <p style={{ opacity: 0.8, fontSize: 13, marginTop: 4 }}>
-                {new Date(upcomingWorkout.scheduled_for).toLocaleString()}
+                {new Date(
+                  upcomingWorkout.scheduled_for
+                ).toLocaleString()}
               </p>
             </>
           ) : (
@@ -472,7 +472,7 @@ export default function Dashboard() {
   );
 }
 
-/* ----------------------- */
+/* Shared Styles */
 const input = {
   width: "100%",
   padding: "8px 10px",
