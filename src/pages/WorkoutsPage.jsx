@@ -1,30 +1,24 @@
 // src/pages/WorkoutsPage.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-
 import {
   DndContext,
+  closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
-  closestCenter,
 } from "@dnd-kit/core";
-
 import {
   SortableContext,
-  verticalListSortingStrategy,
-  arrayMove,
   useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-
 import { CSS } from "@dnd-kit/utilities";
-
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
-/* ============================================================
-   DRAG WRAPPER
-   ============================================================ */
-function SortableItem({ id, dragOnly = false, children }) {
+// Draggable wrapper (original behavior)
+function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
@@ -35,117 +29,111 @@ function SortableItem({ id, dragOnly = false, children }) {
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...(dragOnly ? listeners : {})}
-      {...(dragOnly ? attributes : {})}
-    >
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       {children}
     </div>
   );
 }
 
-/* ============================================================
-   MAIN PAGE
-   ============================================================ */
 export default function WorkoutsPage() {
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
-  const [expanded, setExpanded] = useState({});
+  const [expandedExercises, setExpandedExercises] = useState({}); // { workoutId: [exercises] }
   const [loading, setLoading] = useState(true);
 
-  // Modals (Workout + Exercise)
-  const [workoutModal, setWorkoutModal] = useState(false);
-  const [exerciseModal, setExerciseModal] = useState(false);
-
+  // Workout modal
+  const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
-  const [editingExercise, setEditingExercise] = useState(null);
-
   const [workoutName, setWorkoutName] = useState("");
   const [workoutSchedule, setWorkoutSchedule] = useState("");
 
+  // Exercise modal
+  const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
   const [exerciseWorkoutId, setExerciseWorkoutId] = useState(null);
+  const [editingExercise, setEditingExercise] = useState(null);
   const [exerciseName, setExerciseName] = useState("");
   const [exerciseSets, setExerciseSets] = useState("");
   const [exerciseReps, setExerciseReps] = useState("");
   const [exerciseWeight, setExerciseWeight] = useState("");
 
-  // Delete confirm modal
+  // Delete confirm modal (new)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null); // { type: "workout"|"exercise", id, workoutId? }
+  const [deleteTarget, setDeleteTarget] = useState(null); // { type: "workout" | "exercise", id, workoutId? }
 
+  // Drag sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
+      activationConstraint: { distance: 8 },
     })
   );
 
-  /* ============================================================
-     LOAD USER + WORKOUTS
-     ============================================================ */
+  // Initial load
   useEffect(() => {
     (async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
       setUser(user);
-
       if (user) await loadWorkouts(user.id);
-
       setLoading(false);
     })();
   }, []);
 
   async function loadWorkouts(uid) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("workouts")
       .select("*")
       .eq("user_id", uid)
-      .order("position", { ascending: true });
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
 
+    if (error) {
+      console.error("Error loading workouts:", error.message);
+      return;
+    }
     setWorkouts(data || []);
   }
 
   async function loadExercises(workoutId) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("exercises")
       .select("*")
       .eq("workout_id", workoutId)
-      .order("position", { ascending: true });
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
 
+    if (error) {
+      console.error("Error loading exercises:", error.message);
+      return [];
+    }
     return data || [];
   }
 
-  /* ============================================================
-     EXPAND / COLLAPSE WORKOUT
-     ============================================================ */
-  async function toggleExpand(id) {
-    if (expanded[id]) {
-      const copy = { ...expanded };
-      delete copy[id];
-      setExpanded(copy);
+  // Expand/collapse workout -> load exercises
+  async function toggleExpand(workoutId) {
+    if (expandedExercises[workoutId]) {
+      // currently open -> collapse
+      const copy = { ...expandedExercises };
+      delete copy[workoutId];
+      setExpandedExercises(copy);
     } else {
-      const ex = await loadExercises(id);
-      setExpanded((prev) => ({ ...prev, [id]: ex }));
+      // open and load exercises
+      const ex = await loadExercises(workoutId);
+      setExpandedExercises((prev) => ({ ...prev, [workoutId]: ex }));
     }
   }
 
-  /* ============================================================
-     DRAG WORKOUT
-     ============================================================ */
-  async function handleWorkoutDragEnd(e) {
-    const { active, over } = e;
+  // Drag end for workouts
+  async function handleWorkoutDragEnd(event) {
+    const { active, over } = event;
     if (!over || active.id === over.id) return;
 
     const oldIndex = workouts.findIndex((w) => w.id === active.id);
     const newIndex = workouts.findIndex((w) => w.id === over.id);
-
     const reordered = arrayMove(workouts, oldIndex, newIndex);
     setWorkouts(reordered);
 
-    // Save new positions
+    // Save new order
     for (let i = 0; i < reordered.length; i++) {
       await supabase
         .from("workouts")
@@ -154,18 +142,15 @@ export default function WorkoutsPage() {
     }
   }
 
-  /* ============================================================
-     DRAG EXERCISES
-     ============================================================ */
-  async function handleExerciseDragEnd(workoutId, e) {
-    const { active, over } = e;
+  // Drag end for exercises
+  async function handleExerciseDragEnd(workoutId, event) {
+    const list = expandedExercises[workoutId] || [];
+    const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const exercises = expanded[workoutId] || [];
-    const oldIndex = exercises.findIndex((ex) => ex.id === active.id);
-    const newIndex = exercises.findIndex((ex) => ex.id === over.id);
-
-    const reordered = arrayMove(exercises, oldIndex, newIndex);
+    const oldIndex = list.findIndex((e) => e.id === active.id);
+    const newIndex = list.findIndex((e) => e.id === over.id);
+    const reordered = arrayMove(list, oldIndex, newIndex);
 
     // Save new order
     for (let i = 0; i < reordered.length; i++) {
@@ -175,49 +160,23 @@ export default function WorkoutsPage() {
         .eq("id", reordered[i].id);
     }
 
-    setExpanded((prev) => ({ ...prev, [workoutId]: reordered }));
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [workoutId]: reordered,
+    }));
   }
 
-  /* ============================================================
-     DELETE (with confirm modal)
-     ============================================================ */
-  function askDeleteWorkout(id) {
-    setDeleteTarget({ type: "workout", id });
-    setDeleteModalOpen(true);
+  // Open workout modal
+  function openWorkoutModal(workout = null) {
+    setEditingWorkout(workout);
+    setWorkoutName(workout?.name || "");
+    setWorkoutSchedule(
+      workout?.scheduled_for ? workout.scheduled_for.slice(0, 16) : ""
+    );
+    setWorkoutModalOpen(true);
   }
 
-  function askDeleteExercise(id, workoutId) {
-    setDeleteTarget({ type: "exercise", id, workoutId });
-    setDeleteModalOpen(true);
-  }
-
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-
-    // Workout delete
-    if (deleteTarget.type === "workout") {
-      await supabase.from("workouts").delete().eq("id", deleteTarget.id);
-      if (user) await loadWorkouts(user.id);
-    }
-
-    // Exercise delete
-    if (deleteTarget.type === "exercise") {
-      await supabase.from("exercises").delete().eq("id", deleteTarget.id);
-
-      const ex = await loadExercises(deleteTarget.workoutId);
-      setExpanded((prev) => ({
-        ...prev,
-        [deleteTarget.workoutId]: ex,
-      }));
-    }
-
-    setDeleteTarget(null);
-    setDeleteModalOpen(false);
-  }
-
-  /* ============================================================
-     SAVE WORKOUT
-     ============================================================ */
+  // Save workout
   async function saveWorkout() {
     if (!user) return;
 
@@ -239,18 +198,33 @@ export default function WorkoutsPage() {
       await supabase.from("workouts").insert(payload);
     }
 
-    setWorkoutModal(false);
+    setWorkoutModalOpen(false);
     setEditingWorkout(null);
     await loadWorkouts(user.id);
   }
 
-  /* ============================================================
-     SAVE EXERCISE
-     ============================================================ */
+  // Delete workout (used by confirm modal)
+  async function deleteWorkout(id) {
+    await supabase.from("workouts").delete().eq("id", id);
+    if (user) await loadWorkouts(user.id);
+  }
+
+  // Open exercise modal
+  function openExerciseModal(workoutId, exercise = null) {
+    setExerciseWorkoutId(workoutId);
+    setEditingExercise(exercise);
+    setExerciseName(exercise?.name || "");
+    setExerciseSets(exercise?.sets ?? "");
+    setExerciseReps(exercise?.reps ?? "");
+    setExerciseWeight(exercise?.weight ?? "");
+    setExerciseModalOpen(true);
+  }
+
+  // Save exercise
   async function saveExercise() {
     if (!user || !exerciseWorkoutId) return;
 
-    const list = expanded[exerciseWorkoutId] || [];
+    const list = expandedExercises[exerciseWorkoutId] || [];
 
     const payload = {
       user_id: user.id,
@@ -258,7 +232,7 @@ export default function WorkoutsPage() {
       name: exerciseName || "Exercise",
       sets: exerciseSets === "" ? null : Number(exerciseSets),
       reps: exerciseReps === "" ? null : Number(exerciseReps),
-      weight: exerciseWeight || null,
+      weight: exerciseWeight === "" ? null : exerciseWeight,
     };
 
     if (editingExercise) {
@@ -271,19 +245,55 @@ export default function WorkoutsPage() {
       await supabase.from("exercises").insert(payload);
     }
 
+    // reload exercises for this workout
     const ex = await loadExercises(exerciseWorkoutId);
-    setExpanded((prev) => ({ ...prev, [exerciseWorkoutId]: ex }));
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [exerciseWorkoutId]: ex,
+    }));
 
-    setExerciseModal(false);
+    setExerciseModalOpen(false);
     setEditingExercise(null);
   }
 
-  /* ============================================================
-     FORMAT DATE
-     ============================================================ */
-  function formatSchedule(v) {
-    if (!v) return "Not scheduled";
-    const d = new Date(v);
+  // Delete exercise (used by confirm modal)
+  async function deleteExercise(id, workoutId) {
+    await supabase.from("exercises").delete().eq("id", id);
+    const ex = await loadExercises(workoutId);
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [workoutId]: ex,
+    }));
+  }
+
+  // Ask to delete (open confirm modal)
+  function askDeleteWorkout(id) {
+    setDeleteTarget({ type: "workout", id });
+    setDeleteModalOpen(true);
+  }
+
+  function askDeleteExercise(id, workoutId) {
+    setDeleteTarget({ type: "exercise", id, workoutId });
+    setDeleteModalOpen(true);
+  }
+
+  // Confirm delete (modal)
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+
+    if (deleteTarget.type === "workout") {
+      await deleteWorkout(deleteTarget.id);
+    } else if (deleteTarget.type === "exercise") {
+      await deleteExercise(deleteTarget.id, deleteTarget.workoutId);
+    }
+
+    setDeleteTarget(null);
+    setDeleteModalOpen(false);
+  }
+
+  function formatSchedule(value) {
+    if (!value) return "Not scheduled";
+    const d = new Date(value);
     return d.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
@@ -292,31 +302,35 @@ export default function WorkoutsPage() {
     });
   }
 
-  /* ============================================================
-     RENDER PAGE
-     ============================================================ */
   return (
-    <div style={{ padding: "20px 16px 90px" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
+    <div
+      style={{
+        padding: "20px 16px 90px",
+        maxWidth: "900px",
+        margin: "0 auto",
+      }}
+    >
+      <h1
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          marginBottom: 16,
+        }}
+      >
         Workouts
       </h1>
 
-      {/* ADD WORKOUT */}
       <button
-        onClick={() => {
-          setEditingWorkout(null);
-          setWorkoutName("");
-          setWorkoutSchedule("");
-          setWorkoutModal(true);
-        }}
+        onClick={() => openWorkoutModal(null)}
         style={{
           padding: "10px 20px",
-          borderRadius: 999,
-          border: "none",
           background: "#ff2f2f",
-          color: "white",
+          borderRadius: "999px",
+          border: "none",
+          fontSize: 14,
           fontWeight: 600,
-          marginBottom: 16,
+          color: "white",
+          marginBottom: 18,
           boxShadow: "0 0 14px rgba(255,47,47,0.35)",
         }}
       >
@@ -324,7 +338,9 @@ export default function WorkoutsPage() {
       </button>
 
       {loading ? (
-        <p style={{ opacity: 0.6 }}>Loading...</p>
+        <p style={{ opacity: 0.7 }}>Loading workouts...</p>
+      ) : workouts.length === 0 ? (
+        <p style={{ opacity: 0.7 }}>No workouts yet. Add your first one.</p>
       ) : (
         <DndContext
           sensors={sensors}
@@ -336,232 +352,299 @@ export default function WorkoutsPage() {
             strategy={verticalListSortingStrategy}
           >
             {workouts.map((workout) => {
-              const exercises = expanded[workout.id];
+              const exercises = expandedExercises[workout.id] || null;
 
               return (
-                <div
-                  key={workout.id}
-                  style={{
-                    background: "#0f0f0f",
-                    borderRadius: 12,
-                    marginBottom: 12,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    padding: 14,
-                  }}
-                >
+                <SortableItem key={workout.id} id={workout.id}>
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 10,
+                      background: "#0f0f0f",
+                      borderRadius: 12,
+                      padding: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      marginBottom: 10,
                     }}
                   >
-                    {/* LEFT DRAG ZONE (invisible) */}
-                    <SortableItem id={workout.id} dragOnly>
-                      <div
-                        style={{
-                          width: "40%",
-                          height: "100%",
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                        }}
-                      />
-                    </SortableItem>
-
-                    {/* NAME + SCHEDULE */}
+                    {/* Header row */}
                     <div
-                      style={{ flex: 1, cursor: "pointer" }}
-                      onClick={() => toggleExpand(workout.id)}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
                     >
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
+                      <div
+                        style={{ flex: 1, cursor: "pointer" }}
+                        onClick={() => toggleExpand(workout.id)}
                       >
-                        {workout.name}
-                      </p>
-                      <p
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 15,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {workout.name || "Workout"}
+                        </p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 11,
+                            opacity: 0.7,
+                          }}
+                        >
+                          {formatSchedule(workout.scheduled_for)}
+                        </p>
+                      </div>
+
+                      <FaEdit
+                        style={{ fontSize: 14, cursor: "pointer" }}
+                        onClick={() => openWorkoutModal(workout)}
+                      />
+                      <FaTrash
                         style={{
-                          margin: 0,
-                          fontSize: 11,
-                          opacity: 0.6,
+                          fontSize: 14,
+                          cursor: "pointer",
+                          color: "#ff4d4d",
                         }}
-                      >
-                        {formatSchedule(workout.scheduled_for)}
-                      </p>
+                        onClick={() => askDeleteWorkout(workout.id)}
+                      />
+                      {exercises ? (
+                        <FaChevronUp
+                          style={{ marginLeft: 6, fontSize: 12 }}
+                        />
+                      ) : (
+                        <FaChevronDown
+                          style={{ marginLeft: 6, fontSize: 12 }}
+                        />
+                      )}
                     </div>
 
-                    <FaEdit
-                      style={{ cursor: "pointer" }}
-                      onClick={() => {
-                        setEditingWorkout(workout);
-                        setWorkoutName(workout.name);
-                        setWorkoutSchedule(
-                          workout.scheduled_for
-                            ? workout.scheduled_for.slice(0, 16)
-                            : ""
-                        );
-                        setWorkoutModal(true);
-                      }}
-                    />
-
-                    <FaTrash
-                      style={{ cursor: "pointer", color: "#ff4d4d" }}
-                      onClick={() => askDeleteWorkout(workout.id)}
-                    />
-
-                    {exercises ? <FaChevronUp /> : <FaChevronDown />}
-                  </div>
-
-                  {/* EXERCISES */}
-                  {exercises && (
-                    <div style={{ marginTop: 10 }}>
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={(e) =>
-                          handleExerciseDragEnd(workout.id, e)
-                        }
-                      >
-                        <SortableContext
-                          items={exercises.map((ex) => ex.id)}
-                          strategy={verticalListSortingStrategy}
+                    {/* Exercises section */}
+                    {exercises && (
+                      <div style={{ marginTop: 10 }}>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(event) =>
+                            handleExerciseDragEnd(workout.id, event)
+                          }
                         >
-                          {exercises.map((ex) => (
-                            <div
-                              key={ex.id}
-                              style={{
-                                background: "#151515",
-                                borderRadius: 10,
-                                marginBottom: 8,
-                                padding: 10,
-                                border:
-                                  "1px solid rgba(255,255,255,0.06)",
-                                position: "relative",
-                              }}
-                            >
-                              {/* DRAG ZONE */}
-                              <SortableItem id={ex.id} dragOnly>
+                          <SortableContext
+                            items={exercises.map((e) => e.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            {exercises.map((ex) => (
+                              <SortableItem key={ex.id} id={ex.id}>
                                 <div
                                   style={{
-                                    width: "40%",
-                                    height: "100%",
-                                    position: "absolute",
-                                    left: 0,
-                                    top: 0,
+                                    background: "#151515",
+                                    borderRadius: 10,
+                                    padding: 10,
+                                    marginBottom: 8,
+                                    border:
+                                      "1px solid rgba(255,255,255,0.06)",
                                   }}
-                                />
-                              </SortableItem>
-
-                              {/* CONTENT */}
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  gap: 10,
-                                }}
-                              >
-                                <div>
-                                  <p
+                                >
+                                  <div
                                     style={{
-                                      margin: 0,
-                                      fontSize: 14,
-                                      fontWeight: 600,
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                      gap: 8,
                                     }}
                                   >
-                                    {ex.name}
-                                  </p>
+                                    <div>
+                                      <p
+                                        style={{
+                                          margin: 0,
+                                          fontSize: 14,
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {ex.name}
+                                      </p>
+                                      <p
+                                        style={{
+                                          margin: 0,
+                                          fontSize: 11,
+                                          opacity: 0.7,
+                                        }}
+                                      >
+                                        {(ex.sets ?? "-") +
+                                          " x " +
+                                          (ex.reps ?? "-") +
+                                          (ex.weight
+                                            ? ` — ${ex.weight}`
+                                            : "")}
+                                      </p>
+                                    </div>
 
-                                  <p
-                                    style={{
-                                      margin: 0,
-                                      fontSize: 11,
-                                      opacity: 0.6,
-                                    }}
-                                  >
-                                    {(ex.sets ?? "-") +
-                                      " x " +
-                                      (ex.reps ?? "-") +
-                                      (ex.weight
-                                        ? ` — ${ex.weight}`
-                                        : "")}
-                                  </p>
+                                    <FaEdit
+                                      style={{
+                                        fontSize: 13,
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() =>
+                                        openExerciseModal(workout.id, ex)
+                                      }
+                                    />
+                                    <FaTrash
+                                      style={{
+                                        fontSize: 13,
+                                        cursor: "pointer",
+                                        color: "#ff4d4d",
+                                      }}
+                                      onClick={() =>
+                                        askDeleteExercise(ex.id, workout.id)
+                                      }
+                                    />
+                                  </div>
                                 </div>
+                              </SortableItem>
+                            ))}
+                          </SortableContext>
+                        </DndContext>
 
-                                <FaEdit
-                                  style={{ cursor: "pointer" }}
-                                  onClick={() => {
-                                    setEditingExercise(ex);
-                                    setExerciseWorkoutId(workout.id);
-                                    setExerciseName(ex.name);
-                                    setExerciseSets(ex.sets ?? "");
-                                    setExerciseReps(ex.reps ?? "");
-                                    setExerciseWeight(ex.weight ?? "");
-                                    setExerciseModal(true);
-                                  }}
-                                />
-
-                                <FaTrash
-                                  style={{
-                                    cursor: "pointer",
-                                    color: "#ff4d4d",
-                                  }}
-                                  onClick={() =>
-                                    askDeleteExercise(ex.id, workout.id)
-                                  }
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </SortableContext>
-                      </DndContext>
-
-                      <button
-                        style={{
-                          width: "100%",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.15)",
-                          background: "transparent",
-                          padding: 8,
-                          color: "#ccc",
-                          fontSize: 12,
-                          marginTop: 4,
-                        }}
-                        onClick={() => {
-                          setEditingExercise(null);
-                          setExerciseWorkoutId(workout.id);
-                          setExerciseName("");
-                          setExerciseSets("");
-                          setExerciseReps("");
-                          setExerciseWeight("");
-                          setExerciseModal(true);
-                        }}
-                      >
-                        + Add Exercise
-                      </button>
-                    </div>
-                  )}
-                </div>
+                        <button
+                          onClick={() =>
+                            openExerciseModal(workout.id, null)
+                          }
+                          style={{
+                            width: "100%",
+                            padding: 8,
+                            fontSize: 12,
+                            background: "transparent",
+                            borderRadius: 999,
+                            border:
+                              "1px solid rgba(255,255,255,0.14)",
+                            color: "#ccc",
+                            marginTop: 4,
+                          }}
+                        >
+                          + Add Exercise
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </SortableItem>
               );
             })}
           </SortableContext>
         </DndContext>
       )}
 
-      {/* DELETE CONFIRM MODAL */}
+      {/* Workout modal */}
+      {workoutModalOpen && (
+        <div
+          style={modalBackdrop}
+          onClick={() => {
+            setWorkoutModalOpen(false);
+            setEditingWorkout(null);
+          }}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              {editingWorkout ? "Edit Workout" : "New Workout"}
+            </h2>
+
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={workoutName}
+              onChange={(e) => setWorkoutName(e.target.value)}
+              placeholder="Push Day, Pull Day, Legs, etc."
+            />
+
+            <label style={labelStyle}>Scheduled For</label>
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={workoutSchedule}
+              onChange={(e) => setWorkoutSchedule(e.target.value)}
+            />
+
+            <button style={primaryBtn} onClick={saveWorkout}>
+              Save Workout
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Exercise modal */}
+      {exerciseModalOpen && (
+        <div
+          style={modalBackdrop}
+          onClick={() => {
+            setExerciseModalOpen(false);
+            setEditingExercise(null);
+          }}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              {editingExercise ? "Edit Exercise" : "New Exercise"}
+            </h2>
+
+            <label style={labelStyle}>Name</label>
+            <input
+              style={inputStyle}
+              value={exerciseName}
+              onChange={(e) => setExerciseName(e.target.value)}
+              placeholder="Bench Press, Squat, etc."
+            />
+
+            <label style={labelStyle}>Sets</label>
+            <input
+              style={inputStyle}
+              type="number"
+              value={exerciseSets}
+              onChange={(e) => setExerciseSets(e.target.value)}
+            />
+
+            <label style={labelStyle}>Reps</label>
+            <input
+              style={inputStyle}
+              type="number"
+              value={exerciseReps}
+              onChange={(e) => setExerciseReps(e.target.value)}
+            />
+
+            <label style={labelStyle}>Weight</label>
+            <input
+              style={inputStyle}
+              value={exerciseWeight}
+              onChange={(e) => setExerciseWeight(e.target.value)}
+              placeholder="e.g. 225 lb"
+            />
+
+            <button style={primaryBtn} onClick={saveExercise}>
+              Save Exercise
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm modal */}
       {deleteModalOpen && (
         <div
           style={modalBackdrop}
           onClick={() => setDeleteModalOpen(false)}
         >
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ color: "#ff4d4d", marginTop: 0 }}>Confirm Delete?</h2>
-            <p style={{ opacity: 0.7, marginBottom: 20 }}>
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
+            <p style={{ opacity: 0.7, marginBottom: 18 }}>
               This action cannot be undone.
             </p>
 
@@ -571,7 +654,6 @@ export default function WorkoutsPage() {
             >
               Cancel
             </button>
-
             <button style={primaryBtn} onClick={confirmDelete}>
               Delete
             </button>
@@ -582,9 +664,7 @@ export default function WorkoutsPage() {
   );
 }
 
-/* ============================================================
-   MODAL STYLES
-   ============================================================ */
+// shared styles for modals
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
@@ -598,31 +678,47 @@ const modalBackdrop = {
 
 const modalCard = {
   background: "#111",
-  padding: 20,
   borderRadius: 12,
-  width: "100%",
-  maxWidth: 380,
   border: "1px solid rgba(255,255,255,0.12)",
+  padding: 18,
+  width: "100%",
+  maxWidth: 420,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.15)",
+  background: "#000",
+  color: "white",
+  marginBottom: 10,
+};
+
+const labelStyle = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 4,
 };
 
 const primaryBtn = {
   width: "100%",
   padding: 10,
   borderRadius: 10,
-  background: "#ff2f2f",
   border: "none",
-  fontWeight: 600,
+  background: "#ff2f2f",
   color: "white",
-  marginTop: 10,
+  fontWeight: 600,
+  marginTop: 8,
 };
 
 const secondaryBtn = {
   width: "100%",
   padding: 10,
   borderRadius: 10,
-  background: "#222",
-  border: "1px solid rgba(255,255,255,0.12)",
-  fontWeight: 600,
+  border: "1px solid rgba(255,255,255,0.25)",
+  background: "transparent",
   color: "white",
-  marginBottom: 6,
+  fontWeight: 600,
+  marginTop: 8,
 };
