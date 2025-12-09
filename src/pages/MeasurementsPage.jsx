@@ -29,20 +29,24 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-// Sortable wrapper — LEFT SIDE DRAG ZONE, RIGHT SIDE SCROLLABLE
+/* -------------------------------------------------------
+   SORTABLE ITEM — LEFT 40% = DRAG HANDLE
+   EVERYTHING ELSE = SCROLLABLE
+------------------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    position: "relative",
-  };
-
   return (
-    <div ref={setNodeRef} style={style}>
-      {/* LEFT 40% DRAG HANDLE */}
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        position: "relative",
+      }}
+    >
+      {/* DRAG HANDLE (left 40%) */}
       <div
         {...attributes}
         {...listeners}
@@ -54,23 +58,9 @@ function SortableItem({ id, children }) {
           height: "100%",
           zIndex: 5,
           touchAction: "none",
-          pointerEvents: "auto",
         }}
       />
-
-      {/* RIGHT 60% SCROLL ZONE */}
-      <div
-        style={{
-          position: "absolute",
-          right: 0,
-          top: 0,
-          width: "60%",
-          height: "100%",
-          zIndex: 1, // BELOW buttons, ABOVE background
-          pointerEvents: "auto",
-        }}
-      />
-
+      {/* Card itself — fully scrollable */}
       {children}
     </div>
   );
@@ -81,6 +71,7 @@ export default function MeasurementsPage() {
 
   const [groups, setGroups] = useState({});
   const [groupOrder, setGroupOrder] = useState([]);
+
   const [expanded, setExpanded] = useState({});
 
   // Modal (add/edit)
@@ -90,16 +81,20 @@ export default function MeasurementsPage() {
   const [mName, setMName] = useState("");
   const [mValue, setMValue] = useState("");
   const [mUnit, setMUnit] = useState("in");
-  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
+  const [mDate, setMDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
 
-  // Delete
+  // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
   );
 
-  // Load measurements
+  // Load
   useEffect(() => {
     (async () => {
       const {
@@ -109,12 +104,14 @@ export default function MeasurementsPage() {
       if (!user) return;
 
       const rows = await getMeasurements(user.id);
+
       const grouped = {};
       rows.forEach((m) => {
         if (!grouped[m.name]) grouped[m.name] = [];
         grouped[m.name].push(m);
       });
 
+      // newest first
       for (const key of Object.keys(grouped)) {
         grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
       }
@@ -125,7 +122,7 @@ export default function MeasurementsPage() {
     })();
   }, []);
 
-  // Reorder groups
+  // Drag reorder groups
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -136,7 +133,9 @@ export default function MeasurementsPage() {
     setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
-  /* MODALS */
+  /** -------------------------
+   *  MODAL HANDLERS
+   -------------------------- */
   function openNew() {
     setEditId(null);
     setMName("");
@@ -181,6 +180,7 @@ export default function MeasurementsPage() {
       });
     }
 
+    // reload
     const rows = await getMeasurements(user.id);
     const grouped = {};
     rows.forEach((m) => {
@@ -193,6 +193,7 @@ export default function MeasurementsPage() {
 
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
+
     setModalOpen(false);
   }
 
@@ -218,7 +219,8 @@ export default function MeasurementsPage() {
     setDeleteId(null);
   }
 
-  if (loading) return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
+  if (loading)
+    return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
 
   return (
     <div
@@ -228,6 +230,7 @@ export default function MeasurementsPage() {
         margin: "0 auto",
       }}
     >
+      {/* HEADER */}
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Measurements
       </h1>
@@ -249,7 +252,7 @@ export default function MeasurementsPage() {
         + Add Measurement
       </button>
 
-      {/* LIST */}
+      {/* DRAGGABLE GROUP LIST */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -259,6 +262,10 @@ export default function MeasurementsPage() {
           items={groupOrder}
           strategy={verticalListSortingStrategy}
         >
+          {groupOrder.length === 0 && (
+            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
+          )}
+
           {groupOrder.map((groupName) => {
             const list = groups[groupName] || [];
             const latest = list[0];
@@ -275,22 +282,21 @@ export default function MeasurementsPage() {
                     marginBottom: 10,
                   }}
                 >
-                  {/* HEADER */}
+                  {/* HEADER ROW */}
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      position: "relative",
-                      zIndex: 999, // ENSURE BUTTONS WORK
                     }}
                   >
-                    {/* LEFT DRAG + EXPAND */}
+                    {/* LEFT SIDE (click to expand – drag handled by overlay) */}
                     <div
                       style={{
                         flexBasis: "40%",
                         cursor: "grab",
                         userSelect: "none",
+                        WebkitUserSelect: "none",
                       }}
                       onClick={() =>
                         setExpanded((prev) => ({
@@ -299,31 +305,47 @@ export default function MeasurementsPage() {
                         }))
                       }
                     >
-                      <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 15,
+                          fontWeight: 600,
+                        }}
+                      >
                         {groupName}
                       </p>
-                      <p style={{ margin: 0, opacity: 0.7, fontSize: 12 }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          opacity: 0.7,
+                        }}
+                      >
                         {latest.value} {latest.unit} — {latest.date}
                       </p>
                     </div>
 
-                    {/* RIGHT BUTTONS */}
+                    {/* RIGHT SIDE BUTTONS (SCROLLABLE AREA) */}
                     <div
                       style={{
+                        flex: 1,
                         display: "flex",
+                        justifyContent: "flex-end",
                         alignItems: "center",
                         gap: 12,
-                        position: "relative",
-                        zIndex: 999,
-                        pointerEvents: "auto",
+                        paddingLeft: 10,
                       }}
                     >
                       <FaEdit
-                        style={{ cursor: "pointer" }}
+                        style={{ fontSize: 14, cursor: "pointer" }}
                         onClick={() => openEdit(latest)}
                       />
                       <FaTrash
-                        style={{ cursor: "pointer", color: "#ff4d4d" }}
+                        style={{
+                          fontSize: 14,
+                          cursor: "pointer",
+                          color: "#ff4d4d",
+                        }}
                         onClick={() => setDeleteId(latest.id)}
                       />
 
@@ -367,7 +389,11 @@ export default function MeasurementsPage() {
                                 {entry.value} {entry.unit}
                               </p>
                               <p
-                                style={{ margin: 0, opacity: 0.7, fontSize: 11 }}
+                                style={{
+                                  margin: 0,
+                                  fontSize: 11,
+                                  opacity: 0.7,
+                                }}
                               >
                                 {entry.date}
                               </p>
@@ -375,11 +401,18 @@ export default function MeasurementsPage() {
 
                             <div style={{ display: "flex", gap: 12 }}>
                               <FaEdit
-                                style={{ cursor: "pointer" }}
+                                style={{
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                }}
                                 onClick={() => openEdit(entry)}
                               />
                               <FaTrash
-                                style={{ cursor: "pointer", color: "#ff4d4d" }}
+                                style={{
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                  color: "#ff4d4d",
+                                }}
                                 onClick={() => setDeleteId(entry.id)}
                               />
                             </div>
@@ -399,13 +432,16 @@ export default function MeasurementsPage() {
       {modalOpen && (
         <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2>{editId ? "Edit Measurement" : "New Measurement"}</h2>
+            <h2 style={{ marginTop: 0 }}>
+              {editId ? "Edit Measurement" : "New Measurement"}
+            </h2>
 
             <label style={labelStyle}>Name</label>
             <input
               style={inputStyle}
               value={mName}
               onChange={(e) => setMName(e.target.value)}
+              placeholder="Bicep, Chest, etc."
             />
 
             <label style={labelStyle}>Value</label>
@@ -438,12 +474,12 @@ export default function MeasurementsPage() {
               style={{
                 width: "100%",
                 padding: 10,
-                marginTop: 10,
                 borderRadius: 10,
                 border: "none",
                 background: "#ff2f2f",
                 color: "white",
                 fontWeight: 600,
+                marginTop: 10,
               }}
               onClick={saveMeasurement}
             >
@@ -453,11 +489,17 @@ export default function MeasurementsPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRM */}
+      {/* DELETE CONFIRM MODAL */}
       {deleteId && (
         <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ color: "#ff4d4d" }}>Confirm Delete?</h2>
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
+
+            <p style={{ opacity: 0.8, marginBottom: 16 }}>
+              This action cannot be undone.
+            </p>
 
             <button
               onClick={() => setDeleteId(null)}
@@ -495,6 +537,7 @@ export default function MeasurementsPage() {
   );
 }
 
+/* SHARED STYLES */
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
