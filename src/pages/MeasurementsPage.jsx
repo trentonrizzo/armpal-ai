@@ -29,21 +29,20 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-// SORTABLE ITEM — DRAGGABLE ONLY ON LEFT 40%
+// Sortable wrapper — LEFT SIDE DRAG ZONE, RIGHT SIDE SCROLLABLE
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    position: "relative",
+  };
+
   return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        position: "relative",
-      }}
-    >
-      {/* DRAG ZONE (LEFT 40%) */}
+    <div ref={setNodeRef} style={style}>
+      {/* LEFT 40% DRAG HANDLE */}
       <div
         {...attributes}
         {...listeners}
@@ -53,12 +52,13 @@ function SortableItem({ id, children }) {
           top: 0,
           width: "40%",
           height: "100%",
-          zIndex: 6,            // ABOVE scroll zone
+          zIndex: 5,
           touchAction: "none",
+          pointerEvents: "auto",
         }}
       />
 
-      {/* SCROLL ZONE (RIGHT 60%) */}
+      {/* RIGHT 60% SCROLL ZONE */}
       <div
         style={{
           position: "absolute",
@@ -66,7 +66,7 @@ function SortableItem({ id, children }) {
           top: 0,
           width: "60%",
           height: "100%",
-          zIndex: 4,            // BELOW drag zone, ABOVE card background
+          zIndex: 1, // BELOW buttons, ABOVE background
           pointerEvents: "auto",
         }}
       />
@@ -83,7 +83,7 @@ export default function MeasurementsPage() {
   const [groupOrder, setGroupOrder] = useState([]);
   const [expanded, setExpanded] = useState({});
 
-  // modal
+  // Modal (add/edit)
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
 
@@ -92,14 +92,14 @@ export default function MeasurementsPage() {
   const [mUnit, setMUnit] = useState("in");
   const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
 
+  // Delete
   const [deleteId, setDeleteId] = useState(null);
 
-  // sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // load
+  // Load measurements
   useEffect(() => {
     (async () => {
       const {
@@ -109,7 +109,6 @@ export default function MeasurementsPage() {
       if (!user) return;
 
       const rows = await getMeasurements(user.id);
-
       const grouped = {};
       rows.forEach((m) => {
         if (!grouped[m.name]) grouped[m.name] = [];
@@ -126,18 +125,18 @@ export default function MeasurementsPage() {
     })();
   }, []);
 
-  // drag end
+  // Reorder groups
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIdx = groupOrder.indexOf(active.id);
-    const newIdx = groupOrder.indexOf(over.id);
+    const oldIndex = groupOrder.indexOf(active.id);
+    const newIndex = groupOrder.indexOf(over.id);
 
-    setGroupOrder((prev) => arrayMove(prev, oldIdx, newIdx));
+    setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
-  // modal open new
+  /* MODALS */
   function openNew() {
     setEditId(null);
     setMName("");
@@ -147,7 +146,6 @@ export default function MeasurementsPage() {
     setModalOpen(true);
   }
 
-  // modal edit
   function openEdit(entry) {
     setEditId(entry.id);
     setMName(entry.name);
@@ -220,8 +218,7 @@ export default function MeasurementsPage() {
     setDeleteId(null);
   }
 
-  if (loading)
-    return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
+  if (loading) return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
 
   return (
     <div
@@ -252,6 +249,7 @@ export default function MeasurementsPage() {
         + Add Measurement
       </button>
 
+      {/* LIST */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -261,10 +259,6 @@ export default function MeasurementsPage() {
           items={groupOrder}
           strategy={verticalListSortingStrategy}
         >
-          {groupOrder.length === 0 && (
-            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
-          )}
-
           {groupOrder.map((groupName) => {
             const list = groups[groupName] || [];
             const latest = list[0];
@@ -279,23 +273,25 @@ export default function MeasurementsPage() {
                     padding: 14,
                     border: "1px solid rgba(255,255,255,0.08)",
                     marginBottom: 10,
-                    position: "relative",
-                    zIndex: 1,
                   }}
                 >
-                  {/* header */}
+                  {/* HEADER */}
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
                       position: "relative",
-                      zIndex: 10,
+                      zIndex: 999, // ENSURE BUTTONS WORK
                     }}
                   >
-                    {/* left (drag) */}
+                    {/* LEFT DRAG + EXPAND */}
                     <div
-                      style={{ flexBasis: "40%", cursor: "grab" }}
+                      style={{
+                        flexBasis: "40%",
+                        cursor: "grab",
+                        userSelect: "none",
+                      }}
                       onClick={() =>
                         setExpanded((prev) => ({
                           ...prev,
@@ -303,36 +299,23 @@ export default function MeasurementsPage() {
                         }))
                       }
                     >
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
+                      <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
                         {groupName}
                       </p>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 12,
-                          opacity: 0.7,
-                        }}
-                      >
+                      <p style={{ margin: 0, opacity: 0.7, fontSize: 12 }}>
                         {latest.value} {latest.unit} — {latest.date}
                       </p>
                     </div>
 
-                    {/* right buttons */}
+                    {/* RIGHT BUTTONS */}
                     <div
                       style={{
-                        flex: 1,
                         display: "flex",
-                        justifyContent: "flex-end",
                         alignItems: "center",
                         gap: 12,
-                        paddingLeft: 10,
-                        zIndex: 15,
+                        position: "relative",
+                        zIndex: 999,
+                        pointerEvents: "auto",
                       }}
                     >
                       <FaEdit
@@ -340,10 +323,7 @@ export default function MeasurementsPage() {
                         onClick={() => openEdit(latest)}
                       />
                       <FaTrash
-                        style={{
-                          color: "#ff4d4d",
-                          cursor: "pointer",
-                        }}
+                        style={{ cursor: "pointer", color: "#ff4d4d" }}
                         onClick={() => setDeleteId(latest.id)}
                       />
 
@@ -355,9 +335,9 @@ export default function MeasurementsPage() {
                     </div>
                   </div>
 
-                  {/* history */}
+                  {/* HISTORY */}
                   {isOpen && (
-                    <div style={{ marginTop: 10, position: "relative", zIndex: 1 }}>
+                    <div style={{ marginTop: 10 }}>
                       {list.slice(1).map((entry) => (
                         <div
                           key={entry.id}
@@ -379,19 +359,15 @@ export default function MeasurementsPage() {
                             <div>
                               <p
                                 style={{
+                                  margin: 0,
                                   fontSize: 14,
                                   fontWeight: 600,
-                                  margin: 0,
                                 }}
                               >
                                 {entry.value} {entry.unit}
                               </p>
                               <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: 11,
-                                  opacity: 0.7,
-                                }}
+                                style={{ margin: 0, opacity: 0.7, fontSize: 11 }}
                               >
                                 {entry.date}
                               </p>
@@ -403,10 +379,7 @@ export default function MeasurementsPage() {
                                 onClick={() => openEdit(entry)}
                               />
                               <FaTrash
-                                style={{
-                                  color: "#ff4d4d",
-                                  cursor: "pointer",
-                                }}
+                                style={{ cursor: "pointer", color: "#ff4d4d" }}
                                 onClick={() => setDeleteId(entry.id)}
                               />
                             </div>
@@ -422,26 +395,23 @@ export default function MeasurementsPage() {
         </SortableContext>
       </DndContext>
 
-      {/* modals */}
+      {/* ADD/EDIT MODAL */}
       {modalOpen && (
         <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0 }}>
-              {editId ? "Edit Measurement" : "New Measurement"}
-            </h2>
+            <h2>{editId ? "Edit Measurement" : "New Measurement"}</h2>
 
             <label style={labelStyle}>Name</label>
             <input
               style={inputStyle}
               value={mName}
               onChange={(e) => setMName(e.target.value)}
-              placeholder="Bicep, Chest, etc."
             />
 
             <label style={labelStyle}>Value</label>
             <input
-              type="number"
               style={inputStyle}
+              type="number"
               value={mValue}
               onChange={(e) => setMValue(e.target.value)}
             />
@@ -458,8 +428,8 @@ export default function MeasurementsPage() {
 
             <label style={labelStyle}>Date</label>
             <input
-              type="date"
               style={inputStyle}
+              type="date"
               value={mDate}
               onChange={(e) => setMDate(e.target.value)}
             />
@@ -468,12 +438,12 @@ export default function MeasurementsPage() {
               style={{
                 width: "100%",
                 padding: 10,
+                marginTop: 10,
                 borderRadius: 10,
                 border: "none",
                 background: "#ff2f2f",
                 color: "white",
                 fontWeight: 600,
-                marginTop: 10,
               }}
               onClick={saveMeasurement}
             >
@@ -483,16 +453,11 @@ export default function MeasurementsPage() {
         </div>
       )}
 
+      {/* DELETE CONFIRM */}
       {deleteId && (
         <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
-              Confirm Delete?
-            </h2>
-
-            <p style={{ opacity: 0.8, marginBottom: 16 }}>
-              This action cannot be undone.
-            </p>
+            <h2 style={{ color: "#ff4d4d" }}>Confirm Delete?</h2>
 
             <button
               onClick={() => setDeleteId(null)}
