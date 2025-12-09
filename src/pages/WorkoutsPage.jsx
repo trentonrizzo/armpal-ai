@@ -1,3 +1,4 @@
+// src/pages/WorkoutsPage.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import {
@@ -16,7 +17,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
-// Drag wrapper WITH DRAG HANDLE (left side only)
+// Draggable wrapper — now with LEFT 40% drag handle only
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
@@ -24,11 +25,13 @@ function SortableItem({ id, children }) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    position: "relative", // needed for the handle overlay
+    touchAction: "none",
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="drag-wrapper">
-      {/* left drag handle zone */}
+    <div ref={setNodeRef} style={style}>
+      {/* Left 40% is the drag zone */}
       <div
         {...attributes}
         {...listeners}
@@ -39,10 +42,10 @@ function SortableItem({ id, children }) {
           width: "40%",
           height: "100%",
           zIndex: 5,
+          // transparent overlay – just for grabbing
         }}
-      ></div>
-
-      {/* actual card content */}
+      />
+      {/* Actual card content (fully scrollable, clicks work) */}
       {children}
     </div>
   );
@@ -51,16 +54,16 @@ function SortableItem({ id, children }) {
 export default function WorkoutsPage() {
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
-  const [expandedExercises, setExpandedExercises] = useState({});
+  const [expandedExercises, setExpandedExercises] = useState({}); // { workoutId: [exercises] }
   const [loading, setLoading] = useState(true);
 
-  // workout modal
+  // Workout modal
   const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
   const [workoutName, setWorkoutName] = useState("");
   const [workoutSchedule, setWorkoutSchedule] = useState("");
 
-  // exercise modal
+  // Exercise modal
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
   const [exerciseWorkoutId, setExerciseWorkoutId] = useState(null);
   const [editingExercise, setEditingExercise] = useState(null);
@@ -69,15 +72,18 @@ export default function WorkoutsPage() {
   const [exerciseReps, setExerciseReps] = useState("");
   const [exerciseWeight, setExerciseWeight] = useState("");
 
-  // delete confirm modal
+  // Delete confirm modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { type: "workout"|"exercise", id, workoutId? }
 
+  // Drag sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
   );
 
-  // Load initial user + workouts
+  // Initial load
   useEffect(() => {
     (async () => {
       const {
@@ -97,41 +103,53 @@ export default function WorkoutsPage() {
       .order("position", { ascending: true })
       .order("created_at", { ascending: true });
 
-    if (!error) setWorkouts(data || []);
+    if (error) {
+      console.error("Error loading workouts:", error.message);
+      return;
+    }
+    setWorkouts(data || []);
   }
 
   async function loadExercises(workoutId) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("exercises")
       .select("*")
       .eq("workout_id", workoutId)
       .order("position", { ascending: true })
       .order("created_at", { ascending: true });
 
+    if (error) {
+      console.error("Error loading exercises:", error.message);
+      return [];
+    }
     return data || [];
   }
 
+  // Expand/collapse workout -> load exercises
   async function toggleExpand(workoutId) {
     if (expandedExercises[workoutId]) {
+      // currently open -> collapse
       const copy = { ...expandedExercises };
       delete copy[workoutId];
       setExpandedExercises(copy);
     } else {
+      // open and load exercises
       const ex = await loadExercises(workoutId);
       setExpandedExercises((prev) => ({ ...prev, [workoutId]: ex }));
     }
   }
 
+  // Drag end for workouts
   async function handleWorkoutDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
     const oldIndex = workouts.findIndex((w) => w.id === active.id);
     const newIndex = workouts.findIndex((w) => w.id === over.id);
-
     const reordered = arrayMove(workouts, oldIndex, newIndex);
     setWorkouts(reordered);
 
+    // Save new order
     for (let i = 0; i < reordered.length; i++) {
       await supabase
         .from("workouts")
@@ -140,6 +158,7 @@ export default function WorkoutsPage() {
     }
   }
 
+  // Drag end for exercises
   async function handleExerciseDragEnd(workoutId, event) {
     const list = expandedExercises[workoutId] || [];
     const { active, over } = event;
@@ -147,9 +166,9 @@ export default function WorkoutsPage() {
 
     const oldIndex = list.findIndex((e) => e.id === active.id);
     const newIndex = list.findIndex((e) => e.id === over.id);
-
     const reordered = arrayMove(list, oldIndex, newIndex);
 
+    // Save new order
     for (let i = 0; i < reordered.length; i++) {
       await supabase
         .from("exercises")
@@ -163,6 +182,107 @@ export default function WorkoutsPage() {
     }));
   }
 
+  // Open workout modal
+  function openWorkoutModal(workout = null) {
+    setEditingWorkout(workout);
+    setWorkoutName(workout?.name || "");
+    setWorkoutSchedule(
+      workout?.scheduled_for ? workout.scheduled_for.slice(0, 16) : ""
+    );
+    setWorkoutModalOpen(true);
+  }
+
+  // Save workout
+  async function saveWorkout() {
+    if (!user) return;
+
+    const payload = {
+      user_id: user.id,
+      name: workoutName || "Workout",
+      scheduled_for: workoutSchedule
+        ? new Date(workoutSchedule).toISOString()
+        : null,
+    };
+
+    if (editingWorkout) {
+      await supabase
+        .from("workouts")
+        .update(payload)
+        .eq("id", editingWorkout.id);
+    } else {
+      payload.position = workouts.length;
+      await supabase.from("workouts").insert(payload);
+    }
+
+    setWorkoutModalOpen(false);
+    setEditingWorkout(null);
+    await loadWorkouts(user.id);
+  }
+
+  // Delete workout (used by confirm modal)
+  async function deleteWorkout(id) {
+    await supabase.from("workouts").delete().eq("id", id);
+    if (user) await loadWorkouts(user.id);
+  }
+
+  // Open exercise modal
+  function openExerciseModal(workoutId, exercise = null) {
+    setExerciseWorkoutId(workoutId);
+    setEditingExercise(exercise);
+    setExerciseName(exercise?.name || "");
+    setExerciseSets(exercise?.sets ?? "");
+    setExerciseReps(exercise?.reps ?? "");
+    setExerciseWeight(exercise?.weight ?? "");
+    setExerciseModalOpen(true);
+  }
+
+  // Save exercise
+  async function saveExercise() {
+    if (!user || !exerciseWorkoutId) return;
+
+    const list = expandedExercises[exerciseWorkoutId] || [];
+
+    const payload = {
+      user_id: user.id,
+      workout_id: exerciseWorkoutId,
+      name: exerciseName || "Exercise",
+      sets: exerciseSets === "" ? null : Number(exerciseSets),
+      reps: exerciseReps === "" ? null : Number(exerciseReps),
+      weight: exerciseWeight === "" ? null : exerciseWeight,
+    };
+
+  if (editingExercise) {
+      await supabase
+        .from("exercises")
+        .update(payload)
+        .eq("id", editingExercise.id);
+    } else {
+      payload.position = list.length;
+      await supabase.from("exercises").insert(payload);
+    }
+
+    // reload exercises for this workout
+    const ex = await loadExercises(exerciseWorkoutId);
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [exerciseWorkoutId]: ex,
+    }));
+
+    setExerciseModalOpen(false);
+    setEditingExercise(null);
+  }
+
+  // Delete exercise (used by confirm modal)
+  async function deleteExercise(id, workoutId) {
+    await supabase.from("exercises").delete().eq("id", id);
+    const ex = await loadExercises(workoutId);
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [workoutId]: ex,
+    }));
+  }
+
+  // Ask to delete (open confirm modal)
   function askDeleteWorkout(id) {
     setDeleteTarget({ type: "workout", id });
     setDeleteModalOpen(true);
@@ -173,32 +293,23 @@ export default function WorkoutsPage() {
     setDeleteModalOpen(true);
   }
 
+  // Confirm delete (modal)
   async function confirmDelete() {
     if (!deleteTarget) return;
 
     if (deleteTarget.type === "workout") {
-      await supabase.from("workouts").delete().eq("id", deleteTarget.id);
-      if (user) await loadWorkouts(user.id);
-    } else {
-      await supabase
-        .from("exercises")
-        .delete()
-        .eq("id", deleteTarget.id);
-
-      const updated = await loadExercises(deleteTarget.workoutId);
-      setExpandedExercises((prev) => ({
-        ...prev,
-        [deleteTarget.workoutId]: updated,
-      }));
+      await deleteWorkout(deleteTarget.id);
+    } else if (deleteTarget.type === "exercise") {
+      await deleteExercise(deleteTarget.id, deleteTarget.workoutId);
     }
 
     setDeleteTarget(null);
     setDeleteModalOpen(false);
   }
 
-  function formatSchedule(v) {
-    if (!v) return "Not scheduled";
-    const d = new Date(v);
+  function formatSchedule(value) {
+    if (!value) return "Not scheduled";
+    const d = new Date(value);
     return d.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
@@ -211,11 +322,17 @@ export default function WorkoutsPage() {
     <div
       style={{
         padding: "20px 16px 90px",
-        maxWidth: 900,
+        maxWidth: "900px",
         margin: "0 auto",
       }}
     >
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
+      <h1
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          marginBottom: 16,
+        }}
+      >
         Workouts
       </h1>
 
@@ -224,7 +341,7 @@ export default function WorkoutsPage() {
         style={{
           padding: "10px 20px",
           background: "#ff2f2f",
-          borderRadius: 999,
+          borderRadius: "999px",
           border: "none",
           fontSize: 14,
           fontWeight: 600,
@@ -237,9 +354,9 @@ export default function WorkoutsPage() {
       </button>
 
       {loading ? (
-        <p style={{ opacity: 0.7 }}>Loading...</p>
+        <p style={{ opacity: 0.7 }}>Loading workouts...</p>
       ) : workouts.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>No workouts yet.</p>
+        <p style={{ opacity: 0.7 }}>No workouts yet. Add your first one.</p>
       ) : (
         <DndContext
           sensors={sensors}
@@ -262,17 +379,15 @@ export default function WorkoutsPage() {
                       padding: 14,
                       border: "1px solid rgba(255,255,255,0.08)",
                       marginBottom: 10,
-                      position: "relative",
-                      overflow: "hidden",
                     }}
                   >
-                    {/* Workout header */}
+                    {/* Header row */}
                     <div
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
-                        gap: 10,
+                        gap: 8,
                       }}
                     >
                       <div
@@ -286,7 +401,7 @@ export default function WorkoutsPage() {
                             fontWeight: 600,
                           }}
                         >
-                          {workout.name}
+                          {workout.name || "Workout"}
                         </p>
                         <p
                           style={{
@@ -311,28 +426,29 @@ export default function WorkoutsPage() {
                         }}
                         onClick={() => askDeleteWorkout(workout.id)}
                       />
-
                       {exercises ? (
-                        <FaChevronUp style={{ marginLeft: 4, fontSize: 12 }} />
+                        <FaChevronUp
+                          style={{ marginLeft: 6, fontSize: 12 }}
+                        />
                       ) : (
                         <FaChevronDown
-                          style={{ marginLeft: 4, fontSize: 12 }}
+                          style={{ marginLeft: 6, fontSize: 12 }}
                         />
                       )}
                     </div>
 
-                    {/* EXERCISES */}
+                    {/* Exercises section */}
                     {exercises && (
                       <div style={{ marginTop: 10 }}>
                         <DndContext
                           sensors={sensors}
                           collisionDetection={closestCenter}
-                          onDragEnd={(e) =>
-                            handleExerciseDragEnd(workout.id, e)
+                          onDragEnd={(event) =>
+                            handleExerciseDragEnd(workout.id, event)
                           }
                         >
                           <SortableContext
-                            items={exercises.map((ex) => ex.id)}
+                            items={exercises.map((e) => e.id)}
                             strategy={verticalListSortingStrategy}
                           >
                             {exercises.map((ex) => (
@@ -345,8 +461,6 @@ export default function WorkoutsPage() {
                                     marginBottom: 8,
                                     border:
                                       "1px solid rgba(255,255,255,0.06)",
-                                    position: "relative",
-                                    overflow: "hidden",
                                   }}
                                 >
                                   <div
@@ -354,10 +468,10 @@ export default function WorkoutsPage() {
                                       display: "flex",
                                       justifyContent: "space-between",
                                       alignItems: "center",
-                                      gap: 10,
+                                      gap: 8,
                                     }}
                                   >
-                                    <div style={{ flex: 1 }}>
+                                    <div>
                                       <p
                                         style={{
                                           margin: 0,
@@ -392,7 +506,6 @@ export default function WorkoutsPage() {
                                         openExerciseModal(workout.id, ex)
                                       }
                                     />
-
                                     <FaTrash
                                       style={{
                                         fontSize: 13,
@@ -400,10 +513,7 @@ export default function WorkoutsPage() {
                                         color: "#ff4d4d",
                                       }}
                                       onClick={() =>
-                                        askDeleteExercise(
-                                          ex.id,
-                                          workout.id
-                                        )
+                                        askDeleteExercise(ex.id, workout.id)
                                       }
                                     />
                                   </div>
@@ -413,7 +523,6 @@ export default function WorkoutsPage() {
                           </SortableContext>
                         </DndContext>
 
-                        {/* ADD EXERCISE BUTTON */}
                         <button
                           onClick={() =>
                             openExerciseModal(workout.id, null)
@@ -442,10 +551,19 @@ export default function WorkoutsPage() {
         </DndContext>
       )}
 
-      {/* WORKOUT MODAL */}
+      {/* Workout modal */}
       {workoutModalOpen && (
-        <div style={modalBackdrop} onClick={() => setWorkoutModalOpen(false)}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+        <div
+          style={modalBackdrop}
+          onClick={() => {
+            setWorkoutModalOpen(false);
+            setEditingWorkout(null);
+          }}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 style={{ marginTop: 0 }}>
               {editingWorkout ? "Edit Workout" : "New Workout"}
             </h2>
@@ -455,7 +573,7 @@ export default function WorkoutsPage() {
               style={inputStyle}
               value={workoutName}
               onChange={(e) => setWorkoutName(e.target.value)}
-              placeholder="Push Day, Pull Day…"
+              placeholder="Push Day, Pull Day, Legs, etc."
             />
 
             <label style={labelStyle}>Scheduled For</label>
@@ -473,10 +591,19 @@ export default function WorkoutsPage() {
         </div>
       )}
 
-      {/* EXERCISE MODAL */}
+      {/* Exercise modal */}
       {exerciseModalOpen && (
-        <div style={modalBackdrop} onClick={() => setExerciseModalOpen(false)}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+        <div
+          style={modalBackdrop}
+          onClick={() => {
+            setExerciseModalOpen(false);
+            setEditingExercise(null);
+          }}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 style={{ marginTop: 0 }}>
               {editingExercise ? "Edit Exercise" : "New Exercise"}
             </h2>
@@ -486,20 +613,21 @@ export default function WorkoutsPage() {
               style={inputStyle}
               value={exerciseName}
               onChange={(e) => setExerciseName(e.target.value)}
+              placeholder="Bench Press, Squat, etc."
             />
 
             <label style={labelStyle}>Sets</label>
             <input
-              type="number"
               style={inputStyle}
+              type="number"
               value={exerciseSets}
               onChange={(e) => setExerciseSets(e.target.value)}
             />
 
             <label style={labelStyle}>Reps</label>
             <input
-              type="number"
               style={inputStyle}
+              type="number"
               value={exerciseReps}
               onChange={(e) => setExerciseReps(e.target.value)}
             />
@@ -509,7 +637,7 @@ export default function WorkoutsPage() {
               style={inputStyle}
               value={exerciseWeight}
               onChange={(e) => setExerciseWeight(e.target.value)}
-              placeholder="225 lb"
+              placeholder="e.g. 225 lb"
             />
 
             <button style={primaryBtn} onClick={saveExercise}>
@@ -519,11 +647,19 @@ export default function WorkoutsPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRM MODAL */}
+      {/* Delete confirm modal */}
       {deleteModalOpen && (
-        <div style={modalBackdrop} onClick={() => setDeleteModalOpen(false)}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>Confirm Delete?</h2>
+        <div
+          style={modalBackdrop}
+          onClick={() => setDeleteModalOpen(false)}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
             <p style={{ opacity: 0.7, marginBottom: 18 }}>
               This action cannot be undone.
             </p>
@@ -544,8 +680,7 @@ export default function WorkoutsPage() {
   );
 }
 
-/* ---------- SHARED STYLES ---------- */
-
+// shared styles for modals
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
