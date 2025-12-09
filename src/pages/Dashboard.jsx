@@ -105,9 +105,10 @@ export default function Dashboard() {
     const { data } = await supabase
       .from("workouts")
       .select("*")
-      .not("scheduled_for", "is", null)
-      .order("scheduled_for", { ascending: true })
-      .limit(1);
+.eq("user_id", uid)
+.gt("scheduled_for", new Date().toISOString())   // only future workouts
+.order("scheduled_for", { ascending: true })
+.limit(1);
 
     setUpcomingWorkout(data?.[0] || null);
   }
