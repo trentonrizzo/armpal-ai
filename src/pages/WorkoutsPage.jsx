@@ -42,13 +42,12 @@ function SortableItem({ id, children }) {
           position: "absolute",
           left: 0,
           top: 0,
-          width: "40%",   // ⬅⬅ 40% drag zone
+          width: "40%",
           height: "100%",
           zIndex: 5,
           touchAction: "none",
         }}
       />
-      {/* Card itself — fully scrollable */}
       {children}
     </div>
   );
@@ -161,17 +160,21 @@ export default function WorkoutsPage() {
   function openWorkoutModal(workout = null) {
     setEditingWorkout(workout);
     setWorkoutName(workout?.name || "");
-    setWorkoutSchedule(workout?.scheduled_for?.slice(0, 16) || "");
+
+    // FIXED: DO NOT CONVERT TIMEZONES
+    setWorkoutSchedule(workout?.scheduled_for || "");
+
     setWorkoutModalOpen(true);
   }
 
+  /* FINAL FIXED SAVE — NO UTC CONVERSION */
   async function saveWorkout() {
     if (!user) return;
 
     const payload = {
       user_id: user.id,
       name: workoutName || "Workout",
-      scheduled_for: workoutSchedule ? new Date(workoutSchedule).toISOString() : null,
+      scheduled_for: workoutSchedule || null, // ← FIXED
     };
 
     if (editingWorkout) {
@@ -185,7 +188,6 @@ export default function WorkoutsPage() {
     setEditingWorkout(null);
     await loadWorkouts(user.id);
   }
-
   /* DELETE CONFIRM */
   function askDeleteWorkout(id) {
     setDeleteTarget({ type: "workout", id });
@@ -239,7 +241,10 @@ export default function WorkoutsPage() {
     };
 
     if (editingExercise) {
-      await supabase.from("exercises").update(payload).eq("id", editingExercise.id);
+      await supabase
+        .from("exercises")
+        .update(payload)
+        .eq("id", editingExercise.id);
     } else {
       payload.position = list.length;
       await supabase.from("exercises").insert(payload);
@@ -324,7 +329,7 @@ export default function WorkoutsPage() {
                         alignItems: "center",
                       }}
                     >
-                      <div style={{ flex: 1 }} onClick={() => toggleExpand(w.id)}>
+                      <div onClick={() => toggleExpand(w.id)} style={{ flex: 1 }}>
                         <p style={{ fontSize: 15, margin: 0, fontWeight: 600 }}>
                           {w.name}
                         </p>
@@ -338,7 +343,11 @@ export default function WorkoutsPage() {
                         onClick={() => openWorkoutModal(w)}
                       />
                       <FaTrash
-                        style={{ color: "#ff4d4d", fontSize: 15, cursor: "pointer" }}
+                        style={{
+                          color: "#ff4d4d",
+                          fontSize: 15,
+                          cursor: "pointer",
+                        }}
                         onClick={() => askDeleteWorkout(w.id)}
                       />
 
@@ -532,10 +541,7 @@ export default function WorkoutsPage() {
 ------------------------------------------------------- */
 function Modal({ children, onClose }) {
   return (
-    <div
-      style={modalBackdrop}
-      onClick={() => onClose()}
-    >
+    <div style={modalBackdrop} onClick={onClose}>
       <div style={modalCard} onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
