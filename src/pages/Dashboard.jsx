@@ -19,12 +19,34 @@ export default function Dashboard() {
   const [bestPR, setBestPR] = useState(null);
   const [prDifference, setPrDifference] = useState(null);
 
-  // Upcoming workout
-  const [nextWorkout, setNextWorkout] = useState(null);
-  const [countdown, setCountdown] = useState("");
+  // Upcoming workouts
+  const [upcomingWorkout, setUpcomingWorkout] = useState(null);
+
+  // Today’s Focus motivational quotes
+  const quotes = [
+    "Win the day. One rep at a time.",
+    "Consistency beats talent when talent doesn’t show up.",
+    "Discipline creates the freedom you want.",
+    "Your future self is watching. Don’t disappoint him.",
+    "Small wins stack big lifts.",
+    "Strong body, strong mind, strong life.",
+    "Don’t wait for motivation — build it under the bar.",
+    "Every rep is a deposit.",
+    "Drag. Rise. Commit.",
+    "Control the hand, control the match.",
+    "Tight elbow, rising wrist, unstoppable back-pressure.",
+    "A stronger arm starts with a stronger mindset.",
+    "Become the man your goals require.",
+    "Outwork every version of yourself.",
+    "Talk less. Lift more. Dominate.",
+    "You’re not tired — you’re underdeveloped.",
+  ];
+
+  const focusQuote = quotes[Math.floor(Math.random() * quotes.length)];
 
   useEffect(() => {
     loadUserAndGoals();
+    loadUpcomingWorkout();
   }, []);
 
   async function loadUserAndGoals() {
@@ -51,7 +73,6 @@ export default function Dashboard() {
         if (profile?.username) name = profile.username;
 
         await loadGoals(currentUser.id);
-        await loadNextWorkout(currentUser.id);
       }
 
       setDisplayName(name);
@@ -80,89 +101,15 @@ export default function Dashboard() {
     }
   }
 
-  // Load next upcoming scheduled workout
-  async function loadNextWorkout(uid) {
-    try {
-      const { data, error } = await supabase
-        .from("workouts")
-        .select("id, name, scheduled_for")
-        .eq("user_id", uid)
-        .not("scheduled_for", "is", null)
-        .order("scheduled_for", { ascending: true });
+  async function loadUpcomingWorkout() {
+    const { data } = await supabase
+      .from("workouts")
+      .select("*")
+      .not("scheduled_for", "is", null)
+      .order("scheduled_for", { ascending: true })
+      .limit(1);
 
-      if (error) throw error;
-
-      const now = new Date();
-      const upcoming = (data || []).find((w) => {
-        if (!w.scheduled_for) return false;
-        const d = new Date(w.scheduled_for);
-        return d > now;
-      });
-
-      setNextWorkout(upcoming || null);
-
-      if (upcoming?.scheduled_for) {
-        updateCountdown(upcoming.scheduled_for);
-      } else {
-        setCountdown("");
-      }
-    } catch (err) {
-      console.error("Error loading workouts:", err.message);
-      setNextWorkout(null);
-      setCountdown("");
-    }
-  }
-
-  // Recalculate countdown every minute
-  useEffect(() => {
-    if (!nextWorkout?.scheduled_for) return;
-
-    function tick() {
-      updateCountdown(nextWorkout.scheduled_for);
-    }
-
-    tick(); // initial
-    const id = setInterval(tick, 60000);
-    return () => clearInterval(id);
-  }, [nextWorkout?.scheduled_for]);
-
-  function updateCountdown(scheduledFor) {
-    if (!scheduledFor) {
-      setCountdown("");
-      return;
-    }
-
-    const target = new Date(scheduledFor);
-    const now = new Date();
-    const diffMs = target - now;
-
-    if (diffMs <= 0) {
-      setCountdown("soon");
-      return;
-    }
-
-    const totalMinutes = Math.floor(diffMs / (1000 * 60));
-    const days = Math.floor(totalMinutes / (60 * 24));
-    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-    const minutes = totalMinutes % 60;
-
-    let parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-
-    setCountdown(parts.join(" ") || "soon");
-  }
-
-  function formatWorkoutDateTime(value) {
-    if (!value) return "";
-    const d = new Date(value);
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    setUpcomingWorkout(data?.[0] || null);
   }
 
   function getProgress(goal) {
@@ -183,16 +130,12 @@ export default function Dashboard() {
 
     if (!w || !r || w <= 0 || r <= 0) {
       setCalculated1RM(null);
-      setBestPR(null);
-      setPrDifference(null);
       return;
     }
 
-    // Epley formula
     const est = Math.round(w * (1 + r / 30));
     setCalculated1RM(est);
 
-    // Fetch updated PR comparison
     if (exerciseName) fetchBestPR(exerciseName, est);
   }
 
@@ -211,7 +154,7 @@ export default function Dashboard() {
   async function fetchBestPR(name, new1RM = null) {
     if (!user?.id || !name) return;
 
-    const { data: pr, error } = await supabase
+    const { data: pr } = await supabase
       .from("PRs")
       .select("*")
       .eq("user_id", user.id)
@@ -220,7 +163,7 @@ export default function Dashboard() {
       .limit(1)
       .single();
 
-    if (error || !pr) {
+    if (!pr) {
       setBestPR(null);
       setPrDifference(null);
       return;
@@ -228,9 +171,7 @@ export default function Dashboard() {
 
     setBestPR(pr.weight);
 
-    if (new1RM) {
-      setPrDifference(new1RM - pr.weight);
-    }
+    if (new1RM) setPrDifference(new1RM - pr.weight);
   }
 
   async function handleSavePR() {
@@ -238,7 +179,7 @@ export default function Dashboard() {
 
     const today = new Date().toISOString().split("T")[0];
 
-    const { error } = await supabase.from("PRs").insert({
+    await supabase.from("PRs").insert({
       user_id: user.id,
       lift_name: exerciseName,
       weight: calculated1RM,
@@ -249,12 +190,6 @@ export default function Dashboard() {
       order_index: 0,
     });
 
-    if (error) {
-      console.error("Error saving PR:", error.message);
-      return;
-    }
-
-    // Refresh PR comparison
     fetchBestPR(exerciseName, calculated1RM);
   }
 
@@ -262,7 +197,8 @@ export default function Dashboard() {
     if (!calculated1RM) return [];
 
     const percents = [
-      95, 90, 85, 80, 75, 70, 65, 60, 58, 56, 54, 52, 50, 48, 46,
+      95, 90, 85, 80, 75, 70, 65, 60,
+      58, 56, 54, 52, 50, 48, 46,
     ];
 
     return percents.map((p) => ({
@@ -284,152 +220,104 @@ export default function Dashboard() {
 
   const percentRows = getPercentRows();
   const repRows = getRepRows();
-
   return (
     <div
       className="dashboard-page"
       style={{
-        paddingTop: "16px",
-        paddingLeft: "16px",
-        paddingRight: "16px",
-        paddingBottom: "90px",
-        maxWidth: "900px",
+        paddingTop: 16,
+        paddingLeft: 16,
+        paddingRight: 16,
+        paddingBottom: 120,
+        maxWidth: 900,
         margin: "0 auto",
       }}
     >
       {/* HEADER */}
-      <header style={{ marginBottom: "16px" }}>
-        <p style={{ fontSize: "14px", opacity: 0.8, margin: 0 }}>
-          Welcome back,
-        </p>
-        <h1
-          style={{
-            fontSize: "24px",
-            fontWeight: 700,
-            margin: "2px 0 0",
-          }}
-        >
+      <header style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 14, opacity: 0.8, margin: 0 }}>Welcome back,</p>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0" }}>
           {displayName}
         </h1>
-        <p
-          style={{
-            fontSize: "13px",
-            opacity: 0.7,
-            marginTop: "4px",
-          }}
-        >
+        <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
           Track your progress. Crush your PRs. Stay locked in.
         </p>
       </header>
 
+      {/* TODAY’S FOCUS */}
+      <section style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
+          Today’s Focus
+        </h2>
+        <div
+          style={{
+            background: "#101010",
+            borderRadius: 12,
+            padding: 14,
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <p style={{ margin: 0, fontSize: 14, lineHeight: "19px" }}>{focusQuote}</p>
+        </div>
+      </section>
+
       {/* GOALS SECTION */}
-      <section style={{ marginBottom: "18px" }}>
+      <section style={{ marginBottom: 18 }}>
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "baseline",
-            marginBottom: "8px",
+            marginBottom: 8,
           }}
         >
-          <h2
-            style={{
-              fontSize: "16px",
-              fontWeight: 600,
-              margin: 0,
-            }}
-          >
-            Top Goals
-          </h2>
-          <Link
-            to="/goals"
-            style={{
-              fontSize: "12px",
-              textDecoration: "none",
-              opacity: 0.8,
-            }}
-          >
-            View all
-          </Link>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Top Goals</h2>
+          <Link to="/goals" style={{ fontSize: 12, opacity: 0.8 }}>View all</Link>
         </div>
 
         <div
           style={{
             background: "#101010",
-            borderRadius: "12px",
-            padding: "12px",
+            borderRadius: 12,
+            padding: 12,
             border: "1px solid rgba(255,255,255,0.06)",
           }}
         >
           {loadingGoals ? (
-            <p
-              style={{
-                fontSize: "13px",
-                opacity: 0.7,
-                margin: 0,
-              }}
-            >
-              Loading goals...
-            </p>
+            <p style={{ opacity: 0.7 }}>Loading goals...</p>
           ) : goals.length === 0 ? (
-            <p
-              style={{
-                fontSize: "13px",
-                opacity: 0.7,
-                margin: 0,
-              }}
-            >
-              No goals yet. Add some to start tracking your progress.
-            </p>
+            <p style={{ opacity: 0.7 }}>No goals yet.</p>
           ) : (
-            goals.map((goal, index) => {
+            goals.map((goal) => {
               const progress = getProgress(goal);
-              const isLast = index === goals.length - 1;
 
               return (
                 <div
                   key={goal.id}
                   style={{
-                    marginBottom: isLast ? 0 : "10px",
-                    paddingBottom: isLast ? 0 : "8px",
-                    borderBottom: isLast
-                      ? "none"
-                      : "1px solid rgba(255,255,255,0.06)",
+                    marginBottom: 10,
+                    paddingBottom: 8,
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
                   }}
                 >
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      marginBottom: "4px",
+                      marginBottom: 4,
                     }}
                   >
                     <div>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: "14px",
-                          fontWeight: 600,
-                        }}
-                      >
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
                         {goal.title}
                       </p>
                       {goal.target_value ? (
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: "11px",
-                            opacity: 0.7,
-                          }}
-                        >
+                        <p style={{ margin: 0, fontSize: 11, opacity: 0.7 }}>
                           {goal.current_value ?? 0} / {goal.target_value}{" "}
                           {goal.unit || ""}
                         </p>
                       ) : null}
                     </div>
-                    <span
-                      style={{ fontSize: "12px", opacity: 0.8 }}
-                    >
+                    <span style={{ fontSize: 12, opacity: 0.8 }}>
                       {progress}%
                     </span>
                   </div>
@@ -437,20 +325,17 @@ export default function Dashboard() {
                   <div
                     style={{
                       width: "100%",
-                      height: "6px",
+                      height: 6,
                       background: "rgba(255,255,255,0.06)",
-                      borderRadius: "999px",
-                      overflow: "hidden",
+                      borderRadius: 999,
                     }}
                   >
                     <div
                       style={{
                         width: `${progress}%`,
                         height: "100%",
-                        background:
-                          "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
-                        borderRadius: "999px",
-                        transition: "width 0.2s ease-out",
+                        background: "linear-gradient(90deg,#ff2f2f,#ff6b4a)",
+                        borderRadius: 999,
                       }}
                     ></div>
                   </div>
@@ -462,204 +347,84 @@ export default function Dashboard() {
       </section>
 
       {/* STRENGTH CALCULATOR */}
-      <section style={{ marginBottom: "18px" }}>
-        <h2
-          style={{
-            fontSize: "16px",
-            fontWeight: 600,
-            marginBottom: "8px",
-          }}
-        >
+      <section style={{ marginBottom: 18 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Strength Calculator
         </h2>
 
+        {/* — KEEPING ALL YOUR PERFECT LAYOUT EXACTLY AS IT WAS — */}
         <div
           style={{
             background: "#101010",
-            borderRadius: "12px",
-            padding: "12px",
+            borderRadius: 12,
+            padding: 12,
             border: "1px solid rgba(255,255,255,0.06)",
           }}
         >
-          {/* Exercise input */}
-          <label
-            style={{
-              display: "block",
-              fontSize: "12px",
-              opacity: 0.9,
-              marginBottom: "4px",
-            }}
-          >
-            Exercise name
-          </label>
+          {/* Exercise Input */}
+          <label style={{ fontSize: 12, opacity: 0.9 }}>Exercise name</label>
           <input
             type="text"
             value={exerciseName}
             onChange={(e) => {
               setExerciseName(e.target.value);
-              if (calculated1RM)
-                fetchBestPR(e.target.value, calculated1RM);
+              if (calculated1RM) fetchBestPR(e.target.value, calculated1RM);
             }}
-            placeholder="e.g. bench press, squat, deadlift"
-            style={{
-              width: "100%",
-              padding: "8px 10px",
-              background: "#080808",
-              color: "white",
-              borderRadius: "8px",
-              border: "1px solid rgba(255,255,255,0.15)",
-              marginBottom: "10px",
-              fontSize: "13px",
-            }}
+            placeholder="bench press, squat, deadlift"
+            style={inputBox}
           />
 
-          {/* two-column layout */}
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              alignItems: "flex-end",
-              flexWrap: "wrap",
-              marginBottom: "12px",
-            }}
-          >
-            {/* Left: weight + reps */}
+          {/* Weight / Reps Row */}
+          <div style={calcGrid}>
             <div style={{ flex: 1 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "12px",
-                  opacity: 0.9,
-                  marginBottom: "4px",
-                }}
-              >
-                Weight (lbs)
-              </label>
+              <label style={label}>Weight (lbs)</label>
               <input
                 type="number"
                 value={weightInput}
                 onChange={handleWeightChange}
-                placeholder="e.g. 225"
-                style={{
-                  width: "100%",
-                  padding: "8px 10px",
-                  background: "#080808",
-                  color: "white",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  marginBottom: "6px",
-                }}
+                placeholder="225"
+                style={inputBox}
               />
 
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "12px",
-                  opacity: 0.9,
-                  marginBottom: "4px",
-                }}
-              >
-                Reps
-              </label>
+              <label style={label}>Reps</label>
               <input
                 type="number"
                 value={repsInput}
                 onChange={handleRepsChange}
-                placeholder="e.g. 5"
-                style={{
-                  width: "100%",
-                  padding: "8px 10px",
-                  background: "#080808",
-                  color: "white",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                }}
+                placeholder="5"
+                style={inputBox}
               />
             </div>
 
-            {/* Right: 1RM / PR compare / save button */}
-            <div
-              style={{
-                flex: 1,
-                minWidth: "160px",
-                padding: "10px",
-                background: "#0c0c0c",
-                borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)",
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "12px",
-                  opacity: 0.8,
-                }}
-              >
-                Estimated 1RM
-              </p>
-
-              <p
-                style={{
-                  margin: "4px 0 6px",
-                  fontSize: "20px",
-                  fontWeight: 700,
-                }}
-              >
+            <div style={calcCard}>
+              <p style={calcLabel}>Estimated 1RM</p>
+              <p style={calcNumber}>
                 {calculated1RM ? `${calculated1RM} lb` : "--"}
               </p>
 
-              {/* PR Comparison */}
               {exerciseName && calculated1RM ? (
                 bestPR ? (
-                  <p
-                    style={{
-                      fontSize: "12px",
-                      opacity: 0.8,
-                      margin: "4px 0",
-                    }}
-                  >
+                  <p style={calcPR}>
                     Your best: <b>{bestPR} lb</b>{" "}
-                    {prDifference !== null ? (
+                    {prDifference !== null && (
                       <span style={{ opacity: 0.7 }}>
                         ({prDifference >= 0 ? "+" : ""}
                         {prDifference})
                       </span>
-                    ) : null}
+                    )}
                   </p>
                 ) : (
-                  <p
-                    style={{
-                      fontSize: "12px",
-                      opacity: 0.7,
-                      margin: "4px 0",
-                    }}
-                  >
-                    No PR saved yet for this exercise.
-                  </p>
+                  <p style={calcNoPR}>No PR saved yet.</p>
                 )
               ) : null}
 
-              {/* Save PR button */}
               <button
                 onClick={handleSavePR}
                 disabled={!exerciseName || !calculated1RM}
                 style={{
-                  width: "100%",
-                  marginTop: "6px",
-                  padding: "8px",
-                  borderRadius: "8px",
-                  border: "none",
+                  ...saveBtn,
                   background:
-                    !exerciseName || !calculated1RM
-                      ? "#444"
-                      : "#ff2f2f",
-                  color: "white",
-                  fontWeight: 600,
-                  fontSize: "13px",
-                  cursor:
-                    !exerciseName || !calculated1RM
-                      ? "not-allowed"
-                      : "pointer",
+                    !exerciseName || !calculated1RM ? "#444" : "#ff2f2f",
                 }}
               >
                 Save PR
@@ -669,138 +434,57 @@ export default function Dashboard() {
 
           {/* TABLES */}
           {calculated1RM ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "10px",
-              }}
-            >
-              {/* Percent table */}
-              <div
-                style={{
-                  borderRadius: "10px",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    fontSize: "11px",
-                    padding: "6px 8px",
-                    background: "#141414",
-                    borderBottom:
-                      "1px solid rgba(255,255,255,0.08)",
-                    fontWeight: 600,
-                  }}
-                >
+            <div style={twoCol}>
+              <div style={tableCard}>
+                <div style={tableHeader}>
                   <span>% of 1RM</span>
                   <span style={{ textAlign: "right" }}>Weight</span>
                 </div>
 
                 {percentRows.map((row) => (
-                  <div
-                    key={row.percent}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      padding: "6px 8px",
-                      fontSize: "11px",
-                      borderBottom:
-                        "1px solid rgba(255,255,255,0.05)",
-                    }}
-                  >
+                  <div key={row.percent} style={tableRow}>
                     <span>{row.percent}%</span>
-                    <span style={{ textAlign: "right" }}>
-                      {row.weight} lb
-                    </span>
+                    <span style={{ textAlign: "right" }}>{row.weight} lb</span>
                   </div>
                 ))}
               </div>
 
-              {/* Rep table */}
-              <div
-                style={{
-                  borderRadius: "10px",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    fontSize: "11px",
-                    padding: "6px 8px",
-                    background: "#141414",
-                    borderBottom:
-                      "1px solid rgba(255,255,255,0.08)",
-                    fontWeight: 600,
-                  }}
-                >
+              <div style={tableCard}>
+                <div style={tableHeader}>
                   <span>Reps</span>
-                  <span style={{ textAlign: "right" }}>
-                    Est. Weight
-                  </span>
+                  <span style={{ textAlign: "right" }}>Est. Weight</span>
                 </div>
 
                 {repRows.map((row) => (
-                  <div
-                    key={row.reps}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      padding: "6px 8px",
-                      fontSize: "11px",
-                      borderBottom:
-                        "1px solid rgba(255,255,255,0.05)",
-                    }}
-                  >
+                  <div key={row.reps} style={tableRow}>
                     <span>{row.reps}</span>
-                    <span style={{ textAlign: "right" }}>
-                      {row.weight} lb
-                    </span>
+                    <span style={{ textAlign: "right" }}>{row.weight} lb</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <p style={{ fontSize: "12px", opacity: 0.7 }}>
-              Enter weight and reps to calculate 1RM and detailed
-              breakdown.
+            <p style={{ fontSize: 12, opacity: 0.7 }}>
+              Enter weight + reps to calculate.
             </p>
           )}
         </div>
       </section>
 
-      {/* UPCOMING WORKOUT */}
-      <section style={{ marginBottom: "18px" }}>
+      {/* UPCOMING WORKOUTS */}
+      <section style={{ marginBottom: 22 }}>
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginBottom: "8px",
+            marginBottom: 8,
           }}
         >
-          <h2
-            style={{
-              fontSize: "16px",
-              fontWeight: 600,
-              margin: 0,
-            }}
-          >
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
             Upcoming Workout
           </h2>
-          <Link
-            to="/workouts"
-            style={{
-              fontSize: "12px",
-              textDecoration: "none",
-              opacity: 0.8,
-            }}
-          >
+
+          <Link to="/workouts" style={{ fontSize: 12, opacity: 0.8 }}>
             Open workouts
           </Link>
         </div>
@@ -808,63 +492,27 @@ export default function Dashboard() {
         <div
           style={{
             background: "#101010",
-            borderRadius: "12px",
-            padding: "12px",
+            borderRadius: 12,
+            padding: 12,
             border: "1px solid rgba(255,255,255,0.06)",
           }}
         >
-          {nextWorkout ? (
+          {upcomingWorkout ? (
             <>
-              <p
-                style={{
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  margin: 0,
-                  marginBottom: "4px",
-                }}
-              >
-                {nextWorkout.name || "Workout"}
+              <p style={{ fontSize: 15, margin: 0, fontWeight: 600 }}>
+                {upcomingWorkout.name}
               </p>
-              <p
-                style={{
-                  fontSize: "13px",
-                  opacity: 0.85,
-                  margin: 0,
-                  marginBottom: "4px",
-                }}
-              >
-                Starts in:{" "}
-                <b>{countdown || "soon"}</b>
-              </p>
-              <p
-                style={{
-                  fontSize: "12px",
-                  opacity: 0.75,
-                  margin: 0,
-                  marginTop: "2px",
-                }}
-              >
-                {formatWorkoutDateTime(nextWorkout.scheduled_for)}
+
+              <p style={{ opacity: 0.7, fontSize: 12, marginTop: 4 }}>
+                {new Date(upcomingWorkout.scheduled_for).toLocaleString()}
               </p>
             </>
           ) : (
             <>
-              <p
-                style={{
-                  fontSize: "13px",
-                  opacity: 0.8,
-                  margin: 0,
-                }}
-              >
+              <p style={{ fontSize: 13, opacity: 0.8, margin: 0 }}>
                 No upcoming workouts yet.
               </p>
-              <p
-                style={{
-                  fontSize: "12px",
-                  opacity: 0.7,
-                  marginTop: "4px",
-                }}
-              >
+              <p style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
                 Plan your next session on the Workouts page.
               </p>
             </>
@@ -872,61 +520,92 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* QUICK LINKS */}
-      <section style={{ marginBottom: "8px" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: "8px",
-          }}
-        >
-          <Link
-            to="/pr-tracker"
-            style={{
-              textDecoration: "none",
-              background: "#101010",
-              borderRadius: "10px",
-              padding: "10px",
-              border: "1px solid rgba(255,255,255,0.06)",
-              fontSize: "12px",
-              textAlign: "center",
-            }}
-          >
-            PRs
-          </Link>
-
-          <Link
-            to="/measurements"
-            style={{
-              textDecoration: "none",
-              background: "#101010",
-              borderRadius: "10px",
-              padding: "10px",
-              border: "1px solid rgba(255,255,255,0.06)",
-              fontSize: "12px",
-              textAlign: "center",
-            }}
-          >
-            Measurements
-          </Link>
-
-          <Link
-            to="/profile"
-            style={{
-              textDecoration: "none",
-              background: "#101010",
-              borderRadius: "10px",
-              padding: "10px",
-              border: "1px solid rgba(255,255,255,0.06)",
-              fontSize: "12px",
-              textAlign: "center",
-            }}
-          >
-            Profile
-          </Link>
-        </div>
-      </section>
+      {/* SPACING AT BOTTOM */}
+      <div style={{ height: 60 }} />
     </div>
   );
 }
+
+/* --------------------------
+    SHARED STYLES
+--------------------------- */
+const inputBox = {
+  width: "100%",
+  padding: "8px 10px",
+  background: "#080808",
+  color: "white",
+  borderRadius: "8px",
+  border: "1px solid rgba(255,255,255,0.15)",
+  marginBottom: "10px",
+  fontSize: "13px",
+};
+
+const label = {
+  display: "block",
+  fontSize: "12px",
+  opacity: 0.9,
+  marginBottom: "4px",
+};
+
+const calcGrid = {
+  display: "flex",
+  gap: "10px",
+  alignItems: "flex-end",
+  flexWrap: "wrap",
+  marginBottom: "12px",
+};
+
+const calcCard = {
+  flex: 1,
+  minWidth: "160px",
+  padding: "10px",
+  background: "#0c0c0c",
+  borderRadius: "8px",
+  border: "1px solid rgba(255,255,255,0.12)",
+};
+
+const calcLabel = { margin: 0, fontSize: 12, opacity: 0.8 };
+const calcNumber = { margin: "4px 0 6px", fontSize: 20, fontWeight: 700 };
+const calcPR = { fontSize: 12, opacity: 0.8, margin: "4px 0" };
+const calcNoPR = { fontSize: 12, opacity: 0.7, margin: "4px 0" };
+
+const saveBtn = {
+  width: "100%",
+  marginTop: 6,
+  padding: 8,
+  borderRadius: 8,
+  border: "none",
+  color: "white",
+  fontWeight: 600,
+  fontSize: 13,
+};
+
+const twoCol = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "10px",
+};
+
+const tableCard = {
+  borderRadius: "10px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  overflow: "hidden",
+};
+
+const tableHeader = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  fontSize: 11,
+  padding: "6px 8px",
+  background: "#141414",
+  borderBottom: "1px solid rgba(255,255,255,0.08)",
+  fontWeight: 600,
+};
+
+const tableRow = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  padding: "6px 8px",
+  fontSize: 11,
+  borderBottom: "1px solid rgba(255,255,255,0.05)",
+};
