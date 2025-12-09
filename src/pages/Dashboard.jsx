@@ -44,6 +44,7 @@ export default function Dashboard() {
         .select("username")
         .eq("id", currentUser.id)
         .single();
+
       if (profile?.username) name = profile.username;
 
       await loadGoals(currentUser.id);
@@ -65,7 +66,7 @@ export default function Dashboard() {
     setLoadingGoals(false);
   }
 
-  // FIXED UPCOMING WORKOUT LOGIC — ONLY FUTURE TIMES COUNT
+  // FIXED UPCOMING WORKOUT — ONLY FUTURE TIMES COUNT
   async function loadUpcomingWorkout(uid) {
     const { data, error } = await supabase
       .from("workouts")
@@ -78,11 +79,12 @@ export default function Dashboard() {
     const now = new Date();
 
     const futureWorkouts = data
-      .filter((w) => {
-        if (!w.scheduled_for) return false;
-        return new Date(w.scheduled_for) > now;
-      })
-      .sort((a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for));
+      .filter((w) => new Date(w.scheduled_for) > now)
+      .sort(
+        (a, b) =>
+          new Date(a.scheduled_for).getTime() -
+          new Date(b.scheduled_for).getTime()
+      );
 
     setUpcomingWorkout(futureWorkouts[0] || null);
   }
@@ -90,7 +92,7 @@ export default function Dashboard() {
   function getProgress(goal) {
     const current = Number(goal.current_value) || 0;
     const target = Number(goal.target_value) || 0;
-    if (!target) return 0;
+    if (!target || target <= 0) return 0;
     const pct = Math.round((current / target) * 100);
     return Math.min(100, Math.max(0, pct));
   }
@@ -129,16 +131,16 @@ export default function Dashboard() {
   async function fetchBestPR(name, new1RM = null) {
     if (!user?.id || !name) return;
 
-    const { data: pr, error } = await supabase
+    const { data: pr } = await supabase
       .from("PRs")
       .select("*")
       .eq("user_id", user.id)
       .eq("lift_name", name)
       .order("weight", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (error || !pr) {
+    if (!pr) {
       setBestPR(null);
       setPrDifference(null);
       return;
@@ -168,6 +170,7 @@ export default function Dashboard() {
     fetchBestPR(exerciseName, calculated1RM);
   }
 
+  // Table data (15 rows)
   const percentRows = calculated1RM
     ? [95, 90, 85, 80, 75, 70, 65, 60, 58, 56, 54, 52, 50, 48, 46].map((p) => ({
         percent: p,
@@ -202,7 +205,7 @@ export default function Dashboard() {
       </header>
 
       {/* Today's Focus */}
-      <section style={{ marginBottom: 18 }}>
+      <section style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Today’s Focus
         </h2>
@@ -220,7 +223,7 @@ export default function Dashboard() {
       </section>
 
       {/* GOALS */}
-      <section style={{ marginBottom: 18 }}>
+      <section style={{ marginBottom: 20 }}>
         <div
           style={{
             display: "flex",
@@ -228,12 +231,13 @@ export default function Dashboard() {
             marginBottom: 8,
           }}
         >
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Top Goals</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+            Top Goals
+          </h2>
           <Link to="/goals" style={{ fontSize: 12, opacity: 0.8 }}>
             View all
           </Link>
         </div>
-
         <div
           style={{
             background: "#101010",
@@ -299,7 +303,8 @@ export default function Dashboard() {
                       style={{
                         width: `${progress}%`,
                         height: "100%",
-                        background: "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
+                        background:
+                          "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
                         transition: "width 0.25s ease",
                       }}
                     ></div>
@@ -312,7 +317,7 @@ export default function Dashboard() {
       </section>
 
       {/* STRENGTH CALCULATOR */}
-      <section style={{ marginBottom: 18 }}>
+      <section style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Strength Calculator
         </h2>
@@ -325,7 +330,8 @@ export default function Dashboard() {
             border: "1px solid rgba(255,255,255,0.06)",
           }}
         >
-          <label style={{ fontSize: 12, opacity: 0.9 }}>Exercise name</label>
+          {/* Exercise input */}
+          <label style={label}>Exercise name</label>
           <input
             type="text"
             value={exerciseName}
@@ -338,8 +344,18 @@ export default function Dashboard() {
             style={input}
           />
 
-          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-            <div style={{ flex: 1 }}>
+          {/* two column layout */}
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+              marginTop: 10,
+            }}
+          >
+            {/* LEFT — weight + reps */}
+            <div style={{ flex: 1, minWidth: "140px" }}>
               <label style={label}>Weight (lbs)</label>
               <input
                 type="number"
@@ -359,28 +375,51 @@ export default function Dashboard() {
               />
             </div>
 
+            {/* RIGHT — 1RM card */}
             <div
               style={{
                 flex: 1,
+                minWidth: "160px",
+                padding: 10,
                 background: "#0c0c0c",
                 borderRadius: 8,
                 border: "1px solid rgba(255,255,255,0.12)",
-                padding: 10,
               }}
             >
-              <p style={{ fontSize: 12, opacity: 0.8 }}>Estimated 1RM</p>
-              <p style={{ fontSize: 20, fontWeight: 700 }}>
+              <p style={{ fontSize: 12, opacity: 0.8, margin: 0 }}>
+                Estimated 1RM
+              </p>
+
+              <p
+                style={{
+                  margin: "4px 0 6px",
+                  fontSize: 20,
+                  fontWeight: 700,
+                }}
+              >
                 {calculated1RM ? `${calculated1RM} lb` : "--"}
               </p>
 
-              {exerciseName && bestPR ? (
-                <p style={{ fontSize: 12, opacity: 0.8 }}>
-                  Your best: <b>{bestPR} lb</b>{" "}
-                  {prDifference !== null &&
-                    `(${prDifference >= 0 ? "+" : ""}${prDifference})`}
-                </p>
+              {/* PR Comparison */}
+              {exerciseName && calculated1RM ? (
+                bestPR ? (
+                  <p style={{ fontSize: 12, opacity: 0.8, margin: "4px 0" }}>
+                    Your best: <b>{bestPR} lb</b>{" "}
+                    {prDifference !== null ? (
+                      <span style={{ opacity: 0.7 }}>
+                        ({prDifference >= 0 ? "+" : ""}
+                        {prDifference})
+                      </span>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p style={{ fontSize: 12, opacity: 0.7, margin: "4px 0" }}>
+                    No PR saved yet for this exercise.
+                  </p>
+                )
               ) : null}
 
+              {/* Save PR button */}
               <button
                 onClick={handleSavePR}
                 disabled={!exerciseName || !calculated1RM}
@@ -391,9 +430,7 @@ export default function Dashboard() {
                   borderRadius: 8,
                   border: "none",
                   background:
-                    !exerciseName || !calculated1RM
-                      ? "#444"
-                      : "#ff2f2f",
+                    !exerciseName || !calculated1RM ? "#444" : "#ff2f2f",
                   color: "white",
                   fontWeight: 600,
                   fontSize: 13,
@@ -408,9 +445,101 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {!calculated1RM && (
+          {/* 15×15 TABLES */}
+          {calculated1RM ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "10px",
+                marginTop: 14,
+              }}
+            >
+              {/* Percent Table */}
+              <div
+                style={{
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    padding: "6px 8px",
+                    background: "#141414",
+                    fontWeight: 600,
+                    fontSize: 11,
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <span>% of 1RM</span>
+                  <span style={{ textAlign: "right" }}>Weight</span>
+                </div>
+
+                {percentRows.map((row) => (
+                  <div
+                    key={row.percent}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      padding: "6px 8px",
+                      fontSize: 11,
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <span>{row.percent}%</span>
+                    <span style={{ textAlign: "right" }}>{row.weight} lb</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Rep Table */}
+              <div
+                style={{
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    padding: "6px 8px",
+                    background: "#141414",
+                    fontWeight: 600,
+                    fontSize: 11,
+                    borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <span>Reps</span>
+                  <span style={{ textAlign: "right" }}>Est. Weight</span>
+                </div>
+
+                {repRows.map((row) => (
+                  <div
+                    key={row.reps}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      padding: "6px 8px",
+                      fontSize: 11,
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <span>{row.reps}</span>
+                    <span style={{ textAlign: "right" }}>
+                      {row.weight} lb
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
             <p style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-              Enter weight + reps to calculate.
+              Enter weight and reps to calculate 1RM and full tables.
             </p>
           )}
         </div>
@@ -428,10 +557,7 @@ export default function Dashboard() {
           <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
             Upcoming Workout
           </h2>
-          <Link
-            to="/workouts"
-            style={{ fontSize: 12, opacity: 0.8 }}
-          >
+          <Link to="/workouts" style={{ fontSize: 12, opacity: 0.8 }}>
             Open workouts
           </Link>
         </div>
@@ -449,7 +575,6 @@ export default function Dashboard() {
               <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
                 {upcomingWorkout.name}
               </p>
-
               <p style={{ opacity: 0.8, fontSize: 13, marginTop: 4 }}>
                 {new Date(upcomingWorkout.scheduled_for).toLocaleString()}
               </p>
