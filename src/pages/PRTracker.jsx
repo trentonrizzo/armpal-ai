@@ -22,21 +22,38 @@ import { CSS } from "@dnd-kit/utilities";
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
 /* --------------------------------------------
-   SORTABLE ITEM WITH HANDLE (LEFT SIDE ONLY)
+   SORTABLE ITEM — LEFT 40% DRAGS, RIGHT SCROLLS
 --------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    touchAction: "none",
-  };
-
   return (
-    <div ref={setNodeRef} style={style}>
-      {children({ attributes, listeners })}
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        position: "relative",
+      }}
+    >
+      {/* DRAG HANDLE on LEFT 40% */}
+      <div
+        {...attributes}
+        {...listeners}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "40%",
+          height: "100%",
+          zIndex: 5,
+          touchAction: "none",
+        }}
+      />
+      
+      {/* CARD CONTENT (FULLY SCROLLABLE) */}
+      {children}
     </div>
   );
 }
@@ -128,7 +145,7 @@ export default function PRTracker() {
   }
 
   /* --------------------------------------------
-     EDIT / ADD MODAL
+     OPEN MODALS
   --------------------------------------------- */
   function openAddModal() {
     setEditingPR(null);
@@ -186,7 +203,6 @@ export default function PRTracker() {
     await loadPRs(user.id);
     setModalOpen(false);
   }
-
   /* --------------------------------------------
      DELETE CONFIRM
   --------------------------------------------- */
@@ -252,169 +268,167 @@ export default function PRTracker() {
 
               return (
                 <SortableItem key={lift} id={lift}>
-                  {({ attributes, listeners }) => (
+                  <div
+                    style={{
+                      background: "#0f0f0f",
+                      borderRadius: 12,
+                      padding: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {/* HEADER */}
                     <div
                       style={{
-                        background: "#0f0f0f",
-                        borderRadius: 12,
-                        padding: 14,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        marginBottom: 10,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
                       }}
                     >
-                      {/* HEADER */}
+                      {/* LEFT = tap to expand, also drag area exists invisibly */}
                       <div
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
+                          flex: 1,
+                          maxWidth: "65%",
+                          cursor: "pointer",
+                          userSelect: "none",
+                          WebkitUserSelect: "none",
                         }}
+                        onClick={() =>
+                          setExpanded((prev) => ({
+                            ...prev,
+                            [lift]: !prev[lift],
+                          }))
+                        }
                       >
-                        {/* LEFT drag + expand */}
-                        <div
+                        <p
                           style={{
-                            flex: 1,
-                            maxWidth: "55%",
-                            cursor: "grab",
-                            userSelect: "none",
-                            WebkitUserSelect: "none",
+                            margin: 0,
+                            fontSize: 15,
+                            fontWeight: 600,
                           }}
-                          {...attributes}
-                          {...listeners}
-                          onClick={() =>
-                            setExpanded((prev) => ({
-                              ...prev,
-                              [lift]: !prev[lift],
-                            }))
-                          }
                         >
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: 15,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {lift}
-                          </p>
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: 12,
-                              opacity: 0.7,
-                            }}
-                          >
-                            {latest.weight} {latest.unit}
-                            {latest.reps ? ` × ${latest.reps}` : ""}
-                            {" — "}
-                            {latest.date}
-                          </p>
-                        </div>
-
-                        {/* RIGHT: edit/delete */}
-                        <FaEdit
-                          style={{ fontSize: 14, cursor: "pointer" }}
-                          onClick={() => openEditModal(latest)}
-                        />
-                        <FaTrash
+                          {lift}
+                        </p>
+                        <p
                           style={{
-                            fontSize: 14,
-                            cursor: "pointer",
-                            color: "#ff4d4d",
-                            marginLeft: 10,
+                            margin: 0,
+                            fontSize: 12,
+                            opacity: 0.7,
                           }}
-                          onClick={() => setDeleteId(latest.id)}
-                        />
-
-                        {isOpen ? (
-                          <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
-                        ) : (
-                          <FaChevronDown
-                            style={{ marginLeft: 10, opacity: 0.7 }}
-                          />
-                        )}
+                        >
+                          {latest.weight} {latest.unit}
+                          {latest.reps ? ` × ${latest.reps}` : ""} —{" "}
+                          {latest.date}
+                        </p>
                       </div>
 
-                      {/* HISTORY LIST */}
-                      {isOpen && (
-                        <div style={{ marginTop: 10 }}>
-                          {entries.slice(1).map((entry) => (
+                      {/* RIGHT SIDE = edit/delete (scrollable) */}
+                      <FaEdit
+                        style={{ fontSize: 14, cursor: "pointer" }}
+                        onClick={() => openEditModal(latest)}
+                      />
+                      <FaTrash
+                        style={{
+                          fontSize: 14,
+                          cursor: "pointer",
+                          color: "#ff4d4d",
+                          marginLeft: 10,
+                        }}
+                        onClick={() => setDeleteId(latest.id)}
+                      />
+
+                      {isOpen ? (
+                        <FaChevronUp
+                          style={{ marginLeft: 10, opacity: 0.7 }}
+                        />
+                      ) : (
+                        <FaChevronDown
+                          style={{ marginLeft: 10, opacity: 0.7 }}
+                        />
+                      )}
+                    </div>
+
+                    {/* HISTORY */}
+                    {isOpen && (
+                      <div style={{ marginTop: 10 }}>
+                        {entries.slice(1).map((entry) => (
+                          <div
+                            key={entry.id}
+                            style={{
+                              background: "#151515",
+                              borderRadius: 10,
+                              padding: 10,
+                              marginBottom: 8,
+                              border: "1px solid rgba(255,255,255,0.06)",
+                            }}
+                          >
                             <div
-                              key={entry.id}
                               style={{
-                                background: "#151515",
-                                borderRadius: 10,
-                                padding: 10,
-                                marginBottom: 8,
-                                border: "1px solid rgba(255,255,255,0.06)",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
                               }}
                             >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                }}
-                              >
-                                <div>
-                                  <p
-                                    style={{
-                                      margin: 0,
-                                      fontSize: 14,
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {entry.weight} {entry.unit}
-                                    {entry.reps ? ` × ${entry.reps}` : ""}
-                                  </p>
+                              <div>
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 14,
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {entry.weight} {entry.unit}
+                                  {entry.reps ? ` × ${entry.reps}` : ""}
+                                </p>
+
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 11,
+                                    opacity: 0.7,
+                                  }}
+                                >
+                                  {entry.date}
+                                </p>
+
+                                {entry.notes && (
                                   <p
                                     style={{
                                       margin: 0,
                                       fontSize: 11,
-                                      opacity: 0.7,
+                                      opacity: 0.5,
+                                      fontStyle: "italic",
                                     }}
                                   >
-                                    {entry.date}
+                                    {entry.notes}
                                   </p>
+                                )}
+                              </div>
 
-                                  {entry.notes && (
-                                    <p
-                                      style={{
-                                        margin: 0,
-                                        fontSize: 11,
-                                        opacity: 0.5,
-                                        fontStyle: "italic",
-                                      }}
-                                    >
-                                      {entry.notes}
-                                    </p>
-                                  )}
-                                </div>
-
-                                <div style={{ display: "flex", gap: 12 }}>
-                                  <FaEdit
-                                    style={{
-                                      fontSize: 13,
-                                      cursor: "pointer",
-                                    }}
-                                    onClick={() => openEditModal(entry)}
-                                  />
-                                  <FaTrash
-                                    style={{
-                                      fontSize: 13,
-                                      cursor: "pointer",
-                                      color: "#ff4d4d",
-                                    }}
-                                    onClick={() => setDeleteId(entry.id)}
-                                  />
-                                </div>
+                              <div style={{ display: "flex", gap: 12 }}>
+                                <FaEdit
+                                  style={{
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() => openEditModal(entry)}
+                                />
+                                <FaTrash
+                                  style={{
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                    color: "#ff4d4d",
+                                  }}
+                                  onClick={() => setDeleteId(entry.id)}
+                                />
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </SortableItem>
               );
             })}
@@ -435,7 +449,7 @@ export default function PRTracker() {
               style={inputStyle}
               value={prLift}
               onChange={(e) => setPrLift(e.target.value)}
-              placeholder="Bench Press, Squat, etc."
+              placeholder="Bench Press, Squat…"
             />
 
             <label style={labelStyle}>Weight</label>
@@ -446,13 +460,12 @@ export default function PRTracker() {
               onChange={(e) => setPrWeight(e.target.value)}
             />
 
-            <label style={labelStyle}>Reps</label>
+            <label style={labelStyle}>Reps (optional)</label>
             <input
               type="number"
               style={inputStyle}
               value={prReps}
               onChange={(e) => setPrReps(e.target.value)}
-              placeholder="Optional"
             />
 
             <label style={labelStyle}>Unit</label>
@@ -480,7 +493,6 @@ export default function PRTracker() {
               style={{ ...inputStyle, minHeight: 60 }}
               value={prNotes}
               onChange={(e) => setPrNotes(e.target.value)}
-              placeholder="Optional notes..."
             />
 
             <button
