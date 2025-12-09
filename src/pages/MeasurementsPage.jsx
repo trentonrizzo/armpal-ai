@@ -29,7 +29,6 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-// Sortable wrapper — **DRAGGABLE ONLY FROM LEFT SECTION**
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
@@ -55,7 +54,6 @@ export default function MeasurementsPage() {
 
   const [expanded, setExpanded] = useState({});
 
-  // Modal (add/edit)
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
 
@@ -66,7 +64,6 @@ export default function MeasurementsPage() {
     new Date().toISOString().slice(0, 10)
   );
 
-  // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
   const sensors = useSensors(
@@ -75,7 +72,16 @@ export default function MeasurementsPage() {
     })
   );
 
-  // Load
+  // 🔥 RIGHT SIDE SCROLL AREA (60%)
+  const scrollZone = {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    width: "60%",
+    height: "100%",
+    zIndex: 1,
+  };
+
   useEffect(() => {
     (async () => {
       const {
@@ -92,7 +98,6 @@ export default function MeasurementsPage() {
         grouped[m.name].push(m);
       });
 
-      // newest first
       for (const key of Object.keys(grouped)) {
         grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
       }
@@ -103,7 +108,6 @@ export default function MeasurementsPage() {
     })();
   }, []);
 
-  // Drag reorder groups
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -114,9 +118,6 @@ export default function MeasurementsPage() {
     setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
-  /** -------------------------
-   *  MODAL HANDLERS
-   -------------------------- */
   function openNew() {
     setEditId(null);
     setMName("");
@@ -161,7 +162,6 @@ export default function MeasurementsPage() {
       });
     }
 
-    // reload
     const rows = await getMeasurements(user.id);
     const grouped = {};
     rows.forEach((m) => {
@@ -211,7 +211,6 @@ export default function MeasurementsPage() {
         margin: "0 auto",
       }}
     >
-      {/* HEADER */}
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Measurements
       </h1>
@@ -233,7 +232,6 @@ export default function MeasurementsPage() {
         + Add Measurement
       </button>
 
-      {/* DRAGGABLE GROUP LIST */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -243,10 +241,6 @@ export default function MeasurementsPage() {
           items={groupOrder}
           strategy={verticalListSortingStrategy}
         >
-          {groupOrder.length === 0 && (
-            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
-          )}
-
           {groupOrder.map((groupName) => {
             const list = groups[groupName] || [];
             const latest = list[0];
@@ -257,6 +251,7 @@ export default function MeasurementsPage() {
                 {({ attributes, listeners }) => (
                   <div
                     style={{
+                      position: "relative",
                       background: "#0f0f0f",
                       borderRadius: 12,
                       padding: 14,
@@ -264,7 +259,10 @@ export default function MeasurementsPage() {
                       marginBottom: 10,
                     }}
                   >
-                    {/* HEADER ROW */}
+                    {/* 🔥 SCROLLABLE RIGHT ZONE */}
+                    <div style={scrollZone} />
+
+                    {/* HEADER */}
                     <div
                       style={{
                         display: "flex",
@@ -272,7 +270,7 @@ export default function MeasurementsPage() {
                         alignItems: "center",
                       }}
                     >
-                      {/* LEFT SIDE = DRAG HANDLE AREA (40%) */}
+                      {/* LEFT (DRAG ZONE 40%) */}
                       <div
                         style={{
                           flexBasis: "40%",
@@ -309,7 +307,7 @@ export default function MeasurementsPage() {
                         </p>
                       </div>
 
-                      {/* RIGHT SIDE BUTTONS (NOT DRAGGABLE) */}
+                      {/* RIGHT BUTTONS (scrollable zone behind them) */}
                       <div
                         style={{
                           flex: 1,
@@ -474,7 +472,6 @@ export default function MeasurementsPage() {
         </div>
       )}
 
-      {/* DELETE CONFIRM MODAL */}
       {deleteId && (
         <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
