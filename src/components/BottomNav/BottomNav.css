@@ -1,9 +1,9 @@
 .bottom-nav {
   position: fixed;
-  bottom: 0;
+  bottom: 0; /* 🔥 stick bar to the actual screen edge */
   left: 0;
   width: 100%;
-  height: 70px;
+  height: 64px;
 
   background: #000000;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -14,10 +14,11 @@
 
   z-index: 999;
 
-  /* 🔥 REQUIRED FOR MOBILE — fixes cutoff */
+  /* 🔥 safe-area INSIDE the bar, not under it */
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Nav link styles */
 .nav-item {
   text-decoration: none;
   color: white;
@@ -33,13 +34,15 @@
   justify-content: center;
 }
 
+/* slightly smaller icons */
 .nav-icon {
-  font-size: 26px;
+  font-size: 22px;
   z-index: 2;
 }
 
+/* Labels */
 .nav-label {
-  font-size: 11px;
+  font-size: 10px;
   margin-top: 3px;
   color: rgba(255, 255, 255, 0.5);
 }
@@ -49,16 +52,17 @@
   font-weight: 600;
 }
 
+/* active glow */
 .active-glow {
   position: absolute;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
 
   background: rgba(255, 0, 0, 0.45);
   box-shadow: 0 0 12px 6px rgba(255, 0, 0, 0.45);
 
-  top: -2px;
+  top: -1px;
   z-index: 1;
 
   animation: fadeIn 0.2s ease-out;

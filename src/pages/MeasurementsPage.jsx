@@ -1,3 +1,4 @@
+// src/pages/MeasurementsPage.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
@@ -18,12 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // icons
-import {
-  FaChevronDown,
-  FaChevronUp,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
 // API
 import {
@@ -33,7 +29,7 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
-// Sortable wrapper
+// Sortable wrapper — **DRAGGABLE ONLY FROM LEFT SECTION**
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
@@ -45,8 +41,8 @@ function SortableItem({ id, children }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style}>
+      {children({ attributes, listeners })}
     </div>
   );
 }
@@ -175,6 +171,7 @@ export default function MeasurementsPage() {
     for (const key of Object.keys(grouped)) {
       grouped[key].sort((a, b) => new Date(b.date) - new Date(a.date));
     }
+
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
 
@@ -257,153 +254,166 @@ export default function MeasurementsPage() {
 
             return (
               <SortableItem key={groupName} id={groupName}>
-                <div
-                  style={{
-                    background: "#0f0f0f",
-                    borderRadius: 12,
-                    padding: 14,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    marginBottom: 10,
-                  }}
-                >
-                  {/* HEADER ROW */}
+                {({ attributes, listeners }) => (
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
+                      background: "#0f0f0f",
+                      borderRadius: 12,
+                      padding: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      marginBottom: 10,
                     }}
                   >
-                    {/* Left side */}
+                    {/* HEADER ROW */}
                     <div
-                      style={{ flex: 1, cursor: "pointer" }}
-                      onClick={() =>
-                        setExpanded((prev) => ({
-                          ...prev,
-                          [groupName]: !prev[groupName],
-                        }))
-                      }
-                    >
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {groupName}
-                      </p>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 12,
-                          opacity: 0.7,
-                        }}
-                      >
-                        {latest.value} {latest.unit} — {latest.date}
-                      </p>
-                    </div>
-
-                    {/* RIGHT SIDE BUTTONS (EDIT, DELETE, CHEVRON) */}
-                    <FaEdit
-                      style={{ fontSize: 14, cursor: "pointer" }}
-                      onClick={() => openEdit(latest)}
-                    />
-                    <FaTrash
                       style={{
-                        fontSize: 14,
-                        cursor: "pointer",
-                        color: "#ff4d4d",
-                        marginLeft: 10,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
                       }}
-                      onClick={() => setDeleteId(latest.id)}
-                    />
-
-                    {isOpen ? (
-                      <FaChevronUp
-                        style={{ marginLeft: 10, opacity: 0.7 }}
-                      />
-                    ) : (
-                      <FaChevronDown
-                        style={{ marginLeft: 10, opacity: 0.7 }}
-                      />
-                    )}
-                  </div>
-
-                  {/* HISTORY */}
-                  {isOpen && (
-                    <div style={{ marginTop: 10 }}>
-                      {list.slice(1).map((entry) => (
-                        <div
-                          key={entry.id}
+                    >
+                      {/* LEFT SIDE = DRAG HANDLE AREA (40%) */}
+                      <div
+                        style={{
+                          flexBasis: "40%",
+                          cursor: "grab",
+                          userSelect: "none",
+                          WebkitUserSelect: "none",
+                        }}
+                        {...attributes}
+                        {...listeners}
+                        onClick={() =>
+                          setExpanded((prev) => ({
+                            ...prev,
+                            [groupName]: !prev[groupName],
+                          }))
+                        }
+                      >
+                        <p
                           style={{
-                            background: "#151515",
-                            borderRadius: 10,
-                            padding: 10,
-                            marginBottom: 8,
-                            border: "1px solid rgba(255,255,255,0.06)",
+                            margin: 0,
+                            fontSize: 15,
+                            fontWeight: 600,
                           }}
                         >
+                          {groupName}
+                        </p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 12,
+                            opacity: 0.7,
+                          }}
+                        >
+                          {latest.value} {latest.unit} — {latest.date}
+                        </p>
+                      </div>
+
+                      {/* RIGHT SIDE BUTTONS (NOT DRAGGABLE) */}
+                      <div
+                        style={{
+                          flex: 1,
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          alignItems: "center",
+                          gap: 12,
+                          paddingLeft: 10,
+                        }}
+                      >
+                        <FaEdit
+                          style={{ fontSize: 14, cursor: "pointer" }}
+                          onClick={() => openEdit(latest)}
+                        />
+                        <FaTrash
+                          style={{
+                            fontSize: 14,
+                            cursor: "pointer",
+                            color: "#ff4d4d",
+                          }}
+                          onClick={() => setDeleteId(latest.id)}
+                        />
+
+                        {isOpen ? (
+                          <FaChevronUp style={{ opacity: 0.7 }} />
+                        ) : (
+                          <FaChevronDown style={{ opacity: 0.7 }} />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* HISTORY */}
+                    {isOpen && (
+                      <div style={{ marginTop: 10 }}>
+                        {list.slice(1).map((entry) => (
                           <div
+                            key={entry.id}
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
+                              background: "#151515",
+                              borderRadius: 10,
+                              padding: 10,
+                              marginBottom: 8,
+                              border: "1px solid rgba(255,255,255,0.06)",
                             }}
                           >
-                            <div>
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: 14,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {entry.value} {entry.unit}
-                              </p>
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: 11,
-                                  opacity: 0.7,
-                                }}
-                              >
-                                {entry.date}
-                              </p>
-                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                              }}
+                            >
+                              <div>
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 14,
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {entry.value} {entry.unit}
+                                </p>
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 11,
+                                    opacity: 0.7,
+                                  }}
+                                >
+                                  {entry.date}
+                                </p>
+                              </div>
 
-                            <div style={{ display: "flex", gap: 12 }}>
-                              <FaEdit
-                                style={{
-                                  fontSize: 13,
-                                  cursor: "pointer",
-                                }}
-                                onClick={() => openEdit(entry)}
-                              />
-                              <FaTrash
-                                style={{
-                                  fontSize: 13,
-                                  cursor: "pointer",
-                                  color: "#ff4d4d",
-                                }}
-                                onClick={() => setDeleteId(entry.id)}
-                              />
+                              <div style={{ display: "flex", gap: 12 }}>
+                                <FaEdit
+                                  style={{
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() => openEdit(entry)}
+                                />
+                                <FaTrash
+                                  style={{
+                                    fontSize: 13,
+                                    cursor: "pointer",
+                                    color: "#ff4d4d",
+                                  }}
+                                  onClick={() => setDeleteId(entry.id)}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </SortableItem>
             );
           })}
         </SortableContext>
       </DndContext>
 
-      {/* ----------------------
-          ADD/EDIT MODAL
-      ----------------------- */}
+      {/* ADD/EDIT MODAL */}
       {modalOpen && (
         <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -464,14 +474,9 @@ export default function MeasurementsPage() {
         </div>
       )}
 
-      {/* ----------------------
-          DELETE CONFIRM MODAL
-      ----------------------- */}
+      {/* DELETE CONFIRM MODAL */}
       {deleteId && (
-        <div
-          style={modalBackdrop}
-          onClick={() => setDeleteId(null)}
-        >
+        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
               Confirm Delete?

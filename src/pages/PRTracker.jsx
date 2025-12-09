@@ -1,7 +1,8 @@
 // src/pages/PRTracker.jsx
-console.log("🔥 USING REAL PRTracker.jsx");
-
 import React, { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
+
+// dnd-kit
 import {
   DndContext,
   closestCenter,
@@ -11,48 +12,18 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  verticalListSortingStrategy,
   useSortable,
   arrayMove,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { supabase } from "../supabaseClient";
-import {
-  Edit,
-  Trash2,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  X,
-  Check,
-} from "lucide-react";
+// icons
+import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 
-import "../glass.css";
-
-/* ----------------------------------------------
-   Sortable wrapper (draggable PR GROUPS)
----------------------------------------------- */
-function SortableGroup({ id, children }) {
-  const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    touchAction: "none",
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
-    </div>
-  );
-}
-
-/* ----------------------------------------------
-   Sortable wrapper for PR ITEMS within a group
----------------------------------------------- */
+/* --------------------------------------------
+   SORTABLE ITEM WITH HANDLE (LEFT SIDE ONLY)
+--------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
@@ -64,399 +35,556 @@ function SortableItem({ id, children }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style}>
+      {children({ attributes, listeners })}
     </div>
   );
 }
 
-/* ----------------------------------------------
+/* --------------------------------------------
    MAIN PAGE
----------------------------------------------- */
+--------------------------------------------- */
 export default function PRTracker() {
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
 
-  const [groups, setGroups] = useState({});
-  const [groupOrder, setGroupOrder] = useState([]);
-
+  const [groups, setGroups] = useState([]); // [{ lift_name, entries }]
   const [expanded, setExpanded] = useState({});
+
+  // Modal
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingPR, setEditingPR] = useState(null);
+  const [prLift, setPrLift] = useState("");
+  const [prWeight, setPrWeight] = useState("");
+  const [prReps, setPrReps] = useState("");
+  const [prUnit, setPrUnit] = useState("lbs");
+  const [prDate, setPrDate] = useState("");
+  const [prNotes, setPrNotes] = useState("");
+
+  // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
 
-  const [editId, setEditId] = useState(null);
-
-  const [mLift, setMLift] = useState("");
-  const [mWeight, setMWeight] = useState("");
-  const [mReps, setMReps] = useState("");
-  const [mUnit, setMUnit] = useState("lbs");
-  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
-  const [mNotes, setMNotes] = useState("");
-
+  // Drag sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  /* ----------------------------------------------
-     Load PRs
-  ---------------------------------------------- */
+  /* --------------------------------------------
+     LOAD USER & PRs
+  --------------------------------------------- */
   useEffect(() => {
     (async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
 
-      const { data, error } = await supabase
-        .from("prs")
-        .select("*")
-        .eq("user_id", user.id);
+      setUser(user);
+      if (user) await loadPRs(user.id);
 
-      if (error) {
-        console.error("PR LOAD ERROR:", error.message);
-        return;
-      }
-
-      const grouped = {};
-
-      data.forEach((pr) => {
-        if (!grouped[pr.lift_name]) grouped[pr.lift_name] = [];
-        grouped[pr.lift_name].push(pr);
-      });
-
-      // Sort each group newest → oldest
-      Object.keys(grouped).forEach((lift) => {
-        grouped[lift].sort((a, b) => new Date(b.date) - new Date(a.date));
-      });
-
-      setGroups(grouped);
-      setGroupOrder(Object.keys(grouped));
       setLoading(false);
     })();
   }, []);
 
-  /* ----------------------------------------------
-     Drag group reorder
-  ---------------------------------------------- */
-  function handleGroupDragEnd(event) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+  async function loadPRs(uid) {
+    const { data, error } = await supabase
+      .from("prs")
+      .select("*")
+      .eq("user_id", uid)
+      .order("date", { ascending: false });
 
-    setGroupOrder((prev) =>
-      arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id))
-    );
-  }
-
-  /* ----------------------------------------------
-     Drag PR within group
-  ---------------------------------------------- */
-  async function handleItemDragEnd(lift, event) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    setGroups((prev) => {
-      const copy = { ...prev };
-      copy[lift] = arrayMove(
-        copy[lift],
-        copy[lift].findIndex((p) => p.id === active.id),
-        copy[lift].findIndex((p) => p.id === over.id)
-      );
-      return copy;
-    });
-  }
-
-  /* ----------------------------------------------
-     OPEN MODALS
-  ---------------------------------------------- */
-  function openAddModal() {
-    setEditId(null);
-    setMLift("");
-    setMWeight("");
-    setMReps("");
-    setMUnit("lbs");
-    setMDate(new Date().toISOString().slice(0, 10));
-    setMNotes("");
-    setModalOpen(true);
-  }
-
-  function openEditModal(entry) {
-    setEditId(entry.id);
-    setMLift(entry.lift_name);
-    setMWeight(entry.weight);
-    setMReps(entry.reps ?? "");
-    setMUnit(entry.unit);
-    setMDate(entry.date);
-    setMNotes(entry.notes || "");
-    setModalOpen(true);
-  }
-
-  /* ----------------------------------------------
-     SAVE ADD/EDIT
-  ---------------------------------------------- */
-  async function savePR() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    if (!mLift || !mWeight) return;
-
-    const data = {
-      user_id: user.id,
-      lift_name: mLift,
-      weight: Number(mWeight),
-      reps: mReps ? Number(mReps) : null,
-      unit: mUnit,
-      date: mDate,
-      notes: mNotes || null,
-    };
-
-    if (editId) {
-      await supabase.from("prs").update(data).eq("id", editId);
-    } else {
-      await supabase.from("prs").insert(data);
+    if (error) {
+      console.error("PR LOAD ERROR:", error.message);
+      return;
     }
 
-    // Reload page instantly (quick way)
-    window.location.reload();
+    // Group by lift
+    const map = {};
+    data.forEach((pr) => {
+      if (!map[pr.lift_name]) map[pr.lift_name] = [];
+      map[pr.lift_name].push(pr);
+    });
+
+    const finalGroups = Object.keys(map).map((lift) => ({
+      lift_name: lift,
+      entries: map[lift].sort(
+        (a, b) => new Date(b.date) - new Date(a.date)
+      ),
+    }));
+
+    setGroups(finalGroups);
   }
 
-  /* ----------------------------------------------
-     CONFIRM DELETE
-  ---------------------------------------------- */
+  /* --------------------------------------------
+     HANDLE DRAG ORDER OF LIFTS
+  --------------------------------------------- */
+  function handleGroupDrag(event) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIdx = groups.findIndex((g) => g.lift_name === active.id);
+    const newIdx = groups.findIndex((g) => g.lift_name === over.id);
+
+    setGroups((prev) => arrayMove(prev, oldIdx, newIdx));
+  }
+
+  /* --------------------------------------------
+     EDIT / ADD MODAL
+  --------------------------------------------- */
+  function openAddModal() {
+    setEditingPR(null);
+    setPrLift("");
+    setPrWeight("");
+    setPrReps("");
+    setPrUnit("lbs");
+    setPrNotes("");
+    setPrDate(new Date().toISOString().slice(0, 10));
+    setModalOpen(true);
+  }
+
+  function openEditModal(pr) {
+    setEditingPR(pr);
+    setPrLift(pr.lift_name);
+    setPrWeight(pr.weight);
+    setPrReps(pr.reps ?? "");
+    setPrUnit(pr.unit);
+    setPrNotes(pr.notes ?? "");
+
+    const iso =
+      pr.date.includes("-")
+        ? pr.date.slice(0, 10)
+        : new Date(pr.date).toISOString().slice(0, 10);
+
+    setPrDate(iso);
+    setModalOpen(true);
+  }
+
+  /* --------------------------------------------
+     SAVE PR
+  --------------------------------------------- */
+  async function savePR() {
+    if (!user) return;
+    if (!prLift || !prWeight) return;
+
+    const isoDate = new Date(prDate).toISOString().slice(0, 10);
+
+    const payload = {
+      user_id: user.id,
+      lift_name: prLift,
+      weight: Number(prWeight),
+      reps: prReps ? Number(prReps) : null,
+      unit: prUnit,
+      date: isoDate,
+      notes: prNotes || null,
+    };
+
+    if (editingPR) {
+      await supabase.from("prs").update(payload).eq("id", editingPR.id);
+    } else {
+      await supabase.from("prs").insert(payload);
+    }
+
+    await loadPRs(user.id);
+    setModalOpen(false);
+  }
+
+  /* --------------------------------------------
+     DELETE CONFIRM
+  --------------------------------------------- */
   async function confirmDelete() {
     await supabase.from("prs").delete().eq("id", deleteId);
-    window.location.reload();
+
+    if (user) await loadPRs(user.id);
+
+    setDeleteId(null);
   }
 
-  if (loading) return <p className="text-white p-4">Loading...</p>;
-
-  /* ----------------------------------------------
+  /* --------------------------------------------
      PAGE UI
-  ---------------------------------------------- */
+  --------------------------------------------- */
   return (
-    <div className="p-4 text-white pb-24">
-      {/* Header */}
-      <div className="glass-chip mb-4 text-glow flex justify-between items-center">
-        <span className="glass-chip-dot" /> Personal Records
-        <button
-          onClick={openAddModal}
-          className="px-3 py-2 bg-red-600 rounded-xl flex items-center gap-1"
-        >
-          <Plus size={18} /> Add
-        </button>
-      </div>
+    <div
+      style={{
+        padding: "20px 16px 90px",
+        maxWidth: "900px",
+        margin: "0 auto",
+      }}
+    >
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
+        Personal Records
+      </h1>
 
-      {/* GROUPS */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleGroupDragEnd}
+      <button
+        onClick={openAddModal}
+        style={{
+          padding: "10px 20px",
+          background: "#ff2f2f",
+          borderRadius: 999,
+          border: "none",
+          fontSize: 14,
+          fontWeight: 600,
+          color: "white",
+          marginBottom: 18,
+          boxShadow: "0 0 14px rgba(255,47,47,0.35)",
+        }}
       >
-        <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
-          {groupOrder.map((lift) => {
-            const list = groups[lift];
-            const latest = list[0];
-            const isOpen = expanded[lift];
+        + Add PR
+      </button>
 
-            return (
-              <SortableGroup key={lift} id={lift}>
-                <div className="glass-section p-4 rounded-2xl mb-4">
-                  {/* Header Row */}
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h2 className="text-xl font-semibold text-red-400">{lift}</h2>
-                      <p className="text-gray-300 text-sm">
-                        {latest.weight} {latest.unit}
-                        {latest.reps ? ` • ${latest.reps} reps` : ""} — {latest.date}
-                      </p>
-                    </div>
+      {loading ? (
+        <p style={{ opacity: 0.7 }}>Loading...</p>
+      ) : groups.length === 0 ? (
+        <p style={{ opacity: 0.7 }}>No PRs yet.</p>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleGroupDrag}
+        >
+          <SortableContext
+            items={groups.map((g) => g.lift_name)}
+            strategy={verticalListSortingStrategy}
+          >
+            {groups.map((group) => {
+              const lift = group.lift_name;
+              const entries = group.entries;
+              const latest = entries[0];
+              const isOpen = expanded[lift];
 
-                    {/* Right-Side Buttons */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => openEditModal(latest)}
-                        className="text-white hover:text-red-400"
+              return (
+                <SortableItem key={lift} id={lift}>
+                  {({ attributes, listeners }) => (
+                    <div
+                      style={{
+                        background: "#0f0f0f",
+                        borderRadius: 12,
+                        padding: 14,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        marginBottom: 10,
+                      }}
+                    >
+                      {/* HEADER */}
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
                       >
-                        <Edit size={20} />
-                      </button>
-
-                      <button
-                        onClick={() => setDeleteId(latest.id)}
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <Trash2 size={20} />
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setExpanded((prev) => ({ ...prev, [lift]: !prev[lift] }))
-                        }
-                        className="text-gray-300 hover:text-white"
-                      >
-                        {isOpen ? <ChevronUp size={22} /> : <ChevronDown size={22} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expand List */}
-                  {isOpen && (
-                    <div className="mt-4">
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={(event) => handleItemDragEnd(lift, event)}
-                      >
-                        <SortableContext
-                          items={list.map((i) => i.id)}
-                          strategy={verticalListSortingStrategy}
+                        {/* LEFT drag + expand */}
+                        <div
+                          style={{
+                            flex: 1,
+                            maxWidth: "55%",
+                            cursor: "grab",
+                            userSelect: "none",
+                            WebkitUserSelect: "none",
+                          }}
+                          {...attributes}
+                          {...listeners}
+                          onClick={() =>
+                            setExpanded((prev) => ({
+                              ...prev,
+                              [lift]: !prev[lift],
+                            }))
+                          }
                         >
-                          {list.slice(1).map((entry) => (
-                            <SortableItem key={entry.id} id={entry.id}>
-                              <div className="p-3 rounded-xl bg-neutral-900/60 border border-neutral-700 flex justify-between items-center mb-2">
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 15,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {lift}
+                          </p>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 12,
+                              opacity: 0.7,
+                            }}
+                          >
+                            {latest.weight} {latest.unit}
+                            {latest.reps ? ` × ${latest.reps}` : ""}
+                            {" — "}
+                            {latest.date}
+                          </p>
+                        </div>
+
+                        {/* RIGHT: edit/delete */}
+                        <FaEdit
+                          style={{ fontSize: 14, cursor: "pointer" }}
+                          onClick={() => openEditModal(latest)}
+                        />
+                        <FaTrash
+                          style={{
+                            fontSize: 14,
+                            cursor: "pointer",
+                            color: "#ff4d4d",
+                            marginLeft: 10,
+                          }}
+                          onClick={() => setDeleteId(latest.id)}
+                        />
+
+                        {isOpen ? (
+                          <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
+                        ) : (
+                          <FaChevronDown
+                            style={{ marginLeft: 10, opacity: 0.7 }}
+                          />
+                        )}
+                      </div>
+
+                      {/* HISTORY LIST */}
+                      {isOpen && (
+                        <div style={{ marginTop: 10 }}>
+                          {entries.slice(1).map((entry) => (
+                            <div
+                              key={entry.id}
+                              style={{
+                                background: "#151515",
+                                borderRadius: 10,
+                                padding: 10,
+                                marginBottom: 8,
+                                border: "1px solid rgba(255,255,255,0.06)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                }}
+                              >
                                 <div>
-                                  <p className="text-white">
+                                  <p
+                                    style={{
+                                      margin: 0,
+                                      fontSize: 14,
+                                      fontWeight: 600,
+                                    }}
+                                  >
                                     {entry.weight} {entry.unit}
-                                    {entry.reps ? ` • ${entry.reps} reps` : ""}
+                                    {entry.reps ? ` × ${entry.reps}` : ""}
                                   </p>
-                                  <p className="text-gray-400 text-xs">{entry.date}</p>
+                                  <p
+                                    style={{
+                                      margin: 0,
+                                      fontSize: 11,
+                                      opacity: 0.7,
+                                    }}
+                                  >
+                                    {entry.date}
+                                  </p>
+
                                   {entry.notes && (
-                                    <p className="text-gray-500 text-xs italic">
+                                    <p
+                                      style={{
+                                        margin: 0,
+                                        fontSize: 11,
+                                        opacity: 0.5,
+                                        fontStyle: "italic",
+                                      }}
+                                    >
                                       {entry.notes}
                                     </p>
                                   )}
                                 </div>
 
-                                <div className="flex gap-3">
-                                  <button
+                                <div style={{ display: "flex", gap: 12 }}>
+                                  <FaEdit
+                                    style={{
+                                      fontSize: 13,
+                                      cursor: "pointer",
+                                    }}
                                     onClick={() => openEditModal(entry)}
-                                    className="text-white hover:text-red-400"
-                                  >
-                                    <Edit size={18} />
-                                  </button>
-
-                                  <button
+                                  />
+                                  <FaTrash
+                                    style={{
+                                      fontSize: 13,
+                                      cursor: "pointer",
+                                      color: "#ff4d4d",
+                                    }}
                                     onClick={() => setDeleteId(entry.id)}
-                                    className="text-red-400 hover:text-red-600"
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
+                                  />
                                 </div>
                               </div>
-                            </SortableItem>
+                            </div>
                           ))}
-                        </SortableContext>
-                      </DndContext>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              </SortableGroup>
-            );
-          })}
-        </SortableContext>
-      </DndContext>
+                </SortableItem>
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+      )}
 
-      {/* ADD/EDIT MODAL */}
+      {/* MODAL: ADD / EDIT PR */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
-            <h2 className="text-xl font-bold mb-4">
-              {editId ? "Edit PR" : "Add PR"}
+        <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>
+              {editingPR ? "Edit PR" : "New PR"}
             </h2>
 
-            <div className="space-y-3">
-              <input
-                placeholder="Lift name"
-                className="neon-input w-full"
-                value={mLift}
-                onChange={(e) => setMLift(e.target.value)}
-              />
+            <label style={labelStyle}>Lift</label>
+            <input
+              style={inputStyle}
+              value={prLift}
+              onChange={(e) => setPrLift(e.target.value)}
+              placeholder="Bench Press, Squat, etc."
+            />
 
-              <input
-                type="number"
-                placeholder="Weight"
-                className="neon-input w-full"
-                value={mWeight}
-                onChange={(e) => setMWeight(e.target.value)}
-              />
+            <label style={labelStyle}>Weight</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={prWeight}
+              onChange={(e) => setPrWeight(e.target.value)}
+            />
 
-              <input
-                type="number"
-                placeholder="Reps"
-                className="neon-input w-full"
-                value={mReps}
-                onChange={(e) => setMReps(e.target.value)}
-              />
+            <label style={labelStyle}>Reps</label>
+            <input
+              type="number"
+              style={inputStyle}
+              value={prReps}
+              onChange={(e) => setPrReps(e.target.value)}
+              placeholder="Optional"
+            />
 
-              <select
-                className="neon-input w-full"
-                value={mUnit}
-                onChange={(e) => setMUnit(e.target.value)}
-              >
-                <option value="lbs">lbs</option>
-                <option value="kg">kg</option>
-              </select>
+            <label style={labelStyle}>Unit</label>
+            <select
+              style={inputStyle}
+              value={prUnit}
+              onChange={(e) => setPrUnit(e.target.value)}
+            >
+              <option value="lbs">lbs</option>
+              <option value="kg">kg</option>
+            </select>
 
-              <input
-                type="date"
-                className="neon-input w-full"
-                value={mDate}
-                onChange={(e) => setMDate(e.target.value)}
-              />
+            <label style={labelStyle}>Date</label>
+            <input
+              type="date"
+              style={inputStyle}
+              value={prDate}
+              onChange={(e) =>
+                setPrDate(new Date(e.target.value).toISOString().slice(0, 10))
+              }
+            />
 
-              <textarea
-                className="neon-input w-full"
-                placeholder="Notes"
-                value={mNotes}
-                onChange={(e) => setMNotes(e.target.value)}
-              />
-            </div>
+            <label style={labelStyle}>Notes</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 60 }}
+              value={prNotes}
+              onChange={(e) => setPrNotes(e.target.value)}
+              placeholder="Optional notes..."
+            />
 
-            <div className="flex justify-between mt-6">
-              <button
-                onClick={() => setModalOpen(false)}
-                className="px-4 py-2 bg-neutral-700 rounded-xl flex items-center gap-1"
-              >
-                <X size={18} /> Cancel
-              </button>
-
-              <button
-                onClick={savePR}
-                className="px-4 py-2 bg-red-600 rounded-xl flex items-center gap-1"
-              >
-                <Check size={18} /> Save
-              </button>
-            </div>
+            <button
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                border: "none",
+                background: "#ff2f2f",
+                color: "white",
+                fontWeight: 600,
+                marginTop: 10,
+              }}
+              onClick={savePR}
+            >
+              Save PR
+            </button>
           </div>
         </div>
       )}
 
-      {/* DELETE CONFIRM MODAL */}
+      {/* DELETE CONFIRM */}
       {deleteId && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 p-5 rounded-2xl w-full max-w-sm border border-neutral-700">
-            <h2 className="text-xl font-bold text-red-400 mb-4">
+        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
               Confirm Delete?
             </h2>
-            <p className="text-gray-300 mb-6">This action cannot be undone.</p>
 
-            <div className="flex justify-between">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="px-4 py-2 bg-neutral-700 rounded-xl"
-              >
-                Cancel
-              </button>
+            <p style={{ opacity: 0.8, marginBottom: 16 }}>
+              This action cannot be undone.
+            </p>
 
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 bg-red-600 rounded-xl"
-              >
-                Delete
-              </button>
-            </div>
+            <button
+              onClick={() => setDeleteId(null)}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#333",
+                border: "none",
+                color: "white",
+                marginBottom: 10,
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={confirmDelete}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                background: "#ff2f2f",
+                border: "none",
+                color: "white",
+                fontWeight: 600,
+              }}
+            >
+              Delete
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+/* --------------------------------------------
+   SHARED STYLES
+--------------------------------------------- */
+const modalBackdrop = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.65)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+  zIndex: 999,
+};
+
+const modalCard = {
+  background: "#111",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  padding: 18,
+  width: "100%",
+  maxWidth: 420,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.15)",
+  background: "#000",
+  color: "white",
+  marginBottom: 10,
+};
+
+const labelStyle = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 4,
+};
