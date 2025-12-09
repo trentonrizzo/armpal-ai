@@ -2,59 +2,118 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
+// dnd-kit (same as Measurements + PR pages)
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// Icons
+import { FaEdit, FaTrash } from "react-icons/fa";
+
+/* -------------------------
+   SORTABLE ITEM (LEFT ONLY)
+-------------------------- */
+function SortableItem({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        touchAction: "none",
+      }}
+    >
+      {children({ attributes, listeners })}
+    </div>
+  );
+}
+
+/* -------------------------
+   MAIN PAGE
+-------------------------- */
 export default function GoalsPage() {
   const [goals, setGoals] = useState([]);
+  const [order, setOrder] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Modal state
-  const [editingGoal, setEditingGoal] = useState(null);
+  // Modal
   const [modalOpen, setModalOpen] = useState(false);
-
-  // Fields for NEW or EDIT goal
+  const [editingGoal, setEditingGoal] = useState(null);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("custom");
   const [currentValue, setCurrentValue] = useState("");
   const [targetValue, setTargetValue] = useState("");
   const [unit, setUnit] = useState("");
 
-  useEffect(() => {
-    loadUser();
-  }, []);
+  // Confirm delete
+  const [deleteId, setDeleteId] = useState(null);
 
-  async function loadUser() {
-    try {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  /* -------------------------
+     LOAD USER + GOALS
+  -------------------------- */
+  useEffect(() => {
+    (async () => {
       const {
         data: { user },
-        error,
       } = await supabase.auth.getUser();
-      if (error) throw error;
-
       setUser(user);
-      if (user) await loadGoals(user.id);
-    } catch (err) {
-      console.error("Error loading user:", err);
-    }
-  }
 
-  async function loadGoals(uid) {
-    try {
-      const { data, error } = await supabase
-        .from("goals")
-        .select("*")
-        .eq("user_id", uid)
-        .order("updated_at", { ascending: false });
+      if (user) {
+        const { data } = await supabase
+          .from("goals")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("order_index", { ascending: true }); // optional field
 
-      if (error) throw error;
+        setGoals(data || []);
+        setOrder((data || []).map((g) => g.id));
+      }
 
-      setGoals(data || []);
-    } catch (err) {
-      console.error("Error loading goals:", err.message);
-    } finally {
       setLoading(false);
-    }
+    })();
+  }, []);
+
+  /* -------------------------
+      DRAG END
+  -------------------------- */
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    if (!over || over.id === active.id) return;
+
+    const oldIdx = order.indexOf(active.id);
+    const newIdx = order.indexOf(over.id);
+
+    const newOrder = arrayMove(order, oldIdx, newIdx);
+    setOrder(newOrder);
+
+    // Save order to DB
+    newOrder.forEach(async (id, i) => {
+      await supabase.from("goals").update({ order_index: i }).eq("id", id);
+    });
   }
 
+  /* -------------------------
+      OPEN MODAL
+  -------------------------- */
   function openModal(goal = null) {
     if (goal) {
       setEditingGoal(goal);
@@ -78,373 +137,348 @@ export default function GoalsPage() {
     setModalOpen(false);
   }
 
+  /* -------------------------
+      SAVE GOAL
+  -------------------------- */
   async function saveGoal() {
-    try {
-      if (!user) return;
+    if (!user) return;
 
-      const payload = {
-        user_id: user.id,
-        title,
-        type,
-        current_value: currentValue ? Number(currentValue) : null,
-        target_value: targetValue ? Number(targetValue) : null,
-        unit,
-        updated_at: new Date(),
-      };
+    const payload = {
+      user_id: user.id,
+      title,
+      type,
+      current_value: currentValue ? Number(currentValue) : null,
+      target_value: targetValue ? Number(targetValue) : null,
+      unit,
+      updated_at: new Date(),
+    };
 
-      let res;
-      if (editingGoal) {
-        // Update existing
-        res = await supabase
-          .from("goals")
-          .update(payload)
-          .eq("id", editingGoal.id);
-      } else {
-        // Insert new
-        res = await supabase.from("goals").insert(payload);
-      }
-
-      if (res.error) throw res.error;
-
-      closeModal();
-      await loadGoals(user.id);
-    } catch (err) {
-      console.error("Save goal error:", err.message);
-    }
-  }
-
-  async function deleteGoal(id) {
-    try {
-      const { error } = await supabase
+    if (editingGoal) {
+      await supabase.from("goals").update(payload).eq("id", editingGoal.id);
+    } else {
+      const { data, error } = await supabase
         .from("goals")
-        .delete()
-        .eq("id", id);
+        .insert({ ...payload, order_index: order.length })
+        .select();
 
-      if (error) throw error;
-
-      await loadGoals(user.id);
-    } catch (err) {
-      console.error("Delete error:", err.message);
+      if (!error && data?.length) {
+        setOrder((prev) => [...prev, data[0].id]);
+      }
     }
+
+    closeModal();
+
+    const { data } = await supabase
+      .from("goals")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("order_index", { ascending: true });
+
+    setGoals(data || []);
   }
 
+  /* -------------------------
+      DELETE GOAL
+  -------------------------- */
+  async function confirmDelete() {
+    await supabase.from("goals").delete().eq("id", deleteId);
+
+    const { data } = await supabase
+      .from("goals")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("order_index", { ascending: true });
+
+    setGoals(data || []);
+    setOrder((data || []).map((g) => g.id));
+    setDeleteId(null);
+  }
+
+  if (loading)
+    return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
+
+  /* -------------------------
+      PAGE
+  -------------------------- */
   return (
     <div
       style={{
         padding: "20px 16px 90px",
-        maxWidth: "900px",
+        maxWidth: 900,
         margin: "0 auto",
       }}
     >
-      <h1
-        style={{
-          fontSize: "22px",
-          fontWeight: 700,
-          marginBottom: "16px",
-        }}
-      >
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Goals
       </h1>
 
-      {/* Add New Goal Button */}
       <button
         onClick={() => openModal(null)}
         style={{
           width: "100%",
-          padding: "12px",
+          padding: 12,
           background: "#ff2f2f",
-          color: "white",
-          borderRadius: "10px",
+          borderRadius: 10,
           border: "none",
-          fontSize: "15px",
+          color: "white",
+          fontSize: 15,
           fontWeight: 600,
-          marginBottom: "16px",
+          marginBottom: 18,
           cursor: "pointer",
+          boxShadow: "0 0 14px rgba(255,47,47,0.35)",
         }}
       >
         + Add New Goal
       </button>
 
-      {loading ? (
-        <p style={{ opacity: 0.7 }}>Loading goals...</p>
-      ) : goals.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>No goals yet. Add your first one!</p>
-      ) : (
-        goals.map((goal) => {
-          const progress = Number(goal.progress || 0).toFixed(0);
+      {/* DRAGGABLE LIST */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={order} strategy={verticalListSortingStrategy}>
+          {order.map((id) => {
+            const goal = goals.find((g) => g.id === id);
+            if (!goal) return null;
 
-          return (
-            <div
-              key={goal.id}
-              style={{
-                background: "#101010",
-                borderRadius: "12px",
-                padding: "14px",
-                border: "1px solid rgba(255,255,255,0.07)",
-                marginBottom: "14px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: "8px",
-                }}
-              >
-                <div>
-                  <p
+            const current = goal.current_value ?? 0;
+            const target = goal.target_value ?? 0;
+            const pct =
+              target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+
+            return (
+              <SortableItem key={goal.id} id={goal.id}>
+                {({ attributes, listeners }) => (
+                  <div
                     style={{
-                      fontSize: "15px",
-                      fontWeight: 600,
-                      margin: 0,
+                      background: "#0f0f0f",
+                      borderRadius: 12,
+                      padding: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      marginBottom: 12,
                     }}
                   >
-                    {goal.title}
-                  </p>
-                  <p
-                    style={{
-                      fontSize: "12px",
-                      opacity: 0.7,
-                      margin: 0,
-                    }}
-                  >
-                    {goal.current_value ?? 0} /{" "}
-                    {goal.target_value ?? "?"} {goal.unit}
-                  </p>
-                </div>
-                <strong style={{ fontSize: "13px", opacity: 0.9 }}>
-                  {progress}%
-                </strong>
-              </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      {/* LEFT = DRAG HANDLE AREA (50%) */}
+                      <div
+                        style={{
+                          flexBasis: "50%",
+                          cursor: "grab",
+                          userSelect: "none",
+                        }}
+                        {...attributes}
+                        {...listeners}
+                      >
+                        <p
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 600,
+                            margin: 0,
+                          }}
+                        >
+                          {goal.title}
+                        </p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 12,
+                            opacity: 0.7,
+                          }}
+                        >
+                          {current} / {target} {goal.unit}
+                        </p>
+                      </div>
 
-              {/* Progress bar */}
-              <div
-                style={{
-                  width: "100%",
-                  height: "6px",
-                  borderRadius: "999px",
-                  background: "rgba(255,255,255,0.05)",
-                  overflow: "hidden",
-                  marginBottom: "10px",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${progress}%`,
-                    height: "100%",
-                    background:
-                      "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
-                    borderRadius: "999px",
-                    transition: "width 0.2s ease",
-                  }}
-                />
-              </div>
+                      {/* RIGHT = ICONS + SCROLLABLE CLICK AREA */}
+                      <div
+                        style={{
+                          flex: 1,
+                          textAlign: "right",
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: 12,
+                        }}
+                      >
+                        <FaEdit
+                          style={{ cursor: "pointer", opacity: 0.9 }}
+                          onClick={() => openModal(goal)}
+                        />
+                        <FaTrash
+                          style={{ cursor: "pointer", color: "#ff4d4d" }}
+                          onClick={() => setDeleteId(goal.id)}
+                        />
+                      </div>
+                    </div>
 
-              {/* Buttons */}
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={() => openModal(goal)}
-                  style={{
-                    flex: 1,
-                    padding: "10px",
-                    background: "#111",
-                    color: "white",
-                    borderRadius: "8px",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    cursor: "pointer",
-                    fontSize: "13px",
-                  }}
-                >
-                  Edit
-                </button>
+                    {/* PROGRESS BAR + % */}
+                    <div style={{ marginTop: 10 }}>
+                      <div
+                        style={{
+                          height: 6,
+                          borderRadius: 999,
+                          background: "rgba(255,255,255,0.06)",
+                          overflow: "hidden",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${pct}%`,
+                            height: "100%",
+                            background:
+                              "linear-gradient(90deg,#ff2f2f,#ff6b4a)",
+                          }}
+                        />
+                      </div>
 
-                <button
-                  onClick={() => deleteGoal(goal.id)}
-                  style={{
-                    flex: 1,
-                    padding: "10px",
-                    background: "transparent",
-                    color: "#ff2f2f",
-                    borderRadius: "8px",
-                    border: "1px solid rgba(255,0,0,0.4)",
-                    cursor: "pointer",
-                    fontSize: "13px",
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          );
-        })
-      )}
+                      <p
+                        style={{
+                          textAlign: "right",
+                          fontSize: 12,
+                          opacity: 0.75,
+                          margin: 0,
+                        }}
+                      >
+                        {pct}% complete
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </SortableItem>
+            );
+          })}
+        </SortableContext>
+      </DndContext>
 
-      {/* EDIT / ADD MODAL */}
+      {/* MODAL */}
       {modalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.7)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: "20px",
-            zIndex: 999,
-          }}
-          onClick={closeModal}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "#0f0f0f",
-              padding: "18px",
-              borderRadius: "12px",
-              width: "100%",
-              maxWidth: "420px",
-              border: "1px solid rgba(255,255,255,0.1)",
-            }}
-          >
-            <h2
-              style={{
-                margin: "0 0 12px",
-                fontSize: "18px",
-                fontWeight: 600,
-              }}
-            >
+        <div style={modalBackdrop} onClick={closeModal}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>
               {editingGoal ? "Edit Goal" : "Create Goal"}
             </h2>
 
-            {/* Title */}
-            <label style={{ fontSize: "12px", opacity: 0.9 }}>
-              Title
-            </label>
+            <label style={labelStyle}>Title</label>
             <input
+              style={inputStyle}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                marginBottom: "10px",
-                background: "#111",
-                borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "white",
-              }}
             />
 
-            {/* Type */}
-            <label style={{ fontSize: "12px", opacity: 0.9 }}>
-              Type
-            </label>
+            <label style={labelStyle}>Type</label>
             <select
+              style={inputStyle}
               value={type}
               onChange={(e) => setType(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                marginBottom: "10px",
-                background: "#111",
-                borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "white",
-              }}
             >
               <option value="custom">Custom</option>
               <option value="pr">PR</option>
               <option value="measurement">Measurement</option>
             </select>
 
-            {/* Current Value */}
-            <label style={{ fontSize: "12px", opacity: 0.9 }}>
-              Current Value
-            </label>
+            <label style={labelStyle}>Current Value</label>
             <input
               type="number"
+              style={inputStyle}
               value={currentValue}
               onChange={(e) => setCurrentValue(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                marginBottom: "10px",
-                background: "#111",
-                borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "white",
-              }}
             />
 
-            {/* Target Value */}
-            <label style={{ fontSize: "12px", opacity: 0.9 }}>
-              Target Value
-            </label>
+            <label style={labelStyle}>Target Value</label>
             <input
               type="number"
+              style={inputStyle}
               value={targetValue}
               onChange={(e) => setTargetValue(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                marginBottom: "10px",
-                background: "#111",
-                borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "white",
-              }}
             />
 
-            {/* Unit */}
-            <label style={{ fontSize: "12px", opacity: 0.9 }}>
-              Unit (optional)
-            </label>
+            <label style={labelStyle}>Unit</label>
             <input
+              style={inputStyle}
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                marginBottom: "16px",
-                background: "#111",
-                borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "white",
-              }}
             />
 
-            {/* Save */}
             <button
-              onClick={saveGoal}
               style={{
                 width: "100%",
-                padding: "12px",
+                padding: 10,
                 background: "#ff2f2f",
-                color: "white",
-                borderRadius: "10px",
                 border: "none",
-                fontSize: "15px",
+                borderRadius: 10,
+                color: "white",
                 fontWeight: 600,
-                marginBottom: "10px",
-                cursor: "pointer",
+                fontSize: 15,
+                marginTop: 8,
               }}
+              onClick={saveGoal}
             >
               Save Goal
             </button>
 
-            {/* Cancel */}
             <button
-              onClick={closeModal}
               style={{
                 width: "100%",
-                padding: "10px",
+                padding: 10,
                 background: "#222",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 10,
+                marginTop: 10,
                 color: "white",
-                borderRadius: "10px",
-                border: "1px solid rgba(255,255,255,0.1)",
-                cursor: "pointer",
-                fontSize: "14px",
               }}
+              onClick={closeModal}
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE MODAL */}
+      {deleteId && (
+        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
+
+            <p style={{ opacity: 0.8 }}>This cannot be undone.</p>
+
+            <button
+              style={{
+                width: "100%",
+                padding: 10,
+                background: "#333",
+                borderRadius: 10,
+                border: "none",
+                color: "white",
+                marginBottom: 10,
+              }}
+              onClick={() => setDeleteId(null)}
+            >
+              Cancel
+            </button>
+
+            <button
+              style={{
+                width: "100%",
+                padding: 10,
+                background: "#ff2f2f",
+                borderRadius: 10,
+                border: "none",
+                color: "white",
+                fontWeight: 600,
+              }}
+              onClick={confirmDelete}
+            >
+              Delete
             </button>
           </div>
         </div>
@@ -452,3 +486,42 @@ export default function GoalsPage() {
     </div>
   );
 }
+
+/* -------------------------
+     STYLES
+-------------------------- */
+const modalBackdrop = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.65)",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+  zIndex: 999,
+};
+
+const modalCard = {
+  background: "#111",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  padding: 18,
+  width: "100%",
+  maxWidth: 420,
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: 8,
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.15)",
+  background: "#000",
+  color: "white",
+  marginBottom: 10,
+};
+
+const labelStyle = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 4,
+};
