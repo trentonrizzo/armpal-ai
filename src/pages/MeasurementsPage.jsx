@@ -29,18 +29,22 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 
+/* ---------------------------------------------------
+   SORTABLE ITEM - USES ABSOLUTE DRAG HANDLE + SCROLL
+--------------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    touchAction: "none",
-  };
-
   return (
-    <div ref={setNodeRef} style={style}>
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        position: "relative",
+      }}
+    >
       {children({ attributes, listeners })}
     </div>
   );
@@ -54,34 +58,25 @@ export default function MeasurementsPage() {
 
   const [expanded, setExpanded] = useState({});
 
+  // Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
 
   const [mName, setMName] = useState("");
   const [mValue, setMValue] = useState("");
   const [mUnit, setMUnit] = useState("in");
-  const [mDate, setMDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
 
   const [deleteId, setDeleteId] = useState(null);
 
+  // Sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // 🔥 RIGHT SIDE SCROLL AREA (60%)
-  const scrollZone = {
-    position: "absolute",
-    right: 0,
-    top: 0,
-    width: "60%",
-    height: "100%",
-    zIndex: 1,
-  };
-
+  /* ---------------------------------------------------
+     LOAD MEASUREMENTS
+  --------------------------------------------------- */
   useEffect(() => {
     (async () => {
       const {
@@ -108,16 +103,22 @@ export default function MeasurementsPage() {
     })();
   }, []);
 
+  /* ---------------------------------------------------
+     DRAG GROUPS
+  --------------------------------------------------- */
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = groupOrder.indexOf(active.id);
-    const newIndex = groupOrder.indexOf(over.id);
+    const oldIdx = groupOrder.indexOf(active.id);
+    const newIdx = groupOrder.indexOf(over.id);
 
-    setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
+    setGroupOrder((prev) => arrayMove(prev, oldIdx, newIdx));
   }
 
+  /* ---------------------------------------------------
+     OPEN MODAL - ADD
+  --------------------------------------------------- */
   function openNew() {
     setEditId(null);
     setMName("");
@@ -127,6 +128,9 @@ export default function MeasurementsPage() {
     setModalOpen(true);
   }
 
+  /* ---------------------------------------------------
+     OPEN MODAL - EDIT
+  --------------------------------------------------- */
   function openEdit(entry) {
     setEditId(entry.id);
     setMName(entry.name);
@@ -136,6 +140,9 @@ export default function MeasurementsPage() {
     setModalOpen(true);
   }
 
+  /* ---------------------------------------------------
+     SAVE MEASUREMENT
+  --------------------------------------------------- */
   async function saveMeasurement() {
     const {
       data: { user },
@@ -163,6 +170,7 @@ export default function MeasurementsPage() {
     }
 
     const rows = await getMeasurements(user.id);
+
     const grouped = {};
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
@@ -174,10 +182,12 @@ export default function MeasurementsPage() {
 
     setGroups(grouped);
     setGroupOrder(Object.keys(grouped));
-
     setModalOpen(false);
   }
 
+  /* ---------------------------------------------------
+     CONFIRM DELETE
+  --------------------------------------------------- */
   async function confirmDelete() {
     await deleteMeasurement(deleteId);
 
@@ -186,6 +196,7 @@ export default function MeasurementsPage() {
     } = await supabase.auth.getUser();
 
     const rows = await getMeasurements(user.id);
+
     const grouped = {};
     rows.forEach((m) => {
       if (!grouped[m.name]) grouped[m.name] = [];
@@ -203,6 +214,9 @@ export default function MeasurementsPage() {
   if (loading)
     return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
 
+  /* ---------------------------------------------------
+     UI
+  --------------------------------------------------- */
   return (
     <div
       style={{
@@ -232,6 +246,7 @@ export default function MeasurementsPage() {
         + Add Measurement
       </button>
 
+      {/* DRAG LIST */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -241,6 +256,10 @@ export default function MeasurementsPage() {
           items={groupOrder}
           strategy={verticalListSortingStrategy}
         >
+          {groupOrder.length === 0 && (
+            <p style={{ opacity: 0.7 }}>No measurements yet.</p>
+          )}
+
           {groupOrder.map((groupName) => {
             const list = groups[groupName] || [];
             const latest = list[0];
@@ -251,18 +270,28 @@ export default function MeasurementsPage() {
                 {({ attributes, listeners }) => (
                   <div
                     style={{
-                      position: "relative",
                       background: "#0f0f0f",
                       borderRadius: 12,
                       padding: 14,
                       border: "1px solid rgba(255,255,255,0.08)",
                       marginBottom: 10,
+                      position: "relative",
                     }}
                   >
-                    {/* 🔥 SCROLLABLE RIGHT ZONE */}
-                    <div style={scrollZone} />
+                    {/* SCROLL ZONE ON RIGHT — 60% */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: 0,
+                        width: "60%",
+                        height: "100%",
+                        zIndex: 3,
+                        pointerEvents: "auto",
+                      }}
+                    ></div>
 
-                    {/* HEADER */}
+                    {/* HEADER ROW */}
                     <div
                       style={{
                         display: "flex",
@@ -270,13 +299,15 @@ export default function MeasurementsPage() {
                         alignItems: "center",
                       }}
                     >
-                      {/* LEFT (DRAG ZONE 40%) */}
+                      {/* LEFT = DRAG HANDLE (40%) */}
                       <div
                         style={{
                           flexBasis: "40%",
                           cursor: "grab",
                           userSelect: "none",
                           WebkitUserSelect: "none",
+                          position: "relative",
+                          zIndex: 5,
                         }}
                         {...attributes}
                         {...listeners}
@@ -307,7 +338,7 @@ export default function MeasurementsPage() {
                         </p>
                       </div>
 
-                      {/* RIGHT BUTTONS (scrollable zone behind them) */}
+                      {/* RIGHT BUTTONS (ABOVE SCROLL ZONE) */}
                       <div
                         style={{
                           flex: 1,
@@ -316,6 +347,8 @@ export default function MeasurementsPage() {
                           alignItems: "center",
                           gap: 12,
                           paddingLeft: 10,
+                          position: "relative",
+                          zIndex: 10,
                         }}
                       >
                         <FaEdit
@@ -330,7 +363,6 @@ export default function MeasurementsPage() {
                           }}
                           onClick={() => setDeleteId(latest.id)}
                         />
-
                         {isOpen ? (
                           <FaChevronUp style={{ opacity: 0.7 }} />
                         ) : (
@@ -341,7 +373,7 @@ export default function MeasurementsPage() {
 
                     {/* HISTORY */}
                     {isOpen && (
-                      <div style={{ marginTop: 10 }}>
+                      <div style={{ marginTop: 10, paddingRight: 4 }}>
                         {list.slice(1).map((entry) => (
                           <div
                             key={entry.id}
@@ -351,8 +383,21 @@ export default function MeasurementsPage() {
                               padding: 10,
                               marginBottom: 8,
                               border: "1px solid rgba(255,255,255,0.06)",
+                              position: "relative",
                             }}
                           >
+                            {/* RIGHT scroll for history too */}
+                            <div
+                              style={{
+                                position: "absolute",
+                                right: 0,
+                                top: 0,
+                                width: "60%",
+                                height: "100%",
+                                zIndex: 3,
+                              }}
+                            ></div>
+
                             <div
                               style={{
                                 display: "flex",
@@ -360,7 +405,7 @@ export default function MeasurementsPage() {
                                 alignItems: "center",
                               }}
                             >
-                              <div>
+                              <div style={{ zIndex: 5, position: "relative" }}>
                                 <p
                                   style={{
                                     margin: 0,
@@ -381,7 +426,14 @@ export default function MeasurementsPage() {
                                 </p>
                               </div>
 
-                              <div style={{ display: "flex", gap: 12 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 12,
+                                  position: "relative",
+                                  zIndex: 10,
+                                }}
+                              >
                                 <FaEdit
                                   style={{
                                     fontSize: 13,
@@ -411,7 +463,7 @@ export default function MeasurementsPage() {
         </SortableContext>
       </DndContext>
 
-      {/* ADD/EDIT MODAL */}
+      {/* MODAL: ADD/EDIT */}
       {modalOpen && (
         <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -472,6 +524,7 @@ export default function MeasurementsPage() {
         </div>
       )}
 
+      {/* DELETE CONFIRM */}
       {deleteId && (
         <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -519,6 +572,9 @@ export default function MeasurementsPage() {
   );
 }
 
+/* ---------------------------------------------------
+   SHARED MODAL STYLES
+--------------------------------------------------- */
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
