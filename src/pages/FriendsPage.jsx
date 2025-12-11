@@ -7,18 +7,15 @@ export default function FriendsPage() {
   const [user, setUser] = useState(null);
 
   // Data
-  const [friends, setFriends] = useState([]);
-  const [incoming, setIncoming] = useState([]);
-  const [outgoing, setOutgoing] = useState([]);
+  const [friends, setFriends] = useState([]); // accepted friends (profiles)
+  const [incoming, setIncoming] = useState([]); // pending where friend_id = me
+  const [outgoing, setOutgoing] = useState([]); // pending where user_id = me
 
   // UI
   const [showAddBox, setShowAddBox] = useState(false);
   const [handleInput, setHandleInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -29,153 +26,154 @@ export default function FriendsPage() {
       if (current?.id) {
         await loadAllFriends(current.id);
       }
-      setLoading(false);
     }
     load();
   }, []);
 
   // -------------------------------------------------------------------
-  // LOAD FRIENDS, INCOMING, OUTGOING
+  // LOAD ALL FRIEND DATA IN ONE GO
   // -------------------------------------------------------------------
   async function loadAllFriends(myId) {
-    // ACCEPTED FRIENDS (both directions)
-    const { data: asUser } = await supabase
-      .from("friends")
-      .select("id, friend_id, status")
-      .eq("user_id", myId)
-      .eq("status", "accepted");
+    try {
+      // Get ALL friend rows where I'm involved (no status filter here)
+      const { data: rows, error } = await supabase
+        .from("friends")
+        .select("id, user_id, friend_id, status")
+        .or(`user_id.eq.${myId},friend_id.eq.${myId}`);
 
-    const { data: asFriend } = await supabase
-      .from("friends")
-      .select("id, user_id, status")
-      .eq("friend_id", myId)
-      .eq("status", "accepted");
+      if (error) {
+        console.error("friends select error:", error);
+        setFriends([]);
+        setIncoming([]);
+        setOutgoing([]);
+        return;
+      }
 
-    const friendIds = new Set();
-    (asUser || []).forEach((row) => friendIds.add(row.friend_id));
-    (asFriend || []).forEach((row) => friendIds.add(row.user_id));
+      const acceptedIds = new Set();
+      const incomingRows = [];
+      const outgoingRows = [];
 
-    let friendsProfiles = [];
-    if (friendIds.size > 0) {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, username, handle, last_active")
-        .in("id", Array.from(friendIds));
+      (rows || []).forEach((row) => {
+        const { user_id, friend_id, status } = row;
 
-      friendsProfiles = profiles || [];
-    }
-    setFriends(friendsProfiles);
+        // normalize status
+        const st = (status || "").toLowerCase();
 
-    // INCOMING REQUESTS
-    const { data: incomingRows } = await supabase
-      .from("friends")
-      .select("id, user_id, status")
-      .eq("friend_id", myId)
-      .eq("status", "pending");
+        if (st === "accepted") {
+          // accepted friend — whichever is NOT me is the friend
+          const otherId = user_id === myId ? friend_id : user_id;
+          acceptedIds.add(otherId);
+        } else if (st === "pending") {
+          if (friend_id === myId) {
+            // they sent request to me
+            incomingRows.push(row);
+          } else if (user_id === myId) {
+            // I sent request to them
+            outgoingRows.push(row);
+          }
+        }
+      });
 
-    if (incomingRows?.length > 0) {
-      const ids = incomingRows.map((r) => r.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, username, handle")
-        .in("id", ids);
+      const profileIds = new Set();
+      acceptedIds.forEach((id) => profileIds.add(id));
+      incomingRows.forEach((row) => profileIds.add(row.user_id));
+      outgoingRows.forEach((row) => profileIds.add(row.friend_id));
 
-      const full = incomingRows.map((row) => ({
+      let profiles = [];
+      if (profileIds.size > 0) {
+        const { data: profData, error: profErr } = await supabase
+          .from("profiles")
+          .select("id, username, handle, last_active")
+          .in("id", Array.from(profileIds));
+
+        if (profErr) {
+          console.error("profiles error:", profErr);
+        } else {
+          profiles = profData || [];
+        }
+      }
+
+      const profileMap = {};
+      profiles.forEach((p) => {
+        profileMap[p.id] = p;
+      });
+
+      // Build accepted friends list
+      const acceptedList = Array.from(acceptedIds)
+        .map((id) => profileMap[id])
+        .filter(Boolean);
+
+      // Build incoming/outgoing with attached profiles
+      const incomingFull = incomingRows.map((row) => ({
         ...row,
-        profile: (profiles || []).find((p) => p.id === row.user_id) || null,
+        profile: profileMap[row.user_id] || null,
       }));
 
-      setIncoming(full);
-    } else {
+      const outgoingFull = outgoingRows.map((row) => ({
+        ...row,
+        profile: profileMap[row.friend_id] || null,
+      }));
+
+      setFriends(acceptedList);
+      setIncoming(incomingFull);
+      setOutgoing(outgoingFull);
+    } catch (err) {
+      console.error("loadAllFriends error:", err);
+      setFriends([]);
       setIncoming([]);
-    }
-
-    // OUTGOING REQUESTS
-    const { data: outgoingRows } = await supabase
-      .from("friends")
-      .select("id, friend_id, status")
-      .eq("user_id", myId)
-      .eq("status", "pending");
-
-    if (outgoingRows?.length > 0) {
-      const ids = outgoingRows.map((r) => r.friend_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, username, handle")
-        .in("id", ids);
-
-      const full = outgoingRows.map((row) => ({
-        ...row,
-        profile: (profiles || []).find((p) => p.id === row.friend_id) || null,
-      }));
-
-      setOutgoing(full);
-    } else {
       setOutgoing([]);
     }
   }
 
   // -------------------------------------------------------------------
-  // SEND FRIEND REQUEST  (case-insensitive handle, clear feedback)
+  // SEND FRIEND REQUEST
   // -------------------------------------------------------------------
   async function sendFriendRequest() {
     try {
       setErrorMsg("");
       setSuccessMsg("");
-
       if (!user?.id) return;
 
-      const raw = handleInput.trim();
-      if (!raw) {
-        setErrorMsg("Enter a handle first.");
-        return;
-      }
+      let raw = handleInput.trim();
+      if (!raw) return;
 
-      // Strip leading @ and normalize to lowercase
-      const cleaned = raw.startsWith("@") ? raw.slice(1) : raw;
-      const normalized = cleaned.toLowerCase();
+      // allow @handle or handle
+      if (raw.startsWith("@")) raw = raw.slice(1);
 
-      setSending(true);
-
-      // CASE-INSENSITIVE SEARCH BY HANDLE
-      const { data: target, error: targetErr } = await supabase
+      // search case-insensitive
+      const { data: target, error } = await supabase
         .from("profiles")
         .select("id, handle, username")
-        .ilike("handle", normalized) // case-insensitive
+        .ilike("handle", raw)
         .maybeSingle();
 
-      if (targetErr || !target) {
+      if (error || !target) {
         setErrorMsg("No user found with that handle.");
-        setSending(false);
         return;
       }
 
       if (target.id === user.id) {
         setErrorMsg("You can’t add yourself.");
-        setSending(false);
         return;
       }
 
-      // Check existing relationship / request
-      const { data: existing } = await supabase
+      // check if existing friendship/req
+      const { data: existing, error: existErr } = await supabase
         .from("friends")
         .select("id, status, user_id, friend_id")
         .or(
           `and(user_id.eq.${user.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${user.id})`
         );
 
+      if (existErr) {
+        console.error("friends existing error:", existErr);
+      }
+
       if (existing && existing.length > 0) {
-        const row = existing[0];
-        if (row.status === "accepted") {
-          setErrorMsg("You’re already friends.");
-        } else {
-          setErrorMsg("A request already exists.");
-        }
-        setSending(false);
+        setErrorMsg("Request already exists or you’re already friends.");
         return;
       }
 
-      // Insert request
       const { error: insertErr } = await supabase.from("friends").insert({
         user_id: user.id,
         friend_id: target.id,
@@ -183,38 +181,43 @@ export default function FriendsPage() {
       });
 
       if (insertErr) {
-        console.error(insertErr);
+        console.error("insert friend error:", insertErr);
         setErrorMsg("Error sending request.");
-        setSending(false);
         return;
       }
 
+      setHandleInput("");
+      setShowAddBox(false);
       setSuccessMsg(
         `Friend request sent to @${
           target.handle || target.username || "user"
         }.`
       );
-      setHandleInput("");
+
       await loadAllFriends(user.id);
     } catch (err) {
       console.error(err);
       setErrorMsg("Error sending request.");
-    } finally {
-      setSending(false);
     }
   }
 
   // ACCEPT REQUEST
   async function acceptRequest(rowId) {
     if (!user?.id) return;
-    await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
+    const { error } = await supabase
+      .from("friends")
+      .update({ status: "accepted" })
+      .eq("id", rowId);
+
+    if (error) console.error("accept error:", error);
     await loadAllFriends(user.id);
   }
 
   // DECLINE REQUEST
   async function declineRequest(rowId) {
     if (!user?.id) return;
-    await supabase.from("friends").delete().eq("id", rowId);
+    const { error } = await supabase.from("friends").delete().eq("id", rowId);
+    if (error) console.error("decline error:", error);
     await loadAllFriends(user.id);
   }
 
@@ -224,7 +227,7 @@ export default function FriendsPage() {
   function isOnline(lastActive) {
     if (!lastActive) return false;
     const diff = Date.now() - new Date(lastActive).getTime();
-    return diff < 60_000; // within 60s = online
+    return diff < 60000; // last 60s
   }
 
   // -------------------------------------------------------------------
@@ -250,32 +253,20 @@ export default function FriendsPage() {
         {showAddBox && (
           <div style={{ marginTop: 12 }}>
             <p style={smallMuted}>
-              Search by <span style={mono}>@handle</span> (case-insensitive)
+              Search by <span style={mono}>@handle</span>
             </p>
 
             <div style={addRow}>
               <input
                 type="text"
                 value={handleInput}
-                onChange={(e) => {
-                  setHandleInput(e.target.value);
-                  setErrorMsg("");
-                  setSuccessMsg("");
-                }}
-                placeholder="@kranjis"
+                onChange={(e) => setHandleInput(e.target.value)}
+                placeholder="@crangis"
                 style={inputBox}
               />
 
-              <button
-                style={{
-                  ...sendBtn,
-                  opacity: sending ? 0.7 : 1,
-                  cursor: sending ? "wait" : "pointer",
-                }}
-                onClick={sendFriendRequest}
-                disabled={sending}
-              >
-                {sending ? "Sending..." : "Send"}
+              <button style={sendBtn} onClick={sendFriendRequest}>
+                Send
               </button>
 
               <button
@@ -292,8 +283,11 @@ export default function FriendsPage() {
             </div>
 
             {errorMsg && <p style={errorStyle}>{errorMsg}</p>}
-            {successMsg && <p style={successStyle}>{successMsg}</p>}
           </div>
+        )}
+
+        {successMsg && !showAddBox && (
+          <p style={successStyle}>{successMsg}</p>
         )}
       </section>
 
@@ -351,7 +345,6 @@ export default function FriendsPage() {
                       .charAt(0)
                       .toUpperCase()}
                   </div>
-
                   <div>
                     <p style={nameText}>{p?.handle || p?.username}</p>
                     <p style={subText}>@{p?.username}</p>
@@ -369,9 +362,7 @@ export default function FriendsPage() {
       <section style={card}>
         <h2 style={sectionTitle}>Your Friends</h2>
 
-        {loading ? (
-          <p style={smallMuted}>Loading friends...</p>
-        ) : friends.length === 0 ? (
+        {friends.length === 0 ? (
           <p style={smallMuted}>You haven&apos;t added anyone yet.</p>
         ) : (
           friends.map((p) => {
@@ -481,15 +472,6 @@ const cancelBtn = {
   cursor: "pointer",
 };
 
-const smallMuted = {
-  fontSize: 12,
-  opacity: 0.7,
-};
-
-const mono = {
-  fontFamily: "monospace",
-};
-
 const errorStyle = {
   color: "#ff6b6b",
   fontSize: 13,
@@ -499,7 +481,7 @@ const errorStyle = {
 const successStyle = {
   color: "#4ade80",
   fontSize: 13,
-  marginTop: 6,
+  marginTop: 8,
 };
 
 const row = {
@@ -564,4 +546,13 @@ const msgBtn = {
   borderRadius: 10,
   textDecoration: "none",
   fontWeight: 700,
+};
+
+const smallMuted = {
+  fontSize: 12,
+  opacity: 0.7,
+};
+
+const mono = {
+  fontFamily: "monospace",
 };
