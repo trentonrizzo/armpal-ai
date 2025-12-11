@@ -4,7 +4,7 @@ import { supabase } from "../supabaseClient";
 import { useParams, useNavigate } from "react-router-dom";
 import { FiArrowLeft, FiSend, FiImage, FiMic, FiX } from "react-icons/fi";
 
-// Format timestamp as HH:MM
+// Format timestamp
 function formatTime(ts) {
   if (!ts) return "";
   const d = new Date(ts);
@@ -17,8 +17,6 @@ export default function ChatPage() {
 
   const [user, setUser] = useState(null);
   const [friend, setFriend] = useState(null);
-
-  const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
 
   const [messageInput, setMessageInput] = useState("");
@@ -35,11 +33,11 @@ export default function ChatPage() {
   const typingTimeout = useRef(null);
   const bottomRef = useRef(null);
 
-  // -------------------------------------------------------
-  // Load current user + friend profile, then get conversation
-  // -------------------------------------------------------
+  // ---------------------------------------
+  // LOAD USER + FRIEND
+  // ---------------------------------------
   useEffect(() => {
-    async function init() {
+    async function load() {
       const { data: userData } = await supabase.auth.getUser();
       const authUser = userData?.user || null;
       setUser(authUser);
@@ -53,56 +51,24 @@ export default function ChatPage() {
         .single();
 
       setFriend(friendProf);
-
-      const convoId = await getOrCreateConversation(authUser.id, friendId);
-      setConversationId(convoId);
     }
-
-    init();
+    load();
   }, [friendId]);
 
-  // Find or create 1-1 conversation row
-  async function getOrCreateConversation(myId, otherId) {
-    // Try existing convo both directions
-    const { data: existing, error } = await supabase
-      .from("conversations")
-      .select("id")
-      .or(
-        `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
-      )
-      .maybeSingle();
-
-    if (!error && existing?.id) return existing.id;
-
-    // Create new conversation
-    const { data: created, error: insertErr } = await supabase
-      .from("conversations")
-      .insert({
-        user1_id: myId,
-        user2_id: otherId,
-      })
-      .select("id")
-      .single();
-
-    if (insertErr) {
-      console.error("create conversation error:", insertErr);
-      return null;
-    }
-
-    return created.id;
-  }
-
-  // -------------------------------------------------------
-  // Load messages + realtime subscription
-  // -------------------------------------------------------
+  // ---------------------------------------
+  // LOAD MESSAGES (sender/receiver system)
+  // ---------------------------------------
   useEffect(() => {
-    if (!user || !conversationId) return;
+    if (!user) return;
 
     async function loadMessages() {
       const { data, error } = await supabase
         .from("messages")
         .select("*")
-        .eq("conversation_id", conversationId)
+        .or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),
+           and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`
+        )
         .order("created_at", { ascending: true });
 
       if (error) {
@@ -118,23 +84,24 @@ export default function ChatPage() {
     loadMessages();
 
     const channel = supabase
-      .channel(`conversation-${conversationId}`)
+      .channel("messages-feed")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        () => loadMessages()
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const m = payload.new;
+
+          const match =
+            (m.sender_id === user.id && m.receiver_id === friendId) ||
+            (m.sender_id === friendId && m.receiver_id === user.id);
+
+          if (match) loadMessages();
+        }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, conversationId]);
+    return () => supabase.removeChannel(channel);
+  }, [user, friendId]);
 
   function scrollToBottom() {
     setTimeout(() => {
@@ -142,36 +109,26 @@ export default function ChatPage() {
     }, 50);
   }
 
-  // -------------------------------------------------------
-  // Send TEXT message
-  // -------------------------------------------------------
+  // ---------------------------------------
+  // SEND TEXT MESSAGE
+  // ---------------------------------------
   async function sendMessage() {
-    if (!user || !conversationId) return;
-    const text = messageInput.trim();
-    if (!text) return;
+    if (!messageInput.trim() || !user) return;
 
-    setMessageInput("");
-
-    const { error } = await supabase.from("messages").insert({
-      conversation_id: conversationId,
+    await supabase.from("messages").insert({
       sender_id: user.id,
       receiver_id: friendId,
-      text,
+      text: messageInput.trim(),
     });
 
-    if (error) console.error("send message error:", error);
-
-    await supabase
-      .from("conversations")
-      .update({ last_message_at: new Date().toISOString() })
-      .eq("id", conversationId);
+    setMessageInput("");
   }
 
-  // -------------------------------------------------------
-  // Send IMAGE message
-  // -------------------------------------------------------
+  // ---------------------------------------
+  // SEND IMAGE
+  // ---------------------------------------
   async function sendImage(file) {
-    if (!user || !conversationId || !file) return;
+    if (!file || !user) return;
 
     const ext = file.name.split(".").pop();
     const path = `${user.id}-${Date.now()}.${ext}`;
@@ -180,31 +137,22 @@ export default function ChatPage() {
       .from("chat_images")
       .upload(path, file);
 
-    if (error) {
-      console.error("image upload error:", error);
-      return;
-    }
+    if (error) return console.error("image upload error:", error);
 
     const { data: urlObj } = supabase.storage
       .from("chat_images")
       .getPublicUrl(path);
 
     await supabase.from("messages").insert({
-      conversation_id: conversationId,
       sender_id: user.id,
       receiver_id: friendId,
       image_url: urlObj.publicUrl,
     });
-
-    await supabase
-      .from("conversations")
-      .update({ last_message_at: new Date().toISOString() })
-      .eq("id", conversationId);
   }
 
-  // -------------------------------------------------------
-  // Voice messages
-  // -------------------------------------------------------
+  // ---------------------------------------
+  // AUDIO MESSAGE
+  // ---------------------------------------
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -216,8 +164,6 @@ export default function ChatPage() {
       recorder.ondataavailable = (e) => audioChunks.current.push(e.data);
 
       recorder.onstop = async () => {
-        if (!user || !conversationId) return;
-
         const blob = new Blob(audioChunks.current, { type: "audio/webm" });
         const file = new File([blob], `audio-${Date.now()}.webm`);
         const path = `${user.id}-${Date.now()}.webm`;
@@ -226,51 +172,41 @@ export default function ChatPage() {
           .from("chat_audio")
           .upload(path, file);
 
-        if (error) {
-          console.error("audio upload error:", error);
-          return;
-        }
+        if (error) return console.error("audio upload error:", error);
 
         const { data: urlObj } = supabase.storage
           .from("chat_audio")
           .getPublicUrl(path);
 
         await supabase.from("messages").insert({
-          conversation_id: conversationId,
           sender_id: user.id,
           receiver_id: friendId,
           audio_url: urlObj.publicUrl,
         });
-
-        await supabase
-          .from("conversations")
-          .update({ last_message_at: new Date().toISOString() })
-          .eq("id", conversationId);
       };
 
       recorder.start();
       setRecording(true);
     } catch (err) {
-      console.error("recording error:", err);
+      console.error(err);
     }
   }
 
   function stopRecording() {
-    if (!mediaRecorder.current) return;
-    mediaRecorder.current.stop();
+    mediaRecorder.current?.stop();
     setRecording(false);
   }
 
-  // -------------------------------------------------------
-  // Typing indicator (simple broadcast channel)
-  // -------------------------------------------------------
+  // ---------------------------------------
+  // TYPING INDICATOR
+  // ---------------------------------------
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
       .channel("typing")
-      .on("broadcast", { event: "typing" }, (payload) => {
-        if (payload.payload.from === friendId) {
+      .on("broadcast", { event: "typing" }, (p) => {
+        if (p.payload.from === friendId) {
           setFriendTyping(true);
           clearTimeout(typingTimeout.current);
           typingTimeout.current = setTimeout(
@@ -285,7 +221,6 @@ export default function ChatPage() {
   }, [user, friendId]);
 
   function sendTyping() {
-    if (!user) return;
     supabase.channel("typing").send({
       type: "broadcast",
       event: "typing",
@@ -293,34 +228,29 @@ export default function ChatPage() {
     });
   }
 
-  // -------------------------------------------------------
-  // Online / last seen (poll profiles.last_active)
-  // -------------------------------------------------------
+  // ---------------------------------------
+  // ONLINE INDICATOR
+  // ---------------------------------------
   useEffect(() => {
     if (!friendId) return;
 
     const interval = setInterval(async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("profiles")
         .select("last_active")
         .eq("id", friendId)
         .single();
 
-      if (error || !data?.last_active) return;
+      if (!data?.last_active) return;
 
       const last = new Date(data.last_active);
       const diff = Date.now() - last.getTime();
 
-      if (diff < 60_000) {
-        setOnline(true);
-        setLastSeen(null);
-      } else {
+      if (diff < 60000) setOnline(true);
+      else {
         setOnline(false);
         setLastSeen(
-          last.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
+          last.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
         );
       }
     }, 5000);
@@ -331,13 +261,14 @@ export default function ChatPage() {
   const friendLabel =
     friend?.display_name || friend?.username || friend?.handle || "User";
 
-  // -------------------------------------------------------
+  // ---------------------------------------
   // UI
-  // -------------------------------------------------------
+  // ---------------------------------------
   return (
     <div className="flex flex-col h-screen bg-black text-white">
+
       {/* HEADER */}
-      <div className="flex items-center gap-3 p-4 bg-black border-b border-white/10 sticky top-0 z-20">
+      <div className="flex items-center gap-3 p-4 border-b border-white/10">
         <button onClick={() => navigate("/friends")}>
           <FiArrowLeft size={24} />
         </button>
@@ -345,14 +276,11 @@ export default function ChatPage() {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-lg">{friendLabel}</span>
-
             {online ? (
               <span className="w-3 h-3 rounded-full bg-green-500"></span>
             ) : (
               lastSeen && (
-                <span className="text-xs opacity-70">
-                  Last seen {lastSeen}
-                </span>
+                <span className="text-xs opacity-70">Last seen {lastSeen}</span>
               )
             )}
           </div>
@@ -364,7 +292,7 @@ export default function ChatPage() {
       </div>
 
       {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
           const initial = friendLabel.charAt(0).toUpperCase();
@@ -376,7 +304,7 @@ export default function ChatPage() {
                 mine ? "justify-end" : "justify-start"
               }`}
             >
-              {/* Avatar on left for friend, right for you */}
+              {/* FRIEND AVATAR */}
               {!mine && (
                 <div className="w-8 h-8 rounded-full border border-red-500 flex items-center justify-center text-xs font-bold bg-black/80">
                   {initial}
@@ -389,25 +317,22 @@ export default function ChatPage() {
                 }`}
               >
                 {m.text && <p className="text-sm">{m.text}</p>}
-
                 {m.image_url && (
                   <img
                     src={m.image_url}
                     className="rounded-xl mt-2 max-h-60"
                     onClick={() => setImagePreview(m.image_url)}
-                    alt=""
                   />
                 )}
-
                 {m.audio_url && (
                   <audio controls src={m.audio_url} className="mt-2 w-full" />
                 )}
-
                 <p className="text-[10px] opacity-60 mt-1 text-right">
                   {formatTime(m.created_at)}
                 </p>
               </div>
 
+              {/* YOUR AVATAR */}
               {mine && (
                 <div className="w-8 h-8 rounded-full border border-red-500 flex items-center justify-center text-xs font-bold bg-black/80">
                   {user?.email?.[0]?.toUpperCase() || "Y"}
@@ -417,17 +342,13 @@ export default function ChatPage() {
           );
         })}
 
-        <div ref={bottomRef} />
+        <div ref={bottomRef}></div>
       </div>
 
-      {/* IMAGE PREVIEW OVERLAY */}
+      {/* IMAGE PREVIEW */}
       {imagePreview && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <img
-            src={imagePreview}
-            className="max-w-[90%] max-h-[80%] rounded-xl"
-            alt=""
-          />
+          <img src={imagePreview} className="max-w-[90%] max-h-[80%] rounded-xl" />
           <button
             onClick={() => setImagePreview(null)}
             className="absolute top-6 right-6 bg-white/10 p-3 rounded-full"
@@ -439,7 +360,6 @@ export default function ChatPage() {
 
       {/* INPUT BAR */}
       <div className="p-3 flex items-center gap-3 border-t border-white/10 bg-black">
-        {/* IMAGE */}
         <label className="cursor-pointer">
           <FiImage size={24} className="opacity-70" />
           <input
@@ -450,7 +370,6 @@ export default function ChatPage() {
           />
         </label>
 
-        {/* MIC */}
         {!recording ? (
           <button onClick={startRecording}>
             <FiMic size={24} className="opacity-70" />
@@ -461,7 +380,6 @@ export default function ChatPage() {
           </button>
         )}
 
-        {/* TEXT INPUT */}
         <input
           className="flex-1 bg-white/10 rounded-xl p-2 text-sm outline-none"
           placeholder="Message…"
@@ -472,7 +390,6 @@ export default function ChatPage() {
           }}
         />
 
-        {/* SEND */}
         <button onClick={sendMessage}>
           <FiSend size={24} className="opacity-80" />
         </button>
