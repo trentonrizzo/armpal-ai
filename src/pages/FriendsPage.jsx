@@ -11,91 +11,59 @@ export default function FriendsPage() {
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
 
+  const [showAddBox, setShowAddBox] = useState(false);
   const [addInput, setAddInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
-      const current = data?.user || null;
+      const current = data?.user;
       setUser(current);
-
-      if (current?.id) {
-        await loadAllFriends(current.id);
-      }
-      setLoading(false);
+      if (current?.id) loadAllFriends(current.id);
     })();
   }, []);
 
-  async function loadAllFriends(myId) {
-    // accepted friends
+  async function loadAllFriends(uid) {
     const { data: accepted } = await supabase
       .from("friends")
-      .select(
-        "id, friend_id, status, profiles:friends_friend_id_fkey (id, username, handle, last_active)"
-      )
-      .eq("user_id", myId)
+      .select("id, friend_id, status, profiles!friends_friend_id_fkey(id, username, handle, last_active)")
+      .eq("user_id", uid)
       .eq("status", "accepted");
 
     setFriends(accepted || []);
 
-    // incoming pending: they added YOU
-    const { data: reqIn } = await supabase
+    const { data: inc } = await supabase
       .from("friends")
-      .select(
-        "id, user_id, status, profiles:friends_user_id_fkey (id, username, handle, last_active)"
-      )
-      .eq("friend_id", myId)
+      .select("id, user_id, status, profiles!friends_user_id_fkey(id, username, handle, last_active)")
+      .eq("friend_id", uid)
       .eq("status", "pending");
 
-    setIncoming(reqIn || []);
+    setIncoming(inc || []);
 
-    // outgoing pending: YOU added THEM
-    const { data: reqOut } = await supabase
+    const { data: out } = await supabase
       .from("friends")
-      .select(
-        "id, friend_id, status, profiles:friends_friend_id_fkey (id, username, handle, last_active)"
-      )
-      .eq("user_id", myId)
+      .select("id, friend_id, status, profiles!friends_friend_id_fkey(id, username, handle, last_active)")
+      .eq("user_id", uid)
       .eq("status", "pending");
 
-    setOutgoing(reqOut || []);
-  }
-
-  function isOnline(lastActive) {
-    if (!lastActive) return false;
-    const diff = Date.now() - new Date(lastActive).getTime();
-    return diff < 60_000; // last 60s = online
-  }
-
-  async function acceptRequest(id) {
-    if (!user?.id) return;
-    await supabase.from("friends").update({ status: "accepted" }).eq("id", id);
-    await loadAllFriends(user.id);
-  }
-
-  async function declineRequest(id) {
-    if (!user?.id) return;
-    await supabase.from("friends").delete().eq("id", id);
-    await loadAllFriends(user.id);
+    setOutgoing(out || []);
   }
 
   async function sendFriendRequest() {
     setErrorMsg("");
 
-    if (!user?.id) return;
-    const handle = addInput.trim();
-    if (!handle) return;
+    if (!addInput.trim() || !user?.id) return;
 
-    // find by handle (the @ thing)
-    const { data: target, error } = await supabase
+    const handle = addInput.trim();
+
+    const { data: target } = await supabase
       .from("profiles")
       .select("id, username, handle")
       .eq("handle", handle)
       .maybeSingle();
 
-    if (error || !target) {
+    if (!target) {
       setErrorMsg("No user found with that handle.");
       return;
     }
@@ -105,7 +73,6 @@ export default function FriendsPage() {
       return;
     }
 
-    // already friends or pending?
     const { data: existing } = await supabase
       .from("friends")
       .select("*")
@@ -114,8 +81,8 @@ export default function FriendsPage() {
          and(user_id.eq.${target.id}, friend_id.eq.${user.id})`
       );
 
-    if (existing && existing.length > 0) {
-      setErrorMsg("Request already exists or you’re already friends.");
+    if (existing?.length > 0) {
+      setErrorMsg("Request already exists or you're already friends.");
       return;
     }
 
@@ -126,185 +93,181 @@ export default function FriendsPage() {
     });
 
     setAddInput("");
-    await loadAllFriends(user.id);
+    setShowAddBox(false);
+    loadAllFriends(user.id);
+  }
+
+  function isOnline(lastActive) {
+    if (!lastActive) return false;
+    return Date.now() - new Date(lastActive).getTime() < 60000;
   }
 
   return (
     <div className="p-4 pb-24 text-white max-w-xl mx-auto">
-      {/* HEADER */}
       <h1 className="text-2xl font-bold mb-4">Friends</h1>
 
-      {/* ADD FRIEND CARD */}
-      <section className="bg-white/5 rounded-2xl border border-white/10 p-4 mb-4">
-        <p className="text-sm font-semibold mb-2">Add Friend</p>
-        <p className="text-xs text-white/60 mb-3">
-          Search by <span className="font-mono">@handle</span> your friend sets
-          on their profile.
-        </p>
+      {/* ADD FRIEND BUTTON */}
+      <button
+        onClick={() => setShowAddBox(!showAddBox)}
+        className="w-full bg-[#ff2f2f] hover:bg-red-500 active:opacity-80 transition-all py-3 rounded-xl font-semibold text-lg mb-4 flex items-center justify-center gap-2"
+      >
+        <FiUserPlus size={20} />
+        Add Friend
+      </button>
 
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={addInput}
-            onChange={(e) => setAddInput(e.target.value)}
-            placeholder="@trentarmgod"
-            className="flex-1 bg-black/50 rounded-xl border border-white/15 px-3 py-2 text-sm outline-none"
-          />
-          <button
-            onClick={sendFriendRequest}
-            className="bg-[#ff2f2f] hover:bg-red-500 transition px-3 py-2 rounded-xl flex items-center justify-center"
-          >
-            <FiUserPlus size={18} />
-          </button>
+      {/* REVEALED ADD BOX */}
+      {showAddBox && (
+        <div className="bg-white/5 border border-white/10 p-4 rounded-xl mb-4">
+          <p className="text-sm text-white/70 mb-2">Enter @handle:</p>
+
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              value={addInput}
+              onChange={(e) => setAddInput(e.target.value)}
+              placeholder="@trentarmgod"
+              className="flex-1 bg-black/50 border border-white/15 rounded-xl px-3 py-2 outline-none text-sm"
+            />
+            <button
+              onClick={sendFriendRequest}
+              className="bg-[#ff2f2f] rounded-xl px-3 py-2 hover:bg-red-500"
+            >
+              <FiUserPlus size={18} />
+            </button>
+          </div>
+
+          {errorMsg && (
+            <p className="text-xs text-red-400">{errorMsg}</p>
+          )}
         </div>
+      )}
 
-        {errorMsg && (
-          <p className="text-xs text-red-400 mt-2">{errorMsg}</p>
-        )}
-      </section>
-
-      {/* MAIN FRIENDS CARD */}
-      <section className="bg-white/5 rounded-2xl border border-white/10 p-4 space-y-4">
-        {/* INCOMING REQUESTS */}
+      {/* FRIEND LIST */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-4">
+        
+        {/* INCOMING */}
         {incoming.length > 0 && (
           <div>
-            <p className="text-xs uppercase tracking-wide text-white/60 mb-1">
-              Requests
+            <p className="text-xs uppercase tracking-wider text-white/60 mb-1">
+              Friend Requests
             </p>
-            <div className="space-y-2">
-              {incoming.map((req) => {
-                const p = req.profiles;
-                return (
-                  <div
-                    key={req.id}
-                    className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {p.handle || p.username}
-                      </p>
-                      <p className="text-[11px] text-white/60">
-                        @{p.username}
-                      </p>
-                    </div>
-                    <div className="flex gap-3 text-xs font-semibold">
-                      <button
-                        onClick={() => acceptRequest(req.id)}
-                        className="text-green-400"
-                      >
-                        Accept
-                      </button>
-                      <button
-                        onClick={() => declineRequest(req.id)}
-                        className="text-red-400"
-                      >
-                        Decline
-                      </button>
-                    </div>
+            {incoming.map((r) => {
+              const p = r.profiles;
+              return (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2"
+                >
+                  <div>
+                    <p className="font-semibold text-sm">
+                      {p.handle || p.username}
+                    </p>
+                    <p className="text-[11px] text-white/50">@{p.username}</p>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex gap-3 text-xs font-semibold">
+                    <button
+                      onClick={async () => {
+                        await supabase
+                          .from("friends")
+                          .update({ status: "accepted" })
+                          .eq("id", r.id);
+                        loadAllFriends(user.id);
+                      }}
+                      className="text-green-400"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await supabase.from("friends").delete().eq("id", r.id);
+                        loadAllFriends(user.id);
+                      }}
+                      className="text-red-400"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
         {/* FRIENDS LIST */}
         <div>
-          <p className="text-sm font-semibold mb-2">Friends</p>
-          {loading ? (
-            <p className="text-xs text-white/60">Loading...</p>
-          ) : friends.length === 0 ? (
-            <p className="text-xs text-white/60">
-              No friends yet — add some!
-            </p>
+          <p className="text-sm font-semibold mb-2">Your Friends</p>
+          {friends.length === 0 ? (
+            <p className="text-xs text-white/60">No friends yet — add some!</p>
           ) : (
-            <div className="space-y-2">
-              {friends.map((f) => {
-                const p = f.profiles;
-                const online = isOnline(p.last_active);
-
-                return (
-                  <div
-                    key={f.id}
-                    className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="w-9 h-9 rounded-full bg-black/60 flex items-center justify-center text-sm font-bold">
-                          {(p.handle || p.username || "?")
-                            .charAt(0)
-                            .toUpperCase()}
-                        </div>
-                        {online && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border border-black" />
-                        )}
+            friends.map((f) => {
+              const p = f.profiles;
+              const online = isOnline(p.last_active);
+              return (
+                <div
+                  key={f.id}
+                  className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2"
+                >
+                  <div className="flex gap-3 items-center">
+                    {/* avatar placeholder */}
+                    <div className="relative">
+                      <div className="w-9 h-9 bg-black/60 rounded-full flex items-center justify-center text-sm font-bold">
+                        {(p.handle || p.username)[0].toUpperCase()}
                       </div>
-
-                      <div>
-                        <p className="text-sm font-semibold">
-                          {p.handle || p.username}
-                        </p>
-                        <p className="text-[11px] text-white/60">
-                          {online
-                            ? "Online"
-                            : p.last_active
-                            ? `Last seen ${new Date(
-                                p.last_active
-                              ).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}`
-                            : "Offline"}
-                        </p>
-                      </div>
+                      {online && (
+                        <span className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-green-500 border border-black"></span>
+                      )}
                     </div>
 
-                    <Link
-                      to={`/chat/${p.id}`}
-                      className="bg-[#ff2f2f] hover:bg-red-500 transition px-3 py-1.5 rounded-lg flex items-center gap-1 text-xs font-semibold"
-                    >
-                      <FiMessageSquare size={14} />
-                      <span>Message</span>
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* OUTGOING REQUESTS */}
-        {outgoing.length > 0 && (
-          <div>
-            <p className="text-xs uppercase tracking-wide text-white/60 mb-1">
-              Sent Requests
-            </p>
-            <div className="space-y-2">
-              {outgoing.map((req) => {
-                const p = req.profiles;
-                return (
-                  <div
-                    key={req.id}
-                    className="flex items-center justify-between bg-white/5 rounded-xl px-3 py-2"
-                  >
                     <div>
                       <p className="text-sm font-semibold">
                         {p.handle || p.username}
                       </p>
                       <p className="text-[11px] text-white/60">
-                        @{p.username}
+                        {online ? "Online" : "Offline"}
                       </p>
                     </div>
-                    <span className="text-[11px] text-yellow-400 font-semibold">
-                      Pending
-                    </span>
                   </div>
-                );
-              })}
-            </div>
+
+                  <Link
+                    to={`/chat/${p.id}`}
+                    className="bg-[#ff2f2f] hover:bg-red-500 px-3 py-1.5 text-xs rounded-lg flex items-center gap-1"
+                  >
+                    <FiMessageSquare size={14} />
+                    Message
+                  </Link>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* OUTGOING */}
+        {outgoing.length > 0 && (
+          <div>
+            <p className="text-xs uppercase tracking-wider text-white/60">
+              Sent Requests
+            </p>
+            {outgoing.map((r) => {
+              const p = r.profiles;
+              return (
+                <div
+                  key={r.id}
+                  className="bg-white/5 rounded-xl px-3 py-2 flex justify-between items-center mt-1"
+                >
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {p.handle || p.username}
+                    </p>
+                    <p className="text-[11px] text-white/50">@{p.username}</p>
+                  </div>
+                  <span className="text-yellow-400 text-[11px] font-semibold">
+                    Pending
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 }
