@@ -2,349 +2,262 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
-import { FiUserPlus, FiUserCheck, FiUserX, FiMessageSquare } from "react-icons/fi";
+import { FiUserPlus, FiMessageSquare } from "react-icons/fi";
 
 export default function FriendsPage() {
   const [user, setUser] = useState(null);
 
+  const [friends, setFriends] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
-  const [friends, setFriends] = useState([]);
 
-  const [search, setSearch] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
+  const [addInput, setAddInput] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    loadUser();
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+
+      if (data.user) {
+        loadAllFriends(data.user.id);
+      }
+    })();
   }, []);
 
-  async function loadUser() {
-    const { data } = await supabase.auth.getUser();
-    if (!data?.user) return;
-
-    setUser(data.user);
-    loadFriendData(data.user.id);
-  }
-
-  async function loadFriendData(myId) {
-    // INCOMING (friend requests sent to ME)
-    const { data: inc } = await supabase
-      .from("friend_requests")
-      .select("id, sender_id, profiles!sender_id(username, display_name, handle, avatar_url)")
-      .eq("receiver_id", myId)
-      .eq("status", "pending");
-
-    setIncoming(inc || []);
-
-    // OUTGOING (requests I sent to others)
-    const { data: out } = await supabase
-      .from("friend_requests")
-      .select("id, receiver_id, profiles!receiver_id(username, display_name, handle, avatar_url)")
-      .eq("sender_id", myId)
-      .eq("status", "pending");
-
-    setOutgoing(out || []);
-
-    // FRIENDS (accepted)
-    const { data: fr } = await supabase
+  async function loadAllFriends(myId) {
+    // Fetch accepted friends
+    const { data: accepted } = await supabase
       .from("friends")
-      .select(
-        "id, friend_id, profiles!friend_id(username, display_name, handle, avatar_url)"
-      )
-      .eq("user_id", myId);
+      .select("*, profiles!friends_friend_id_fkey(username, last_active)")
+      .eq("user_id", myId)
+      .eq("status", "accepted");
 
-    setFriends(fr || []);
+    setFriends(accepted || []);
+
+    // incoming requests
+    const { data: reqIn } = await supabase
+      .from("friends")
+      .select("*, profiles!friends_user_id_fkey(username, last_active)")
+      .eq("friend_id", myId)
+      .eq("status", "pending");
+
+    setIncoming(reqIn || []);
+
+    // outgoing requests
+    const { data: reqOut } = await supabase
+      .from("friends")
+      .select("*, profiles!friends_friend_id_fkey(username, last_active)")
+      .eq("user_id", myId)
+      .eq("status", "pending");
+
+    setOutgoing(reqOut || []);
   }
 
-  /* -------------------------
-        SEARCH USERS
-  -------------------------- */
-  async function searchUsers() {
-    if (!search.trim()) return setSearchResults([]);
-
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, handle, avatar_url")
-      .ilike("handle", `%${search}%`)
-      .limit(20);
-
-    setSearchResults(data || []);
-  }
-
-  /* -------------------------
-        SEND FRIEND REQUEST
-  -------------------------- */
-  async function sendFriendRequest(receiverId) {
-    if (!user) return;
-
-    await supabase.from("friend_requests").insert({
-      sender_id: user.id,
-      receiver_id: receiverId,
-      status: "pending",
-    });
-
-    loadFriendData(user.id);
-  }
-
-  /* -------------------------
-        ACCEPT / DECLINE
-  -------------------------- */
-  async function acceptRequest(id, senderId) {
+  // Accept incoming request
+  async function acceptRequest(id) {
     await supabase
-      .from("friend_requests")
+      .from("friends")
       .update({ status: "accepted" })
       .eq("id", id);
 
-    // Add friendship rows
-    await supabase.from("friends").insert([
-      { user_id: user.id, friend_id: senderId },
-      { user_id: senderId, friend_id: user.id },
-    ]);
-
-    loadFriendData(user.id);
+    loadAllFriends(user.id);
   }
 
+  // Decline
   async function declineRequest(id) {
-    await supabase.from("friend_requests").delete().eq("id", id);
-    loadFriendData(user.id);
+    await supabase.from("friends").delete().eq("id", id);
+    loadAllFriends(user.id);
   }
 
-  async function cancelRequest(id) {
-    await supabase.from("friend_requests").delete().eq("id", id);
-    loadFriendData(user.id);
+  // Send friend request
+  async function sendFriendRequest() {
+    setErrorMsg("");
+
+    const username = addInput.trim();
+    if (!username) return;
+
+    // Find user by username
+    const { data: matched } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("username", username)
+      .single();
+
+    if (!matched) {
+      setErrorMsg("User not found.");
+      return;
+    }
+
+    if (matched.id === user.id) {
+      setErrorMsg("You cannot add yourself.");
+      return;
+    }
+
+    // Check if already exists
+    const { data: exists } = await supabase
+      .from("friends")
+      .select("*")
+      .or(
+        `and(user_id.eq.${user.id}, friend_id.eq.${matched.id}),
+         and(user_id.eq.${matched.id}, friend_id.eq.${user.id})`
+      );
+
+    if (exists && exists.length > 0) {
+      setErrorMsg("Friend request already exists or you're already friends.");
+      return;
+    }
+
+    await supabase.from("friends").insert({
+      user_id: user.id,
+      friend_id: matched.id,
+      status: "pending",
+    });
+
+    setAddInput("");
+    loadAllFriends(user.id);
   }
 
-  /* -------------------------
-          STYLES
-  -------------------------- */
-  const cardStyle = {
-    background: "#101010",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.06)",
-    padding: 12,
-    marginBottom: 14,
-  };
-
-  const row = {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "10px 0",
-    borderBottom: "1px solid rgba(255,255,255,0.06)",
-  };
-
-  const avatar = {
-    width: 46,
-    height: 46,
-    borderRadius: "999px",
-    objectFit: "cover",
-    border: "1px solid rgba(255,255,255,0.1)",
-  };
-
-  const btn = {
-    padding: "8px 12px",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 13,
-    border: "none",
-  };
+  function isOnline(lastActive) {
+    if (!lastActive) return false;
+    const diff = Date.now() - new Date(lastActive).getTime();
+    return diff < 60000;
+  }
 
   return (
-    <div style={{ padding: "16px", paddingBottom: "120px" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
-        Friends
-      </h1>
+    <div className="p-4 pb-24 text-white">
+      <h1 className="text-xl font-bold mb-4">Friends</h1>
 
-      {/* SEARCH */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Add Friend</h3>
-
+      {/* Add Friend */}
+      <div className="flex gap-2 mb-4">
         <input
-          type="text"
-          placeholder="Search by handle..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && searchUsers()}
-          style={{
-            width: "100%",
-            padding: "10px",
-            background: "#0d0d0d",
-            border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 10,
-            color: "white",
-            marginBottom: 12,
-          }}
+          value={addInput}
+          onChange={(e) => setAddInput(e.target.value)}
+          placeholder="Enter username"
+          className="flex-1 bg-white/10 px-3 py-2 rounded-lg outline-none"
         />
-
-        {searchResults.map((u) => (
-          <div key={u.id} style={{ ...row, borderBottom: "none" }}>
-            <img
-              src={u.avatar_url || "https://via.placeholder.com/46"}
-              style={avatar}
-            />
-
-            <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-                {u.display_name || u.username}
-              </p>
-              <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
-                @{u.handle || u.username}
-              </p>
-            </div>
-
-            <button
-              onClick={() => sendFriendRequest(u.id)}
-              style={{
-                ...btn,
-                background: "#ff2f2f",
-                color: "white",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <FiUserPlus /> Add
-            </button>
-          </div>
-        ))}
+        <button
+          onClick={sendFriendRequest}
+          className="bg-[#ff2f2f] px-3 py-2 rounded-lg font-semibold"
+        >
+          <FiUserPlus size={18} />
+        </button>
       </div>
 
-      {/* INCOMING REQUESTS */}
+      {errorMsg && (
+        <p className="text-red-500 text-sm mb-2">{errorMsg}</p>
+      )}
+
+      {/* Incoming Requests */}
       {incoming.length > 0 && (
-        <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Incoming Requests</h3>
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-2">Requests</h2>
 
-          {incoming.map((req) => (
-            <div key={req.id} style={row}>
-              <img
-                src={
-                  req.profiles?.avatar_url ||
-                  "https://via.placeholder.com/46"
-                }
-                style={avatar}
-              />
+          <div className="space-y-2">
+            {incoming.map((req) => (
+              <div
+                key={req.id}
+                className="flex items-center justify-between bg-white/5 p-3 rounded-lg"
+              >
+                <span className="font-medium">{req.profiles.username}</span>
 
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-                  {req.profiles?.display_name || req.profiles?.username}
-                </p>
-                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
-                  @{req.profiles?.handle || req.profiles?.username}
-                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => acceptRequest(req.id)}
+                    className="text-green-400 font-semibold"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => declineRequest(req.id)}
+                    className="text-red-400 font-semibold"
+                  >
+                    Decline
+                  </button>
+                </div>
               </div>
-
-              <button
-                onClick={() => acceptRequest(req.id, req.sender_id)}
-                style={{
-                  ...btn,
-                  background: "#16c784",
-                  color: "white",
-                }}
-              >
-                Accept
-              </button>
-
-              <button
-                onClick={() => declineRequest(req.id)}
-                style={{
-                  ...btn,
-                  background: "#333",
-                  color: "white",
-                }}
-              >
-                Decline
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      {/* OUTGOING REQUESTS */}
+      {/* Friends List */}
+      <h2 className="text-lg font-semibold mb-2">Your Friends</h2>
+      {friends.length === 0 ? (
+        <p className="text-white/60 text-sm">No friends yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {friends.map((f) => {
+            const profile = f.profiles;
+            const online = isOnline(profile.last_active);
+
+            return (
+              <div
+                key={f.id}
+                className="flex items-center justify-between bg-white/5 p-3 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-xl font-bold">
+                      {profile.username?.charAt(0).toUpperCase()}
+                    </div>
+
+                    {online ? (
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border border-black"></span>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <p className="font-semibold">{profile.username}</p>
+                    <p className="text-xs opacity-60">
+                      {online
+                        ? "Online"
+                        : `Last seen ${new Date(
+                            profile.last_active
+                          ).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}`}
+                    </p>
+                  </div>
+                </div>
+
+                <Link
+                  to={`/chat/${profile.id}`}
+                  className="bg-[#ff2f2f] px-3 py-1 rounded-lg flex items-center gap-1 font-semibold"
+                >
+                  <FiMessageSquare size={16} />
+                  Message
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Outgoing Requests */}
       {outgoing.length > 0 && (
-        <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Sent Requests</h3>
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold mb-2">Sent Requests</h2>
 
-          {outgoing.map((req) => (
-            <div key={req.id} style={row}>
-              <img
-                src={
-                  req.profiles?.avatar_url ||
-                  "https://via.placeholder.com/46"
-                }
-                style={avatar}
-              />
-
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-                  {req.profiles?.display_name || req.profiles?.username}
-                </p>
-                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
-                  @{req.profiles?.handle || req.profiles?.username}
-                </p>
-              </div>
-
-              <button
-                onClick={() => cancelRequest(req.id)}
-                style={{
-                  ...btn,
-                  background: "#333",
-                  color: "white",
-                }}
+          <div className="space-y-2">
+            {outgoing.map((req) => (
+              <div
+                key={req.id}
+                className="flex items-center justify-between bg-white/5 p-3 rounded-lg"
               >
-                Cancel
-              </button>
-            </div>
-          ))}
+                <span className="font-medium">
+                  {req.profiles.username}
+                </span>
+
+                <span className="text-yellow-400 text-sm">
+                  Pending
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
-
-      {/* FRIENDS LIST */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Friends</h3>
-
-        {friends.length === 0 ? (
-          <p style={{ fontSize: 13, opacity: 0.7 }}>
-            No friends yet — add some!
-          </p>
-        ) : (
-          friends.map((fr) => (
-            <div key={fr.id} style={row}>
-              <img
-                src={
-                  fr.profiles?.avatar_url ||
-                  "https://via.placeholder.com/46"
-                }
-                style={avatar}
-              />
-
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-                  {fr.profiles?.display_name || fr.profiles?.username}
-                </p>
-                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
-                  @{fr.profiles?.handle || fr.profiles?.username}
-                </p>
-              </div>
-
-              {/* MESSAGE BUTTON */}
-              <Link
-                to={`/chat/${fr.friend_id}`}
-                style={{
-                  ...btn,
-                  background: "#ff2f2f",
-                  color: "white",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  textDecoration: "none",
-                }}
-              >
-                <FiMessageSquare size={16} /> Message
-              </Link>
-            </div>
-          ))
-        )}
-      </div>
     </div>
   );
 }
