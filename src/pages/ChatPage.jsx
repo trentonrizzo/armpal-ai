@@ -2,10 +2,9 @@
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
 import { useParams, useNavigate } from "react-router-dom";
-
 import { FiArrowLeft, FiSend, FiImage, FiMic, FiX } from "react-icons/fi";
 
-// Format timestamp
+// Format timestamp as HH:MM
 function formatTime(ts) {
   if (!ts) return "";
   const d = new Date(ts);
@@ -18,6 +17,8 @@ export default function ChatPage() {
 
   const [user, setUser] = useState(null);
   const [friend, setFriend] = useState(null);
+
+  const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
 
   const [messageInput, setMessageInput] = useState("");
@@ -25,124 +26,185 @@ export default function ChatPage() {
 
   const [online, setOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState(null);
-
   const [friendTyping, setFriendTyping] = useState(false);
-  const typingTimeout = useRef(null);
 
-  const bottomRef = useRef(null);
-
-  // Recording
   const [recording, setRecording] = useState(false);
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
 
-  // ------------------------------------------
-  // Load user + friend
-  // ------------------------------------------
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data?.user ?? null);
+  const typingTimeout = useRef(null);
+  const bottomRef = useRef(null);
 
-      const { data: prof } = await supabase
+  // -------------------------------------------------------
+  // Load current user + friend profile, then get conversation
+  // -------------------------------------------------------
+  useEffect(() => {
+    async function init() {
+      const { data: userData } = await supabase.auth.getUser();
+      const authUser = userData?.user || null;
+      setUser(authUser);
+
+      if (!authUser) return;
+
+      const { data: friendProf } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", friendId)
         .single();
 
-      setFriend(prof);
-    })();
+      setFriend(friendProf);
+
+      const convoId = await getOrCreateConversation(authUser.id, friendId);
+      setConversationId(convoId);
+    }
+
+    init();
   }, [friendId]);
 
-  // ------------------------------------------
-  // Load messages + realtime updates
-  // ------------------------------------------
+  // Find or create 1-1 conversation row
+  async function getOrCreateConversation(myId, otherId) {
+    // Try existing convo both directions
+    const { data: existing, error } = await supabase
+      .from("conversations")
+      .select("id")
+      .or(
+        `and(user1_id.eq.${myId},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${myId})`
+      )
+      .maybeSingle();
+
+    if (!error && existing?.id) return existing.id;
+
+    // Create new conversation
+    const { data: created, error: insertErr } = await supabase
+      .from("conversations")
+      .insert({
+        user1_id: myId,
+        user2_id: otherId,
+      })
+      .select("id")
+      .single();
+
+    if (insertErr) {
+      console.error("create conversation error:", insertErr);
+      return null;
+    }
+
+    return created.id;
+  }
+
+  // -------------------------------------------------------
+  // Load messages + realtime subscription
+  // -------------------------------------------------------
   useEffect(() => {
-    if (!user) return;
+    if (!user || !conversationId) return;
+
+    async function loadMessages() {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("load messages error:", error);
+        setMessages([]);
+        return;
+      }
+
+      setMessages(data || []);
+      scrollToBottom();
+    }
 
     loadMessages();
 
     const channel = supabase
-      .channel(`chat-${user.id}-${friendId}`)
+      .channel(`conversation-${conversationId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
         () => loadMessages()
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, [user, friendId]);
-
-  async function loadMessages() {
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .or(
-        `and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),
-         and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`
-      )
-      .order("created_at", { ascending: true });
-
-    setMessages(data || []);
-    scrollToBottom();
-  }
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, conversationId]);
 
   function scrollToBottom() {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
   }
 
-  // ------------------------------------------
-  // Send text message
-  // ------------------------------------------
+  // -------------------------------------------------------
+  // Send TEXT message
+  // -------------------------------------------------------
   async function sendMessage() {
-    if (!messageInput.trim()) return;
-
+    if (!user || !conversationId) return;
     const text = messageInput.trim();
+    if (!text) return;
+
     setMessageInput("");
 
-    await supabase.from("messages").insert({
+    const { error } = await supabase.from("messages").insert({
+      conversation_id: conversationId,
       sender_id: user.id,
       receiver_id: friendId,
       text,
-      image_url: null,
-      audio_url: null,
     });
 
-    scrollToBottom();
+    if (error) console.error("send message error:", error);
+
+    await supabase
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", conversationId);
   }
 
-  // ------------------------------------------
-  // Send image message
-  // ------------------------------------------
+  // -------------------------------------------------------
+  // Send IMAGE message
+  // -------------------------------------------------------
   async function sendImage(file) {
-    if (!file) return;
+    if (!user || !conversationId || !file) return;
 
     const ext = file.name.split(".").pop();
     const path = `${user.id}-${Date.now()}.${ext}`;
 
-    const { error } = await supabase.storage.from("chat_images").upload(path, file);
+    const { error } = await supabase.storage
+      .from("chat_images")
+      .upload(path, file);
 
-    if (!error) {
-      const { data: urlObj } = supabase.storage
-        .from("chat_images")
-        .getPublicUrl(path);
-
-      await supabase.from("messages").insert({
-        sender_id: user.id,
-        receiver_id: friendId,
-        text: null,
-        image_url: urlObj.publicUrl,
-        audio_url: null,
-      });
-
-      scrollToBottom();
+    if (error) {
+      console.error("image upload error:", error);
+      return;
     }
+
+    const { data: urlObj } = supabase.storage
+      .from("chat_images")
+      .getPublicUrl(path);
+
+    await supabase.from("messages").insert({
+      conversation_id: conversationId,
+      sender_id: user.id,
+      receiver_id: friendId,
+      image_url: urlObj.publicUrl,
+    });
+
+    await supabase
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", conversationId);
   }
 
-  // ------------------------------------------
-  // Voice recording
-  // ------------------------------------------
+  // -------------------------------------------------------
+  // Voice messages
+  // -------------------------------------------------------
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -154,6 +216,8 @@ export default function ChatPage() {
       recorder.ondataavailable = (e) => audioChunks.current.push(e.data);
 
       recorder.onstop = async () => {
+        if (!user || !conversationId) return;
+
         const blob = new Blob(audioChunks.current, { type: "audio/webm" });
         const file = new File([blob], `audio-${Date.now()}.webm`);
         const path = `${user.id}-${Date.now()}.webm`;
@@ -162,36 +226,44 @@ export default function ChatPage() {
           .from("chat_audio")
           .upload(path, file);
 
-        if (!error) {
-          const { data: urlObj } = supabase.storage
-            .from("chat_audio")
-            .getPublicUrl(path);
-
-          await supabase.from("messages").insert({
-            sender_id: user.id,
-            receiver_id: friendId,
-            text: null,
-            image_url: null,
-            audio_url: urlObj.publicUrl,
-          });
+        if (error) {
+          console.error("audio upload error:", error);
+          return;
         }
+
+        const { data: urlObj } = supabase.storage
+          .from("chat_audio")
+          .getPublicUrl(path);
+
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          receiver_id: friendId,
+          audio_url: urlObj.publicUrl,
+        });
+
+        await supabase
+          .from("conversations")
+          .update({ last_message_at: new Date().toISOString() })
+          .eq("id", conversationId);
       };
 
       recorder.start();
       setRecording(true);
     } catch (err) {
-      console.error("Recording error:", err);
+      console.error("recording error:", err);
     }
   }
 
   function stopRecording() {
-    mediaRecorder.current?.stop();
+    if (!mediaRecorder.current) return;
+    mediaRecorder.current.stop();
     setRecording(false);
   }
 
-  // ------------------------------------------
-  // Typing indicator
-  // ------------------------------------------
+  // -------------------------------------------------------
+  // Typing indicator (simple broadcast channel)
+  // -------------------------------------------------------
   useEffect(() => {
     if (!user) return;
 
@@ -200,17 +272,20 @@ export default function ChatPage() {
       .on("broadcast", { event: "typing" }, (payload) => {
         if (payload.payload.from === friendId) {
           setFriendTyping(true);
-
           clearTimeout(typingTimeout.current);
-          typingTimeout.current = setTimeout(() => setFriendTyping(false), 1500);
+          typingTimeout.current = setTimeout(
+            () => setFriendTyping(false),
+            1500
+          );
         }
       })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
-  }, [friendId, user]);
+  }, [user, friendId]);
 
   function sendTyping() {
+    if (!user) return;
     supabase.channel("typing").send({
       type: "broadcast",
       event: "typing",
@@ -218,100 +293,99 @@ export default function ChatPage() {
     });
   }
 
-  // ------------------------------------------
-  // Online + last seen
-  // ------------------------------------------
+  // -------------------------------------------------------
+  // Online / last seen (poll profiles.last_active)
+  // -------------------------------------------------------
   useEffect(() => {
+    if (!friendId) return;
+
     const interval = setInterval(async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
-        .select("last_active, avatar_url")
+        .select("last_active")
         .eq("id", friendId)
         .single();
 
-      if (!data) return;
+      if (error || !data?.last_active) return;
 
       const last = new Date(data.last_active);
       const diff = Date.now() - last.getTime();
 
-      setOnline(diff < 60000);
-      setLastSeen(
-        last.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-
-      if (data?.avatar_url) setFriend((f) => ({ ...f, avatar_url: data.avatar_url }));
+      if (diff < 60_000) {
+        setOnline(true);
+        setLastSeen(null);
+      } else {
+        setOnline(false);
+        setLastSeen(
+          last.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        );
+      }
     }, 5000);
 
     return () => clearInterval(interval);
   }, [friendId]);
 
-  // ------------------------------------------
+  const friendLabel =
+    friend?.display_name || friend?.username || friend?.handle || "User";
+
+  // -------------------------------------------------------
   // UI
-  // ------------------------------------------
+  // -------------------------------------------------------
   return (
     <div className="flex flex-col h-screen bg-black text-white">
-
       {/* HEADER */}
-      <div className="flex items-center gap-3 p-4 border-b border-white/10 bg-black sticky top-0 z-20">
+      <div className="flex items-center gap-3 p-4 bg-black border-b border-white/10 sticky top-0 z-20">
         <button onClick={() => navigate("/friends")}>
           <FiArrowLeft size={24} />
         </button>
 
-        <div className="flex items-center gap-3">
-          {/* Friend Avatar */}
-          <div className="relative">
-            <img
-              src={friend?.avatar_url || ""}
-              alt=""
-              className={`w-10 h-10 rounded-full object-cover ${
-                friend?.avatar_url ? "border border-red-500" : "bg-white/10"
-              }`}
-            />
-          </div>
-
-          <div className="flex flex-col leading-tight">
-            <span className="font-semibold text-lg">
-              {friend?.username || "User"}
-            </span>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-lg">{friendLabel}</span>
 
             {online ? (
-              <span className="text-green-400 text-xs">Online</span>
+              <span className="w-3 h-3 rounded-full bg-green-500"></span>
             ) : (
-              <span className="text-xs opacity-70">Last seen {lastSeen}</span>
-            )}
-
-            {friendTyping && (
-              <span className="text-xs text-white/60">typing…</span>
+              lastSeen && (
+                <span className="text-xs opacity-70">
+                  Last seen {lastSeen}
+                </span>
+              )
             )}
           </div>
+
+          {friendTyping && (
+            <span className="text-xs text-white/60">typing…</span>
+          )}
         </div>
       </div>
 
       {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((m) => {
-          const mine = m.sender_id === user.id;
-          const avatarUrl = mine ? user?.avatar_url : friend?.avatar_url;
+          const mine = m.sender_id === user?.id;
+          const initial = friendLabel.charAt(0).toUpperCase();
 
           return (
-            <div key={m.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
-
-              {/* Avatar */}
+            <div
+              key={m.id}
+              className={`flex items-end gap-2 ${
+                mine ? "justify-end" : "justify-start"
+              }`}
+            >
+              {/* Avatar on left for friend, right for you */}
               {!mine && (
-                <img
-                  src={avatarUrl || ""}
-                  className={`w-8 h-8 rounded-full object-cover ${
-                    avatarUrl ? "border border-red-500" : "bg-white/20"
-                  }`}
-                />
+                <div className="w-8 h-8 rounded-full border border-red-500 flex items-center justify-center text-xs font-bold bg-black/80">
+                  {initial}
+                </div>
               )}
 
-              {/* Bubble */}
               <div
-                className={`max-w-[70%] px-4 py-3 rounded-2xl ${
-                  mine
-                    ? "bg-black border border-red-600 text-white"
-                    : "bg-[#1a1a1a] text-white"
+                className={`max-w-[75%] p-3 rounded-2xl ${
+                  mine ? "bg-[#ff2f2f]" : "bg-[#1a1a1a]"
                 }`}
               >
                 {m.text && <p className="text-sm">{m.text}</p>}
@@ -319,8 +393,9 @@ export default function ChatPage() {
                 {m.image_url && (
                   <img
                     src={m.image_url}
-                    onClick={() => setImagePreview(m.image_url)}
                     className="rounded-xl mt-2 max-h-60"
+                    onClick={() => setImagePreview(m.image_url)}
+                    alt=""
                   />
                 )}
 
@@ -333,26 +408,26 @@ export default function ChatPage() {
                 </p>
               </div>
 
-              {/* Your avatar */}
               {mine && (
-                <img
-                  src={user?.avatar_url || ""}
-                  className={`w-8 h-8 rounded-full object-cover ${
-                    user?.avatar_url ? "border border-red-500" : "bg-white/20"
-                  }`}
-                />
+                <div className="w-8 h-8 rounded-full border border-red-500 flex items-center justify-center text-xs font-bold bg-black/80">
+                  {user?.email?.[0]?.toUpperCase() || "Y"}
+                </div>
               )}
             </div>
           );
         })}
 
-        <div ref={bottomRef}></div>
+        <div ref={bottomRef} />
       </div>
 
-      {/* IMAGE PREVIEW */}
+      {/* IMAGE PREVIEW OVERLAY */}
       {imagePreview && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <img src={imagePreview} className="max-w-[90%] max-h-[80%] rounded-xl" />
+          <img
+            src={imagePreview}
+            className="max-w-[90%] max-h-[80%] rounded-xl"
+            alt=""
+          />
           <button
             onClick={() => setImagePreview(null)}
             className="absolute top-6 right-6 bg-white/10 p-3 rounded-full"
@@ -364,19 +439,18 @@ export default function ChatPage() {
 
       {/* INPUT BAR */}
       <div className="p-3 flex items-center gap-3 border-t border-white/10 bg-black">
-
-        {/* Image */}
+        {/* IMAGE */}
         <label className="cursor-pointer">
           <FiImage size={24} className="opacity-70" />
           <input
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={(e) => sendImage(e.target.files[0])}
+            onChange={(e) => sendImage(e.target.files?.[0])}
           />
         </label>
 
-        {/* Mic */}
+        {/* MIC */}
         {!recording ? (
           <button onClick={startRecording}>
             <FiMic size={24} className="opacity-70" />
@@ -387,18 +461,18 @@ export default function ChatPage() {
           </button>
         )}
 
-        {/* Text input */}
+        {/* TEXT INPUT */}
         <input
+          className="flex-1 bg-white/10 rounded-xl p-2 text-sm outline-none"
+          placeholder="Message…"
           value={messageInput}
           onChange={(e) => {
             setMessageInput(e.target.value);
             sendTyping();
           }}
-          placeholder="Message…"
-          className="flex-1 bg-white/10 rounded-xl p-2 text-sm outline-none"
         />
 
-        {/* Send */}
+        {/* SEND */}
         <button onClick={sendMessage}>
           <FiSend size={24} className="opacity-80" />
         </button>
