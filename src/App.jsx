@@ -20,6 +20,9 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 
+// NEW: Friends Page
+import FriendsPage from "./pages/FriendsPage";
+
 // Strength Calculator
 import StrengthCalculator from "./pages/StrengthCalculator";
 
@@ -109,7 +112,10 @@ export default function App() {
           {/* Strength */}
           <Route path="/strength" element={<StrengthCalculator />} />
 
-          {/* NEW CHAT ROUTE */}
+          {/* FRIENDS PAGE */}
+          <Route path="/friends" element={<FriendsPage />} />
+
+          {/* CHAT */}
           <Route path="/chat/:friendId" element={<ChatPage />} />
         </Routes>
 
