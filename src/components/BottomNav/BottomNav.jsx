@@ -8,11 +8,12 @@ import { FaDumbbell, FaRulerVertical, FaUserAlt } from "react-icons/fa";
 const BottomNav = () => {
   return (
     <nav className="bottom-nav">
+      
       {/* Dashboard */}
       <NavLink to="/" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
-            {isActive && <div className="active-glow"></div>}
+            {isActive && <div className="active-glow" />}
             <AiFillHome className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
               Dashboard
@@ -25,7 +26,7 @@ const BottomNav = () => {
       <NavLink to="/workouts" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
-            {isActive && <div className="active-glow"></div>}
+            {isActive && <div className="active-glow" />}
             <FaDumbbell className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
               Workouts
@@ -34,11 +35,11 @@ const BottomNav = () => {
         )}
       </NavLink>
 
-      {/* PRs — FIXED FOREVER */}
+      {/* PRs */}
       <NavLink to="/prs" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
-            {isActive && <div className="active-glow"></div>}
+            {isActive && <div className="active-glow" />}
             <AiFillTrophy className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
               PRs
@@ -51,7 +52,7 @@ const BottomNav = () => {
       <NavLink to="/measure" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
-            {isActive && <div className="active-glow"></div>}
+            {isActive && <div className="active-glow" />}
             <FaRulerVertical className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
               Measure
@@ -64,7 +65,7 @@ const BottomNav = () => {
       <NavLink to="/goals" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
-            {isActive && <div className="active-glow"></div>}
+            {isActive && <div className="active-glow" />}
             <AiFillFlag className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
               Goals
@@ -77,7 +78,7 @@ const BottomNav = () => {
       <NavLink to="/profile" className="nav-item">
         {({ isActive }) => (
           <div className="icon-container">
-            {isActive && <div className="active-glow"></div>}
+            {isActive && <div className="active-glow" />}
             <FaUserAlt className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
               Profile
@@ -85,6 +86,7 @@ const BottomNav = () => {
           </div>
         )}
       </NavLink>
+
     </nav>
   );
 };

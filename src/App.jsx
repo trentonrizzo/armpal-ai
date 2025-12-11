@@ -87,35 +87,38 @@ export default function App() {
     return <CoverScreen onEnterApp={() => setShowCover(false)} />;
   }
 
+  // Wait for auth to load
   if (!ready) return null;
 
+  // If logged out → go to auth page
   if (!session) return <AuthPage key="auth" />;
 
   return (
     <AppProvider>
       <div className="min-h-screen bg-black text-white pb-20">
         <Routes>
+          {/* MAIN DASHBOARD */}
           <Route path="/" element={<Dashboard />} />
+
+          {/* HOME PAGE */}
           <Route path="/home" element={<HomePage />} />
 
-          {/* PR */}
+          {/* PR TRACKER */}
           <Route path="/prs" element={<PRTracker />} />
           <Route path="/prslist" element={<PRTracker />} />
 
-          {/* Tracking Pages */}
+          {/* FITNESS / TRACKING */}
           <Route path="/measure" element={<MeasurementsPage />} />
           <Route path="/workouts" element={<WorkoutsPage />} />
           <Route path="/workoutlogger" element={<WorkoutLogger />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/goals" element={<GoalsPage />} />
 
-          {/* Strength */}
+          {/* STRENGTH CALC */}
           <Route path="/strength" element={<StrengthCalculator />} />
 
-          {/* FRIENDS PAGE */}
+          {/* SOCIAL SYSTEM */}
           <Route path="/friends" element={<FriendsPage />} />
-
-          {/* CHAT */}
           <Route path="/chat/:friendId" element={<ChatPage />} />
         </Routes>
 
