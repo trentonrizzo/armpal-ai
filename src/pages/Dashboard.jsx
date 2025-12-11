@@ -3,6 +3,9 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
 
+// NEW FRIENDS ICON
+import { FiUsers } from "react-icons/fi";
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [displayName, setDisplayName] = useState("Athlete");
@@ -193,15 +196,42 @@ export default function Dashboard() {
         margin: "0 auto",
       }}
     >
-      {/* HEADER */}
-      <header style={{ marginBottom: 16 }}>
-        <p style={{ fontSize: 14, opacity: 0.8, margin: 0 }}>Welcome back,</p>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0" }}>
-          {displayName}
-        </h1>
-        <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
-          Track your progress. Crush your PRs. Stay locked in.
-        </p>
+      {/* HEADER WITH FRIENDS ICON */}
+      <header
+        style={{
+          marginBottom: 16,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}
+      >
+        <div>
+          <p style={{ fontSize: 14, opacity: 0.8, margin: 0 }}>Welcome back,</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0" }}>
+            {displayName}
+          </h1>
+          <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
+            Track your progress. Crush your PRs. Stay locked in.
+          </p>
+        </div>
+
+        {/* FRIENDS PAGE BUTTON */}
+        <Link
+          to="/friends"
+          style={{
+            background: "#111",
+            borderRadius: "10px",
+            padding: "8px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: 36,
+            width: 36,
+          }}
+        >
+          <FiUsers size={18} color="white" />
+        </Link>
       </header>
 
       {/* Today's Focus */}
@@ -231,9 +261,7 @@ export default function Dashboard() {
             marginBottom: 8,
           }}
         >
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-            Top Goals
-          </h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Top Goals</h2>
           <Link to="/goals" style={{ fontSize: 12, opacity: 0.8 }}>
             View all
           </Link>
@@ -303,8 +331,7 @@ export default function Dashboard() {
                       style={{
                         width: `${progress}%`,
                         height: "100%",
-                        background:
-                          "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
+                        background: "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
                         transition: "width 0.25s ease",
                       }}
                     ></div>
@@ -337,8 +364,7 @@ export default function Dashboard() {
             value={exerciseName}
             onChange={(e) => {
               setExerciseName(e.target.value);
-              if (calculated1RM)
-                fetchBestPR(e.target.value, calculated1RM);
+              if (calculated1RM) fetchBestPR(e.target.value, calculated1RM);
             }}
             placeholder="bench press, squat, deadlift"
             style={input}
