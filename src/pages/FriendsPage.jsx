@@ -2,18 +2,17 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
-import { FiArrowLeft } from "react-icons/fi";
+import { FiUserPlus, FiUserCheck, FiUserX, FiMessageSquare } from "react-icons/fi";
 
 export default function FriendsPage() {
   const [user, setUser] = useState(null);
 
-  const [searchHandle, setSearchHandle] = useState("");
-  const [searchResult, setSearchResult] = useState(null);
-  const [searchError, setSearchError] = useState("");
-
-  const [pendingIncoming, setPendingIncoming] = useState([]);
-  const [pendingOutgoing, setPendingOutgoing] = useState([]);
+  const [incoming, setIncoming] = useState([]);
+  const [outgoing, setOutgoing] = useState([]);
   const [friends, setFriends] = useState([]);
+
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
 
   useEffect(() => {
     loadUser();
@@ -21,465 +20,331 @@ export default function FriendsPage() {
 
   async function loadUser() {
     const { data } = await supabase.auth.getUser();
-    const authUser = data?.user;
-    if (!authUser) return;
+    if (!data?.user) return;
 
-    setUser(authUser);
-    await loadRequests(authUser.id);
+    setUser(data.user);
+    loadFriendData(data.user.id);
   }
 
-  async function loadRequests(uid) {
-    // LOAD PENDING INCOMING
-    const { data: incoming } = await supabase
+  async function loadFriendData(myId) {
+    // INCOMING (friend requests sent to ME)
+    const { data: inc } = await supabase
       .from("friend_requests")
-      .select(
-        `
-        id,
-        sender_id,
-        status,
-        profiles:sender_id (display_name, handle, avatar_url)
-      `
-      )
-      .eq("receiver_id", uid)
+      .select("id, sender_id, profiles!sender_id(username, display_name, handle, avatar_url)")
+      .eq("receiver_id", myId)
       .eq("status", "pending");
 
-    // LOAD PENDING OUTGOING
-    const { data: outgoing } = await supabase
+    setIncoming(inc || []);
+
+    // OUTGOING (requests I sent to others)
+    const { data: out } = await supabase
       .from("friend_requests")
-      .select(
-        `
-        id,
-        receiver_id,
-        status,
-        profiles:receiver_id (display_name, handle, avatar_url)
-      `
-      )
-      .eq("sender_id", uid)
+      .select("id, receiver_id, profiles!receiver_id(username, display_name, handle, avatar_url)")
+      .eq("sender_id", myId)
       .eq("status", "pending");
 
-    // LOAD ACCEPTED FRIENDS (BOTH WAYS)
-    const { data: acceptedSent } = await supabase
-      .from("friend_requests")
-      .select(
-        `
-        id,
-        receiver_id,
-        profiles:receiver_id (display_name, handle, avatar_url)
-      `
-      )
-      .eq("sender_id", uid)
-      .eq("status", "accepted");
+    setOutgoing(out || []);
 
-    const { data: acceptedReceived } = await supabase
-      .from("friend_requests")
+    // FRIENDS (accepted)
+    const { data: fr } = await supabase
+      .from("friends")
       .select(
-        `
-        id,
-        sender_id,
-        profiles:sender_id (display_name, handle, avatar_url)
-      `
+        "id, friend_id, profiles!friend_id(username, display_name, handle, avatar_url)"
       )
-      .eq("receiver_id", uid)
-      .eq("status", "accepted");
+      .eq("user_id", myId);
 
-    setPendingIncoming(incoming || []);
-    setPendingOutgoing(outgoing || []);
-    setFriends([...(acceptedSent || []), ...(acceptedReceived || [])]);
+    setFriends(fr || []);
   }
 
-  // --------------------------
-  // SEARCH FRIEND BY HANDLE
-  // --------------------------
-  async function searchByHandle() {
-    setSearchError("");
-    setSearchResult(null);
+  /* -------------------------
+        SEARCH USERS
+  -------------------------- */
+  async function searchUsers() {
+    if (!search.trim()) return setSearchResults([]);
 
-    if (!searchHandle.trim()) return;
-
-    const handleClean = searchHandle.toLowerCase().replace("@", "");
-
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("profiles")
-      .select("id, display_name, handle, avatar_url")
-      .eq("handle", handleClean)
-      .single();
+      .select("id, username, display_name, handle, avatar_url")
+      .ilike("handle", `%${search}%`)
+      .limit(20);
 
-    if (error || !data) {
-      setSearchError("No user found with that handle.");
-      return;
-    }
-
-    if (data.id === user.id) {
-      setSearchError("You cannot add yourself.");
-      return;
-    }
-
-    setSearchResult(data);
+    setSearchResults(data || []);
   }
 
-  // --------------------------
-  // SEND REQUEST
-  // --------------------------
+  /* -------------------------
+        SEND FRIEND REQUEST
+  -------------------------- */
   async function sendFriendRequest(receiverId) {
-    const { error } = await supabase.from("friend_requests").insert({
+    if (!user) return;
+
+    await supabase.from("friend_requests").insert({
       sender_id: user.id,
       receiver_id: receiverId,
       status: "pending",
     });
 
-    if (error) return alert("Error sending request.");
-
-    alert("Friend request sent!");
-    setSearchResult(null);
-    setSearchHandle("");
-    loadRequests(user.id);
+    loadFriendData(user.id);
   }
 
-  // --------------------------
-  // ACCEPT REQUEST
-  // --------------------------
-  async function acceptRequest(requestId) {
+  /* -------------------------
+        ACCEPT / DECLINE
+  -------------------------- */
+  async function acceptRequest(id, senderId) {
     await supabase
       .from("friend_requests")
       .update({ status: "accepted" })
-      .eq("id", requestId);
+      .eq("id", id);
 
-    loadRequests(user.id);
+    // Add friendship rows
+    await supabase.from("friends").insert([
+      { user_id: user.id, friend_id: senderId },
+      { user_id: senderId, friend_id: user.id },
+    ]);
+
+    loadFriendData(user.id);
   }
 
-  // --------------------------
-  // DECLINE OR CANCEL
-  // --------------------------
-  async function declineRequest(requestId) {
-    await supabase.from("friend_requests").delete().eq("id", requestId);
-    loadRequests(user.id);
+  async function declineRequest(id) {
+    await supabase.from("friend_requests").delete().eq("id", id);
+    loadFriendData(user.id);
   }
+
+  async function cancelRequest(id) {
+    await supabase.from("friend_requests").delete().eq("id", id);
+    loadFriendData(user.id);
+  }
+
+  /* -------------------------
+          STYLES
+  -------------------------- */
+  const cardStyle = {
+    background: "#101010",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.06)",
+    padding: 12,
+    marginBottom: 14,
+  };
+
+  const row = {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "10px 0",
+    borderBottom: "1px solid rgba(255,255,255,0.06)",
+  };
+
+  const avatar = {
+    width: 46,
+    height: 46,
+    borderRadius: "999px",
+    objectFit: "cover",
+    border: "1px solid rgba(255,255,255,0.1)",
+  };
+
+  const btn = {
+    padding: "8px 12px",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontSize: 13,
+    border: "none",
+  };
 
   return (
-    <div
-      style={{
-        padding: "16px 16px 90px",
-        maxWidth: "900px",
-        margin: "0 auto",
-        color: "white",
-      }}
-    >
-      {/* HEADER */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <Link
-          to="/"
-          style={{
-            marginRight: 12,
-            padding: 6,
-            borderRadius: 8,
-            background: "#111",
-            border: "1px solid rgba(255,255,255,0.1)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <FiArrowLeft size={18} />
-        </Link>
+    <div style={{ padding: "16px", paddingBottom: "120px" }}>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+        Friends
+      </h1>
 
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
-          Friends
-        </h1>
-      </div>
+      {/* SEARCH */}
+      <div style={cardStyle}>
+        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Add Friend</h3>
 
-      {/* SEARCH BAR */}
-      <div
-        style={{
-          background: "#101010",
-          borderRadius: 12,
-          padding: 16,
-          border: "1px solid rgba(255,255,255,0.06)",
-          marginBottom: 20,
-        }}
-      >
-        <label style={{ fontSize: 13, opacity: 0.85 }}>Add Friend</label>
         <input
-          placeholder="@handle"
-          value={searchHandle}
-          onChange={(e) => setSearchHandle(e.target.value)}
+          type="text"
+          placeholder="Search by handle..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && searchUsers()}
           style={{
             width: "100%",
             padding: "10px",
-            borderRadius: 8,
-            marginTop: 6,
             background: "#0d0d0d",
             border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: 10,
             color: "white",
-            fontSize: 14,
+            marginBottom: 12,
           }}
         />
 
-        <button
-          onClick={searchByHandle}
-          style={{
-            width: "100%",
-            marginTop: 10,
-            padding: 10,
-            background: "#ff2f2f",
-            border: "none",
-            borderRadius: 10,
-            color: "white",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          Search
-        </button>
+        {searchResults.map((u) => (
+          <div key={u.id} style={{ ...row, borderBottom: "none" }}>
+            <img
+              src={u.avatar_url || "https://via.placeholder.com/46"}
+              style={avatar}
+            />
 
-        {searchError && (
-          <p style={{ marginTop: 10, fontSize: 13, color: "#ff5555" }}>
-            {searchError}
-          </p>
-        )}
-
-        {searchResult && (
-          <div
-            style={{
-              marginTop: 14,
-              padding: 12,
-              borderRadius: 10,
-              background: "#0f0f0f",
-              border: "1px solid rgba(255,255,255,0.08)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <img
-                src={
-                  searchResult.avatar_url ||
-                  "https://via.placeholder.com/60?text=?"
-                }
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 999,
-                  objectFit: "cover",
-                }}
-              />
-              <div>
-                <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
-                  {searchResult.display_name}
-                </p>
-                <p style={{ opacity: 0.7, fontSize: 13 }}>
-                  @{searchResult.handle}
-                </p>
-              </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                {u.display_name || u.username}
+              </p>
+              <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
+                @{u.handle || u.username}
+              </p>
             </div>
 
             <button
-              onClick={() => sendFriendRequest(searchResult.id)}
+              onClick={() => sendFriendRequest(u.id)}
               style={{
+                ...btn,
                 background: "#ff2f2f",
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "none",
                 color: "white",
-                fontWeight: 600,
-                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
               }}
             >
-              Add
+              <FiUserPlus /> Add
             </button>
           </div>
-        )}
+        ))}
       </div>
 
-      {/* PENDING INCOMING */}
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>
-        Pending Requests
-      </h2>
+      {/* INCOMING REQUESTS */}
+      {incoming.length > 0 && (
+        <div style={cardStyle}>
+          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Incoming Requests</h3>
 
-      {pendingIncoming.length === 0 ? (
-        <p style={{ fontSize: 13, opacity: 0.7 }}>No incoming requests.</p>
-      ) : (
-        pendingIncoming.map((r) => (
-          <div
-            key={r.id}
-            style={{
-              background: "#0f0f0f",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 10,
-              padding: 12,
-              marginBottom: 10,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {incoming.map((req) => (
+            <div key={req.id} style={row}>
               <img
                 src={
-                  r.profiles?.avatar_url ||
-                  "https://via.placeholder.com/50?text=?"
+                  req.profiles?.avatar_url ||
+                  "https://via.placeholder.com/46"
                 }
-                style={{
-                  width: 46,
-                  height: 46,
-                  borderRadius: 999,
-                }}
+                style={avatar}
               />
-              <div>
-                <p style={{ fontWeight: 600, margin: 0 }}>
-                  {r.profiles?.display_name}
+
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                  {req.profiles?.display_name || req.profiles?.username}
                 </p>
-                <p style={{ opacity: 0.7, fontSize: 13 }}>
-                  @{r.profiles?.handle}
+                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
+                  @{req.profiles?.handle || req.profiles?.username}
                 </p>
               </div>
-            </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
               <button
-                onClick={() => acceptRequest(r.id)}
+                onClick={() => acceptRequest(req.id, req.sender_id)}
                 style={{
-                  background: "#22c55e",
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  border: "none",
+                  ...btn,
+                  background: "#16c784",
                   color: "white",
-                  fontWeight: 600,
                 }}
               >
                 Accept
               </button>
+
               <button
-                onClick={() => declineRequest(r.id)}
+                onClick={() => declineRequest(req.id)}
                 style={{
-                  background: "#444",
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  border: "none",
+                  ...btn,
+                  background: "#333",
                   color: "white",
-                  fontWeight: 600,
                 }}
               >
                 Decline
               </button>
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
 
-      {/* PENDING OUTGOING */}
-      <h2 style={{ fontSize: 16, fontWeight: 600, margin: "20px 0 10px" }}>
-        Sent Requests
-      </h2>
+      {/* OUTGOING REQUESTS */}
+      {outgoing.length > 0 && (
+        <div style={cardStyle}>
+          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Sent Requests</h3>
 
-      {pendingOutgoing.length === 0 ? (
-        <p style={{ fontSize: 13, opacity: 0.7 }}>
-          No sent requests.
-        </p>
-      ) : (
-        pendingOutgoing.map((r) => (
-          <div
-            key={r.id}
-            style={{
-              background: "#0f0f0f",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 10,
-              padding: 12,
-              marginBottom: 10,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {outgoing.map((req) => (
+            <div key={req.id} style={row}>
               <img
                 src={
-                  r.profiles?.avatar_url ||
-                  "https://via.placeholder.com/50?text=?"
+                  req.profiles?.avatar_url ||
+                  "https://via.placeholder.com/46"
                 }
-                style={{
-                  width: 46,
-                  height: 46,
-                  borderRadius: 999,
-                }}
+                style={avatar}
               />
-              <div>
-                <p style={{ fontWeight: 600, margin: 0 }}>
-                  {r.profiles?.display_name}
+
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                  {req.profiles?.display_name || req.profiles?.username}
                 </p>
-                <p style={{ opacity: 0.7, fontSize: 13 }}>
-                  @{r.profiles?.handle}
+                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
+                  @{req.profiles?.handle || req.profiles?.username}
                 </p>
               </div>
-            </div>
 
-            <button
-              onClick={() => declineRequest(r.id)}
-              style={{
-                background: "#444",
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "none",
-                color: "white",
-                fontWeight: 600,
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        ))
+              <button
+                onClick={() => cancelRequest(req.id)}
+                style={{
+                  ...btn,
+                  background: "#333",
+                  color: "white",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* FRIENDS LIST */}
-      <h2 style={{ fontSize: 16, fontWeight: 600, margin: "20px 0 10px" }}>
-        Friends
-      </h2>
+      <div style={cardStyle}>
+        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Friends</h3>
 
-      {friends.length === 0 ? (
-        <p style={{ fontSize: 13, opacity: 0.7 }}>No friends yet.</p>
-      ) : (
-        friends.map((f) => (
-          <div
-            key={f.id}
-            style={{
-              background: "#0f0f0f",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 10,
-              padding: 12,
-              marginBottom: 10,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <img
-              src={
-                f.profiles?.avatar_url ||
-                "https://via.placeholder.com/50?text=?"
-              }
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: 999,
-              }}
-            />
-            <div>
-              <p style={{ fontWeight: 600, margin: 0 }}>
-                {f.profiles?.display_name}
-              </p>
-              <p style={{ opacity: 0.7, fontSize: 13 }}>
-                @{f.profiles?.handle}
-              </p>
+        {friends.length === 0 ? (
+          <p style={{ fontSize: 13, opacity: 0.7 }}>
+            No friends yet — add some!
+          </p>
+        ) : (
+          friends.map((fr) => (
+            <div key={fr.id} style={row}>
+              <img
+                src={
+                  fr.profiles?.avatar_url ||
+                  "https://via.placeholder.com/46"
+                }
+                style={avatar}
+              />
+
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                  {fr.profiles?.display_name || fr.profiles?.username}
+                </p>
+                <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>
+                  @{fr.profiles?.handle || fr.profiles?.username}
+                </p>
+              </div>
+
+              {/* MESSAGE BUTTON */}
+              <Link
+                to={`/chat/${fr.friend_id}`}
+                style={{
+                  ...btn,
+                  background: "#ff2f2f",
+                  color: "white",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  textDecoration: "none",
+                }}
+              >
+                <FiMessageSquare size={16} /> Message
+              </Link>
             </div>
-          </div>
-        ))
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }

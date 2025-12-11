@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { supabase } from "./supabaseClient";
@@ -21,6 +22,9 @@ import GoalsPage from "./pages/GoalsPage";
 
 // Strength Calculator
 import StrengthCalculator from "./pages/StrengthCalculator";
+
+// NEW: Chat System
+import ChatPage from "./pages/ChatPage";
 
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
@@ -88,21 +92,26 @@ export default function App() {
     <AppProvider>
       <div className="min-h-screen bg-black text-white pb-20">
         <Routes>
-  <Route path="/" element={<Dashboard />} />
-  <Route path="/home" element={<HomePage />} />
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/home" element={<HomePage />} />
 
-  {/* ONLY ONE PR PAGE — BOTH URLs GO HERE */}
-  <Route path="/prs" element={<PRTracker />} />
-  <Route path="/prslist" element={<PRTracker />} />
+          {/* PR */}
+          <Route path="/prs" element={<PRTracker />} />
+          <Route path="/prslist" element={<PRTracker />} />
 
-  <Route path="/measure" element={<MeasurementsPage />} />
-  <Route path="/workouts" element={<WorkoutsPage />} />
-  <Route path="/workoutlogger" element={<WorkoutLogger />} />
-  <Route path="/profile" element={<ProfilePage />} />
-  <Route path="/goals" element={<GoalsPage />} />
+          {/* Tracking Pages */}
+          <Route path="/measure" element={<MeasurementsPage />} />
+          <Route path="/workouts" element={<WorkoutsPage />} />
+          <Route path="/workoutlogger" element={<WorkoutLogger />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/goals" element={<GoalsPage />} />
 
-  <Route path="/strength" element={<StrengthCalculator />} />
-</Routes>
+          {/* Strength */}
+          <Route path="/strength" element={<StrengthCalculator />} />
+
+          {/* NEW CHAT ROUTE */}
+          <Route path="/chat/:friendId" element={<ChatPage />} />
+        </Routes>
 
         <BottomNav />
       </div>
