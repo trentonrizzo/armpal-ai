@@ -1,210 +1,486 @@
 // src/pages/FriendsPage.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 export default function FriendsPage() {
   const [user, setUser] = useState(null);
-  const [friends, setFriends] = useState([]);
-  const [incoming, setIncoming] = useState([]);
-  const [outgoing, setOutgoing] = useState([]);
-  const [handleSearch, setHandleSearch] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
 
-  const navigate = useNavigate();
+  // Data
+  const [friends, setFriends] = useState([]); // list of profile objects
+  const [incoming, setIncoming] = useState([]); // [{ id, user_id, profile }]
+  const [outgoing, setOutgoing] = useState([]); // [{ id, friend_id, profile }]
 
-  // LOAD USER
+  // UI state
+  const [showAddBox, setShowAddBox] = useState(false);
+  const [handleInput, setHandleInput] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      if (data.user) loadFriends(data.user.id);
-    });
+    async function load() {
+      const { data } = await supabase.auth.getUser();
+      const current = data?.user || null;
+      setUser(current);
+
+      if (current?.id) {
+        await loadAllFriends(current.id);
+      }
+    }
+    load();
   }, []);
 
-  // LOAD FRIENDS + REQUESTS
-  async function loadFriends(uid) {
-    let { data: f1 } = await supabase
+  async function loadAllFriends(myId) {
+    // 1) ACCEPTED FRIENDS (both directions)
+    const { data: asUser } = await supabase
       .from("friends")
-      .select("id, friend_id, profiles:friend_id(username, handle)")
-      .eq("user_id", uid);
+      .select("id, friend_id, status")
+      .eq("user_id", myId)
+      .eq("status", "accepted");
 
-    let { data: f2 } = await supabase
+    const { data: asFriend } = await supabase
       .from("friends")
-      .select("id, user_id, profiles:user_id(username, handle)")
-      .eq("friend_id", uid);
+      .select("id, user_id, status")
+      .eq("friend_id", myId)
+      .eq("status", "accepted");
 
-    let { data: incomingReq } = await supabase
-      .from("friend_requests")
-      .select("id, sender_id, profiles:sender_id(username, handle)")
-      .eq("receiver_id", uid);
+    const friendIds = new Set();
+    (asUser || []).forEach((row) => friendIds.add(row.friend_id));
+    (asFriend || []).forEach((row) => friendIds.add(row.user_id));
 
-    let { data: outgoingReq } = await supabase
-      .from("friend_requests")
-      .select("id, receiver_id, profiles:receiver_id(username, handle)")
-      .eq("sender_id", uid);
-
-    setFriends([...(f1 || []), ...(f2 || [])]);
-    setIncoming(incomingReq || []);
-    setOutgoing(outgoingReq || []);
-  }
-
-  // SEND REQUEST
-  async function sendRequest() {
-    if (!handleSearch.trim()) return;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id, handle")
-      .eq("handle", handleSearch.trim())
-      .single();
-
-    if (!profile) {
-      alert("Handle not found!");
-      return;
+    let friendsProfiles = [];
+    if (friendIds.size > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, handle, last_active")
+        .in("id", Array.from(friendIds));
+      friendsProfiles = profiles || [];
     }
+    setFriends(friendsProfiles);
 
-    await supabase.from("friend_requests").insert({
-      sender_id: user.id,
-      receiver_id: profile.id,
-    });
+    // 2) INCOMING PENDING REQUESTS (they added YOU)
+    const { data: incomingRows } = await supabase
+      .from("friends")
+      .select("id, user_id, status")
+      .eq("friend_id", myId)
+      .eq("status", "pending");
 
-    setHandleSearch("");
-    setShowSearch(false);
-    loadFriends(user.id);
+    let incomingWithProfiles = [];
+    if ((incomingRows || []).length > 0) {
+      const ids = incomingRows.map((r) => r.user_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, handle")
+        .in("id", ids);
+
+      incomingWithProfiles = incomingRows.map((row) => ({
+        ...row,
+        profile: (profiles || []).find((p) => p.id === row.user_id) || null,
+      }));
+    }
+    setIncoming(incomingWithProfiles);
+
+    // 3) OUTGOING PENDING REQUESTS (YOU added THEM)
+    const { data: outgoingRows } = await supabase
+      .from("friends")
+      .select("id, friend_id, status")
+      .eq("user_id", myId)
+      .eq("status", "pending");
+
+    let outgoingWithProfiles = [];
+    if ((outgoingRows || []).length > 0) {
+      const ids = outgoingRows.map((r) => r.friend_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, handle")
+        .in("id", ids);
+
+      outgoingWithProfiles = outgoingRows.map((row) => ({
+        ...row,
+        profile: (profiles || []).find((p) => p.id === row.friend_id) || null,
+      }));
+    }
+    setOutgoing(outgoingWithProfiles);
   }
 
-  // ACCEPT
-  async function acceptRequest(id) {
-    const request = incoming.find((r) => r.id === id);
-    if (!request) return;
+  async function sendFriendRequest() {
+    try {
+      setErrorMsg("");
+      if (!user?.id) return;
 
-    await supabase.from("friends").insert([
-      { user_id: user.id, friend_id: request.sender_id },
-      { user_id: request.sender_id, friend_id: user.id },
-    ]);
+      const handle = handleInput.trim();
+      if (!handle) return;
 
-    await supabase.from("friend_requests").delete().eq("id", id);
-    loadFriends(user.id);
+      // find target by handle
+      const { data: target, error } = await supabase
+        .from("profiles")
+        .select("id, username, handle")
+        .eq("handle", handle)
+        .maybeSingle();
+
+      if (error || !target) {
+        setErrorMsg("No user found with that handle.");
+        return;
+      }
+
+      if (target.id === user.id) {
+        setErrorMsg("You can’t add yourself.");
+        return;
+      }
+
+      // check if existing row
+      const { data: existing } = await supabase
+        .from("friends")
+        .select("id, status, user_id, friend_id")
+        .or(
+          `and(user_id.eq.${user.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${user.id})`
+        );
+
+      if (existing && existing.length > 0) {
+        setErrorMsg("Request already exists or you’re already friends.");
+        return;
+      }
+
+      await supabase.from("friends").insert({
+        user_id: user.id,
+        friend_id: target.id,
+        status: "pending",
+      });
+
+      setHandleInput("");
+      setShowAddBox(false);
+      await loadAllFriends(user.id);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Error sending request.");
+    }
   }
 
-  // DECLINE / CANCEL
-  async function removeRequest(id) {
-    await supabase.from("friend_requests").delete().eq("id", id);
-    loadFriends(user.id);
+  async function acceptRequest(rowId) {
+    if (!user?.id) return;
+    await supabase
+      .from("friends")
+      .update({ status: "accepted" })
+      .eq("id", rowId);
+
+    await loadAllFriends(user.id);
+  }
+
+  async function declineRequest(rowId) {
+    if (!user?.id) return;
+    await supabase.from("friends").delete().eq("id", rowId);
+    await loadAllFriends(user.id);
+  }
+
+  function isOnline(lastActive) {
+    if (!lastActive) return false;
+    const diff = Date.now() - new Date(lastActive).getTime();
+    return diff < 60_000; // last 60s
   }
 
   return (
-    <div className="p-4 text-white">
-      <h1 className="text-3xl font-bold mb-4">Friends</h1>
+    <div style={pageContainer}>
+      {/* HEADER */}
+      <h1 style={headerTitle}>Friends</h1>
 
-      {/* ADD FRIEND BUTTON */}
-      {!showSearch && (
+      {/* ADD FRIEND CARD */}
+      <section style={card}>
+        {/* Big red button */}
         <button
-          onClick={() => setShowSearch(true)}
-          className="w-full bg-red-600 text-white font-semibold py-3 rounded-xl text-lg mb-4 shadow-lg active:scale-95 transition"
+          style={bigAddButton}
+          onClick={() => {
+            setShowAddBox((v) => !v);
+            setErrorMsg("");
+          }}
         >
-          ➕ Add Friend
+          <span style={{ fontSize: 20, marginRight: 6 }}>＋</span>
+          <span>Add Friend</span>
         </button>
-      )}
 
-      {/* HANDLE INPUT */}
-      {showSearch && (
-        <div className="mb-6 bg-[#111] p-4 rounded-xl border border-red-600">
-          <input
-            className="w-full p-3 rounded-lg bg-black border border-gray-700 text-white"
-            placeholder="@handle..."
-            value={handleSearch}
-            onChange={(e) => setHandleSearch(e.target.value)}
-          />
+        {/* Reveal search box when button tapped */}
+        {showAddBox && (
+          <div style={{ marginTop: 10 }}>
+            <p style={smallMuted}>
+              Search by <span style={{ fontFamily: "monospace" }}>@handle</span>
+            </p>
 
-          <button
-            onClick={sendRequest}
-            className="w-full mt-3 bg-red-600 py-2 rounded-lg font-semibold active:scale-95 transition"
-          >
-            Send Request
-          </button>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 8,
+                alignItems: "center",
+              }}
+            >
+              <input
+                type="text"
+                value={handleInput}
+                onChange={(e) => setHandleInput(e.target.value)}
+                placeholder="@trentarmgod"
+                style={textInput}
+              />
 
-          <button
-            onClick={() => setShowSearch(false)}
-            className="w-full mt-2 py-2 text-gray-400 text-sm"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+              <button style={smallRedButton} onClick={sendFriendRequest}>
+                Send
+              </button>
+
+              <button
+                style={smallGhostButton}
+                onClick={() => {
+                  setShowAddBox(false);
+                  setHandleInput("");
+                  setErrorMsg("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+
+            {errorMsg && (
+              <p style={{ color: "#ff6b6b", fontSize: 12, marginTop: 6 }}>
+                {errorMsg}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* INCOMING REQUESTS */}
       {incoming.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xl font-bold mb-2">Incoming Requests</h2>
-
-          {incoming.map((req) => (
-            <div
-              key={req.id}
-              className="bg-[#111] border border-gray-700 p-4 rounded-xl mb-2"
-            >
-              <p className="text-lg font-semibold">@{req.profiles.handle}</p>
-
-              <div className="flex gap-4 mt-2">
-                <button
-                  onClick={() => acceptRequest(req.id)}
-                  className="flex-1 bg-green-600 py-2 rounded-lg"
-                >
-                  Accept
-                </button>
-                <button
-                  onClick={() => removeRequest(req.id)}
-                  className="flex-1 bg-red-600 py-2 rounded-lg"
-                >
-                  Decline
-                </button>
+        <section style={card}>
+          <h2 style={sectionTitle}>Friend Requests</h2>
+          {incoming.map((req) => {
+            const p = req.profile;
+            return (
+              <div key={req.id} style={row}>
+                <div>
+                  <p style={rowMainText}>{p?.handle || p?.username}</p>
+                  <p style={rowSubText}>@{p?.username}</p>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    style={smallGreenButton}
+                    onClick={() => acceptRequest(req.id)}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    style={smallRedButton}
+                    onClick={() => declineRequest(req.id)}
+                  >
+                    Decline
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            );
+          })}
+        </section>
       )}
 
       {/* OUTGOING REQUESTS */}
       {outgoing.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xl font-bold mb-2">Pending Requests</h2>
-
-          {outgoing.map((req) => (
-            <div
-              key={req.id}
-              className="bg-[#111] border border-gray-700 p-4 rounded-xl mb-2"
-            >
-              <p className="text-lg font-semibold">@{req.profiles.handle}</p>
-
-              <button
-                onClick={() => removeRequest(req.id)}
-                className="mt-2 w-full bg-red-600 py-2 rounded-lg"
-              >
-                Cancel Request
-              </button>
-            </div>
-          ))}
-        </div>
+        <section style={card}>
+          <h2 style={sectionTitle}>Sent Requests</h2>
+          {outgoing.map((req) => {
+            const p = req.profile;
+            return (
+              <div key={req.id} style={row}>
+                <div>
+                  <p style={rowMainText}>{p?.handle || p?.username}</p>
+                  <p style={rowSubText}>@{p?.username}</p>
+                </div>
+                <span style={{ fontSize: 11, color: "#ffc857" }}>
+                  Pending
+                </span>
+              </div>
+            );
+          })}
+        </section>
       )}
 
       {/* FRIENDS LIST */}
-      <h2 className="text-xl font-bold mb-2">Your Friends</h2>
+      <section style={card}>
+        <h2 style={sectionTitle}>Your Friends</h2>
 
-      {friends.length === 0 ? (
-        <p className="text-gray-400">No friends yet — add some!</p>
-      ) : (
-        friends.map((friend) => (
-          <div
-            key={friend.id}
-            onClick={() => navigate(`/chat/${friend.friend_id || friend.user_id}`)}
-            className="bg-[#111] border border-gray-700 p-4 rounded-xl mb-3 active:scale-[0.98] transition cursor-pointer"
-          >
-            <p className="text-lg font-semibold">
-              @{friend.profiles.handle}
-            </p>
-          </div>
-        ))
-      )}
+        {friends.length === 0 ? (
+          <p style={smallMuted}>No friends yet — add some!</p>
+        ) : (
+          friends.map((p) => {
+            const online = isOnline(p.last_active);
+            return (
+              <div key={p.id} style={row}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {/* Circle avatar with first letter */}
+                  <div style={avatarCircle}>
+                    {(p.handle || p.username || "?")
+                      .charAt(0)
+                      .toUpperCase()}
+                    {online && <span style={onlineDot} />}
+                  </div>
+                  <div>
+                    <p style={rowMainText}>{p.handle || p.username}</p>
+                    <p style={rowSubText}>
+                      {online ? "Online" : "Offline"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Message button → /chat/:friendId */}
+                <Link
+                  to={`/chat/${p.id}`}
+                  style={smallRedButtonLink}
+                >
+                  Message
+                </Link>
+              </div>
+            );
+          })
+        )}
+      </section>
     </div>
   );
 }
+
+/* --------- SHARED STYLES ---------- */
+
+const pageContainer = {
+  padding: "16px 16px 90px",
+  maxWidth: "900px",
+  margin: "0 auto",
+};
+
+const headerTitle = {
+  fontSize: 26,
+  fontWeight: 700,
+  marginBottom: 14,
+};
+
+const card = {
+  background: "#101010",
+  borderRadius: 14,
+  padding: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  marginBottom: 16,
+};
+
+const sectionTitle = {
+  fontSize: 15,
+  fontWeight: 600,
+  marginBottom: 8,
+};
+
+const bigAddButton = {
+  width: "100%",
+  padding: "12px 16px",
+  background: "#ff2f2f",
+  borderRadius: 12,
+  border: "none",
+  color: "white",
+  fontSize: 16,
+  fontWeight: 600,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+  boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
+};
+
+const textInput = {
+  flex: 1,
+  padding: "9px 10px",
+  background: "#050505",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "white",
+  fontSize: 14,
+};
+
+const smallRedButton = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "none",
+  background: "#ff2f2f",
+  color: "white",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const smallGreenButton = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "none",
+  background: "#1fbf61",
+  color: "white",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const smallGhostButton = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.3)",
+  background: "transparent",
+  color: "rgba(255,255,255,0.8)",
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+};
+
+const smallRedButtonLink = {
+  ...smallRedButton,
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const smallMuted = {
+  fontSize: 12,
+  opacity: 0.7,
+};
+
+const row = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "8px 0",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
+};
+
+const rowMainText = {
+  fontSize: 14,
+  fontWeight: 600,
+  margin: 0,
+};
+
+const rowSubText = {
+  fontSize: 11,
+  opacity: 0.7,
+  margin: 0,
+};
+
+const avatarCircle = {
+  width: 34,
+  height: 34,
+  borderRadius: "999px",
+  background: "#000",
+  border: "1px solid rgba(255,255,255,0.18)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 15,
+  fontWeight: 700,
+  position: "relative",
+};
+
+const onlineDot = {
+  position: "absolute",
+  right: -1,
+  bottom: -1,
+  width: 9,
+  height: 9,
+  borderRadius: "999px",
+  background: "#1fbf61",
+  border: "2px solid #000",
+};
