@@ -1,5 +1,11 @@
-/* ======== TAILWIND v4 IMPORT (REQUIRED) ======== */
-@import "tailwindcss";
+/* =============================== */
+/*       TAILWIND v4 IMPORT        */
+/* =============================== */
+
+/* THIS IS THE CORRECT IMPORT — REQUIRED */
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
 
 /* =============================== */
 /*        ARMPAL GLOBAL THEME      */
@@ -28,6 +34,11 @@ html, body {
   font-family: system-ui, sans-serif;
   min-height: 100%;
   overflow-x: hidden;
+
+  /* Prevent top cutoff on iPhones */
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Scrollbar */
@@ -39,11 +50,8 @@ html, body {
 ::-webkit-scrollbar-thumb:hover { background: #333; }
 
 /* =============================== */
-/*            CARD BASE             */
+/*            CARD BASE            */
 /* =============================== */
-/* IMPORTANT: No glow, no fog, no shadows.
-   PRTracker will handle its own card UI.
-*/
 
 .card {
   background: var(--card);
@@ -192,15 +200,9 @@ a:hover { color: inherit !important; }
   transition: width 0.45s ease;
 }
 
-/* Over-goal glow */
 .over-goal-fill {
   box-shadow: 0 0 12px rgba(255,200,0,0.8);
 }
-
-/* =============================== */
-/*         NO GLASS / NO FOG        */
-/* =============================== */
-/* glass-card, neon-input, pulses REMOVED because they polluted PR page */
 
 /* =============================== */
 /*           UTILITY               */
@@ -214,42 +216,13 @@ a:hover { color: inherit !important; }
   to { transform: translateY(0); opacity: 1; }
 }
 .animate-slideUp { animation: slideUp 0.25s ease-out; }
-html, body {
-  margin: 0;
-  padding: 0;
 
-  /* Prevent top cutoff on iPhones */
-  padding-top: env(safe-area-inset-top);
-
-  /* Prevent sides cutoff */
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
-
-  /* Your app background */
-  background: #000;
-}
-.fade-in {
-  animation: fadeIn 0.25s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-/* Smooth focus glow on form controls */
 input,
 textarea,
 select {
-  transition:
-    border-color 0.15s ease-out,
-    box-shadow 0.15s ease-out,
-    background 0.15s ease-out;
+  transition: border-color 0.15s ease-out,
+              box-shadow 0.15s ease-out,
+              background 0.15s ease-out;
 }
 
 input:focus,
@@ -260,6 +233,5 @@ select:focus {
   box-shadow: 0 0 0 1px rgba(255, 47, 47, 0.7);
   background: #050505;
 }
-html {
-  scroll-behavior: smooth;
-}
+
+html { scroll-behavior: smooth; }
