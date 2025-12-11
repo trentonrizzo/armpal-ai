@@ -7,9 +7,9 @@ export default function FriendsPage() {
   const [user, setUser] = useState(null);
 
   // Data
-  const [friends, setFriends] = useState([]); // accepted friends (profiles)
-  const [incoming, setIncoming] = useState([]); // pending where friend_id = me
-  const [outgoing, setOutgoing] = useState([]); // pending where user_id = me
+  const [friends, setFriends] = useState([]); 
+  const [incoming, setIncoming] = useState([]);
+  const [outgoing, setOutgoing] = useState([]);
 
   // UI
   const [showAddBox, setShowAddBox] = useState(false);
@@ -31,11 +31,10 @@ export default function FriendsPage() {
   }, []);
 
   // -------------------------------------------------------------------
-  // LOAD ALL FRIEND DATA IN ONE GO
+  //  LOAD EVERYTHING
   // -------------------------------------------------------------------
   async function loadAllFriends(myId) {
     try {
-      // Get ALL friend rows where I'm involved (no status filter here)
       const { data: rows, error } = await supabase
         .from("friends")
         .select("id, user_id, friend_id, status")
@@ -55,22 +54,14 @@ export default function FriendsPage() {
 
       (rows || []).forEach((row) => {
         const { user_id, friend_id, status } = row;
-
-        // normalize status
         const st = (status || "").toLowerCase();
 
         if (st === "accepted") {
-          // accepted friend — whichever is NOT me is the friend
           const otherId = user_id === myId ? friend_id : user_id;
           acceptedIds.add(otherId);
         } else if (st === "pending") {
-          if (friend_id === myId) {
-            // they sent request to me
-            incomingRows.push(row);
-          } else if (user_id === myId) {
-            // I sent request to them
-            outgoingRows.push(row);
-          }
+          if (friend_id === myId) incomingRows.push(row);
+          else if (user_id === myId) outgoingRows.push(row);
         }
       });
 
@@ -86,37 +77,31 @@ export default function FriendsPage() {
           .select("id, username, handle, last_active")
           .in("id", Array.from(profileIds));
 
-        if (profErr) {
-          console.error("profiles error:", profErr);
-        } else {
-          profiles = profData || [];
-        }
+        if (!profErr) profiles = profData || [];
       }
 
       const profileMap = {};
-      profiles.forEach((p) => {
-        profileMap[p.id] = p;
-      });
+      profiles.forEach((p) => (profileMap[p.id] = p));
 
-      // Build accepted friends list
       const acceptedList = Array.from(acceptedIds)
         .map((id) => profileMap[id])
         .filter(Boolean);
 
-      // Build incoming/outgoing with attached profiles
-      const incomingFull = incomingRows.map((row) => ({
-        ...row,
-        profile: profileMap[row.user_id] || null,
-      }));
-
-      const outgoingFull = outgoingRows.map((row) => ({
-        ...row,
-        profile: profileMap[row.friend_id] || null,
-      }));
-
       setFriends(acceptedList);
-      setIncoming(incomingFull);
-      setOutgoing(outgoingFull);
+
+      setIncoming(
+        incomingRows.map((row) => ({
+          ...row,
+          profile: profileMap[row.user_id] || null,
+        }))
+      );
+
+      setOutgoing(
+        outgoingRows.map((row) => ({
+          ...row,
+          profile: profileMap[row.friend_id] || null,
+        }))
+      );
     } catch (err) {
       console.error("loadAllFriends error:", err);
       setFriends([]);
@@ -126,21 +111,20 @@ export default function FriendsPage() {
   }
 
   // -------------------------------------------------------------------
-  // SEND FRIEND REQUEST
+  //  SEND FRIEND REQUEST
   // -------------------------------------------------------------------
   async function sendFriendRequest() {
     try {
       setErrorMsg("");
       setSuccessMsg("");
+
       if (!user?.id) return;
 
       let raw = handleInput.trim();
       if (!raw) return;
 
-      // allow @handle or handle
       if (raw.startsWith("@")) raw = raw.slice(1);
 
-      // search case-insensitive
       const { data: target, error } = await supabase
         .from("profiles")
         .select("id, handle, username")
@@ -157,20 +141,15 @@ export default function FriendsPage() {
         return;
       }
 
-      // check if existing friendship/req
-      const { data: existing, error: existErr } = await supabase
+      const { data: existing } = await supabase
         .from("friends")
         .select("id, status, user_id, friend_id")
         .or(
           `and(user_id.eq.${user.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${user.id})`
         );
 
-      if (existErr) {
-        console.error("friends existing error:", existErr);
-      }
-
-      if (existing && existing.length > 0) {
-        setErrorMsg("Request already exists or you’re already friends.");
+      if (existing?.length > 0) {
+        setErrorMsg("Request already exists or you're already friends.");
         return;
       }
 
@@ -181,19 +160,14 @@ export default function FriendsPage() {
       });
 
       if (insertErr) {
-        console.error("insert friend error:", insertErr);
+        console.error("insert error:", insertErr);
         setErrorMsg("Error sending request.");
         return;
       }
 
       setHandleInput("");
       setShowAddBox(false);
-      setSuccessMsg(
-        `Friend request sent to @${
-          target.handle || target.username || "user"
-        }.`
-      );
-
+      setSuccessMsg(`Friend request sent to @${target.handle || target.username}.`);
       await loadAllFriends(user.id);
     } catch (err) {
       console.error(err);
@@ -201,48 +175,42 @@ export default function FriendsPage() {
     }
   }
 
-  // ACCEPT REQUEST
+  // -------------------------------------------------------------------
+  //  ACCEPT / DECLINE REQUEST
+  // -------------------------------------------------------------------
   async function acceptRequest(rowId) {
     if (!user?.id) return;
-    const { error } = await supabase
-      .from("friends")
-      .update({ status: "accepted" })
-      .eq("id", rowId);
-
-    if (error) console.error("accept error:", error);
+    await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
     await loadAllFriends(user.id);
   }
 
-  // DECLINE REQUEST
   async function declineRequest(rowId) {
     if (!user?.id) return;
-    const { error } = await supabase.from("friends").delete().eq("id", rowId);
-    if (error) console.error("decline error:", error);
+    await supabase.from("friends").delete().eq("id", rowId);
     await loadAllFriends(user.id);
   }
 
   // -------------------------------------------------------------------
-  // ONLINE STATUS HELPERS
+  //  ONLINE STATUS
   // -------------------------------------------------------------------
   function isOnline(lastActive) {
     if (!lastActive) return false;
-    const diff = Date.now() - new Date(lastActive).getTime();
-    return diff < 60000; // last 60s
+    return Date.now() - new Date(lastActive).getTime() < 60000;
   }
 
   // -------------------------------------------------------------------
-  // UI
+  //  UI
   // -------------------------------------------------------------------
   return (
     <div style={pageWrap}>
       <h1 style={title}>Friends</h1>
 
-      {/* ADD FRIEND CARD */}
+      {/* ADD FRIEND */}
       <section style={card}>
         <button
           style={bigAddButton}
           onClick={() => {
-            setShowAddBox((v) => !v);
+            setShowAddBox(!showAddBox);
             setErrorMsg("");
             setSuccessMsg("");
           }}
@@ -286,9 +254,7 @@ export default function FriendsPage() {
           </div>
         )}
 
-        {successMsg && !showAddBox && (
-          <p style={successStyle}>{successMsg}</p>
-        )}
+        {!showAddBox && successMsg && <p style={successStyle}>{successMsg}</p>}
       </section>
 
       {/* INCOMING REQUESTS */}
@@ -302,11 +268,8 @@ export default function FriendsPage() {
               <div key={req.id} style={row}>
                 <div style={rowLeft}>
                   <div style={avatarCircle}>
-                    {(p?.handle || p?.username || "?")
-                      .charAt(0)
-                      .toUpperCase()}
+                    {(p?.handle || p?.username || "?").charAt(0).toUpperCase()}
                   </div>
-
                   <div>
                     <p style={nameText}>{p?.handle || p?.username}</p>
                     <p style={subText}>@{p?.username}</p>
@@ -317,10 +280,7 @@ export default function FriendsPage() {
                   <button style={acceptBtn} onClick={() => acceptRequest(req.id)}>
                     Accept
                   </button>
-                  <button
-                    style={declineBtn}
-                    onClick={() => declineRequest(req.id)}
-                  >
+                  <button style={declineBtn} onClick={() => declineRequest(req.id)}>
                     Decline
                   </button>
                 </div>
@@ -341,10 +301,9 @@ export default function FriendsPage() {
               <div key={req.id} style={row}>
                 <div style={rowLeft}>
                   <div style={avatarCircle}>
-                    {(p?.handle || p?.username || "?")
-                      .charAt(0)
-                      .toUpperCase()}
+                    {(p?.handle || p?.username || "?").charAt(0).toUpperCase()}
                   </div>
+
                   <div>
                     <p style={nameText}>{p?.handle || p?.username}</p>
                     <p style={subText}>@{p?.username}</p>
@@ -363,7 +322,7 @@ export default function FriendsPage() {
         <h2 style={sectionTitle}>Your Friends</h2>
 
         {friends.length === 0 ? (
-          <p style={smallMuted}>You haven&apos;t added anyone yet.</p>
+          <p style={smallMuted}>You haven't added anyone yet.</p>
         ) : (
           friends.map((p) => {
             const online = isOnline(p.last_active);
@@ -395,7 +354,7 @@ export default function FriendsPage() {
 }
 
 // -----------------------------------------------------------------------
-// STYLES
+//  STYLES
 // -----------------------------------------------------------------------
 const pageWrap = {
   padding: "16px 16px 90px",
@@ -532,6 +491,27 @@ const subText = {
   fontSize: 12,
   opacity: 0.6,
   marginTop: -2,
+};
+
+// THE TWO MISSING BUTTONS — CAUSE OF YOUR CRASH
+const acceptBtn = {
+  padding: "8px 12px",
+  background: "#1fbf61",
+  color: "white",
+  borderRadius: 10,
+  border: "none",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const declineBtn = {
+  padding: "8px 12px",
+  background: "#ff4444",
+  color: "white",
+  borderRadius: 10,
+  border: "none",
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
 const pendingText = {
