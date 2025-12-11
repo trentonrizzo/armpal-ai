@@ -5,8 +5,9 @@ import { useParams, useNavigate } from "react-router-dom";
 
 import { FiArrowLeft, FiSend, FiImage, FiMic, FiX } from "react-icons/fi";
 
-// FORMAT TIME
+// Format timestamp
 function formatTime(ts) {
+  if (!ts) return "";
   const d = new Date(ts);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -30,13 +31,14 @@ export default function ChatPage() {
 
   const bottomRef = useRef(null);
 
+  // Recording
   const [recording, setRecording] = useState(false);
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
 
-  // ---------------------------
-  // LOAD USER + FRIEND
-  // ---------------------------
+  // ------------------------------------------
+  // Load user + friend
+  // ------------------------------------------
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -52,9 +54,9 @@ export default function ChatPage() {
     })();
   }, [friendId]);
 
-  // ---------------------------
-  // LOAD MESSAGES + REALTIME
-  // ---------------------------
+  // ------------------------------------------
+  // Load messages + realtime updates
+  // ------------------------------------------
   useEffect(() => {
     if (!user) return;
 
@@ -87,12 +89,12 @@ export default function ChatPage() {
   }
 
   function scrollToBottom() {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
 
-  // ---------------------------
-  // SEND TEXT MESSAGE
-  // ---------------------------
+  // ------------------------------------------
+  // Send text message
+  // ------------------------------------------
   async function sendMessage() {
     if (!messageInput.trim()) return;
 
@@ -103,13 +105,16 @@ export default function ChatPage() {
       sender_id: user.id,
       receiver_id: friendId,
       text,
+      image_url: null,
+      audio_url: null,
     });
+
     scrollToBottom();
   }
 
-  // ---------------------------
-  // SEND IMAGE
-  // ---------------------------
+  // ------------------------------------------
+  // Send image message
+  // ------------------------------------------
   async function sendImage(file) {
     if (!file) return;
 
@@ -126,16 +131,18 @@ export default function ChatPage() {
       await supabase.from("messages").insert({
         sender_id: user.id,
         receiver_id: friendId,
+        text: null,
         image_url: urlObj.publicUrl,
+        audio_url: null,
       });
 
       scrollToBottom();
     }
   }
 
-  // ---------------------------
-  // VOICE RECORDING
-  // ---------------------------
+  // ------------------------------------------
+  // Voice recording
+  // ------------------------------------------
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -163,6 +170,8 @@ export default function ChatPage() {
           await supabase.from("messages").insert({
             sender_id: user.id,
             receiver_id: friendId,
+            text: null,
+            image_url: null,
             audio_url: urlObj.publicUrl,
           });
         }
@@ -171,7 +180,7 @@ export default function ChatPage() {
       recorder.start();
       setRecording(true);
     } catch (err) {
-      console.error("record error", err);
+      console.error("Recording error:", err);
     }
   }
 
@@ -180,9 +189,9 @@ export default function ChatPage() {
     setRecording(false);
   }
 
-  // ---------------------------
-  // TYPING INDICATOR
-  // ---------------------------
+  // ------------------------------------------
+  // Typing indicator
+  // ------------------------------------------
   useEffect(() => {
     if (!user) return;
 
@@ -209,14 +218,14 @@ export default function ChatPage() {
     });
   }
 
-  // ---------------------------
-  // ONLINE + LAST SEEN
-  // ---------------------------
+  // ------------------------------------------
+  // Online + last seen
+  // ------------------------------------------
   useEffect(() => {
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("last_active")
+        .select("last_active, avatar_url")
         .eq("id", friendId)
         .single();
 
@@ -225,76 +234,96 @@ export default function ChatPage() {
       const last = new Date(data.last_active);
       const diff = Date.now() - last.getTime();
 
-      if (diff < 60_000) {
-        setOnline(true);
-      } else {
-        setOnline(false);
-        setLastSeen(
-          last.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        );
-      }
+      setOnline(diff < 60000);
+      setLastSeen(
+        last.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
+
+      if (data?.avatar_url) setFriend((f) => ({ ...f, avatar_url: data.avatar_url }));
     }, 5000);
 
     return () => clearInterval(interval);
   }, [friendId]);
 
-  // ---------------------------
+  // ------------------------------------------
   // UI
-  // ---------------------------
+  // ------------------------------------------
   return (
     <div className="flex flex-col h-screen bg-black text-white">
 
       {/* HEADER */}
-      <div className="flex items-center gap-3 p-4 bg-black border-b border-white/10 sticky top-0 z-20">
+      <div className="flex items-center gap-3 p-4 border-b border-white/10 bg-black sticky top-0 z-20">
         <button onClick={() => navigate("/friends")}>
           <FiArrowLeft size={24} />
         </button>
 
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-lg">{friend?.username || "User"}</span>
+        <div className="flex items-center gap-3">
+          {/* Friend Avatar */}
+          <div className="relative">
+            <img
+              src={friend?.avatar_url || ""}
+              alt=""
+              className={`w-10 h-10 rounded-full object-cover ${
+                friend?.avatar_url ? "border border-red-500" : "bg-white/10"
+              }`}
+            />
+          </div>
+
+          <div className="flex flex-col leading-tight">
+            <span className="font-semibold text-lg">
+              {friend?.username || "User"}
+            </span>
 
             {online ? (
-              <span className="w-3 h-3 rounded-full bg-green-500"></span>
+              <span className="text-green-400 text-xs">Online</span>
             ) : (
               <span className="text-xs opacity-70">Last seen {lastSeen}</span>
             )}
-          </div>
 
-          {friendTyping && (
-            <span className="text-xs text-white/60">typing…</span>
-          )}
+            {friendTyping && (
+              <span className="text-xs text-white/60">typing…</span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((m) => {
           const mine = m.sender_id === user.id;
+          const avatarUrl = mine ? user?.avatar_url : friend?.avatar_url;
 
           return (
-            <div
-              key={m.id}
-              className={`flex ${mine ? "justify-end" : "justify-start"}`}
-            >
+            <div key={m.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
+
+              {/* Avatar */}
+              {!mine && (
+                <img
+                  src={avatarUrl || ""}
+                  className={`w-8 h-8 rounded-full object-cover ${
+                    avatarUrl ? "border border-red-500" : "bg-white/20"
+                  }`}
+                />
+              )}
+
+              {/* Bubble */}
               <div
-                className={`max-w-[75%] p-3 rounded-2xl ${
-                  mine ? "bg-[#ff2f2f]" : "bg-[#1a1a1a]"
+                className={`max-w-[70%] px-4 py-3 rounded-2xl ${
+                  mine
+                    ? "bg-black border border-red-600 text-white"
+                    : "bg-[#1a1a1a] text-white"
                 }`}
               >
-                {/* TEXT */}
                 {m.text && <p className="text-sm">{m.text}</p>}
 
-                {/* IMAGE */}
                 {m.image_url && (
                   <img
                     src={m.image_url}
-                    className="rounded-xl mt-2 max-h-60"
                     onClick={() => setImagePreview(m.image_url)}
+                    className="rounded-xl mt-2 max-h-60"
                   />
                 )}
 
-                {/* AUDIO */}
                 {m.audio_url && (
                   <audio controls src={m.audio_url} className="mt-2 w-full" />
                 )}
@@ -303,6 +332,16 @@ export default function ChatPage() {
                   {formatTime(m.created_at)}
                 </p>
               </div>
+
+              {/* Your avatar */}
+              {mine && (
+                <img
+                  src={user?.avatar_url || ""}
+                  className={`w-8 h-8 rounded-full object-cover ${
+                    user?.avatar_url ? "border border-red-500" : "bg-white/20"
+                  }`}
+                />
+              )}
             </div>
           );
         })}
@@ -310,13 +349,10 @@ export default function ChatPage() {
         <div ref={bottomRef}></div>
       </div>
 
-      {/* IMAGE PREVIEW FULLSCREEN */}
+      {/* IMAGE PREVIEW */}
       {imagePreview && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <img
-            src={imagePreview}
-            className="max-w-[90%] max-h-[80%] rounded-xl"
-          />
+          <img src={imagePreview} className="max-w-[90%] max-h-[80%] rounded-xl" />
           <button
             onClick={() => setImagePreview(null)}
             className="absolute top-6 right-6 bg-white/10 p-3 rounded-full"
@@ -329,7 +365,7 @@ export default function ChatPage() {
       {/* INPUT BAR */}
       <div className="p-3 flex items-center gap-3 border-t border-white/10 bg-black">
 
-        {/* IMAGE BUTTON */}
+        {/* Image */}
         <label className="cursor-pointer">
           <FiImage size={24} className="opacity-70" />
           <input
@@ -340,7 +376,7 @@ export default function ChatPage() {
           />
         </label>
 
-        {/* MIC BUTTON */}
+        {/* Mic */}
         {!recording ? (
           <button onClick={startRecording}>
             <FiMic size={24} className="opacity-70" />
@@ -351,18 +387,18 @@ export default function ChatPage() {
           </button>
         )}
 
-        {/* TEXT INPUT */}
+        {/* Text input */}
         <input
-          className="flex-1 bg-white/10 rounded-xl p-2 text-sm outline-none"
-          placeholder="Message…"
           value={messageInput}
           onChange={(e) => {
             setMessageInput(e.target.value);
             sendTyping();
           }}
+          placeholder="Message…"
+          className="flex-1 bg-white/10 rounded-xl p-2 text-sm outline-none"
         />
 
-        {/* SEND */}
+        {/* Send */}
         <button onClick={sendMessage}>
           <FiSend size={24} className="opacity-80" />
         </button>
