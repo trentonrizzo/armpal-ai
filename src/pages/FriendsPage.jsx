@@ -7,9 +7,9 @@ export default function FriendsPage() {
   const [user, setUser] = useState(null);
 
   // Data
-  const [friends, setFriends] = useState([]); // list of profile objects
-  const [incoming, setIncoming] = useState([]); // [{ id, user_id, profile }]
-  const [outgoing, setOutgoing] = useState([]); // [{ id, friend_id, profile }]
+  const [friends, setFriends] = useState([]);   // accepted friends (profiles)
+  const [incoming, setIncoming] = useState([]); // pending requests TO you
+  const [outgoing, setOutgoing] = useState([]); // pending requests FROM you
 
   // UI state
   const [showAddBox, setShowAddBox] = useState(false);
@@ -29,95 +29,127 @@ export default function FriendsPage() {
     load();
   }, []);
 
+  // -------------------------
+  // LOAD FRIENDS + REQUESTS
+  // -------------------------
   async function loadAllFriends(myId) {
     // 1) ACCEPTED FRIENDS (both directions)
-    const { data: asUser } = await supabase
-      .from("friends")
-      .select("id, friend_id, status")
-      .eq("user_id", myId)
-      .eq("status", "accepted");
+    const { data: acceptedRows, error: acceptedErr } = await supabase
+      .from("friend_requests")
+      .select("*")
+      .or(
+        `and(sender_id.eq.${myId},status.eq.accepted),and(receiver_id.eq.${myId},status.eq.accepted)`
+      );
 
-    const { data: asFriend } = await supabase
-      .from("friends")
-      .select("id, user_id, status")
-      .eq("friend_id", myId)
-      .eq("status", "accepted");
+    if (acceptedErr) {
+      console.error("Error loading accepted friends:", acceptedErr);
+    }
 
     const friendIds = new Set();
-    (asUser || []).forEach((row) => friendIds.add(row.friend_id));
-    (asFriend || []).forEach((row) => friendIds.add(row.user_id));
+    (acceptedRows || []).forEach((row) => {
+      if (row.sender_id === myId) {
+        friendIds.add(row.receiver_id);
+      } else {
+        friendIds.add(row.sender_id);
+      }
+    });
 
-    let friendsProfiles = [];
+    let friendProfiles = [];
     if (friendIds.size > 0) {
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profilesErr } = await supabase
         .from("profiles")
         .select("id, username, handle, last_active")
         .in("id", Array.from(friendIds));
-      friendsProfiles = profiles || [];
+
+      if (profilesErr) {
+        console.error("Error loading friend profiles:", profilesErr);
+      }
+      friendProfiles = profiles || [];
     }
-    setFriends(friendsProfiles);
+    setFriends(friendProfiles);
 
     // 2) INCOMING PENDING REQUESTS (they added YOU)
-    const { data: incomingRows } = await supabase
-      .from("friends")
-      .select("id, user_id, status")
-      .eq("friend_id", myId)
+    const { data: incomingRows, error: incomingErr } = await supabase
+      .from("friend_requests")
+      .select("id, sender_id, status")
+      .eq("receiver_id", myId)
       .eq("status", "pending");
 
+    if (incomingErr) {
+      console.error("Error loading incoming requests:", incomingErr);
+    }
+
     let incomingWithProfiles = [];
-    if ((incomingRows || []).length > 0) {
-      const ids = incomingRows.map((r) => r.user_id);
-      const { data: profiles } = await supabase
+    if (incomingRows?.length) {
+      const ids = incomingRows.map((r) => r.sender_id);
+      const { data: profiles, error: pErr } = await supabase
         .from("profiles")
         .select("id, username, handle")
         .in("id", ids);
 
+      if (pErr) {
+        console.error("Error loading incoming profiles:", pErr);
+      }
+
       incomingWithProfiles = incomingRows.map((row) => ({
         ...row,
-        profile: (profiles || []).find((p) => p.id === row.user_id) || null,
+        profile: (profiles || []).find((p) => p.id === row.sender_id) || null,
       }));
     }
     setIncoming(incomingWithProfiles);
 
     // 3) OUTGOING PENDING REQUESTS (YOU added THEM)
-    const { data: outgoingRows } = await supabase
-      .from("friends")
-      .select("id, friend_id, status")
-      .eq("user_id", myId)
+    const { data: outgoingRows, error: outgoingErr } = await supabase
+      .from("friend_requests")
+      .select("id, receiver_id, status")
+      .eq("sender_id", myId)
       .eq("status", "pending");
 
+    if (outgoingErr) {
+      console.error("Error loading outgoing requests:", outgoingErr);
+    }
+
     let outgoingWithProfiles = [];
-    if ((outgoingRows || []).length > 0) {
-      const ids = outgoingRows.map((r) => r.friend_id);
-      const { data: profiles } = await supabase
+    if (outgoingRows?.length) {
+      const ids = outgoingRows.map((r) => r.receiver_id);
+      const { data: profiles, error: pErr } = await supabase
         .from("profiles")
         .select("id, username, handle")
         .in("id", ids);
 
+      if (pErr) {
+        console.error("Error loading outgoing profiles:", pErr);
+      }
+
       outgoingWithProfiles = outgoingRows.map((row) => ({
         ...row,
-        profile: (profiles || []).find((p) => p.id === row.friend_id) || null,
+        profile: (profiles || []).find((p) => p.id === row.receiver_id) || null,
       }));
     }
     setOutgoing(outgoingWithProfiles);
   }
 
+  // -------------------------
+  // SEND FRIEND REQUEST
+  // -------------------------
   async function sendFriendRequest() {
     try {
       setErrorMsg("");
       if (!user?.id) return;
 
-      const handle = handleInput.trim();
-      if (!handle) return;
+      const rawHandle = handleInput.trim();
+      if (!rawHandle) return;
 
-      // find target by handle
-      const { data: target, error } = await supabase
+      const normalized = rawHandle.replace("@", "").toLowerCase();
+
+      // Find target profile (case-insensitive handle search)
+      const { data: target, error: searchErr } = await supabase
         .from("profiles")
         .select("id, username, handle")
-        .eq("handle", handle)
+        .ilike("handle", normalized)
         .maybeSingle();
 
-      if (error || !target) {
+      if (searchErr || !target) {
         setErrorMsg("No user found with that handle.");
         return;
       }
@@ -127,56 +159,81 @@ export default function FriendsPage() {
         return;
       }
 
-      // check if existing row
-      const { data: existing } = await supabase
-        .from("friends")
-        .select("id, status, user_id, friend_id")
+      // Check if a request already exists (either direction)
+      const { data: existing, error: existErr } = await supabase
+        .from("friend_requests")
+        .select("*")
         .or(
-          `and(user_id.eq.${user.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${user.id})`
+          `and(sender_id.eq.${user.id},receiver_id.eq.${target.id}),and(sender_id.eq.${target.id},receiver_id.eq.${user.id})`
         );
+
+      if (existErr) {
+        console.error("Error checking existing:", existErr);
+      }
 
       if (existing && existing.length > 0) {
         setErrorMsg("Request already exists or you’re already friends.");
         return;
       }
 
-      await supabase.from("friends").insert({
-        user_id: user.id,
-        friend_id: target.id,
+      const { error: insertErr } = await supabase.from("friend_requests").insert({
+        sender_id: user.id,
+        receiver_id: target.id,
         status: "pending",
       });
+
+      if (insertErr) {
+        console.error(insertErr);
+        setErrorMsg("Error sending request.");
+        return;
+      }
 
       setHandleInput("");
       setShowAddBox(false);
       await loadAllFriends(user.id);
     } catch (err) {
       console.error(err);
-      setErrorMsg("Error sending request.");
+      setErrorMsg("Unexpected error sending request.");
     }
   }
 
+  // -------------------------
+  // ACCEPT / DECLINE
+  // -------------------------
   async function acceptRequest(rowId) {
     if (!user?.id) return;
-    await supabase
-      .from("friends")
+    const { error } = await supabase
+      .from("friend_requests")
       .update({ status: "accepted" })
       .eq("id", rowId);
 
+    if (error) console.error("Accept error:", error);
     await loadAllFriends(user.id);
   }
 
   async function declineRequest(rowId) {
     if (!user?.id) return;
-    await supabase.from("friends").delete().eq("id", rowId);
+    const { error } = await supabase
+      .from("friend_requests")
+      .delete()
+      .eq("id", rowId);
+
+    if (error) console.error("Decline error:", error);
     await loadAllFriends(user.id);
   }
 
+  // -------------------------
+  // ONLINE DOT (last_active)
+  // -------------------------
   function isOnline(lastActive) {
     if (!lastActive) return false;
     const diff = Date.now() - new Date(lastActive).getTime();
     return diff < 60_000; // last 60s
   }
 
+  // -------------------------
+  // RENDER
+  // -------------------------
   return (
     <div style={pageContainer}>
       {/* HEADER */}
@@ -200,7 +257,8 @@ export default function FriendsPage() {
         {showAddBox && (
           <div style={{ marginTop: 10 }}>
             <p style={smallMuted}>
-              Search by <span style={{ fontFamily: "monospace" }}>@handle</span>
+              Search by{" "}
+              <span style={{ fontFamily: "monospace" }}>@handle</span>
             </p>
 
             <div
@@ -325,10 +383,7 @@ export default function FriendsPage() {
                 </div>
 
                 {/* Message button → /chat/:friendId */}
-                <Link
-                  to={`/chat/${p.id}`}
-                  style={smallRedButtonLink}
-                >
+                <Link to={`/chat/${p.id}`} style={smallRedButtonLink}>
                   Message
                 </Link>
               </div>
