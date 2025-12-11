@@ -1,11 +1,6 @@
-/* =============================== */
-/*       TAILWIND v4 IMPORT        */
-/* =============================== */
-
-/* THIS IS THE CORRECT IMPORT — REQUIRED */
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* =============================== */
 /*        ARMPAL GLOBAL THEME      */
@@ -35,7 +30,6 @@ html, body {
   min-height: 100%;
   overflow-x: hidden;
 
-  /* Prevent top cutoff on iPhones */
   padding-top: env(safe-area-inset-top);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
@@ -50,7 +44,7 @@ html, body {
 ::-webkit-scrollbar-thumb:hover { background: #333; }
 
 /* =============================== */
-/*            CARD BASE            */
+/*              CARD               */
 /* =============================== */
 
 .card {
@@ -128,7 +122,7 @@ html, body {
 .qa-btn-red:hover { background: rgba(224,0,0,0.35); }
 
 /* =============================== */
-/*       STRENGTH PROGRESS BARS     */
+/*       STRENGTH PROGRESS BAR     */
 /* =============================== */
 
 .strength-bar {
@@ -146,7 +140,7 @@ html, body {
 }
 
 /* =============================== */
-/*              AVATAR              */
+/*              AVATAR             */
 /* =============================== */
 
 .avatar {
@@ -158,55 +152,16 @@ html, body {
 }
 
 /* =============================== */
-/*           FADE-IN ANIM           */
+/*            ANIMATIONS           */
 /* =============================== */
 
 .fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.25s ease-out;
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-/* =============================== */
-/*        REMOVE LINK COLORS         */
-/* =============================== */
-
-a, a:visited {
-  color: inherit !important;
-  text-decoration: none !important;
-}
-a:hover { color: inherit !important; }
-
-/* =============================== */
-/*         GOAL PROGRESS BAR        */
-/* =============================== */
-
-.goal-progress-bar {
-  width: 100%;
-  height: 12px;
-  background: #111;
-  border-radius: 20px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 0, 0, 0.25);
-  margin-top: 6px;
-}
-
-.goal-progress-fill {
-  height: 100%;
-  background: var(--red-soft);
-  border-radius: 20px;
-  transition: width 0.45s ease;
-}
-
-.over-goal-fill {
-  box-shadow: 0 0 12px rgba(255,200,0,0.8);
-}
-
-/* =============================== */
-/*           UTILITY               */
-/* =============================== */
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -217,12 +172,17 @@ a:hover { color: inherit !important; }
 }
 .animate-slideUp { animation: slideUp 0.25s ease-out; }
 
+/* =============================== */
+/*           FORM FOCUS            */
+/* =============================== */
+
 input,
 textarea,
 select {
-  transition: border-color 0.15s ease-out,
-              box-shadow 0.15s ease-out,
-              background 0.15s ease-out;
+  transition:
+    border-color 0.15s ease-out,
+    box-shadow 0.15s ease-out,
+    background 0.15s ease-out;
 }
 
 input:focus,
@@ -234,4 +194,6 @@ select:focus {
   background: #050505;
 }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+}
