@@ -1,244 +1,349 @@
 // src/pages/ChatPage.jsx
 import React, { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { FiArrowLeft, FiSend } from "react-icons/fi";
+import { useParams } from "react-router-dom";
+
+// Icons
+import { FiArrowLeft, FiSend, FiImage, FiMic, FiX } from "react-icons/fi";
+
+// ---------- FORMAT TIME ----------
+function formatTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function ChatPage() {
   const { friendId } = useParams();
-  const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
   const [friend, setFriend] = useState(null);
-  const [conversationId, setConversationId] = useState(null);
 
   const [messages, setMessages] = useState([]);
-  const [text, setText] = useState("");
+  const [messageInput, setMessageInput] = useState("");
+
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeout = useRef(null);
+
+  const [friendTyping, setFriendTyping] = useState(false);
+
+  const [imagePreview, setImagePreview] = useState(null);
+  const [online, setOnline] = useState(false);
+  const [lastSeen, setLastSeen] = useState(null);
+
+  const [recording, setRecording] = useState(false);
+  const mediaRecorder = useRef(null);
+  const audioChunks = useRef([]);
 
   const bottomRef = useRef(null);
 
+  // ---------------------------
+  // Load User + Friend Profile
+  // ---------------------------
   useEffect(() => {
-    loadUser();
-  }, []);
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
 
-  async function loadUser() {
-    const { data } = await supabase.auth.getUser();
-    if (!data?.user) return;
-    setUser(data.user);
+      const { data: friendProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", friendId)
+        .single();
 
-    loadFriendProfile();
-    findOrCreateConversation(data.user.id, friendId);
-  }
+      setFriend(friendProfile);
+    })();
+  }, [friendId]);
 
-  async function loadFriendProfile() {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, handle")
-      .eq("id", friendId)
-      .single();
+  // ---------------------------
+  // Load Messages
+  // ---------------------------
+  useEffect(() => {
+    if (!user) return;
 
-    setFriend(data || null);
-  }
+    loadMessages();
 
-  async function findOrCreateConversation(myId, theirId) {
-    // Step 1: find convo where BOTH users have messages or exist in metadata
-    const { data: convos } = await supabase
-      .rpc("find_conversation_between", {
-        u1: myId,
-        u2: theirId,
-      });
-
-    if (convos && convos.length > 0) {
-      const convo = convos[0];
-      setConversationId(convo.id);
-      loadMessages(convo.id);
-      subscribeToMessages(convo.id);
-      return;
-    }
-
-    // Step 2: Create new conversation
-    const { data: newConvo, error } = await supabase
-      .from("conversations")
-      .insert({})
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Conversation creation error:", error);
-      return;
-    }
-
-    setConversationId(newConvo.id);
-
-    // Step 3: No messages yet, but subscribe anyway
-    subscribeToMessages(newConvo.id);
-  }
-
-  async function loadMessages(convoId) {
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("conversation_id", convoId)
-      .order("created_at", { ascending: true });
-
-    setMessages(data || []);
-    scrollToBottom();
-  }
-
-  function subscribeToMessages(convoId) {
+    // subscribe to realtime changes
     const channel = supabase
-      .channel("realtime-messages-" + convoId)
+      .channel(`messages-${user.id}-${friendId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${convoId}`,
-        },
+        { event: "*", schema: "public", table: "messages" },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
-          scrollToBottom();
+          loadMessages();
         }
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, friendId]);
+
+  async function loadMessages() {
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .or(
+        `and(sender_id.eq.${user.id}, receiver_id.eq.${friendId}),
+         and(sender_id.eq.${friendId}, receiver_id.eq.${user.id})`
+      )
+      .order("created_at", { ascending: true });
+
+    setMessages(data || []);
+    scrollToBottom();
+
+    // mark friend messages as read
+    if (data?.length > 0) {
+      const unread = data.filter(
+        (m) => m.sender_id === friendId
+      );
+      if (unread.length > 0) markAsRead(unread);
+    }
   }
 
+  async function markAsRead(msgs) {
+    for (const m of msgs) {
+      await supabase.from("message_reads").insert({
+        message_id: m.id,
+        user_id: user.id,
+      });
+    }
+  }
+
+  // ---------------------------
+  // Send Text Message
+  // ---------------------------
+  async function sendMessage() {
+    if (!messageInput.trim()) return;
+
+    const content = messageInput.trim();
+    setMessageInput("");
+
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: friendId,
+      content,
+      image_url: null,
+      audio_url: null,
+    });
+
+    scrollToBottom();
+  }
+
+  // ---------------------------
+  // Image Upload
+  // ---------------------------
+  async function sendImage(file) {
+    const fileExt = file.name.split(".").pop();
+    const path = `${user.id}-${Date.now()}.${fileExt}`;
+
+    const { data, error } = await supabase.storage
+      .from("chat_images")
+      .upload(path, file);
+
+    if (!error) {
+      const { data: urlData } = supabase.storage
+        .from("chat_images")
+        .getPublicUrl(path);
+
+      await supabase.from("messages").insert({
+        sender_id: user.id,
+        receiver_id: friendId,
+        content: null,
+        image_url: urlData.publicUrl,
+        audio_url: null,
+      });
+    }
+  }
+
+  // ---------------------------
+  // Voice Recording
+  // ---------------------------
+  async function startRecording() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks.current = [];
+
+    const recorder = new MediaRecorder(stream);
+    mediaRecorder.current = recorder;
+
+    recorder.ondataavailable = (e) => audioChunks.current.push(e.data);
+
+    recorder.onstop = async () => {
+      const blob = new Blob(audioChunks.current, { type: "audio/webm" });
+      const file = new File([blob], `audio-${Date.now()}.webm`);
+
+      const fileExt = "webm";
+      const path = `${user.id}-${Date.now()}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from("chat_audio")
+        .upload(path, file);
+
+      if (!error) {
+        const { data: urlData } = supabase.storage
+          .from("chat_audio")
+          .getPublicUrl(path);
+
+        await supabase.from("messages").insert({
+          sender_id: user.id,
+          receiver_id: friendId,
+          content: null,
+          image_url: null,
+          audio_url: urlData.publicUrl,
+        });
+      }
+    };
+
+    recorder.start();
+    setRecording(true);
+  }
+
+  function stopRecording() {
+    if (mediaRecorder.current) {
+      mediaRecorder.current.stop();
+      setRecording(false);
+    }
+  }
+
+  // ---------------------------
+  // Typing Indicator
+  // ---------------------------
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel("typing")
+      .on("broadcast", { event: "typing" }, (payload) => {
+        if (payload.payload.from === friendId) {
+          setFriendTyping(true);
+
+          setTimeout(() => setFriendTyping(false), 1500);
+        }
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [friendId, user]);
+
+  function sendTyping() {
+    supabase.channel("typing").send({
+      type: "broadcast",
+      event: "typing",
+      payload: { from: user.id },
+    });
+  }
+
+  // ---------------------------
+  // Online Status / Last Seen
+  // ---------------------------
+  useEffect(() => {
+    if (!friendId) return;
+
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("last_active")
+        .eq("id", friendId)
+        .single();
+
+      if (!data) return;
+
+      const last = new Date(data.last_active);
+      const diff = Date.now() - last.getTime();
+
+      if (diff < 60000) {
+        setOnline(true);
+      } else {
+        setOnline(false);
+        setLastSeen(last.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [friendId]);
+
+  // ---------------------------
+  // Auto-scroll
+  // ---------------------------
   function scrollToBottom() {
     setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 50);
   }
 
-  async function sendMessage() {
-    if (!text.trim() || !conversationId || !user) return;
-
-    const msg = {
-      conversation_id: conversationId,
-      sender_id: user.id,
-      text: text.trim(),
-    };
-
-    await supabase.from("messages").insert(msg);
-
-    setText("");
-  }
-
+  // ---------------------------
+  // Render UI
+  // ---------------------------
   return (
-    <div
-      style={{
-        height: "100vh",
-        paddingBottom: "70px",
-        display: "flex",
-        flexDirection: "column",
-        background: "#0c0c0c",
-      }}
-    >
-      {/* HEADER */}
-      <div
-        style={{
-          padding: "14px 14px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          background: "#0f0f0f",
-        }}
-      >
-        <button
-          onClick={() => navigate(-1)}
-          style={{
-            background: "none",
-            border: "none",
-            color: "white",
-            cursor: "pointer",
-          }}
-        >
+    <div className="flex flex-col h-screen bg-black text-white">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 p-4 border-b border-white/10 bg-black/80 sticky top-0">
+        <a href="/friends">
           <FiArrowLeft size={22} />
-        </button>
+        </a>
 
-        {friend && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img
-              src={
-                friend.avatar_url ||
-                "https://via.placeholder.com/40?text=User"
-              }
-              alt="avatar"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "999px",
-                objectFit: "cover",
-                border: "1px solid rgba(255,255,255,0.1)",
-              }}
-            />
-            <div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 15,
-                  fontWeight: 600,
-                }}
-              >
-                {friend.display_name || friend.username}
-              </p>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12,
-                  opacity: 0.6,
-                }}
-              >
-                @{friend.handle || friend.username}
-              </p>
-            </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">{friend?.username || "User"}</span>
+
+            {online ? (
+              <span className="w-3 h-3 rounded-full bg-green-500"></span>
+            ) : (
+              <span className="text-xs opacity-60">
+                Last seen {lastSeen || "recently"}
+              </span>
+            )}
           </div>
-        )}
+
+          {friendTyping && (
+            <p className="text-xs text-white/60">typing...</p>
+          )}
+        </div>
       </div>
 
-      {/* MESSAGES */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "14px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-        }}
-      >
-        {messages.map((msg) => {
-          const isMe = msg.sender_id === user?.id;
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.map((m) => {
+          const isMine = m.sender_id === user.id;
 
           return (
             <div
-              key={msg.id}
-              style={{
-                display: "flex",
-                justifyContent: isMe ? "flex-end" : "flex-start",
-              }}
+              key={m.id}
+              className={`flex ${isMine ? "justify-end" : "justify-start"}`}
             >
               <div
-                style={{
-                  maxWidth: "75%",
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  fontSize: 14,
-                  lineHeight: 1.4,
-
-                  background: isMe ? "#ff2f2f" : "#1a1a1a",
-                  border:
-                    isMe
-                      ? "1px solid rgba(255,255,255,0.1)"
-                      : "1px solid rgba(255,255,255,0.08)",
-
-                  color: "white",
-                }}
+                className={`max-w-[70%] rounded-2xl p-3 ${
+                  isMine
+                    ? "bg-[#ff2f2f] text-white"
+                    : "bg-white/10 text-white"
+                }`}
               >
-                {msg.text}
+                {/* text */}
+                {m.content && <p className="mb-1 text-sm">{m.content}</p>}
+
+                {/* image */}
+                {m.image_url && (
+                  <img
+                    src={m.image_url}
+                    alt="sent img"
+                    className="rounded-lg mt-1 mb-1 max-h-60 cursor-pointer"
+                    onClick={() => setImagePreview(m.image_url)}
+                  />
+                )}
+
+                {/* audio */}
+                {m.audio_url && (
+                  <audio
+                    controls
+                    src={m.audio_url}
+                    className="w-full mt-1"
+                  />
+                )}
+
+                {/* time */}
+                <p className="text-[10px] opacity-70 mt-1 text-right">
+                  {formatTime(m.created_at)}
+                </p>
               </div>
             </div>
           );
@@ -247,45 +352,61 @@ export default function ChatPage() {
         <div ref={bottomRef}></div>
       </div>
 
+      {/* IMAGE PREVIEW MODAL */}
+      {imagePreview && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <img
+            src={imagePreview}
+            alt="preview"
+            className="max-h-[80%] max-w-[90%] rounded-lg"
+          />
+          <button
+            onClick={() => setImagePreview(null)}
+            className="absolute top-6 right-6 bg-white/10 p-3 rounded-full"
+          >
+            <FiX size={22} />
+          </button>
+        </div>
+      )}
+
       {/* INPUT BAR */}
-      <div
-        style={{
-          padding: "12px",
-          background: "#0f0f0f",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          display: "flex",
-          gap: 10,
-          alignItems: "center",
-        }}
-      >
+      <div className="p-3 border-t border-white/10 bg-black flex items-center gap-3">
+        {/* Image */}
+        <label className="cursor-pointer">
+          <FiImage size={22} />
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => sendImage(e.target.files[0])}
+          />
+        </label>
+
+        {/* Record */}
+        {!recording ? (
+          <button onClick={startRecording}>
+            <FiMic size={22} />
+          </button>
+        ) : (
+          <button onClick={stopRecording} className="text-red-400">
+            <FiMic size={22} />
+          </button>
+        )}
+
+        {/* Text box */}
         <input
-          type="text"
-          value={text}
-          placeholder="Message..."
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          style={{
-            flex: 1,
-            background: "#111",
-            border: "1px solid rgba(255,255,255,0.1)",
-            padding: "10px 12px",
-            borderRadius: 10,
-            color: "white",
-            fontSize: 14,
+          value={messageInput}
+          onChange={(e) => {
+            setMessageInput(e.target.value);
+            sendTyping();
           }}
+          placeholder="Message..."
+          className="flex-1 bg-white/10 p-2 rounded-xl outline-none"
         />
 
-        <button
-          onClick={sendMessage}
-          style={{
-            background: "#ff2f2f",
-            border: "none",
-            padding: "10px 12px",
-            borderRadius: 10,
-            cursor: "pointer",
-          }}
-        >
-          <FiSend size={18} color="white" />
+        {/* Send */}
+        <button onClick={sendMessage}>
+          <FiSend size={22} />
         </button>
       </div>
     </div>
