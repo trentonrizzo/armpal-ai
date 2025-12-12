@@ -4,7 +4,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { FiArrowLeft, FiSend, FiImage, FiX } from "react-icons/fi";
 
-/* ---------- HELPERS ---------- */
 function formatTime(ts) {
   if (!ts) return "";
   return new Date(ts).toLocaleTimeString([], {
@@ -13,7 +12,6 @@ function formatTime(ts) {
   });
 }
 
-/* ---------- COMPONENT ---------- */
 export default function ChatPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
@@ -22,38 +20,36 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
-  const [errMsg, setErrMsg] = useState("");
+  const [error, setError] = useState("");
   const [imageView, setImageView] = useState(null);
 
   const listRef = useRef(null);
   const holdTimer = useRef(null);
 
-  /* ---------- LOCK PAGE SCROLL (PWA FIX) ---------- */
+  // 🔒 Lock background scroll (PWA fix)
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.body.style.touchAction = "none";
-
     return () => {
       document.body.style.overflow = prevOverflow;
       document.body.style.touchAction = "";
     };
   }, []);
 
-  /* ---------- LOAD USER + MESSAGES ---------- */
+  // Load user + messages
   async function loadMessages(uid) {
+    setError("");
+
     const { data, error } = await supabase
       .from("messages")
       .select("*")
-      .or(
-        `and(sender_id.eq.${uid},receiver_id.eq.${friendId}),
-         and(sender_id.eq.${friendId},receiver_id.eq.${uid})`
-      )
+      .or(`and(sender_id.eq.${uid},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${uid})`)
       .order("created_at", { ascending: true });
 
     if (error) {
       console.error(error);
-      setErrMsg(error.message);
+      setError(error.message);
       return;
     }
 
@@ -61,18 +57,18 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    let alive = true;
+    let mounted = true;
 
     (async () => {
       setLoading(true);
       const { data } = await supabase.auth.getUser();
-      if (!alive) return;
+      if (!mounted) return;
 
       const u = data?.user;
       setUser(u);
 
       if (!u) {
-        setErrMsg("Not logged in");
+        setError("Not logged in");
         setLoading(false);
         return;
       }
@@ -81,10 +77,12 @@ export default function ChatPage() {
       setLoading(false);
     })();
 
-    return () => (alive = false);
+    return () => {
+      mounted = false;
+    };
   }, [friendId]);
 
-  /* ---------- REALTIME ---------- */
+  // Realtime
   useEffect(() => {
     if (!user) return;
 
@@ -111,13 +109,13 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
-  /* ---------- AUTO SCROLL ---------- */
+  // Auto scroll
   useEffect(() => {
-    if (!listRef.current) return;
-    listRef.current.scrollTop = listRef.current.scrollHeight;
+    if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
   }, [messages]);
 
-  /* ---------- SEND TEXT ---------- */
   async function sendMessage() {
     if (!text.trim() || !user) return;
 
@@ -130,22 +128,21 @@ export default function ChatPage() {
       text: msg,
     });
 
-    if (error) setErrMsg(error.message);
+    if (error) setError(error.message);
   }
 
-  /* ---------- SEND IMAGE ---------- */
   async function sendImage(file) {
     if (!file || !user) return;
 
     const ext = file.name.split(".").pop();
     const path = `${user.id}-${Date.now()}.${ext}`;
 
-    const { error } = await supabase.storage
+    const { error: uploadErr } = await supabase.storage
       .from("chat_images")
       .upload(path, file);
 
-    if (error) {
-      setErrMsg(error.message);
+    if (uploadErr) {
+      setError(uploadErr.message);
       return;
     }
 
@@ -160,11 +157,9 @@ export default function ChatPage() {
     });
   }
 
-  /* ---------- DELETE (LONG PRESS ONLY) ---------- */
   function startHold(m) {
     holdTimer.current = setTimeout(async () => {
       if (m.sender_id !== user.id) return;
-
       if (!window.confirm("Delete this message?")) return;
 
       await supabase.from("messages").delete().eq("id", m.id);
@@ -176,7 +171,6 @@ export default function ChatPage() {
     clearTimeout(holdTimer.current);
   }
 
-  /* ---------- UI ---------- */
   return (
     <>
       {/* HEADER */}
@@ -188,13 +182,9 @@ export default function ChatPage() {
       </div>
 
       {/* MESSAGES */}
-      <div
-        ref={listRef}
-        style={messagesBox}
-        onTouchMove={(e) => e.stopPropagation()}
-      >
+      <div ref={listRef} style={messagesBox}>
         {loading && <div style={{ opacity: 0.6 }}>Loading…</div>}
-        {errMsg && <div style={err}>{errMsg}</div>}
+        {error && <div style={errBox}>{error}</div>}
 
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
@@ -265,7 +255,7 @@ export default function ChatPage() {
         </button>
       </div>
 
-      {/* IMAGE VIEWER */}
+      {/* IMAGE VIEW */}
       {imageView && (
         <div style={imageOverlay} onClick={() => setImageView(null)}>
           <img src={imageView} style={imageFull} />
@@ -276,7 +266,7 @@ export default function ChatPage() {
   );
 }
 
-/* ---------- STYLES ---------- */
+/* STYLES */
 const header = {
   position: "fixed",
   top: 0,
@@ -311,7 +301,6 @@ const messagesBox = {
   overscrollBehavior: "contain",
   padding: 12,
   background: "#000",
-  touchAction: "pan-y",
 };
 
 const inputBar = {
@@ -348,10 +337,10 @@ const sendBtn = {
   color: "#fff",
 };
 
-const err = {
-  background: "rgba(255,47,47,0.2)",
+const errBox = {
+  background: "rgba(255,47,47,0.25)",
   padding: 10,
-  borderRadius: 10,
+  borderRadius: 12,
   marginBottom: 10,
 };
 
