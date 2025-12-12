@@ -1,6 +1,6 @@
 // src/App.jsx
 import React, { useEffect, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
@@ -24,7 +24,7 @@ import GoalsPage from "./pages/GoalsPage";
 import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 
-// ✅ NEW: ISOLATED CHAT UI TEST (SAFE)
+// Chat UI Test
 import ChatUITest from "./pages/chat/ChatUITest";
 
 // Strength Calculator
@@ -32,6 +32,54 @@ import StrengthCalculator from "./pages/StrengthCalculator";
 
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
+
+function AppContent() {
+  const location = useLocation();
+
+  // 🔥 CHAT ROUTES NEED FULL VIEWPORT CONTROL
+  const isChatRoute =
+    location.pathname.startsWith("/chat");
+
+  return (
+    <div
+      className={`bg-black text-white ${
+        isChatRoute
+          ? "h-screen overflow-hidden"
+          : "min-h-screen pb-20"
+      }`}
+    >
+      <Routes>
+        {/* MAIN */}
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/home" element={<HomePage />} />
+
+        {/* PRS */}
+        <Route path="/prs" element={<PRTracker />} />
+        <Route path="/prslist" element={<PRTracker />} />
+
+        {/* FITNESS */}
+        <Route path="/measure" element={<MeasurementsPage />} />
+        <Route path="/workouts" element={<WorkoutsPage />} />
+        <Route path="/workoutlogger" element={<WorkoutLogger />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/goals" element={<GoalsPage />} />
+
+        {/* TOOLS */}
+        <Route path="/strength" element={<StrengthCalculator />} />
+
+        {/* SOCIAL */}
+        <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/chat/:friendId" element={<ChatPage />} />
+
+        {/* CHAT UI TEST */}
+        <Route path="/chat-test" element={<ChatUITest />} />
+      </Routes>
+
+      {/* ❗ Hide BottomNav on chat routes */}
+      {!isChatRoute && <BottomNav />}
+    </div>
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -91,47 +139,12 @@ export default function App() {
   // Wait for auth to load
   if (!ready) return null;
 
-  // If logged out → go to auth page
+  // Logged out
   if (!session) return <AuthPage key="auth" />;
 
   return (
     <AppProvider>
-      {/* 
-        IMPORTANT:
-        - min-h-screen stays
-        - pb-20 stays for BottomNav
-        - Chat UI Test uses its OWN internal layout (100vh)
-      */}
-      <div className="min-h-screen bg-black text-white pb-20">
-        <Routes>
-          {/* MAIN */}
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/home" element={<HomePage />} />
-
-          {/* PRS */}
-          <Route path="/prs" element={<PRTracker />} />
-          <Route path="/prslist" element={<PRTracker />} />
-
-          {/* FITNESS */}
-          <Route path="/measure" element={<MeasurementsPage />} />
-          <Route path="/workouts" element={<WorkoutsPage />} />
-          <Route path="/workoutlogger" element={<WorkoutLogger />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/goals" element={<GoalsPage />} />
-
-          {/* TOOLS */}
-          <Route path="/strength" element={<StrengthCalculator />} />
-
-          {/* SOCIAL */}
-          <Route path="/friends" element={<FriendsPage />} />
-          <Route path="/chat/:friendId" element={<ChatPage />} />
-
-          {/* ✅ SAFE CHAT UI TEST */}
-          <Route path="/chat-test" element={<ChatUITest />} />
-        </Routes>
-
-        <BottomNav />
-      </div>
+      <AppContent />
     </AppProvider>
   );
 }
