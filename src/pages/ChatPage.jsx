@@ -19,49 +19,71 @@ export default function ChatPage() {
   const [user, setUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const listRef = useRef(null);
 
   /* ---------------------------------- */
-  /* LOAD USER + MESSAGES               */
+  /* LOAD USER + MESSAGES (ALWAYS)      */
   /* ---------------------------------- */
   useEffect(() => {
-    async function init() {
-      const { data } = await supabase.auth.getUser();
-      if (!data?.user) return;
-      setUser(data.user);
+    let isMounted = true;
 
-      const { data: msgs } = await supabase
+    async function load() {
+      setLoading(true);
+
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth?.user) return;
+
+      if (!isMounted) return;
+      setUser(auth.user);
+
+      const { data: msgs, error } = await supabase
         .from("messages")
         .select("*")
         .or(
-          `and(sender_id.eq.${data.user.id},receiver_id.eq.${friendId}),
-           and(sender_id.eq.${friendId},receiver_id.eq.${data.user.id})`
+          `and(sender_id.eq.${auth.user.id},receiver_id.eq.${friendId}),
+           and(sender_id.eq.${friendId},receiver_id.eq.${auth.user.id})`
         )
         .order("created_at", { ascending: true });
 
-      setMessages(msgs || []);
+      if (!error && isMounted) {
+        setMessages(msgs || []);
+      }
+
+      setLoading(false);
     }
-    init();
+
+    load();
+    return () => {
+      isMounted = false;
+    };
   }, [friendId]);
 
   /* ---------------------------------- */
-  /* REALTIME                           */
+  /* REALTIME (DEDUPED)                 */
   /* ---------------------------------- */
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
-      .channel("chat-feed")
+      .channel(`chat-${user.id}-${friendId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const m = payload.new;
+
           const match =
             (m.sender_id === user.id && m.receiver_id === friendId) ||
             (m.sender_id === friendId && m.receiver_id === user.id);
-          if (match) setMessages((prev) => [...prev, m]);
+
+          if (!match) return;
+
+          setMessages((prev) => {
+            if (prev.some((x) => x.id === m.id)) return prev;
+            return [...prev, m];
+          });
         }
       )
       .subscribe();
@@ -69,30 +91,52 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
+  /* ---------------------------------- */
+  /* AUTO SCROLL                        */
+  /* ---------------------------------- */
   useEffect(() => {
-    listRef.current?.scrollTo({
+    if (!listRef.current) return;
+    listRef.current.scrollTo({
       top: listRef.current.scrollHeight,
       behavior: "smooth",
     });
   }, [messages]);
 
   /* ---------------------------------- */
-  /* SEND                               */
+  /* SEND TEXT                          */
   /* ---------------------------------- */
   async function sendMessage() {
     if (!text.trim() || !user) return;
 
+    const tempText = text.trim();
+    setText("");
+
+    // Optimistic feel (no UI flicker)
     await supabase.from("messages").insert({
       sender_id: user.id,
       receiver_id: friendId,
-      text: text.trim(),
+      text: tempText,
     });
 
-    setText("");
+    // Safety reload (guarantees persistence)
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .or(
+        `and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),
+         and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`
+      )
+      .order("created_at", { ascending: true });
+
+    setMessages(data || []);
   }
 
+  /* ---------------------------------- */
+  /* SEND IMAGE                         */
+  /* ---------------------------------- */
   async function sendImage(file) {
     if (!file || !user) return;
+
     const path = `${user.id}-${Date.now()}.${file.name.split(".").pop()}`;
 
     await supabase.storage.from("chat_images").upload(path, file);
@@ -122,6 +166,12 @@ export default function ChatPage() {
 
       {/* MESSAGES */}
       <div ref={listRef} style={messagesStyle}>
+        {loading && (
+          <div style={{ opacity: 0.6, textAlign: "center", marginTop: 20 }}>
+            Loading…
+          </div>
+        )}
+
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
           return (
@@ -140,7 +190,7 @@ export default function ChatPage() {
                   borderRadius: 16,
                   background: mine ? "#ff2f2f" : "#1a1a1a",
                   color: "#fff",
-                  fontSize: 14,
+                  fontSize: 16, // prevents iOS zoom
                 }}
               >
                 {m.text && <div>{m.text}</div>}
@@ -187,7 +237,7 @@ export default function ChatPage() {
 }
 
 /* ---------------------------------- */
-/* STYLES (INLINE = NO CSS WAR)       */
+/* STYLES                             */
 /* ---------------------------------- */
 
 const headerStyle = {
@@ -248,6 +298,7 @@ const input = {
   background: "#111",
   color: "#fff",
   padding: "0 12px",
+  fontSize: 16, // critical for iOS
 };
 
 const sendBtn = {
