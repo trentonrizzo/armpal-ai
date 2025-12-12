@@ -24,10 +24,10 @@ export default function ChatPage() {
   const listRef = useRef(null);
 
   /* ---------------------------------- */
-  /* LOAD USER + MESSAGES (ALWAYS)      */
+  /* LOAD USER + MESSAGES (ONCE)        */
   /* ---------------------------------- */
   useEffect(() => {
-    let isMounted = true;
+    let alive = true;
 
     async function load() {
       setLoading(true);
@@ -35,10 +35,10 @@ export default function ChatPage() {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth?.user) return;
 
-      if (!isMounted) return;
+      if (!alive) return;
       setUser(auth.user);
 
-      const { data: msgs, error } = await supabase
+      const { data: msgs } = await supabase
         .from("messages")
         .select("*")
         .or(
@@ -47,21 +47,20 @@ export default function ChatPage() {
         )
         .order("created_at", { ascending: true });
 
-      if (!error && isMounted) {
+      if (alive) {
         setMessages(msgs || []);
+        setLoading(false);
       }
-
-      setLoading(false);
     }
 
     load();
     return () => {
-      isMounted = false;
+      alive = false;
     };
   }, [friendId]);
 
   /* ---------------------------------- */
-  /* REALTIME (DEDUPED)                 */
+  /* REALTIME (SAFE + DEDUPED)          */
   /* ---------------------------------- */
   useEffect(() => {
     if (!user) return;
@@ -95,40 +94,35 @@ export default function ChatPage() {
   /* AUTO SCROLL                        */
   /* ---------------------------------- */
   useEffect(() => {
-    if (!listRef.current) return;
-    listRef.current.scrollTo({
+    listRef.current?.scrollTo({
       top: listRef.current.scrollHeight,
       behavior: "smooth",
     });
   }, [messages]);
 
   /* ---------------------------------- */
-  /* SEND TEXT                          */
+  /* SEND TEXT (NO RELOAD)              */
   /* ---------------------------------- */
   async function sendMessage() {
     if (!text.trim() || !user) return;
 
-    const tempText = text.trim();
+    const temp = {
+      id: `temp-${Date.now()}`,
+      sender_id: user.id,
+      receiver_id: friendId,
+      text: text.trim(),
+      created_at: new Date().toISOString(),
+      _optimistic: true,
+    };
+
+    setMessages((prev) => [...prev, temp]);
     setText("");
 
-    // Optimistic feel (no UI flicker)
     await supabase.from("messages").insert({
       sender_id: user.id,
       receiver_id: friendId,
-      text: tempText,
+      text: temp.text,
     });
-
-    // Safety reload (guarantees persistence)
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .or(
-        `and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),
-         and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`
-      )
-      .order("created_at", { ascending: true });
-
-    setMessages(data || []);
   }
 
   /* ---------------------------------- */
@@ -181,6 +175,7 @@ export default function ChatPage() {
                 display: "flex",
                 justifyContent: mine ? "flex-end" : "flex-start",
                 marginBottom: 8,
+                opacity: m._optimistic ? 0.6 : 1,
               }}
             >
               <div
@@ -190,7 +185,7 @@ export default function ChatPage() {
                   borderRadius: 16,
                   background: mine ? "#ff2f2f" : "#1a1a1a",
                   color: "#fff",
-                  fontSize: 16, // prevents iOS zoom
+                  fontSize: 16,
                 }}
               >
                 {m.text && <div>{m.text}</div>}
@@ -298,7 +293,7 @@ const input = {
   background: "#111",
   color: "#fff",
   padding: "0 12px",
-  fontSize: 16, // critical for iOS
+  fontSize: 16,
 };
 
 const sendBtn = {
