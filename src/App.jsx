@@ -1,7 +1,7 @@
+// src/App.jsx
 import React, { useEffect, useState } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./supabaseClient";
-import { registerForPush } from "./utils/push";
 
 import { AppProvider } from "./context/AppContext";
 
@@ -20,6 +20,7 @@ import GoalsPage from "./pages/GoalsPage";
 
 import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
+import EnableNotifications from "./pages/EnableNotifications";
 
 import StrengthCalculator from "./pages/StrengthCalculator";
 import BottomNav from "./components/BottomNav/BottomNav";
@@ -40,8 +41,12 @@ function AppContent() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
+
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
+
+        {/* 🔔 ENABLE PUSH */}
+        <Route path="/enable-notifications" element={<EnableNotifications />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
@@ -57,17 +62,11 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
-
-      if (session) {
-        // 🔥 FORCE PUSH PERMISSION ON LOGIN
-        setTimeout(registerForPush, 800);
-      }
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
-      setSession(session);
-      if (session) setTimeout(registerForPush, 800);
-    });
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_e, session) => setSession(session)
+    );
 
     return () => listener.subscription.unsubscribe();
   }, []);
