@@ -16,18 +16,29 @@
   --text-dim: #c8c8c8;
 }
 
-/* RESET */
+/* =============================== */
+/*              RESET              */
+/* =============================== */
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html, body {
+/* 🚨 IMPORTANT FIX:
+   DO NOT force height rules globally.
+   This was killing chat layouts.
+*/
+html,
+body {
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, sans-serif;
-  min-height: 100%;
+
+  /* ❌ REMOVED: min-height: 100% */
+  /* ❌ REMOVED: height: 100% */
+
   overflow-x: hidden;
 
   padding-top: env(safe-area-inset-top);
@@ -35,13 +46,29 @@ html, body {
   padding-right: env(safe-area-inset-right);
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 7px; }
+/* Let React control layout height */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =============================== */
+/*            SCROLLBAR             */
+/* =============================== */
+
+::-webkit-scrollbar {
+  width: 7px;
+}
+
 ::-webkit-scrollbar-thumb {
   background: #222;
   border-radius: 8px;
 }
-::-webkit-scrollbar-thumb:hover { background: #333; }
+
+::-webkit-scrollbar-thumb:hover {
+  background: #333;
+}
 
 /* =============================== */
 /*              CARD               */
@@ -108,6 +135,7 @@ html, body {
   font-weight: 600;
   transition: 0.25s;
 }
+
 .qa-btn:hover {
   border-color: var(--red);
   color: var(--red-soft);
@@ -115,14 +143,17 @@ html, body {
 }
 
 .qa-btn-red {
-  background: rgba(224,0,0,0.2);
-  border: 1px solid rgba(224,0,0,0.4);
+  background: rgba(224, 0, 0, 0.2);
+  border: 1px solid rgba(224, 0, 0, 0.4);
   color: var(--red);
 }
-.qa-btn-red:hover { background: rgba(224,0,0,0.35); }
+
+.qa-btn-red:hover {
+  background: rgba(224, 0, 0, 0.35);
+}
 
 /* =============================== */
-/*       STRENGTH PROGRESS BAR     */
+/*       STRENGTH PROGRESS BAR      */
 /* =============================== */
 
 .strength-bar {
@@ -132,6 +163,7 @@ html, body {
   border-radius: 20px;
   overflow: hidden;
 }
+
 .strength-fill {
   height: 100%;
   background: var(--red-soft);
@@ -158,19 +190,41 @@ html, body {
 .fade-in {
   animation: fadeIn 0.25s ease-out;
 }
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 @keyframes slideUp {
-  from { transform: translateY(100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
-.animate-slideUp { animation: slideUp 0.25s ease-out; }
+
+.animate-slideUp {
+  animation: slideUp 0.25s ease-out;
+}
 
 /* =============================== */
 /*           FORM FOCUS            */

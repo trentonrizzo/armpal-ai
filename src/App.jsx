@@ -1,9 +1,10 @@
 // src/App.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
+import { registerPush } from "./utils/pushNotifications";
 
 // Screens
 import SplashScreen from "./SplashScreen";
@@ -37,15 +38,12 @@ function AppContent() {
   const location = useLocation();
 
   // 🔥 CHAT ROUTES NEED FULL VIEWPORT CONTROL
-  const isChatRoute =
-    location.pathname.startsWith("/chat");
+  const isChatRoute = location.pathname.startsWith("/chat");
 
   return (
     <div
       className={`bg-black text-white ${
-        isChatRoute
-          ? "h-screen overflow-hidden"
-          : "min-h-screen pb-20"
+        isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
       }`}
     >
       <Routes>
@@ -89,6 +87,8 @@ export default function App() {
   const [showCover, setShowCover] = useState(false);
   const [firstLaunch, setFirstLaunch] = useState(null);
 
+  const pushRegistered = useRef(false);
+
   // AUTH
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -102,6 +102,18 @@ export default function App() {
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // 🔔 REGISTER PUSH (ONCE PER LOGIN)
+  useEffect(() => {
+    if (!session) return;
+    if (pushRegistered.current) return;
+
+    pushRegistered.current = true;
+
+    setTimeout(() => {
+      registerPush();
+    }, 800);
+  }, [session]);
 
   // SPLASH + COVER
   useEffect(() => {
