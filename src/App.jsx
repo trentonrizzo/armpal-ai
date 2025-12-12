@@ -20,14 +20,15 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 
-// NEW: Friends Page
+// Social
 import FriendsPage from "./pages/FriendsPage";
+import ChatPage from "./pages/ChatPage";
+
+// ✅ NEW: ISOLATED CHAT UI TEST (SAFE)
+import ChatUITest from "./pages/chat/ChatUITest";
 
 // Strength Calculator
 import StrengthCalculator from "./pages/StrengthCalculator";
-
-// NEW: Chat System
-import ChatPage from "./pages/ChatPage";
 
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
@@ -95,31 +96,38 @@ export default function App() {
 
   return (
     <AppProvider>
+      {/* 
+        IMPORTANT:
+        - min-h-screen stays
+        - pb-20 stays for BottomNav
+        - Chat UI Test uses its OWN internal layout (100vh)
+      */}
       <div className="min-h-screen bg-black text-white pb-20">
         <Routes>
-          {/* MAIN DASHBOARD */}
+          {/* MAIN */}
           <Route path="/" element={<Dashboard />} />
-
-          {/* HOME PAGE */}
           <Route path="/home" element={<HomePage />} />
 
-          {/* PR TRACKER */}
+          {/* PRS */}
           <Route path="/prs" element={<PRTracker />} />
           <Route path="/prslist" element={<PRTracker />} />
 
-          {/* FITNESS / TRACKING */}
+          {/* FITNESS */}
           <Route path="/measure" element={<MeasurementsPage />} />
           <Route path="/workouts" element={<WorkoutsPage />} />
           <Route path="/workoutlogger" element={<WorkoutLogger />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/goals" element={<GoalsPage />} />
 
-          {/* STRENGTH CALC */}
+          {/* TOOLS */}
           <Route path="/strength" element={<StrengthCalculator />} />
 
-          {/* SOCIAL SYSTEM */}
+          {/* SOCIAL */}
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/chat/:friendId" element={<ChatPage />} />
+
+          {/* ✅ SAFE CHAT UI TEST */}
+          <Route path="/chat-test" element={<ChatUITest />} />
         </Routes>
 
         <BottomNav />
