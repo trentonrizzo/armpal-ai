@@ -2,13 +2,18 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { FiArrowLeft, FiSend, FiImage } from "react-icons/fi";
+import { FiArrowLeft, FiSend, FiImage, FiX } from "react-icons/fi";
 
+/* ---------- HELPERS ---------- */
 function formatTime(ts) {
   if (!ts) return "";
-  return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
+/* ---------- COMPONENT ---------- */
 export default function ChatPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
@@ -18,26 +23,38 @@ export default function ChatPage() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
+  const [imageView, setImageView] = useState(null);
 
   const listRef = useRef(null);
-  const longPressTimer = useRef(null);
+  const holdTimer = useRef(null);
 
-  // ---------- LOAD USER + MESSAGES ----------
+  /* ---------- LOCK PAGE SCROLL (PWA FIX) ---------- */
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = "";
+    };
+  }, []);
+
+  /* ---------- LOAD USER + MESSAGES ---------- */
   async function loadMessages(uid) {
-    setErrMsg("");
-
     const { data, error } = await supabase
       .from("messages")
       .select("*")
       .or(
-        `and(sender_id.eq.${uid},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${uid})`
+        `and(sender_id.eq.${uid},receiver_id.eq.${friendId}),
+         and(sender_id.eq.${friendId},receiver_id.eq.${uid})`
       )
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("LOAD MESSAGES ERROR:", error);
-      setErrMsg(error.message || "Failed to load messages.");
-      return; // IMPORTANT: do NOT wipe messages to []
+      console.error(error);
+      setErrMsg(error.message);
+      return;
     }
 
     setMessages(data || []);
@@ -48,14 +65,14 @@ export default function ChatPage() {
 
     (async () => {
       setLoading(true);
-      const { data: auth } = await supabase.auth.getUser();
-      const u = auth?.user || null;
-
+      const { data } = await supabase.auth.getUser();
       if (!alive) return;
+
+      const u = data?.user;
       setUser(u);
 
       if (!u) {
-        setErrMsg("Not logged in.");
+        setErrMsg("Not logged in");
         setLoading(false);
         return;
       }
@@ -64,12 +81,10 @@ export default function ChatPage() {
       setLoading(false);
     })();
 
-    return () => {
-      alive = false;
-    };
+    return () => (alive = false);
   }, [friendId]);
 
-  // ---------- REALTIME (DEDUPED) ----------
+  /* ---------- REALTIME ---------- */
   useEffect(() => {
     if (!user) return;
 
@@ -80,22 +95,15 @@ export default function ChatPage() {
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const m = payload.new;
-
           const match =
             (m.sender_id === user.id && m.receiver_id === friendId) ||
             (m.sender_id === friendId && m.receiver_id === user.id);
 
           if (!match) return;
 
-          setMessages((prev) => {
-            // If we already have the real row, ignore
-            if (prev.some((x) => x.id === m.id)) return prev;
-
-            // If we have a temp optimistic message with same text/time-ish, remove it
-            const withoutTemps = prev.filter((x) => !(x._temp && x.text && x.text === m.text));
-
-            return [...withoutTemps, m];
-          });
+          setMessages((prev) =>
+            prev.some((x) => x.id === m.id) ? prev : [...prev, m]
+          );
         }
       )
       .subscribe();
@@ -103,179 +111,93 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
-  // ---------- AUTO SCROLL ----------
+  /* ---------- AUTO SCROLL ---------- */
   useEffect(() => {
-    listRef.current?.scrollTo({
-      top: listRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+    if (!listRef.current) return;
+    listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages]);
 
-  // ---------- SEND TEXT (NO DOUBLE) ----------
+  /* ---------- SEND TEXT ---------- */
   async function sendMessage() {
     if (!text.trim() || !user) return;
 
-    const tempId = `temp-${Date.now()}`;
-    const tempText = text.trim();
-
-    // add temp message
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        sender_id: user.id,
-        receiver_id: friendId,
-        text: tempText,
-        created_at: new Date().toISOString(),
-        _temp: true,
-      },
-    ]);
-
+    const msg = text.trim();
     setText("");
 
-    // Insert and RETURN the row so we can replace temp immediately
-    const { data: inserted, error } = await supabase
-      .from("messages")
-      .insert({
-        sender_id: user.id,
-        receiver_id: friendId,
-        text: tempText,
-      })
-      .select("*")
-      .single();
-
-    if (error) {
-      console.error("SEND ERROR:", error);
-      setErrMsg(error.message || "Failed to send message.");
-      // mark temp as failed (don’t delete it)
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, _failed: true } : m))
-      );
-      return;
-    }
-
-    // Replace temp with real row (prevents duplicate)
-    setMessages((prev) => {
-      const withoutTemp = prev.filter((m) => m.id !== tempId);
-      if (withoutTemp.some((m) => m.id === inserted.id)) return withoutTemp;
-      return [...withoutTemp, inserted];
+    const { error } = await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: friendId,
+      text: msg,
     });
+
+    if (error) setErrMsg(error.message);
   }
 
-  // ---------- SEND IMAGE ----------
+  /* ---------- SEND IMAGE ---------- */
   async function sendImage(file) {
     if (!file || !user) return;
-
-    setErrMsg("");
 
     const ext = file.name.split(".").pop();
     const path = `${user.id}-${Date.now()}.${ext}`;
 
-    const { error: upErr } = await supabase.storage.from("chat_images").upload(path, file);
-    if (upErr) {
-      console.error("UPLOAD ERROR:", upErr);
-      setErrMsg(upErr.message || "Image upload failed.");
-      return;
-    }
-
-    const { data: urlObj } = supabase.storage.from("chat_images").getPublicUrl(path);
-    const imageUrl = urlObj?.publicUrl;
-
-    const { data: inserted, error } = await supabase
-      .from("messages")
-      .insert({
-        sender_id: user.id,
-        receiver_id: friendId,
-        image_url: imageUrl,
-      })
-      .select("*")
-      .single();
+    const { error } = await supabase.storage
+      .from("chat_images")
+      .upload(path, file);
 
     if (error) {
-      console.error("IMAGE INSERT ERROR:", error);
-      setErrMsg(error.message || "Failed to send image.");
+      setErrMsg(error.message);
       return;
     }
 
-    // append real row immediately (no waiting)
-    setMessages((prev) => {
-      if (prev.some((m) => m.id === inserted.id)) return prev;
-      return [...prev, inserted];
+    const { data } = supabase.storage
+      .from("chat_images")
+      .getPublicUrl(path);
+
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: friendId,
+      image_url: data.publicUrl,
     });
   }
 
-  // ---------- DELETE (PRESS & HOLD) ----------
-  async function deleteMessage(m) {
-    if (!user) return;
-    if (m.sender_id !== user.id) return; // only delete your own
-
-    const ok = window.confirm("Delete this message?");
-    if (!ok) return;
-
-    const { error } = await supabase
-      .from("messages")
-      .delete()
-      .eq("id", m.id)
-      .eq("sender_id", user.id);
-
-    if (error) {
-      console.error("DELETE ERROR:", error);
-      setErrMsg(error.message || "Failed to delete.");
-      return;
-    }
-
-    setMessages((prev) => prev.filter((x) => x.id !== m.id));
-  }
-
+  /* ---------- DELETE (LONG PRESS ONLY) ---------- */
   function startHold(m) {
-    // mobile long-press
-    longPressTimer.current = setTimeout(() => {
-      deleteMessage(m);
-    }, 450);
+    holdTimer.current = setTimeout(async () => {
+      if (m.sender_id !== user.id) return;
+
+      if (!window.confirm("Delete this message?")) return;
+
+      await supabase.from("messages").delete().eq("id", m.id);
+      setMessages((prev) => prev.filter((x) => x.id !== m.id));
+    }, 500);
   }
 
   function endHold() {
-    clearTimeout(longPressTimer.current);
+    clearTimeout(holdTimer.current);
   }
 
-  // ---------- UI ----------
+  /* ---------- UI ---------- */
   return (
     <>
       {/* HEADER */}
-      <div style={headerStyle}>
+      <div style={header}>
         <button onClick={() => navigate("/friends")} style={backBtn}>
           <FiArrowLeft size={22} />
         </button>
-        <div style={{ fontWeight: 800 }}>Chat</div>
+        <strong>Chat</strong>
       </div>
 
       {/* MESSAGES */}
-      <div ref={listRef} style={messagesStyle}>
-        {loading && (
-          <div style={{ opacity: 0.65, textAlign: "center", marginTop: 18 }}>
-            Loading…
-          </div>
-        )}
-
-        {!!errMsg && (
-          <div
-            style={{
-              margin: "10px 0 14px",
-              padding: 10,
-              borderRadius: 12,
-              background: "rgba(255,47,47,0.15)",
-              border: "1px solid rgba(255,47,47,0.35)",
-              color: "#fff",
-              fontSize: 13,
-            }}
-          >
-            {errMsg}
-          </div>
-        )}
+      <div
+        ref={listRef}
+        style={messagesBox}
+        onTouchMove={(e) => e.stopPropagation()}
+      >
+        {loading && <div style={{ opacity: 0.6 }}>Loading…</div>}
+        {errMsg && <div style={err}>{errMsg}</div>}
 
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
-
           return (
             <div
               key={m.id}
@@ -283,37 +205,35 @@ export default function ChatPage() {
                 display: "flex",
                 justifyContent: mine ? "flex-end" : "flex-start",
                 marginBottom: 8,
-                opacity: m._temp ? 0.55 : 1,
               }}
             >
               <div
                 onTouchStart={() => mine && startHold(m)}
                 onTouchEnd={endHold}
                 onTouchCancel={endHold}
-                onClick={() => mine && deleteMessage(m)} // tap-to-delete fallback
                 style={{
-                  maxWidth: "75%",
-                  padding: "10px 12px",
-                  borderRadius: 16,
                   background: mine ? "#ff2f2f" : "#1a1a1a",
                   color: "#fff",
-                  fontSize: 16, // prevents iOS zoom
-                  userSelect: "none",
-                  cursor: mine ? "pointer" : "default",
-                  outline: m._failed ? "2px solid rgba(255,255,255,0.35)" : "none",
+                  padding: "10px 12px",
+                  borderRadius: 16,
+                  maxWidth: "75%",
+                  fontSize: 16,
                 }}
-                title={mine ? "Tap (or hold) to delete" : ""}
               >
                 {m.text && <div>{m.text}</div>}
                 {m.image_url && (
                   <img
                     src={m.image_url}
-                    style={{ marginTop: 6, borderRadius: 12, maxHeight: 220 }}
+                    onClick={() => setImageView(m.image_url)}
+                    style={{
+                      marginTop: 6,
+                      borderRadius: 12,
+                      maxHeight: 220,
+                    }}
                   />
                 )}
                 <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>
                   {formatTime(m.created_at)}
-                  {m._failed ? "  •  failed" : ""}
                 </div>
               </div>
             </div>
@@ -323,12 +243,12 @@ export default function ChatPage() {
 
       {/* INPUT */}
       <div style={inputBar}>
-        <label style={{ cursor: "pointer" }}>
+        <label>
           <FiImage size={22} />
           <input
             type="file"
-            accept="image/*"
             hidden
+            accept="image/*"
             onChange={(e) => sendImage(e.target.files?.[0])}
           />
         </label>
@@ -344,13 +264,20 @@ export default function ChatPage() {
           <FiSend size={20} />
         </button>
       </div>
+
+      {/* IMAGE VIEWER */}
+      {imageView && (
+        <div style={imageOverlay} onClick={() => setImageView(null)}>
+          <img src={imageView} style={imageFull} />
+          <FiX size={28} style={closeIcon} />
+        </div>
+      )}
     </>
   );
 }
 
-/* ---------------- STYLES ---------------- */
-
-const headerStyle = {
+/* ---------- STYLES ---------- */
+const header = {
   position: "fixed",
   top: 0,
   left: 0,
@@ -362,11 +289,11 @@ const headerStyle = {
   alignItems: "center",
   gap: 10,
   padding: "0 12px",
-  zIndex: 100,
+  zIndex: 10,
 };
 
 const backBtn = {
-  background: "rgba(255,255,255,0.15)",
+  background: "rgba(255,255,255,0.2)",
   border: "none",
   borderRadius: 18,
   width: 36,
@@ -374,22 +301,24 @@ const backBtn = {
   color: "#fff",
 };
 
-const messagesStyle = {
+const messagesBox = {
   position: "fixed",
   top: 56,
   bottom: 72,
   left: 0,
   right: 0,
   overflowY: "auto",
+  overscrollBehavior: "contain",
   padding: 12,
   background: "#000",
+  touchAction: "pan-y",
 };
 
 const inputBar = {
   position: "fixed",
+  bottom: "env(safe-area-inset-bottom)",
   left: 0,
   right: 0,
-  bottom: "env(safe-area-inset-bottom)",
   height: 72,
   background: "#000",
   borderTop: "1px solid #222",
@@ -397,7 +326,6 @@ const inputBar = {
   alignItems: "center",
   gap: 10,
   padding: "0 12px",
-  zIndex: 100,
 };
 
 const input = {
@@ -417,5 +345,35 @@ const sendBtn = {
   borderRadius: 12,
   background: "#ff2f2f",
   border: "none",
+  color: "#fff",
+};
+
+const err = {
+  background: "rgba(255,47,47,0.2)",
+  padding: 10,
+  borderRadius: 10,
+  marginBottom: 10,
+};
+
+const imageOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.9)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 999,
+};
+
+const imageFull = {
+  maxWidth: "90%",
+  maxHeight: "80%",
+  borderRadius: 12,
+};
+
+const closeIcon = {
+  position: "absolute",
+  top: 20,
+  right: 20,
   color: "#fff",
 };
