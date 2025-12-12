@@ -1,17 +1,14 @@
-// src/App.jsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./supabaseClient";
+import { registerForPush } from "./utils/push";
 
 import { AppProvider } from "./context/AppContext";
-import { registerPush } from "./utils/pushNotifications";
 
-// Screens
 import SplashScreen from "./SplashScreen";
 import CoverScreen from "./CoverScreen";
 import AuthPage from "./AuthPage";
 
-// Pages
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
 import MeasurementsPage from "./pages/MeasurementsPage";
@@ -21,59 +18,32 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 
-// Social
 import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 
-// Chat UI Test
-import ChatUITest from "./pages/chat/ChatUITest";
-
-// Strength Calculator
 import StrengthCalculator from "./pages/StrengthCalculator";
-
-// Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
 
 function AppContent() {
   const location = useLocation();
-
-  // 🔥 CHAT ROUTES NEED FULL VIEWPORT CONTROL
   const isChatRoute = location.pathname.startsWith("/chat");
 
   return (
-    <div
-      className={`bg-black text-white ${
-        isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
-      }`}
-    >
+    <div className={`bg-black text-white ${isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"}`}>
       <Routes>
-        {/* MAIN */}
         <Route path="/" element={<Dashboard />} />
         <Route path="/home" element={<HomePage />} />
-
-        {/* PRS */}
         <Route path="/prs" element={<PRTracker />} />
-        <Route path="/prslist" element={<PRTracker />} />
-
-        {/* FITNESS */}
         <Route path="/measure" element={<MeasurementsPage />} />
         <Route path="/workouts" element={<WorkoutsPage />} />
         <Route path="/workoutlogger" element={<WorkoutLogger />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/goals" element={<GoalsPage />} />
-
-        {/* TOOLS */}
         <Route path="/strength" element={<StrengthCalculator />} />
-
-        {/* SOCIAL */}
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
-
-        {/* CHAT UI TEST */}
-        <Route path="/chat-test" element={<ChatUITest />} />
       </Routes>
 
-      {/* ❗ Hide BottomNav on chat routes */}
       {!isChatRoute && <BottomNav />}
     </div>
   );
@@ -83,76 +53,27 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
-  const [showSplash, setShowSplash] = useState(false);
-  const [showCover, setShowCover] = useState(false);
-  const [firstLaunch, setFirstLaunch] = useState(null);
-
-  const pushRegistered = useRef(false);
-
-  // AUTH
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
+
+      if (session) {
+        // 🔥 FORCE PUSH PERMISSION ON LOGIN
+        setTimeout(registerForPush, 800);
+      }
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => setSession(session)
-    );
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+      setSession(session);
+      if (session) setTimeout(registerForPush, 800);
+    });
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // 🔔 REGISTER PUSH (ONCE PER LOGIN)
-  useEffect(() => {
-    if (!session) return;
-    if (pushRegistered.current) return;
-
-    pushRegistered.current = true;
-
-    setTimeout(() => {
-      registerPush();
-    }, 800);
-  }, [session]);
-
-  // SPLASH + COVER
-  useEffect(() => {
-    const seen = localStorage.getItem("armpal-first-launch");
-
-    if (!seen) {
-      setFirstLaunch(true);
-      setShowSplash(true);
-      localStorage.setItem("armpal-first-launch", "true");
-
-      setTimeout(() => {
-        setShowSplash(false);
-        setShowCover(true);
-      }, 1800);
-    } else {
-      setFirstLaunch(false);
-    }
-  }, []);
-
-  if (firstLaunch === true && showSplash) {
-    return (
-      <SplashScreen
-        onFinished={() => {
-          setShowSplash(false);
-          setShowCover(true);
-        }}
-      />
-    );
-  }
-
-  if (firstLaunch === true && showCover) {
-    return <CoverScreen onEnterApp={() => setShowCover(false)} />;
-  }
-
-  // Wait for auth to load
   if (!ready) return null;
-
-  // Logged out
-  if (!session) return <AuthPage key="auth" />;
+  if (!session) return <AuthPage />;
 
   return (
     <AppProvider>
