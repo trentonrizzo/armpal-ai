@@ -25,12 +25,18 @@ import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import BottomNav from "./components/BottomNav/BottomNav";
 
+import { initOneSignal } from "./onesignal";
+
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
 
   return (
-    <div className={`bg-black text-white ${isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"}`}>
+    <div
+      className={`bg-black text-white ${
+        isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
+      }`}
+    >
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/home" element={<HomePage />} />
@@ -62,10 +68,21 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
+
+      // 🔔 INIT ONESIGNAL ONLY WHEN LOGGED IN
+      if (session?.user?.id) {
+        initOneSignal(session.user.id);
+      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_e, session) => setSession(session)
+      (_e, session) => {
+        setSession(session);
+
+        if (session?.user?.id) {
+          initOneSignal(session.user.id);
+        }
+      }
     );
 
     return () => listener.subscription.unsubscribe();
