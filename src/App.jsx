@@ -5,10 +5,10 @@ import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
 
-import SplashScreen from "./SplashScreen";
-import CoverScreen from "./CoverScreen";
+// Auth
 import AuthPage from "./AuthPage";
 
+// Pages
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
 import MeasurementsPage from "./pages/MeasurementsPage";
@@ -17,19 +17,25 @@ import WorkoutLogger from "./pages/WorkoutLogger";
 import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
-
 import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
-
 import StrengthCalculator from "./pages/StrengthCalculator";
+
+// Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
 
+// OneSignal
 import { initOneSignal } from "./onesignal";
 
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
+
+  // ✅ FIX: OneSignal init MUST run inside a component
+  useEffect(() => {
+    initOneSignal();
+  }, []);
 
   return (
     <div
@@ -38,16 +44,24 @@ function AppContent() {
       }`}
     >
       <Routes>
+        {/* MAIN */}
         <Route path="/" element={<Dashboard />} />
         <Route path="/home" element={<HomePage />} />
+
+        {/* PRS */}
         <Route path="/prs" element={<PRTracker />} />
+
+        {/* FITNESS */}
         <Route path="/measure" element={<MeasurementsPage />} />
         <Route path="/workouts" element={<WorkoutsPage />} />
         <Route path="/workoutlogger" element={<WorkoutLogger />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/goals" element={<GoalsPage />} />
+
+        {/* TOOLS */}
         <Route path="/strength" element={<StrengthCalculator />} />
 
+        {/* SOCIAL */}
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
 
@@ -68,21 +82,10 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
-
-      // 🔔 INIT ONESIGNAL ONLY WHEN LOGGED IN
-      if (session?.user?.id) {
-        initOneSignal(session.user.id);
-      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_e, session) => {
-        setSession(session);
-
-        if (session?.user?.id) {
-          initOneSignal(session.user.id);
-        }
-      }
+      (_e, session) => setSession(session)
     );
 
     return () => listener.subscription.unsubscribe();
