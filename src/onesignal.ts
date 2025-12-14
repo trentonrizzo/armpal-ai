@@ -9,13 +9,14 @@ export async function initOneSignal() {
   if (initialized) return;
   initialized = true;
 
+  // Initialize OneSignal
   await OneSignal.init({
-    appId: "PASTE_YOUR_REAL_ONESIGNAL_APP_ID_HERE",
+    appId: "edd3f271-1b21-4f0b-ba32-8fafd9132f10",
     allowLocalhostAsSecureOrigin: true,
     notifyButton: { enable: false },
   });
 
-  // Ensure OneSignal is fully ready
+  // Ask for permission / ensure device registers
   await OneSignal.showSlidedownPrompt();
 
   // Get logged-in Supabase user
@@ -31,7 +32,7 @@ export async function initOneSignal() {
   // Link device to Supabase user
   await OneSignal.setExternalUserId(user.id);
 
-  // Optional but VERY useful for debugging
+  // Debug info
   const deviceState = await OneSignal.getDeviceState();
 
   console.log("✅ OneSignal linked to user:", user.id);
