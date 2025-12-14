@@ -3,11 +3,17 @@ import { supabase } from "./supabaseClient";
 
 let initialized = false;
 
+function getOS() {
+  if (typeof window === "undefined") return null;
+  return (window as any).OneSignal || null;
+}
+
+/* ---------------- INIT ---------------- */
+
 export async function initOneSignal() {
   if (initialized) return;
-  if (typeof window === "undefined") return;
 
-  const OneSignal = (window as any).OneSignal;
+  const OneSignal = getOS();
   if (!OneSignal) return;
 
   initialized = true;
@@ -18,14 +24,38 @@ export async function initOneSignal() {
     notifyButton: { enable: false },
   });
 
-  const permission = await OneSignal.Notifications.permission;
-  if (!permission) return;
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return;
+  if (user) {
+    await OneSignal.login(user.id);
+  }
+}
 
-  await OneSignal.login(user.id);
+/* ---------------- STATE ---------------- */
+
+export async function getSubscriptionState() {
+  const OneSignal = getOS();
+  if (!OneSignal) return false;
+
+  const permission = await OneSignal.Notifications.permission;
+  return permission === true;
+}
+
+/* ---------------- ACTIONS ---------------- */
+
+export async function requestNotificationPermission() {
+  const OneSignal = getOS();
+  if (!OneSignal) return false;
+
+  await OneSignal.Notifications.requestPermission();
+  return true;
+}
+
+export async function unsubscribe() {
+  const OneSignal = getOS();
+  if (!OneSignal) return;
+
+  await OneSignal.logout();
 }
