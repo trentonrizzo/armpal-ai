@@ -39,32 +39,18 @@ function AppContent() {
       }`}
     >
       <Routes>
-        {/* MAIN */}
         <Route path="/" element={<Dashboard />} />
         <Route path="/home" element={<HomePage />} />
-
-        {/* PRS */}
         <Route path="/prs" element={<PRTracker />} />
-
-        {/* FITNESS */}
         <Route path="/measure" element={<MeasurementsPage />} />
         <Route path="/workouts" element={<WorkoutsPage />} />
         <Route path="/workoutlogger" element={<WorkoutLogger />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/goals" element={<GoalsPage />} />
-
-        {/* TOOLS */}
         <Route path="/strength" element={<StrengthCalculator />} />
-
-        {/* SOCIAL */}
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
-
-        {/* 🔔 ENABLE PUSH */}
-        <Route
-          path="/enable-notifications"
-          element={<EnableNotifications />}
-        />
+        <Route path="/enable-notifications" element={<EnableNotifications />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
@@ -76,31 +62,28 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
+  // 1️⃣ Load session once
   useEffect(() => {
-    // Initial session load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
-
-      // ✅ INIT ONESIGNAL ONLY WHEN USER EXISTS
-      if (session) {
-        initOneSignal();
-      }
     });
 
-    // Listen for auth changes (login / logout)
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session);
-
-        if (session) {
-          await initOneSignal();
-        }
       }
     );
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // 2️⃣ Init OneSignal ONLY when session exists
+  useEffect(() => {
+    if (!session) return;
+
+    initOneSignal();
+  }, [session]);
 
   if (!ready) return null;
   if (!session) return <AuthPage />;
