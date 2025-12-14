@@ -1,57 +1,60 @@
+// src/pages/EnableNotifications.jsx
 import React, { useEffect, useState } from "react";
 import {
-  getSubscriptionState,
   requestNotificationPermission,
-  unsubscribe,
+  getSubscriptionState,
 } from "../onesignal";
+import { useNavigate } from "react-router-dom";
 
 export default function EnableNotifications() {
-  const [subscribed, setSubscribed] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function check() {
-      const state = await getSubscriptionState();
-      setSubscribed(state);
+      const isEnabled = await getSubscriptionState();
+      setEnabled(isEnabled);
+      setLoading(false);
+
+      if (isEnabled) {
+        setTimeout(() => navigate("/"), 1200);
+      }
     }
     check();
-  }, []);
+  }, [navigate]);
 
-  async function handleSubscribe() {
-    setLoading(true);
-    await requestNotificationPermission();
-    const state = await getSubscriptionState();
-    setSubscribed(state);
-    setLoading(false);
+  async function handleEnable() {
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      setEnabled(true);
+      setTimeout(() => navigate("/"), 1200);
+    }
   }
 
-  async function handleUnsubscribe() {
-    setLoading(true);
-    await unsubscribe();
-    setSubscribed(false);
-    setLoading(false);
-  }
-
-  if (subscribed === null) return null;
+  if (loading) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
-      <div className="bg-[#111] rounded-xl p-6 w-[90%] max-w-sm text-center">
-        <h2 className="text-xl font-bold mb-4">
-          {subscribed ? "Notifications Enabled" : "Enable Notifications"}
-        </h2>
+    <div className="min-h-screen flex items-center justify-center bg-black text-white px-6">
+      <div className="max-w-sm w-full text-center">
+        <h1 className="text-2xl font-bold mb-4">Enable Notifications</h1>
 
-        <button
-          onClick={subscribed ? handleUnsubscribe : handleSubscribe}
-          disabled={loading}
-          className="w-full py-3 rounded-lg bg-red-600 text-white font-semibold"
-        >
-          {loading
-            ? "Please wait…"
-            : subscribed
-            ? "Disable Notifications"
-            : "Enable Notifications"}
-        </button>
+        {enabled ? (
+          <p className="text-green-400">Notifications enabled ✅</p>
+        ) : (
+          <>
+            <p className="text-gray-400 mb-6">
+              Get workout reminders, PR alerts, and messages.
+            </p>
+
+            <button
+              onClick={handleEnable}
+              className="w-full py-3 rounded-xl bg-red-600 font-bold"
+            >
+              Enable Notifications
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

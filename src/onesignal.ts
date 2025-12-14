@@ -1,19 +1,12 @@
 // src/onesignal.ts
-import { supabase } from "./supabaseClient";
 
 let initialized = false;
 
-function getOS() {
-  if (typeof window === "undefined") return null;
-  return (window as any).OneSignal || null;
-}
-
-/* ---------------- INIT ---------------- */
-
 export async function initOneSignal() {
   if (initialized) return;
+  if (typeof window === "undefined") return;
 
-  const OneSignal = getOS();
+  const OneSignal = (window as any).OneSignal;
   if (!OneSignal) return;
 
   initialized = true;
@@ -23,39 +16,27 @@ export async function initOneSignal() {
     allowLocalhostAsSecureOrigin: true,
     notifyButton: { enable: false },
   });
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    await OneSignal.login(user.id);
-  }
 }
 
-/* ---------------- STATE ---------------- */
+export async function requestNotificationPermission() {
+  const OneSignal = (window as any).OneSignal;
+  if (!OneSignal) return false;
+
+  const permission = await OneSignal.Notifications.requestPermission();
+  return permission;
+}
 
 export async function getSubscriptionState() {
-  const OneSignal = getOS();
+  const OneSignal = (window as any).OneSignal;
   if (!OneSignal) return false;
 
   const permission = await OneSignal.Notifications.permission;
-  return permission === true;
-}
-
-/* ---------------- ACTIONS ---------------- */
-
-export async function requestNotificationPermission() {
-  const OneSignal = getOS();
-  if (!OneSignal) return false;
-
-  await OneSignal.Notifications.requestPermission();
-  return true;
+  return permission === "granted";
 }
 
 export async function unsubscribe() {
-  const OneSignal = getOS();
+  const OneSignal = (window as any).OneSignal;
   if (!OneSignal) return;
 
-  await OneSignal.logout();
+  await OneSignal.Notifications.setSubscription(false);
 }
