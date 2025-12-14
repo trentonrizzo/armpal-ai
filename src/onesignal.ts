@@ -1,40 +1,68 @@
 // src/onesignal.ts
-import OneSignal from "react-onesignal";
+import OneSignal from "onesignal";
 import { supabase } from "./supabaseClient";
 
-let initialized = false;
+let initPromise: Promise<void> | null = null;
 
 export async function initOneSignal() {
-  // Prevent double init
-  if (initialized) return;
-  initialized = true;
+  // 🔒 Ensure single init across reloads
+  if (!initPromise) {
+    initPromise = (async () => {
+      await OneSignal.init({
+        appId: "edd3f271-1b21-4f0b-ba32-8fafd9132f10",
+        allowLocalhostAsSecureOrigin: true,
+        notifyButton: { enable: false },
+      });
 
-  // Initialize OneSignal
-  await OneSignal.init({
-    appId: "edd3f271-1b21-4f0b-ba32-8fafd9132f10",
-    allowLocalhostAsSecureOrigin: true,
-    notifyButton: { enable: false },
-  });
+      // Wait until OneSignal is actually ready
+      await OneSignal.waitForPushNotificationsEnabled();
 
-  // Ask for permission / ensure device registers
-  await OneSignal.showSlidedownPrompt();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  // Get logged-in Supabase user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+      if (!user) return;
 
-  if (!user) {
-    console.warn("⚠️ OneSignal init: no user found");
-    return;
+      // Always re-link on load (safe + required)
+      await OneSignal.login(user.id);
+
+      console.log("🔔 OneSignal ready + linked:", user.id);
+    })();
   }
 
-  // Link device to Supabase user
-  await OneSignal.setExternalUserId(user.id);
+  return initPromise;
+}
 
-  // Debug info
+// Explicit user action ONLY
+export async function requestNotificationPermission() {
+  const permission = await OneSignal.getNotificationPermission();
+
+  if (permission === "granted") {
+    localStorage.setItem("onesignal_user_subscribed", "true");
+    return true;
+  }
+
+  await OneSignal.showSlidedownPrompt();
+
+  const finalPermission = await OneSignal.getNotificationPermission();
+
+  if (finalPermission === "granted") {
+    localStorage.setItem("onesignal_user_subscribed", "true");
+    return true;
+  }
+
+  return false;
+}
+
+export async function getStableSubscriptionState() {
+  await initOneSignal();
+
   const deviceState = await OneSignal.getDeviceState();
 
-  console.log("✅ OneSignal linked to user:", user.id);
-  console.log("📱 OneSignal device state:", deviceState);
+  return {
+    isSubscribed: Boolean(deviceState?.isSubscribed),
+    permission: deviceState?.notificationPermission,
+    userOptedIn:
+      localStorage.getItem("onesignal_user_subscribed") === "true",
+  };
 }
