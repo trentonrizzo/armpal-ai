@@ -1,56 +1,54 @@
 // src/onesignal.ts
-import { supabase } from "./supabaseClient";
+import OneSignal from "onesignal";
 
-const STORAGE_KEY = "armpal_notifications_enabled";
 let initialized = false;
 
 export async function initOneSignal() {
   if (initialized) return;
   initialized = true;
 
-  if (!window?.OneSignal) return;
+  if (!window || !("OneSignal" in window)) {
+    console.warn("OneSignal not available");
+    return;
+  }
 
-  await window.OneSignal.init({
+  await OneSignal.init({
     appId: "edd3f271-1b21-4f0b-ba32-8fafd9132f10",
     allowLocalhostAsSecureOrigin: true,
-    notifyButton: { enable: false },
+
+    // 🔴 HARD DISABLE ALL ONESIGNAL UI
+    notifyButton: {
+      enable: false,
+    },
+
+    promptOptions: {
+      slidedown: {
+        enabled: false,
+      },
+    },
   });
 
-  const { data } = await supabase.auth.getUser();
-  const user = data?.user;
-  if (user) {
-    await window.OneSignal.setExternalUserId(user.id);
-  }
-
-  const state = await window.OneSignal.getDeviceState();
-  if (state?.isSubscribed) {
-    localStorage.setItem(STORAGE_KEY, "true");
-    window.OneSignal.hideSlidedownPrompt();
-  }
+  // 🔒 Never auto-prompt again
+  OneSignal.setConsentRequired(false);
 }
 
-export function isNotificationsEnabled(): boolean {
-  return localStorage.getItem(STORAGE_KEY) === "true";
+// 🔍 SAFE, STABLE SUBSCRIPTION CHECK
+export async function getSubscriptionState() {
+  const permission = await OneSignal.getNotificationPermission();
+  const optedIn = await OneSignal.isPushNotificationsEnabled();
+
+  return {
+    permission,
+    subscribed: optedIn,
+  };
 }
 
-export async function enableNotifications() {
-  if (!window?.OneSignal) return false;
-
-  await window.OneSignal.showSlidedownPrompt();
-  const state = await window.OneSignal.getDeviceState();
-
-  if (state?.isSubscribed) {
-    localStorage.setItem(STORAGE_KEY, "true");
-    window.OneSignal.hideSlidedownPrompt();
-    return true;
-  }
-
-  return false;
+// 👆 USER-INITIATED SUBSCRIBE ONLY
+export async function requestNotificationPermission() {
+  await OneSignal.showSlidedownPrompt();
 }
 
-export async function disableNotifications() {
-  if (!window?.OneSignal) return;
-
-  await window.OneSignal.setSubscription(false);
-  localStorage.removeItem(STORAGE_KEY);
+// ❌ USER-INITIATED UNSUBSCRIBE
+export async function unsubscribe() {
+  await OneSignal.setSubscription(false);
 }

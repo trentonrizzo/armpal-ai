@@ -1,55 +1,63 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  isNotificationsEnabled,
-  enableNotifications,
-  disableNotifications,
+  getSubscriptionState,
+  requestNotificationPermission,
+  unsubscribe,
 } from "../onesignal";
 
 export default function EnableNotifications() {
-  const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [subscribed, setSubscribed] = useState(false);
 
   useEffect(() => {
-    setEnabled(isNotificationsEnabled());
-    setLoading(false);
+    let mounted = true;
+
+    getSubscriptionState().then((state) => {
+      if (!mounted) return;
+      setSubscribed(state.subscribed);
+      setLoading(false);
+    });
+
+    return () => (mounted = false);
   }, []);
 
-  async function handleEnable() {
-    setLoading(true);
-    const ok = await enableNotifications();
-    setEnabled(ok);
-    setLoading(false);
-  }
-
-  async function handleDisable() {
-    setLoading(true);
-    await disableNotifications();
-    setEnabled(false);
-    setLoading(false);
-  }
-
-  if (loading) {
-    return <div className="p-6 text-center text-gray-400">Loading…</div>;
-  }
+  if (loading) return null;
 
   return (
-    <div className="p-6">
-      <h2 className="text-xl font-bold mb-4">Notifications</h2>
+    <div className="p-6 text-center">
+      <h1 className="text-xl font-bold mb-4">Notifications</h1>
 
-      {enabled ? (
-        <button
-          onClick={handleDisable}
-          className="w-full bg-gray-700 py-3 rounded text-white"
-        >
-          Notifications Enabled ✓ (Disable)
-        </button>
+      {subscribed ? (
+        <>
+          <p className="mb-4 text-green-400">
+            Notifications are enabled ✅
+          </p>
+          <button
+            onClick={async () => {
+              await unsubscribe();
+              setSubscribed(false);
+            }}
+            className="bg-red-600 px-4 py-2 rounded"
+          >
+            Unsubscribe
+          </button>
+        </>
       ) : (
-        <button
-          onClick={handleEnable}
-          className="w-full bg-red-600 py-3 rounded text-white"
-        >
-          Enable Notifications
-        </button>
+        <>
+          <p className="mb-4 text-gray-400">
+            Enable push notifications for updates.
+          </p>
+          <button
+            onClick={async () => {
+              await requestNotificationPermission();
+              const state = await getSubscriptionState();
+              setSubscribed(state.subscribed);
+            }}
+            className="bg-red-600 px-4 py-2 rounded"
+          >
+            Enable Notifications
+          </button>
+        </>
       )}
     </div>
   );
