@@ -5,42 +5,58 @@ import {
 } from "../onesignal";
 
 export default function EnableNotifications() {
-  const [state, setState] = useState(null);
+  const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
-    (async () => {
-      const s = await getStableSubscriptionState();
+    async function check() {
+      const isSub = await getStableSubscriptionState();
       if (mounted) {
-        setState(s);
+        setSubscribed(isSub);
         setLoading(false);
       }
-    })();
+    }
 
-    return () => {
-      mounted = false;
-    };
+    check();
+    return () => (mounted = false);
   }, []);
 
-  if (loading) return <div>Loading…</div>;
-
-  if (state.isSubscribed) {
-    return <div>✅ Notifications enabled</div>;
+  async function enable() {
+    await requestNotificationPermission();
+    const isSub = await getStableSubscriptionState();
+    setSubscribed(isSub);
   }
 
+  async function disable() {
+    if (window.OneSignal) {
+      await window.OneSignal.setSubscription(false);
+      setSubscribed(false);
+    }
+  }
+
+  if (loading) return null;
+
   return (
-    <button
-      onClick={async () => {
-        const ok = await requestNotificationPermission();
-        if (ok) {
-          const s = await getStableSubscriptionState();
-          setState(s);
-        }
-      }}
-    >
-      Enable Notifications
-    </button>
+    <div className="p-6 text-white">
+      <h1 className="text-xl font-bold mb-4">Push Notifications</h1>
+
+      {subscribed ? (
+        <button
+          onClick={disable}
+          className="bg-red-600 px-4 py-2 rounded"
+        >
+          Unsubscribe
+        </button>
+      ) : (
+        <button
+          onClick={enable}
+          className="bg-green-600 px-4 py-2 rounded"
+        >
+          Enable Notifications
+        </button>
+      )}
+    </div>
   );
 }

@@ -1,4 +1,3 @@
-// src/onesignal.ts
 import { supabase } from "./supabaseClient";
 
 let initialized = false;
@@ -7,39 +6,44 @@ export async function initOneSignal() {
   if (initialized) return;
   initialized = true;
 
-  // @ts-ignore
-  const OneSignal = window.OneSignal;
-
-  if (!OneSignal) {
-    console.warn("❌ OneSignal SDK not loaded");
+  if (!window.OneSignal) {
+    console.warn("❌ OneSignal not loaded");
     return;
   }
 
-  await OneSignal.init({
+  await window.OneSignal.init({
     appId: "edd3f271-1b21-4f0b-ba32-8fafd9132f10",
     allowLocalhostAsSecureOrigin: true,
     notifyButton: { enable: false },
   });
 
-  // Ask permission ONLY if not already granted
-  const permission = await OneSignal.Notifications.permission;
-  if (permission !== "granted") {
-    await OneSignal.Notifications.requestPermission();
-  }
-
-  // Get logged-in Supabase user
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    console.warn("⚠️ OneSignal: no user found");
-    return;
-  }
+  if (!user) return;
 
-  // Link device to user (PERSISTENT)
-  await OneSignal.login(user.id);
+  await window.OneSignal.setExternalUserId(user.id);
 
-  const state = await OneSignal.User.PushSubscription.getState();
-  console.log("✅ OneSignal state:", state);
+  console.log("✅ OneSignal initialized & linked:", user.id);
+}
+
+/**
+ * ✅ STABLE subscription state (this was missing)
+ */
+export async function getStableSubscriptionState() {
+  if (!window.OneSignal) return false;
+
+  const state = await window.OneSignal.getDeviceState();
+  return !!state?.isSubscribed;
+}
+
+/**
+ * ✅ Request permission SAFELY
+ */
+export async function requestNotificationPermission() {
+  if (!window.OneSignal) return false;
+
+  const permission = await window.OneSignal.showSlidedownPrompt();
+  return permission;
 }
