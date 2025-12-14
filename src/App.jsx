@@ -32,11 +32,6 @@ function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
 
-  // ✅ FIX: OneSignal init MUST run inside a component
-  useEffect(() => {
-    initOneSignal();
-  }, []);
-
   return (
     <div
       className={`bg-black text-white ${
@@ -66,7 +61,10 @@ function AppContent() {
         <Route path="/chat/:friendId" element={<ChatPage />} />
 
         {/* 🔔 ENABLE PUSH */}
-        <Route path="/enable-notifications" element={<EnableNotifications />} />
+        <Route
+          path="/enable-notifications"
+          element={<EnableNotifications />}
+        />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
@@ -79,13 +77,26 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // Initial session load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
+
+      // ✅ INIT ONESIGNAL ONLY WHEN USER EXISTS
+      if (session) {
+        initOneSignal();
+      }
     });
 
+    // Listen for auth changes (login / logout)
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_e, session) => setSession(session)
+      async (_event, session) => {
+        setSession(session);
+
+        if (session) {
+          await initOneSignal();
+        }
+      }
     );
 
     return () => listener.subscription.unsubscribe();

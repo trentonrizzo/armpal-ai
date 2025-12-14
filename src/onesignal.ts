@@ -1,11 +1,19 @@
 import OneSignal from "react-onesignal";
+import { supabase } from "./supabaseClient";
 
 export async function initOneSignal() {
-  if (!window.location.origin.includes("armpal.net")) return;
-
   await OneSignal.init({
-    appId: "edd3f271-1b21-4f0b-ba32-8fafd9132f10",
+    appId: "YOUR_ONESIGNAL_APP_ID",
     allowLocalhostAsSecureOrigin: true,
-    notifyButton: { enable: false },
   });
+
+  // 🔗 Link OneSignal to logged-in user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    await OneSignal.setExternalUserId(user.id);
+    console.log("✅ OneSignal linked to user:", user.id);
+  }
 }
