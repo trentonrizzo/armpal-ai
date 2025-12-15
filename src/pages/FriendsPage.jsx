@@ -1,18 +1,17 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
-
   const [user, setUser] = useState(null);
   const [friends, setFriends] = useState([]);
   const [lastMessages, setLastMessages] = useState({});
   const [unreadMap, setUnreadMap] = useState({});
 
-  // ------------------------------------------------------------------
+  // --------------------------------------------------
   // LOAD USER + FRIENDS
-  // ------------------------------------------------------------------
+  // --------------------------------------------------
   useEffect(() => {
     async function load() {
       const { data } = await supabase.auth.getUser();
@@ -26,8 +25,9 @@ export default function FriendsPage() {
         .eq("status", "accepted")
         .or(`user_id.eq.${me.id},friend_id.eq.${me.id}`);
 
-      const ids = rows
-        .map(r => (r.user_id === me.id ? r.friend_id : r.user_id));
+      const ids = rows?.map(r =>
+        r.user_id === me.id ? r.friend_id : r.user_id
+      ) || [];
 
       if (!ids.length) return;
 
@@ -37,16 +37,15 @@ export default function FriendsPage() {
         .in("id", ids);
 
       setFriends(profiles || []);
-
       loadLastMessages(me.id, ids);
     }
 
     load();
   }, []);
 
-  // ------------------------------------------------------------------
-  // LOAD LAST MESSAGE + UNREAD STATE
-  // ------------------------------------------------------------------
+  // --------------------------------------------------
+  // LOAD LAST MESSAGE + UNREAD
+  // --------------------------------------------------
   async function loadLastMessages(myId, friendIds) {
     const { data: messages } = await supabase
       .from("messages")
@@ -85,14 +84,13 @@ export default function FriendsPage() {
     setUnreadMap(unread);
   }
 
-  // ------------------------------------------------------------------
+  // --------------------------------------------------
   // HELPERS
-  // ------------------------------------------------------------------
+  // --------------------------------------------------
   function formatLastActive(ts) {
     if (!ts) return "Offline";
-
     const diff = Date.now() - new Date(ts).getTime();
-    const m = 60_000, h = 60*m, d = 24*h, w = 7*d, y = 365*d;
+    const m = 60000, h = 60*m, d = 24*h, w = 7*d, y = 365*d;
 
     if (diff < 2*m) return "Online";
     if (diff < h) return `${Math.floor(diff/m)}m`;
@@ -102,30 +100,29 @@ export default function FriendsPage() {
     return `${Math.floor(diff/y)}y`;
   }
 
-  // ------------------------------------------------------------------
-  // TAP-THRESHOLD HANDLER
-  // ------------------------------------------------------------------
-  function useTapGuard(onTap) {
-    const start = useRef(null);
+  // --------------------------------------------------
+  // TAP GUARD (NO HOOKS)
+  // --------------------------------------------------
+  function attachTapHandlers(onTap) {
+    let startX = 0;
+    let startY = 0;
 
     return {
-      onTouchStart: e => {
-        start.current = e.touches[0];
+      onPointerDown: e => {
+        startX = e.clientX;
+        startY = e.clientY;
       },
-      onTouchEnd: e => {
-        if (!start.current) return;
-        const end = e.changedTouches[0];
-        const dx = Math.abs(end.clientX - start.current.clientX);
-        const dy = Math.abs(end.clientY - start.current.clientY);
+      onPointerUp: e => {
+        const dx = Math.abs(e.clientX - startX);
+        const dy = Math.abs(e.clientY - startY);
         if (dx < 8 && dy < 8) onTap();
-        start.current = null;
       }
     };
   }
 
-  // ------------------------------------------------------------------
+  // --------------------------------------------------
   // UI
-  // ------------------------------------------------------------------
+  // --------------------------------------------------
   return (
     <div style={page}>
       <h1 style={title}>Friends</h1>
@@ -133,18 +130,18 @@ export default function FriendsPage() {
       {friends.map(f => {
         const last = lastMessages[f.id];
         const unread = unreadMap[f.id];
-        const rowTap = useTapGuard(() => navigate(`/chat/${f.id}`));
-        const profileTap = useTapGuard(() =>
+
+        const rowTap = attachTapHandlers(() =>
+          navigate(`/chat/${f.id}`)
+        );
+        const profileTap = attachTapHandlers(() =>
           navigate(`/friends/${f.id}`)
         );
 
         return (
           <div
             key={f.id}
-            style={{
-              ...row,
-              ...(unread ? unreadGlow : {})
-            }}
+            style={{ ...row, ...(unread ? unreadGlow : {}) }}
             {...rowTap}
           >
             <div style={left}>
@@ -181,9 +178,9 @@ export default function FriendsPage() {
   );
 }
 
-// ------------------------------------------------------------------
+// --------------------------------------------------
 // STYLES
-// ------------------------------------------------------------------
+// --------------------------------------------------
 const page = { padding: "16px 16px 90px", color: "white" };
 const title = { fontSize: 28, fontWeight: 700, marginBottom: 16 };
 
@@ -228,5 +225,12 @@ const dot = {
 };
 
 const name = { fontWeight: 600, fontSize: 15 };
-const sub = { fontSize: 12, opacity: 0.65, maxWidth: 220, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+const sub = {
+  fontSize: 12,
+  opacity: 0.65,
+  maxWidth: 220,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis"
+};
 const time = { fontSize: 12, opacity: 0.5 };
