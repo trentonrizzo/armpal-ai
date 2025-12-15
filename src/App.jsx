@@ -18,6 +18,7 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 import FriendsPage from "./pages/FriendsPage";
+import FriendProfile from "./pages/FriendProfile"; // ✅ NEW
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
@@ -48,8 +49,15 @@ function AppContent() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
+
+        {/* FRIENDS */}
         <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/friends/:friendId" element={<FriendProfile />} /> {/* ✅ NEW */}
+
+        {/* CHAT */}
         <Route path="/chat/:friendId" element={<ChatPage />} />
+
+        {/* NOTIFICATIONS */}
         <Route path="/enable-notifications" element={<EnableNotifications />} />
       </Routes>
 
@@ -62,7 +70,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // 1️⃣ Load session once
+  // Load session once
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -78,10 +86,9 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // 2️⃣ Init OneSignal ONLY when session exists
+  // Init OneSignal ONLY when session exists
   useEffect(() => {
     if (!session) return;
-
     initOneSignal();
   }, [session]);
 
