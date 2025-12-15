@@ -826,40 +826,7 @@ export default function ProfilePage() {
                   <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
                     Profile picture
                   </div>
-
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      style={{
-                        padding: "10px 14px",
-                        borderRadius: 12,
-                        background: "#111",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        color: "white",
-                        cursor: "pointer",
-                        fontWeight: 700,
-                        fontSize: 13,
-                      }}
-                    >
-                      Upload
-                    </button>
-
-                    <button
-                      onClick={removeAvatar}
-                      style={{
-                        padding: "10px 14px",
-                        borderRadius: 12,
-                        background: "rgba(255,255,255,0.06)",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        color: "rgba(255,255,255,0.9)",
-                        cursor: "pointer",
-                        fontWeight: 700,
-                        fontSize: 13,
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
+              
                 </div>
               </div>
 
