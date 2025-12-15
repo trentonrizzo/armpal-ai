@@ -719,8 +719,64 @@ export default function ProfilePage() {
                 marginBottom: 16,
               }}
             >
-              {/* AVATAR + BUTTONS */}
-              <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
+             {/* AVATAR */}
+<div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
+  <div style={{ position: "relative", width: 92, height: 92 }}>
+    <img
+      src={avatarUrl || "https://via.placeholder.com/120?text=No+Avatar"}
+      alt="avatar"
+      style={{
+        width: 92,
+        height: 92,
+        objectFit: "cover",
+        borderRadius: "999px",
+        border: "2px solid rgba(255,255,255,0.10)",
+        background: "#0a0a0a",
+      }}
+    />
+
+    {/* hidden file input */}
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*"
+      onChange={onSelectFile}
+      style={{ display: "none" }}
+    />
+
+    {/* pencil icon ONLY */}
+    <button
+      onClick={() => fileInputRef.current?.click()}
+      style={{
+        position: "absolute",
+        right: -2,
+        bottom: -2,
+        width: 32,
+        height: 32,
+        borderRadius: "999px",
+        background: "#111",
+        border: "1px solid rgba(255,255,255,0.25)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        boxShadow: "0 6px 14px rgba(0,0,0,0.5)",
+      }}
+      aria-label="Change profile picture"
+    >
+      <FiEdit2 size={16} color="#ffffff" />
+    </button>
+  </div>
+
+  <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ fontSize: 12, opacity: 0.7 }}>
+      Profile picture
+    </div>
+    <div style={{ fontSize: 12, opacity: 0.45, marginTop: 4 }}>
+      Tap the pencil to change
+    </div>
+  </div>
+</div>
                 <div style={{ position: "relative", width: 92, height: 92 }}>
                   <img
                     src={avatarUrl || "https://via.placeholder.com/120?text=No+Avatar"}
