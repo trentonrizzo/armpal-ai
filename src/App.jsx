@@ -21,7 +21,7 @@ import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
-import FriendProfilePage from "./pages/FriendProfilePage"; // ✅ NEW
+import FriendProfile from "./pages/FriendProfile"; // ✅ NEW
 
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
@@ -50,11 +50,9 @@ function AppContent() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/friend/:friendId" element={<FriendProfile />} /> {/* ✅ NEW */}
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
-
-        {/* ✅ NEW friend profile route */}
-        <Route path="/user/:id" element={<FriendProfilePage />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
@@ -66,21 +64,23 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // Load session once
+  // 1️⃣ Load session once
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+      }
+    );
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // Init OneSignal ONLY when session exists
+  // 2️⃣ Init OneSignal ONLY when session exists
   useEffect(() => {
     if (!session) return;
     initOneSignal();

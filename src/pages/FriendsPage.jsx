@@ -1,5 +1,5 @@
 // src/pages/FriendsPage.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
 
@@ -7,353 +7,792 @@ export default function FriendsPage() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
+
+  // Data
   const [friends, setFriends] = useState([]);
-  const [unreadMap, setUnreadMap] = useState({});
-  const [lastMessageMap, setLastMessageMap] = useState({});
+  const [incoming, setIncoming] = useState([]);
+  const [outgoing, setOutgoing] = useState([]);
 
-  const [showAdd, setShowAdd] = useState(false);
+  // Chat preview / unread
+  const [lastByFriend, setLastByFriend] = useState({}); // { friendId: { text, created_at, sender_id, id } }
+  const [unreadByFriend, setUnreadByFriend] = useState({}); // { friendId: true/false }
+
+  // UI
+  const [showAddBox, setShowAddBox] = useState(false);
   const [handleInput, setHandleInput] = useState("");
-  const [error, setError] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
-  // --------------------------------------------------
-  // INIT
-  // --------------------------------------------------
   useEffect(() => {
-    async function init() {
+    (async () => {
       const { data } = await supabase.auth.getUser();
-      if (!data?.user) return;
-      setUser(data.user);
-      await loadFriends(data.user.id);
-    }
-    init();
+      const current = data?.user || null;
+      setUser(current);
+
+      if (current?.id) {
+        await loadAllFriends(current.id);
+      }
+    })();
   }, []);
 
-  // --------------------------------------------------
-  // LOAD FRIENDS
-  // --------------------------------------------------
-  async function loadFriends(myId) {
-    const { data: rows } = await supabase
-      .from("friends")
-      .select("user_id, friend_id, status")
-      .or(`user_id.eq.${myId},friend_id.eq.${myId}`)
-      .eq("status", "accepted");
-
-    if (!rows) return;
-
-    const ids = rows.map((r) =>
-      r.user_id === myId ? r.friend_id : r.user_id
-    );
-
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, last_active")
-      .in("id", ids);
-
-    setFriends(profiles || []);
-    await loadLastMessages(myId, ids);
+  // -------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------
+  function pickDisplayName(p) {
+    return p?.display_name || p?.username || p?.handle || "Unknown";
   }
 
-  // --------------------------------------------------
-  // LOAD LAST MESSAGE + UNREAD
-  // --------------------------------------------------
-  async function loadLastMessages(myId, ids) {
-    const { data: messages } = await supabase
-      .from("messages")
-      .select("id, sender_id, receiver_id, content, created_at, read")
-      .or(
-        ids
-          .map(
-            (id) =>
-              `and(sender_id.eq.${myId},receiver_id.eq.${id}),and(sender_id.eq.${id},receiver_id.eq.${myId})`
-          )
-          .join(",")
-      )
-      .order("created_at", { ascending: false });
-
-    const lastMap = {};
-    const unread = {};
-
-    messages?.forEach((m) => {
-      const other =
-        m.sender_id === myId ? m.receiver_id : m.sender_id;
-
-      if (!lastMap[other]) {
-        lastMap[other] = m;
-      }
-
-      if (m.receiver_id === myId && !m.read) {
-        unread[other] = true;
-      }
-    });
-
-    setLastMessageMap(lastMap);
-    setUnreadMap(unread);
+  function initialsLetter(p) {
+    const name = pickDisplayName(p);
+    return (name || "?").trim().charAt(0).toUpperCase();
   }
 
-  // --------------------------------------------------
-  // ADD FRIEND
-  // --------------------------------------------------
-  async function sendFriendRequest() {
-    setError("");
-    let raw = handleInput.trim().replace("@", "");
-    if (!raw || !user) return;
+  function isOnline(lastActive) {
+    if (!lastActive) return false;
+    return Date.now() - new Date(lastActive).getTime() < 60 * 1000; // 1 min
+  }
 
-    const { data: target } = await supabase
-      .from("profiles")
-      .select("id")
-      .ilike("username", raw)
-      .maybeSingle();
+  function formatAgoNoMonths(ts) {
+    if (!ts) return "";
+    const ms = Date.now() - new Date(ts).getTime();
+    if (ms < 0) return "";
 
-    if (!target) {
-      setError("User not found");
+    const sec = Math.floor(ms / 1000);
+    if (sec < 60) return `${sec}s`;
+
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m`;
+
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h`;
+
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day}d`;
+
+    const wk = Math.floor(day / 7);
+    if (wk <= 53) return `${wk}w`;
+
+    const yr = Math.floor(day / 365);
+    return `${yr}y`;
+  }
+
+  function oneLinePreview(str) {
+    if (!str) return "No messages yet";
+    const cleaned = String(str).replace(/\s+/g, " ").trim();
+    return cleaned.length > 60 ? cleaned.slice(0, 60) + "…" : cleaned;
+  }
+
+  // -------------------------------------------------------------------
+  // LOAD EVERYTHING (friends + profiles) — stable
+  // -------------------------------------------------------------------
+  async function loadAllFriends(myId) {
+    try {
+      setErrorMsg("");
+      setSuccessMsg("");
+
+      const { data: rows, error } = await supabase
+        .from("friends")
+        .select("id, user_id, friend_id, status")
+        .or(`user_id.eq.${myId},friend_id.eq.${myId}`);
+
+      if (error) {
+        console.error("friends select error:", error);
+        setFriends([]);
+        setIncoming([]);
+        setOutgoing([]);
+        return;
+      }
+
+      const acceptedIds = new Set();
+      const incomingRows = [];
+      const outgoingRows = [];
+
+      (rows || []).forEach((row) => {
+        const st = (row?.status || "").toLowerCase();
+
+        if (st === "accepted") {
+          const otherId = row.user_id === myId ? row.friend_id : row.user_id;
+          acceptedIds.add(otherId);
+        } else if (st === "pending") {
+          if (row.friend_id === myId) incomingRows.push(row);
+          else if (row.user_id === myId) outgoingRows.push(row);
+        }
+      });
+
+      const profileIds = new Set();
+      acceptedIds.forEach((id) => profileIds.add(id));
+      incomingRows.forEach((row) => profileIds.add(row.user_id));
+      outgoingRows.forEach((row) => profileIds.add(row.friend_id));
+
+      let profiles = [];
+      if (profileIds.size > 0) {
+        const { data: profData, error: profErr } = await supabase
+          .from("profiles")
+          .select("id, username, handle, display_name, avatar_url, bio, last_active")
+          .in("id", Array.from(profileIds));
+
+        if (profErr) console.error("profiles select error:", profErr);
+        profiles = profData || [];
+      }
+
+      const profileMap = {};
+      profiles.forEach((p) => (profileMap[p.id] = p));
+
+      const acceptedList = Array.from(acceptedIds)
+        .map((id) => profileMap[id])
+        .filter(Boolean);
+
+      setFriends(acceptedList);
+
+      setIncoming(
+        incomingRows.map((row) => ({
+          ...row,
+          profile: profileMap[row.user_id] || null,
+        }))
+      );
+
+      setOutgoing(
+        outgoingRows.map((row) => ({
+          ...row,
+          profile: profileMap[row.friend_id] || null,
+        }))
+      );
+
+      // Best-effort: load last message previews + unread, NEVER crash if schema differs
+      await loadLastMessagesAndUnread(myId, acceptedList.map((p) => p.id));
+    } catch (err) {
+      console.error("loadAllFriends error:", err);
+      setFriends([]);
+      setIncoming([]);
+      setOutgoing([]);
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // BEST-EFFORT last message + unread (won’t break if your columns differ)
+  // -------------------------------------------------------------------
+  async function loadLastMessagesAndUnread(myId, friendIds) {
+    if (!myId || !friendIds?.length) {
+      setLastByFriend({});
+      setUnreadByFriend({});
       return;
     }
 
-    await supabase.from("friends").insert({
-      user_id: user.id,
-      friend_id: target.id,
-      status: "pending",
-    });
+    const lastMap = {};
+    const unreadMap = {};
 
-    setHandleInput("");
-    setShowAdd(false);
+    // We do per-friend queries to stay compatible with unknown schema.
+    // If your messages table columns are different, these calls just fail silently.
+    for (const fid of friendIds) {
+      try {
+        const { data: lastMsg, error: msgErr } = await supabase
+          .from("messages")
+          .select("*")
+          .or(
+            `and(sender_id.eq.${myId},receiver_id.eq.${fid}),and(sender_id.eq.${fid},receiver_id.eq.${myId})`
+          )
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!msgErr && lastMsg) {
+          const text =
+            lastMsg.text ??
+            lastMsg.content ??
+            lastMsg.message ??
+            lastMsg.body ??
+            "";
+
+          lastMap[fid] = {
+            id: lastMsg.id,
+            text,
+            created_at: lastMsg.created_at,
+            sender_id: lastMsg.sender_id,
+          };
+
+          // unread if last message from friend and no read record
+          if (lastMsg.sender_id && lastMsg.sender_id !== myId) {
+            const { data: readRow, error: readErr } = await supabase
+              .from("message_reads")
+              .select("id")
+              .eq("user_id", myId)
+              .eq("message_id", lastMsg.id)
+              .maybeSingle();
+
+            unreadMap[fid] = !readErr && !readRow;
+          } else {
+            unreadMap[fid] = false;
+          }
+        } else {
+          unreadMap[fid] = false;
+        }
+      } catch (e) {
+        // If schema mismatch -> ignore.
+        unreadMap[fid] = false;
+      }
+    }
+
+    setLastByFriend(lastMap);
+    setUnreadByFriend(unreadMap);
   }
 
-  // --------------------------------------------------
-  // HELPERS
-  // --------------------------------------------------
-  function formatLastActive(ts) {
-    if (!ts) return "Offline";
+  // -------------------------------------------------------------------
+  // SEND FRIEND REQUEST
+  // -------------------------------------------------------------------
+  async function sendFriendRequest() {
+    try {
+      setErrorMsg("");
+      setSuccessMsg("");
 
-    const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
-    if (diff < 60) return "Offline · just now";
-    if (diff < 3600) return `Offline · ${Math.floor(diff / 60)}m`;
-    if (diff < 86400) return `Offline · ${Math.floor(diff / 3600)}h`;
-    if (diff < 604800) return `Offline · ${Math.floor(diff / 86400)}d`;
-    if (diff < 31536000) return `Offline · ${Math.floor(diff / 604800)}w`;
-    return `Offline · ${Math.floor(diff / 31536000)}y`;
+      if (!user?.id) return;
+
+      let raw = handleInput.trim();
+      if (!raw) return;
+
+      if (raw.startsWith("@")) raw = raw.slice(1);
+
+      const { data: target, error } = await supabase
+        .from("profiles")
+        .select("id, handle, username, display_name")
+        .ilike("handle", raw)
+        .maybeSingle();
+
+      if (error || !target) {
+        setErrorMsg("No user found with that handle.");
+        return;
+      }
+
+      if (target.id === user.id) {
+        setErrorMsg("You can’t add yourself.");
+        return;
+      }
+
+      const { data: existing } = await supabase
+        .from("friends")
+        .select("id, status, user_id, friend_id")
+        .or(
+          `and(user_id.eq.${user.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${user.id})`
+        );
+
+      if (existing?.length > 0) {
+        setErrorMsg("Request already exists or you're already friends.");
+        return;
+      }
+
+      const { error: insertErr } = await supabase.from("friends").insert({
+        user_id: user.id,
+        friend_id: target.id,
+        status: "pending",
+      });
+
+      if (insertErr) {
+        console.error("insert error:", insertErr);
+        setErrorMsg("Error sending request.");
+        return;
+      }
+
+      setHandleInput("");
+      setShowAddBox(false);
+      setSuccessMsg(`Friend request sent.`);
+      await loadAllFriends(user.id);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Error sending request.");
+    }
   }
 
-  function isOnline(ts) {
-    if (!ts) return false;
-    return Date.now() - new Date(ts) < 60000;
+  // -------------------------------------------------------------------
+  // ACCEPT / DECLINE
+  // -------------------------------------------------------------------
+  async function acceptRequest(rowId) {
+    if (!user?.id) return;
+    await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
+    await loadAllFriends(user.id);
   }
 
-  // --------------------------------------------------
+  async function declineRequest(rowId) {
+    if (!user?.id) return;
+    await supabase.from("friends").delete().eq("id", rowId);
+    await loadAllFriends(user.id);
+  }
+
+  // -------------------------------------------------------------------
+  // Scroll-safe tap handling (tap != scroll)
+  // -------------------------------------------------------------------
+  function useTapGuard() {
+    const startRef = useRef({ x: 0, y: 0, t: 0, moved: false });
+
+    const onTouchStart = (e) => {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      startRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        t: Date.now(),
+        moved: false,
+      };
+    };
+
+    const onTouchMove = (e) => {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      const dx = Math.abs(touch.clientX - startRef.current.x);
+      const dy = Math.abs(touch.clientY - startRef.current.y);
+      if (dx > 10 || dy > 10) startRef.current.moved = true;
+    };
+
+    const isTap = () => {
+      const { moved } = startRef.current;
+      return !moved;
+    };
+
+    return { onTouchStart, onTouchMove, isTap };
+  }
+
+  // -------------------------------------------------------------------
   // UI
-  // --------------------------------------------------
+  // -------------------------------------------------------------------
   return (
-    <div style={page}>
+    <div style={pageWrap}>
       <h1 style={title}>Friends</h1>
 
       {/* ADD FRIEND */}
-      <div style={card}>
-        <button style={addBtn} onClick={() => setShowAdd(!showAdd)}>
-          + Add Friend
+      <section style={card}>
+        <button
+          style={bigAddButton}
+          onClick={() => {
+            setShowAddBox((v) => !v);
+            setErrorMsg("");
+            setSuccessMsg("");
+          }}
+        >
+          ＋ Add Friend
         </button>
 
-        {showAdd && (
+        {showAddBox && (
           <div style={{ marginTop: 12 }}>
-            <input
-              placeholder="@username"
-              value={handleInput}
-              onChange={(e) => setHandleInput(e.target.value)}
-              style={input}
-            />
-            <button style={sendBtn} onClick={sendFriendRequest}>
-              Send
-            </button>
-            {error && <p style={errorText}>{error}</p>}
-          </div>
-        )}
-      </div>
+            <p style={smallMuted}>
+              Search by <span style={mono}>@handle</span>
+            </p>
 
-      {/* FRIEND LIST */}
-      <div style={card}>
-        <h2 style={section}>Your Friends</h2>
+            <div style={addRow}>
+              <input
+                type="text"
+                value={handleInput}
+                onChange={(e) => setHandleInput(e.target.value)}
+                placeholder="@crangis"
+                style={inputBox}
+              />
 
-        {friends.map((f) => {
-          const name = f.display_name || f.username;
-          const last = lastMessageMap[f.id];
-          const unread = unreadMap[f.id];
-          const online = isOnline(f.last_active);
+              <button style={sendBtn} onClick={sendFriendRequest}>
+                Send
+              </button>
 
-          return (
-            <div
-              key={f.id}
-              style={{
-                ...row,
-                ...(unread ? unreadGlow : {}),
-              }}
-              onClick={() => navigate(`/chat/${f.id}`)}
-            >
-              <div
-                style={left}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/profile/${f.id}`);
+              <button
+                style={cancelBtn}
+                onClick={() => {
+                  setShowAddBox(false);
+                  setHandleInput("");
+                  setErrorMsg("");
+                  setSuccessMsg("");
                 }}
               >
-                <div style={avatar}>
-                  {name?.charAt(0)?.toUpperCase()}
-                  {online && <span style={onlineDot} />}
-                </div>
+                Cancel
+              </button>
+            </div>
 
-                <div>
-                  <div style={nameText}>{name}</div>
-                  <div style={preview}>
-                    {last ? last.content : "No messages yet"}
+            {errorMsg && <p style={errorStyle}>{errorMsg}</p>}
+          </div>
+        )}
+
+        {!showAddBox && successMsg && <p style={successStyle}>{successMsg}</p>}
+      </section>
+
+      {/* INCOMING REQUESTS */}
+      {incoming.length > 0 && (
+        <section style={card}>
+          <h2 style={sectionTitle}>Friend Requests</h2>
+
+          {incoming.map((req) => {
+            const p = req.profile;
+            return (
+              <div key={req.id} style={rowBase}>
+                <div style={rowLeft}>
+                  <div style={avatarCircle}>{initialsLetter(p)}</div>
+                  <div>
+                    <p style={nameText}>{pickDisplayName(p)}</p>
+                    <p style={subText}>Wants to add you</p>
                   </div>
                 </div>
-              </div>
 
-              <div style={right}>
-                {online ? (
-                  <span style={onlineText}>Online</span>
-                ) : (
-                  <span style={offlineText}>
-                    {formatLastActive(f.last_active)}
-                  </span>
-                )}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={acceptBtn} onClick={() => acceptRequest(req.id)}>
+                    Accept
+                  </button>
+                  <button style={declineBtn} onClick={() => declineRequest(req.id)}>
+                    Decline
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </section>
+      )}
+
+      {/* OUTGOING REQUESTS */}
+      {outgoing.length > 0 && (
+        <section style={card}>
+          <h2 style={sectionTitle}>Sent Requests</h2>
+
+          {outgoing.map((req) => {
+            const p = req.profile;
+            return (
+              <div key={req.id} style={rowBase}>
+                <div style={rowLeft}>
+                  <div style={avatarCircle}>{initialsLetter(p)}</div>
+                  <div>
+                    <p style={nameText}>{pickDisplayName(p)}</p>
+                    <p style={subText}>Pending</p>
+                  </div>
+                </div>
+
+                <span style={pendingText}>Pending</span>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* FRIEND LIST */}
+      <section style={card}>
+        <h2 style={sectionTitle}>Your Friends</h2>
+
+        {friends.length === 0 ? (
+          <p style={smallMuted}>You haven't added anyone yet.</p>
+        ) : (
+          friends.map((p) => (
+            <FriendRow
+              key={p.id}
+              meId={user?.id}
+              friend={p}
+              online={isOnline(p.last_active)}
+              lastActiveAgo={formatAgoNoMonths(p.last_active)}
+              preview={oneLinePreview(lastByFriend[p.id]?.text)}
+              unread={!!unreadByFriend[p.id]}
+              onOpenChat={() => navigate(`/chat/${p.id}`)}
+              onOpenProfile={() => navigate(`/friend/${p.id}`)}
+            />
+          ))
+        )}
+      </section>
+    </div>
+  );
+}
+
+function FriendRow({
+  friend,
+  online,
+  lastActiveAgo,
+  preview,
+  unread,
+  onOpenChat,
+  onOpenProfile,
+}) {
+  const { onTouchStart, onTouchMove, isTap } = (function useTapGuardLocal() {
+    const startRef = useRef({ x: 0, y: 0, moved: false });
+
+    const onTouchStart = (e) => {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      startRef.current = { x: touch.clientX, y: touch.clientY, moved: false };
+    };
+
+    const onTouchMove = (e) => {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      const dx = Math.abs(touch.clientX - startRef.current.x);
+      const dy = Math.abs(touch.clientY - startRef.current.y);
+      if (dx > 10 || dy > 10) startRef.current.moved = true;
+    };
+
+    const isTap = () => !startRef.current.moved;
+    return { onTouchStart, onTouchMove, isTap };
+  })();
+
+  const displayName = friend?.display_name || friend?.username || friend?.handle || "Unknown";
+  const letter = (displayName || "?").trim().charAt(0).toUpperCase();
+
+  const rightText = online
+    ? "Online"
+    : `Offline${lastActiveAgo ? ` · ${lastActiveAgo}` : ""}`;
+
+  const rowStyle = {
+    ...rowClickable,
+    ...(unread ? rowUnreadGlow : null),
+  };
+
+  return (
+    <div
+      style={rowStyle}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onClick={() => {
+        // tap row opens chat
+        if (isTap()) onOpenChat();
+      }}
+    >
+      <div style={rowLeft}>
+        {/* Avatar opens profile */}
+        <div
+          style={avatarCircle}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenProfile();
+          }}
+        >
+          {letter}
+          {online && <span style={onlineDot} />}
+        </div>
+
+        {/* Name opens profile (NOT blue, not link) */}
+        <div
+          style={{ minWidth: 0 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenProfile();
+          }}
+        >
+          <p style={nameText}>{displayName}</p>
+          <p style={subText}>{preview}</p>
+        </div>
+      </div>
+
+      <div style={rightWrap}>
+        <span style={statusText}>{rightText}</span>
       </div>
     </div>
   );
 }
 
-// --------------------------------------------------
-// STYLES
-// --------------------------------------------------
-const page = {
+// -----------------------------------------------------------------------
+//  STYLES
+// -----------------------------------------------------------------------
+const pageWrap = {
   padding: "16px 16px 90px",
+  maxWidth: 900,
+  margin: "0 auto",
   color: "white",
 };
 
 const title = {
-  fontSize: 28,
-  fontWeight: 700,
+  fontSize: 32,
+  fontWeight: 800,
   marginBottom: 16,
+  letterSpacing: 0.2,
 };
 
 const card = {
-  background: "#0f0f0f",
+  background: "#101010",
   borderRadius: 18,
   padding: 16,
+  border: "1px solid rgba(255,255,255,0.08)",
   marginBottom: 20,
+  boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
 };
 
-const addBtn = {
+const bigAddButton = {
   width: "100%",
-  padding: 14,
+  padding: "14px 16px",
+  background: "#ff2f2f",
   borderRadius: 14,
   border: "none",
-  background: "#ff2f2f",
   color: "white",
+  fontSize: 17,
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow: "0 12px 28px rgba(255,47,47,0.14)",
+};
+
+const sectionTitle = {
+  fontSize: 17,
   fontWeight: 700,
-};
-
-const input = {
-  width: "100%",
-  marginTop: 10,
-  padding: 12,
-  borderRadius: 10,
-  background: "#000",
-  border: "1px solid rgba(255,255,255,0.2)",
-  color: "white",
-};
-
-const sendBtn = {
-  width: "100%",
-  marginTop: 10,
-  padding: 12,
-  borderRadius: 10,
-  background: "#ff2f2f",
-  color: "white",
-  fontWeight: 700,
-};
-
-const errorText = {
-  color: "#ff6b6b",
-  marginTop: 6,
-  fontSize: 13,
-};
-
-const section = {
-  fontSize: 16,
-  fontWeight: 600,
   marginBottom: 10,
 };
 
-const row = {
+const addRow = {
   display: "flex",
-  justifyContent: "space-between",
+  gap: 8,
+  marginTop: 8,
   alignItems: "center",
-  padding: "14px 0",
-  borderBottom: "1px solid rgba(255,255,255,0.05)",
+};
+
+const inputBox = {
+  flex: 1,
+  padding: "10px",
+  background: "#050505",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "white",
+  outline: "none",
+};
+
+const sendBtn = {
+  padding: "10px 14px",
+  background: "#ff2f2f",
+  color: "white",
+  borderRadius: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+  border: "none",
+};
+
+const cancelBtn = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.25)",
+  background: "transparent",
+  color: "white",
   cursor: "pointer",
 };
 
-const unreadGlow = {
-  boxShadow: "0 0 0 1px rgba(255,47,47,0.8)",
-  borderRadius: 12,
+const errorStyle = {
+  color: "#ff6b6b",
+  fontSize: 13,
+  marginTop: 6,
 };
 
-const left = {
+const successStyle = {
+  color: "#4ade80",
+  fontSize: 13,
+  marginTop: 8,
+};
+
+const rowBase = {
   display: "flex",
-  gap: 12,
   alignItems: "center",
+  justifyContent: "space-between",
+  padding: "10px 0",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
 };
 
-const avatar = {
+const rowClickable = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "14px 14px",
+  borderRadius: 14,
+  background: "rgba(0,0,0,0.35)",
+  border: "1px solid rgba(255,255,255,0.07)",
+  marginBottom: 12,
+  cursor: "pointer",
+  touchAction: "pan-y", // IMPORTANT: scroll still works
+  userSelect: "none",
+};
+
+const rowUnreadGlow = {
+  border: "1px solid rgba(255,47,47,0.35)",
+  boxShadow: "0 0 0 1px rgba(255,47,47,0.18), 0 10px 30px rgba(255,47,47,0.10)",
+};
+
+const rowLeft = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  minWidth: 0,
+  flex: 1,
+};
+
+const rightWrap = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  minWidth: 110,
+};
+
+const avatarCircle = {
   width: 44,
   height: 44,
   borderRadius: "50%",
   background: "#000",
+  border: "1px solid rgba(255,255,255,0.14)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontWeight: 700,
+  fontSize: 18,
+  fontWeight: 900,
   position: "relative",
+  flexShrink: 0,
 };
 
 const onlineDot = {
   position: "absolute",
-  right: -2,
-  bottom: -2,
+  right: -1,
+  bottom: -1,
   width: 10,
   height: 10,
-  background: "#22c55e",
   borderRadius: "50%",
-  boxShadow: "0 0 6px #22c55e",
+  background: "#1fbf61",
+  border: "2px solid #000",
+  boxShadow: "0 0 10px rgba(31,191,97,0.45)",
 };
 
 const nameText = {
-  fontSize: 15,
-  fontWeight: 600,
+  fontSize: 16,
+  fontWeight: 800,
+  color: "white",
+  margin: 0,
+  lineHeight: "18px",
 };
 
-const preview = {
-  fontSize: 13,
-  opacity: 0.65,
+const subText = {
+  fontSize: 12,
+  opacity: 0.7,
+  margin: "6px 0 0 0",
+  lineHeight: "14px",
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
-  maxWidth: 220,
+  maxWidth: "100%",
 };
 
-const right = {
+const statusText = {
+  fontSize: 12,
+  opacity: 0.6,
+  fontWeight: 700,
+};
+
+const acceptBtn = {
+  padding: "8px 12px",
+  background: "#1fbf61",
+  color: "white",
+  borderRadius: 12,
+  border: "none",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const declineBtn = {
+  padding: "8px 12px",
+  background: "#ff4444",
+  color: "white",
+  borderRadius: 12,
+  border: "none",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const pendingText = {
+  fontSize: 13,
+  color: "#ffc857",
+  fontWeight: 800,
+};
+
+const smallMuted = {
   fontSize: 12,
   opacity: 0.7,
 };
 
-const onlineText = {
-  color: "#22c55e",
-  fontWeight: 600,
-};
-
-const offlineText = {
-  opacity: 0.6,
+const mono = {
+  fontFamily: "monospace",
 };
