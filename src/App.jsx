@@ -18,10 +18,10 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 import FriendsPage from "./pages/FriendsPage";
-import FriendProfile from "./pages/FriendProfile"; // ✅ NEW
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
+import FriendProfilePage from "./pages/FriendProfilePage"; // ✅ NEW
 
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
@@ -49,16 +49,12 @@ function AppContent() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
-
-        {/* FRIENDS */}
         <Route path="/friends" element={<FriendsPage />} />
-        <Route path="/friends/:friendId" element={<FriendProfile />} /> {/* ✅ NEW */}
-
-        {/* CHAT */}
         <Route path="/chat/:friendId" element={<ChatPage />} />
-
-        {/* NOTIFICATIONS */}
         <Route path="/enable-notifications" element={<EnableNotifications />} />
+
+        {/* ✅ NEW friend profile route */}
+        <Route path="/user/:id" element={<FriendProfilePage />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
@@ -77,11 +73,9 @@ export default function App() {
       setReady(true);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      }
-    );
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
     return () => listener.subscription.unsubscribe();
   }, []);
