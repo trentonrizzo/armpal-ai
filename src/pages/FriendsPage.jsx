@@ -23,6 +23,9 @@ export default function FriendsPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  // ✅ Presence realtime channel ref (prevents duplicates)
+  const presenceChannelRef = useRef(null);
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -34,6 +37,62 @@ export default function FriendsPage() {
       }
     })();
   }, []);
+
+  // ✅ Realtime presence subscription once user + friends exist
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // clean any previous channel
+    if (presenceChannelRef.current) {
+      supabase.removeChannel(presenceChannelRef.current);
+      presenceChannelRef.current = null;
+    }
+
+    const ch = supabase
+      .channel(`friends-presence-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const updated = payload.new;
+          if (!updated?.id) return;
+
+          // Update accepted friends presence in-place
+          setFriends((prev) =>
+            prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+          );
+
+          // Update incoming/outgoing request profile presence too (nice + free)
+          setIncoming((prev) =>
+            prev.map((row) => {
+              if (row?.profile?.id === updated.id) {
+                return { ...row, profile: { ...row.profile, ...updated } };
+              }
+              return row;
+            })
+          );
+
+          setOutgoing((prev) =>
+            prev.map((row) => {
+              if (row?.profile?.id === updated.id) {
+                return { ...row, profile: { ...row.profile, ...updated } };
+              }
+              return row;
+            })
+          );
+        }
+      )
+      .subscribe();
+
+    presenceChannelRef.current = ch;
+
+    return () => {
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
+      }
+    };
+  }, [user?.id]);
 
   // -------------------------------------------------------------------
   // Helpers
@@ -47,9 +106,13 @@ export default function FriendsPage() {
     return (name || "?").trim().charAt(0).toUpperCase();
   }
 
-  function isOnline(lastActive) {
-    if (!lastActive) return false;
-    return Date.now() - new Date(lastActive).getTime() < 60 * 1000; // 1 min
+  // ✅ ONLINE if:
+  // - is_online true
+  // - last_seen is fresh (within 60s)
+  function isOnline(profile) {
+    if (!profile?.is_online) return false;
+    if (!profile?.last_seen) return false;
+    return Date.now() - new Date(profile.last_seen).getTime() < 60 * 1000; // 1 min
   }
 
   function formatAgoNoMonths(ts) {
@@ -126,9 +189,12 @@ export default function FriendsPage() {
 
       let profiles = [];
       if (profileIds.size > 0) {
+        // ✅ CHANGED: last_active -> is_online, last_seen
         const { data: profData, error: profErr } = await supabase
           .from("profiles")
-          .select("id, username, handle, display_name, avatar_url, bio, last_active")
+          .select(
+            "id, username, handle, display_name, avatar_url, bio, is_online, last_seen"
+          )
           .in("id", Array.from(profileIds));
 
         if (profErr) console.error("profiles select error:", profErr);
@@ -407,7 +473,6 @@ export default function FriendsPage() {
 
         {!showAddBox && successMsg && <p style={successStyle}>{successMsg}</p>}
       </section>
-
       {/* INCOMING REQUESTS */}
       {incoming.length > 0 && (
         <section style={card}>
@@ -415,13 +480,24 @@ export default function FriendsPage() {
 
           {incoming.map((req) => {
             const p = req.profile;
+            const online = isOnline(p);
+            const lastAgo = formatAgoNoMonths(p?.last_seen);
+            const status = online
+              ? "Online"
+              : p?.last_seen
+              ? `Last seen ${lastAgo} ago`
+              : "Offline";
+
             return (
               <div key={req.id} style={rowBase}>
                 <div style={rowLeft}>
-                  <div style={avatarCircle}>{initialsLetter(p)}</div>
+                  <div style={avatarCircle}>
+                    {initialsLetter(p)}
+                    {online && <span style={onlineDot} />}
+                  </div>
                   <div>
                     <p style={nameText}>{pickDisplayName(p)}</p>
-                    <p style={subText}>Wants to add you</p>
+                    <p style={subText}>Wants to add you · {status}</p>
                   </div>
                 </div>
 
@@ -446,13 +522,24 @@ export default function FriendsPage() {
 
           {outgoing.map((req) => {
             const p = req.profile;
+            const online = isOnline(p);
+            const lastAgo = formatAgoNoMonths(p?.last_seen);
+            const status = online
+              ? "Online"
+              : p?.last_seen
+              ? `Last seen ${lastAgo} ago`
+              : "Offline";
+
             return (
               <div key={req.id} style={rowBase}>
                 <div style={rowLeft}>
-                  <div style={avatarCircle}>{initialsLetter(p)}</div>
+                  <div style={avatarCircle}>
+                    {initialsLetter(p)}
+                    {online && <span style={onlineDot} />}
+                  </div>
                   <div>
                     <p style={nameText}>{pickDisplayName(p)}</p>
-                    <p style={subText}>Pending</p>
+                    <p style={subText}>Pending · {status}</p>
                   </div>
                 </div>
 
@@ -475,8 +562,9 @@ export default function FriendsPage() {
               key={p.id}
               meId={user?.id}
               friend={p}
-              online={isOnline(p.last_active)}
-              lastActiveAgo={formatAgoNoMonths(p.last_active)}
+              // ✅ CHANGED: use is_online + last_seen
+              online={isOnline(p)}
+              lastActiveAgo={formatAgoNoMonths(p?.last_seen)}
               preview={oneLinePreview(lastByFriend[p.id]?.text)}
               unread={!!unreadByFriend[p.id]}
               onOpenChat={() => navigate(`/chat/${p.id}`)}
@@ -519,12 +607,13 @@ function FriendRow({
     return { onTouchStart, onTouchMove, isTap };
   })();
 
-  const displayName = friend?.display_name || friend?.username || friend?.handle || "Unknown";
+  const displayName =
+    friend?.display_name || friend?.username || friend?.handle || "Unknown";
   const letter = (displayName || "?").trim().charAt(0).toUpperCase();
 
   const rightText = online
     ? "Online"
-    : `Offline${lastActiveAgo ? ` · ${lastActiveAgo}` : ""}`;
+    : `Last seen${lastActiveAgo ? ` · ${lastActiveAgo} ago` : ""}`;
 
   const rowStyle = {
     ...rowClickable,
@@ -692,7 +781,8 @@ const rowClickable = {
 
 const rowUnreadGlow = {
   border: "1px solid rgba(255,47,47,0.35)",
-  boxShadow: "0 0 0 1px rgba(255,47,47,0.18), 0 10px 30px rgba(255,47,47,0.10)",
+  boxShadow:
+    "0 0 0 1px rgba(255,47,47,0.18), 0 10px 30px rgba(255,47,47,0.10)",
 };
 
 const rowLeft = {
@@ -736,7 +826,6 @@ const onlineDot = {
   border: "2px solid #000",
   boxShadow: "0 0 10px rgba(31,191,97,0.45)",
 };
-
 const nameText = {
   fontSize: 16,
   fontWeight: 800,
