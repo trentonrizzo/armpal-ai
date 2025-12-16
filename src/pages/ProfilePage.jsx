@@ -1,5 +1,11 @@
 // src/pages/ProfilePage.jsx
-import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import { supabase } from "../supabaseClient";
 import Cropper from "react-easy-crop";
 import { FiSettings, FiEdit2 } from "react-icons/fi";
@@ -13,51 +19,34 @@ import { FiSettings, FiEdit2 } from "react-icons/fi";
  *    - Notifications toggle (asks permission on iOS + subscribes)
  *    - Account info collapse
  *    - Logout confirm
- *
- * IMPORTANT:
- * - This file assumes you already set up:
- *   - public/sw.js (service worker)
- *   - push_subscriptions table + policies (you did)
- * - This file DOES NOT delete features. It restores a full profile UI.
  */
 
-/* ---------------------------
-   Push Helpers (PWA)
-   --------------------------- */
+/* ============================
+   PUSH HELPERS (PWA)
+============================ */
 
 /**
  * Base64 URL -> Uint8Array (for VAPID key)
  */
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const base64 = (base64String + padding)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
   const raw = window.atob(base64);
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
-/**
- * Gets a VAPID public key from wherever you already stored it.
- * - Tries common places without you editing:
- *   1) window.VAPID_PUBLIC_KEY (if you set it)
- *   2) localStorage "VAPID_PUBLIC_KEY"
- *   3) import.meta.env.VITE_VAPID_PUBLIC_KEY (vite env)
- *
- * If none exist, notifications toggle will still show,
- * but enabling will alert you what’s missing.
- */
 function getVapidPublicKey() {
-  // 1) global
   if (typeof window !== "undefined" && window.VAPID_PUBLIC_KEY) {
     return String(window.VAPID_PUBLIC_KEY);
   }
 
-  // 2) localStorage
   try {
     const ls = localStorage.getItem("VAPID_PUBLIC_KEY");
     if (ls) return String(ls);
   } catch (e) {}
 
-  // 3) Vite env (only works if set in your deployment)
   try {
     if (import.meta?.env?.VITE_VAPID_PUBLIC_KEY) {
       return String(import.meta.env.VITE_VAPID_PUBLIC_KEY);
@@ -67,11 +56,6 @@ function getVapidPublicKey() {
   return null;
 }
 
-/**
- * Save subscription to Supabase.
- * Table: push_subscriptions
- * Columns you created: id, user_id, endpoint, p256dh, auth, created_at
- */
 async function saveSubscriptionToSupabase(userId, subscription) {
   const json = subscription.toJSON();
 
@@ -79,8 +63,6 @@ async function saveSubscriptionToSupabase(userId, subscription) {
   const p256dh = json?.keys?.p256dh || null;
   const auth = json?.keys?.auth || null;
 
-  // Upsert: one row per endpoint per user (simple approach)
-  // If you want strict uniqueness later, add a unique index on (user_id, endpoint)
   const { error } = await supabase.from("push_subscriptions").upsert(
     {
       user_id: userId,
@@ -95,9 +77,6 @@ async function saveSubscriptionToSupabase(userId, subscription) {
   if (error) throw error;
 }
 
-/**
- * Remove a subscription from Supabase.
- */
 async function removeSubscriptionFromSupabase(userId, endpoint) {
   const { error } = await supabase
     .from("push_subscriptions")
@@ -108,50 +87,35 @@ async function removeSubscriptionFromSupabase(userId, endpoint) {
   if (error) throw error;
 }
 
-/**
- * Ensure service worker is ready.
- */
 async function getServiceWorkerRegistration() {
   if (!("serviceWorker" in navigator)) {
-    throw new Error("Service Worker not supported on this device/browser.");
+    throw new Error("Service Worker not supported");
   }
-  const reg = await navigator.serviceWorker.ready;
-  return reg;
+  return navigator.serviceWorker.ready;
 }
 
-/**
- * Returns current push subscription (or null).
- */
 async function getExistingPushSubscription() {
   const reg = await getServiceWorkerRegistration();
-  const sub = await reg.pushManager.getSubscription();
-  return sub;
+  return reg.pushManager.getSubscription();
 }
 
-/**
- * Subscribe the user to push.
- */
 async function subscribeToPush(userId) {
   if (!("Notification" in window)) {
-    throw new Error("Notifications not supported on this device/browser.");
+    throw new Error("Notifications not supported");
   }
 
-  // Ask permission (iOS will show the prompt)
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
-    throw new Error("Notification permission was not granted.");
+    throw new Error("Notification permission denied");
   }
 
   const vapidPublicKey = getVapidPublicKey();
   if (!vapidPublicKey) {
-    throw new Error(
-      "Missing VAPID public key. Set window.VAPID_PUBLIC_KEY or localStorage VAPID_PUBLIC_KEY or VITE_VAPID_PUBLIC_KEY."
-    );
+    throw new Error("Missing VAPID public key");
   }
 
   const reg = await getServiceWorkerRegistration();
 
-  // Subscribe (or get existing)
   let subscription = await reg.pushManager.getSubscription();
   if (!subscription) {
     subscription = await reg.pushManager.subscribe({
@@ -161,31 +125,22 @@ async function subscribeToPush(userId) {
   }
 
   await saveSubscriptionToSupabase(userId, subscription);
-
   return subscription;
 }
 
-/**
- * Unsubscribe the user from push.
- */
 async function unsubscribeFromPush(userId) {
   const reg = await getServiceWorkerRegistration();
   const subscription = await reg.pushManager.getSubscription();
-
   if (!subscription) return;
 
   const endpoint = subscription.endpoint;
-
-  // Unsubscribe browser
   await subscription.unsubscribe();
-
-  // Remove row
   await removeSubscriptionFromSupabase(userId, endpoint);
 }
 
-/* ---------------------------
-   UI Helpers
-   --------------------------- */
+/* ============================
+   UI HELPERS
+============================ */
 
 function SoftCard({ title, value, sub }) {
   return (
@@ -199,34 +154,18 @@ function SoftCard({ title, value, sub }) {
         minWidth: 0,
       }}
     >
-      <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1 }}>{value}</div>
-      {sub ? <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>{sub}</div> : null}
+      <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1 }}>
+        {value}
+      </div>
+      {sub ? (
+        <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>
+          {sub}
+        </div>
+      ) : null}
     </div>
-  );
-}
-
-function RowButton({ left, right, onClick, danger }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "12px 12px",
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: danger ? "rgba(255,47,47,0.10)" : "#0d0d0f",
-        color: danger ? "#ff6464" : "white",
-        cursor: "pointer",
-        textAlign: "left",
-      }}
-    >
-      <span style={{ fontSize: 14, fontWeight: 600 }}>{left}</span>
-      <span style={{ fontSize: 12, opacity: 0.75 }}>{right}</span>
-    </button>
   );
 }
 
@@ -240,14 +179,17 @@ function TogglePill({ on, disabled, onClick }) {
         height: 30,
         borderRadius: 999,
         border: "1px solid rgba(255,255,255,0.14)",
-        background: disabled ? "#222" : on ? "rgba(255,47,47,0.95)" : "#1a1a1a",
+        background: disabled
+          ? "#222"
+          : on
+          ? "rgba(255,47,47,0.95)"
+          : "#1a1a1a",
         padding: 2,
         cursor: disabled ? "not-allowed" : "pointer",
         display: "flex",
         alignItems: "center",
         justifyContent: on ? "flex-end" : "flex-start",
       }}
-      aria-label="toggle"
     >
       <div
         style={{
@@ -262,25 +204,30 @@ function TogglePill({ on, disabled, onClick }) {
   );
 }
 
-/* ---------------------------
-   Main Component
-   --------------------------- */
+/* ============================
+   MAIN COMPONENT (START)
+============================ */
 
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // EXISTING FIELDS
+  // Profile fields
   const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [handle, setHandle] = useState("");
+  const [handleStatus, setHandleStatus] = useState(null);
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
 
-  // NEW FIELDS
-  const [displayName, setDisplayName] = useState("");
-  const [handle, setHandle] = useState("");
-  const [handleStatus, setHandleStatus] = useState(null); // valid, invalid, taken
+  // Stats
+  const [stats, setStats] = useState({
+    prs: 0,
+    workouts: 0,
+    measurements: 0,
+  });
 
-  // Upload/crop
+  // Avatar / crop
   const [uploading, setUploading] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -290,29 +237,24 @@ export default function ProfilePage() {
 
   const fileInputRef = useRef(null);
 
-  // Settings drawer
+  // Settings / notifications
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAccountInfo, setShowAccountInfo] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  // Notifications toggle state
   const [notifSupported, setNotifSupported] = useState(false);
-  const [notifPermission, setNotifPermission] = useState("default"); // default|granted|denied
+  const [notifPermission, setNotifPermission] = useState("default");
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
-
-  // Stats (optional)
-  const [stats, setStats] = useState({
-    prs: 0,
-    workouts: 0,
-    measurements: 0,
-  });
 
   useEffect(() => {
     loadProfile();
     initNotificationState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /* ============================
+     LOAD PROFILE + STATS
+  ============================ */
 
   async function loadProfile() {
     try {
@@ -339,7 +281,6 @@ export default function ProfilePage() {
       setDisplayName(data?.display_name || "");
       setHandle(data?.handle || "");
 
-      // Pull optional stats (won’t crash if tables don’t exist)
       await loadStats(authUser.id);
     } catch (err) {
       console.error("Error loading profile:", err);
@@ -351,7 +292,6 @@ export default function ProfilePage() {
   async function loadStats(userId) {
     const next = { prs: 0, workouts: 0, measurements: 0 };
 
-    // PRs
     try {
       const { count } = await supabase
         .from("prs")
@@ -360,7 +300,6 @@ export default function ProfilePage() {
       next.prs = count || 0;
     } catch (e) {}
 
-    // Workouts
     try {
       const { count } = await supabase
         .from("workouts")
@@ -369,7 +308,6 @@ export default function ProfilePage() {
       next.workouts = count || 0;
     } catch (e) {}
 
-    // Measurements
     try {
       const { count } = await supabase
         .from("measurements")
@@ -381,9 +319,9 @@ export default function ProfilePage() {
     setStats(next);
   }
 
-  /* ---------------------------
-     Handle Validation
-     --------------------------- */
+  /* ============================
+     HANDLE VALIDATION
+  ============================ */
 
   function validateHandle(h) {
     return /^[a-z0-9_]{3,20}$/.test(h);
@@ -393,14 +331,17 @@ export default function ProfilePage() {
     const clean = (val || "").toLowerCase();
     setHandle(clean);
 
+    if (!clean) {
+      setHandleStatus(null);
+      return;
+    }
+
     if (!validateHandle(clean)) {
       setHandleStatus("invalid");
       return;
     }
 
-    // Must have user loaded for .neq
-    const myId = user?.id;
-    if (!myId) {
+    if (!user?.id) {
       setHandleStatus("valid");
       return;
     }
@@ -409,15 +350,15 @@ export default function ProfilePage() {
       .from("profiles")
       .select("id")
       .eq("handle", clean)
-      .neq("id", myId);
+      .neq("id", user.id);
 
     if (data?.length) setHandleStatus("taken");
     else setHandleStatus("valid");
   }
 
-  /* ---------------------------
-     Cropping
-     --------------------------- */
+  /* ============================
+     AVATAR CROPPING
+  ============================ */
 
   const getCroppedImg = async (imageSrc, pixelCrop) => {
     return new Promise((resolve, reject) => {
@@ -488,21 +429,28 @@ export default function ProfilePage() {
 
       setUploading(true);
 
-      const croppedBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
+      const croppedBlob = await getCroppedImg(
+        selectedImage,
+        croppedAreaPixels
+      );
       const filePath = `${user.id}-${Date.now()}.jpg`;
 
       const { error } = await supabase.storage
         .from("avatars")
-        .upload(filePath, croppedBlob, { upsert: true, contentType: "image/jpeg" });
+        .upload(filePath, croppedBlob, {
+          upsert: true,
+          contentType: "image/jpeg",
+        });
 
       if (error) throw error;
 
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
 
       const publicUrl = urlData?.publicUrl || "";
       setAvatarUrl(publicUrl);
 
-      // Save avatar_url to profile immediately (so it persists)
       await supabase
         .from("profiles")
         .upsert({ id: user.id, avatar_url: publicUrl });
@@ -511,7 +459,7 @@ export default function ProfilePage() {
       setSelectedImage(null);
     } catch (err) {
       console.error(err);
-      alert("Avatar upload failed: " + (err?.message || "unknown error"));
+      alert("Avatar upload failed");
     } finally {
       setUploading(false);
     }
@@ -520,12 +468,15 @@ export default function ProfilePage() {
   async function removeAvatar() {
     setAvatarUrl("");
     if (!user) return;
-    await supabase.from("profiles").upsert({ id: user.id, avatar_url: "" });
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      avatar_url: "",
+    });
   }
 
-  /* ---------------------------
-     Save Profile
-     --------------------------- */
+  /* ============================
+     SAVE PROFILE
+  ============================ */
 
   async function saveProfile() {
     try {
@@ -545,8 +496,6 @@ export default function ProfilePage() {
         username: username || "",
         bio: bio || "",
         avatar_url: avatarUrl || "",
-
-        // new
         display_name: displayName || "",
         handle: handle ? handle : null,
       };
@@ -555,24 +504,15 @@ export default function ProfilePage() {
       if (error) throw error;
 
       alert("Profile saved!");
+      await loadProfile();
     } catch (err) {
-      alert("Error saving profile: " + (err?.message || "unknown error"));
+      alert("Error saving profile");
     }
   }
 
-  async function logout() {
-    await supabase.auth.signOut();
-    window.location.href = "/auth";
-  }
-
-  function openSettings() {
-    setSettingsOpen(true);
-    setShowAccountInfo(false);
-  }
-
-  /* ---------------------------
-     Notifications
-     --------------------------- */
+  /* ============================
+     NOTIFICATIONS
+  ============================ */
 
   function initNotificationState() {
     const supported =
@@ -589,7 +529,6 @@ export default function ProfilePage() {
       setNotifPermission("default");
     }
 
-    // Check subscription
     setTimeout(async () => {
       try {
         if (!supported) return;
@@ -605,31 +544,28 @@ export default function ProfilePage() {
     if (!user) return;
 
     if (!notifSupported) {
-      alert("Push notifications are not supported on this device/browser.");
+      alert("Push notifications not supported.");
       return;
     }
 
     setNotifBusy(true);
 
     try {
-      // Turning ON
       if (!notifEnabled) {
         await subscribeToPush(user.id);
         setNotifEnabled(true);
         setNotifPermission("granted");
-        alert("Notifications enabled ✅");
+        alert("Notifications enabled");
       } else {
-        // Turning OFF
         await unsubscribeFromPush(user.id);
         setNotifEnabled(false);
-        alert("Notifications disabled.");
+        alert("Notifications disabled");
       }
     } catch (err) {
       console.error(err);
       alert(err?.message || "Notification setup failed.");
     } finally {
       setNotifBusy(false);
-      // Re-check actual subscription state
       try {
         const existing = await getExistingPushSubscription();
         setNotifEnabled(!!existing);
@@ -637,22 +573,26 @@ export default function ProfilePage() {
     }
   }
 
-  /* ---------------------------
-     Derived UI
-     --------------------------- */
+  /* ============================
+     DERIVED UI
+  ============================ */
 
   const handleHelper = useMemo(() => {
     if (!handle) return null;
     if (handleStatus === "invalid")
-      return { text: "Only letters, numbers, underscores (3–20).", color: "#ff5a5a" };
-    if (handleStatus === "taken") return { text: "Handle already taken.", color: "#ff5a5a" };
-    if (handleStatus === "valid") return { text: "Available ✓", color: "#4ade80" };
+      return {
+        text: "Only letters, numbers, underscores (3–20).",
+        color: "#ff5a5a",
+      };
+    if (handleStatus === "taken")
+      return { text: "Handle already taken.", color: "#ff5a5a" };
+    if (handleStatus === "valid")
+      return { text: "Available ✓", color: "#4ade80" };
     return null;
   }, [handle, handleStatus]);
-
-  /* ---------------------------
-     Render
-     --------------------------- */
+  /* ============================
+     RENDER
+  ============================ */
 
   return (
     <>
@@ -667,7 +607,7 @@ export default function ProfilePage() {
               margin: "0 auto",
             }}
           >
-            {/* HEADER */}
+            {/* ================= HEADER ================= */}
             <div
               style={{
                 display: "flex",
@@ -677,14 +617,19 @@ export default function ProfilePage() {
               }}
             >
               <div>
-                <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 2 }}>Profile</h1>
+                <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 2 }}>
+                  Profile
+                </h1>
                 <div style={{ fontSize: 12, opacity: 0.6 }}>
-                  {user?.email ? user.email : " "}
+                  {user?.email || ""}
                 </div>
               </div>
 
               <button
-                onClick={openSettings}
+                onClick={() => {
+                  setSettingsOpen(true);
+                  setShowAccountInfo(false);
+                }}
                 style={{
                   background: "#111",
                   borderRadius: "999px",
@@ -702,14 +647,22 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            {/* STATS */}
+            {/* ================= STATS ================= */}
             <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
               <SoftCard title="PRs" value={stats.prs} sub="Total PR entries" />
-              <SoftCard title="Workouts" value={stats.workouts} sub="Saved workouts" />
-              <SoftCard title="Measures" value={stats.measurements} sub="Logged measurements" />
+              <SoftCard
+                title="Workouts"
+                value={stats.workouts}
+                sub="Saved workouts"
+              />
+              <SoftCard
+                title="Measures"
+                value={stats.measurements}
+                sub="Logged measurements"
+              />
             </div>
 
-            {/* MAIN CARD */}
+            {/* ================= PROFILE CARD ================= */}
             <div
               style={{
                 background: "#070708",
@@ -719,67 +672,21 @@ export default function ProfilePage() {
                 marginBottom: 16,
               }}
             >
-             {/* AVATAR */}
-<div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
-  <div style={{ position: "relative", width: 92, height: 92 }}>
-    <img
-      src={avatarUrl || "https://via.placeholder.com/120?text=No+Avatar"}
-      alt="avatar"
-      style={{
-        width: 92,
-        height: 92,
-        objectFit: "cover",
-        borderRadius: "999px",
-        border: "2px solid rgba(255,255,255,0.10)",
-        background: "#0a0a0a",
-      }}
-    />
-
-    {/* hidden file input */}
-    <input
-      ref={fileInputRef}
-      type="file"
-      accept="image/*"
-      onChange={onSelectFile}
-      style={{ display: "none" }}
-    />
-
-    {/* pencil icon ONLY */}
-    <button
-      onClick={() => fileInputRef.current?.click()}
-      style={{
-        position: "absolute",
-        right: -2,
-        bottom: -2,
-        width: 32,
-        height: 32,
-        borderRadius: "999px",
-        background: "#111",
-        border: "1px solid rgba(255,255,255,0.25)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        boxShadow: "0 6px 14px rgba(0,0,0,0.5)",
-      }}
-      aria-label="Change profile picture"
-    >
-      <FiEdit2 size={16} color="#ffffff" />
-    </button>
-  </div>
-
-  <div style={{ flex: 1, minWidth: 0 }}>
-    <div style={{ fontSize: 12, opacity: 0.7 }}>
-      Profile picture
-    </div>
-    <div style={{ fontSize: 12, opacity: 0.45, marginTop: 4 }}>
-      Tap the pencil to change
-    </div>
-  </div>
-</div>
+              {/* AVATAR */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  alignItems: "center",
+                  marginBottom: 14,
+                }}
+              >
                 <div style={{ position: "relative", width: 92, height: 92 }}>
                   <img
-                    src={avatarUrl || "https://via.placeholder.com/120?text=No+Avatar"}
+                    src={
+                      avatarUrl ||
+                      "https://via.placeholder.com/120?text=No+Avatar"
+                    }
                     alt="avatar"
                     style={{
                       width: 92,
@@ -808,29 +715,37 @@ export default function ProfilePage() {
                       width: 32,
                       height: 32,
                       borderRadius: "999px",
-                      background: "#ff2f2f",
-                      border: "none",
+                      background: "#111",
+                      border: "1px solid rgba(255,255,255,0.25)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
-                      boxShadow: "0 8px 18px rgba(255,47,47,0.25)",
+                      boxShadow: "0 6px 14px rgba(0,0,0,0.5)",
                     }}
-                    aria-label="Edit avatar"
+                    aria-label="Change profile picture"
                   >
-                    <FiEdit2 size={16} />
+                    <FiEdit2 size={16} color="#ffffff" />
                   </button>
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
                     Profile picture
                   </div>
-              
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.45,
+                      marginTop: 4,
+                    }}
+                  >
+                    Tap the pencil to change
+                  </div>
                 </div>
               </div>
 
-              {/* INPUTS GRID */}
+              {/* ================= INPUTS ================= */}
               <div
                 style={{
                   display: "grid",
@@ -840,7 +755,9 @@ export default function ProfilePage() {
               >
                 {/* Username */}
                 <div>
-                  <label style={{ fontSize: 12, opacity: 0.85 }}>Username</label>
+                  <label style={{ fontSize: 12, opacity: 0.85 }}>
+                    Username
+                  </label>
                   <input
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -860,7 +777,9 @@ export default function ProfilePage() {
 
                 {/* Display Name */}
                 <div>
-                  <label style={{ fontSize: 12, opacity: 0.85 }}>Display Name</label>
+                  <label style={{ fontSize: 12, opacity: 0.85 }}>
+                    Display Name
+                  </label>
                   <input
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
@@ -880,7 +799,9 @@ export default function ProfilePage() {
 
                 {/* Handle */}
                 <div>
-                  <label style={{ fontSize: 12, opacity: 0.85 }}>Handle (@username)</label>
+                  <label style={{ fontSize: 12, opacity: 0.85 }}>
+                    Handle (@username)
+                  </label>
                   <input
                     value={handle}
                     onChange={(e) => onHandleChange(e.target.value)}
@@ -897,11 +818,23 @@ export default function ProfilePage() {
                     }}
                   />
                   {handleHelper ? (
-                    <div style={{ marginTop: 6, fontSize: 12, color: handleHelper.color }}>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 12,
+                        color: handleHelper.color,
+                      }}
+                    >
                       {handleHelper.text}
                     </div>
                   ) : (
-                    <div style={{ marginTop: 6, fontSize: 12, opacity: 0.55 }}>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 12,
+                        opacity: 0.55,
+                      }}
+                    >
                       3–20 chars. letters, numbers, underscores only.
                     </div>
                   )}
@@ -951,7 +884,7 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            {/* QUICK SETTINGS PREVIEW (so “notifications” is visible even before opening drawer) */}
+            {/* ================= QUICK SETTINGS ================= */}
             <div
               style={{
                 background: "#070708",
@@ -960,7 +893,15 @@ export default function ProfilePage() {
                 padding: 16,
               }}
             >
-              <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>Quick Settings</div>
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.75,
+                  marginBottom: 10,
+                }}
+              >
+                Quick Settings
+              </div>
 
               <div
                 style={{
@@ -973,23 +914,35 @@ export default function ProfilePage() {
                   background: "#0d0d0f",
                 }}
               >
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <div style={{ fontSize: 14, fontWeight: 800 }}>Notifications</div>
-                  <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800 }}>
+                    Notifications
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.6,
+                      marginTop: 2,
+                    }}
+                  >
                     {notifSupported
                       ? notifEnabled
                         ? "Enabled"
                         : "Disabled"
-                      : "Not supported on this device/browser"}
+                      : "Not supported"}
                   </div>
                 </div>
 
-                <TogglePill on={notifEnabled} disabled={!notifSupported || notifBusy} onClick={toggleNotifications} />
+                <TogglePill
+                  on={notifEnabled}
+                  disabled={!notifSupported || notifBusy}
+                  onClick={toggleNotifications}
+                />
               </div>
             </div>
           </div>
 
-          {/* CROPPER OVERLAY */}
+          {/* ================= CROPPER OVERLAY ================= */}
           {showCropper && (
             <div
               style={{
@@ -1037,7 +990,15 @@ export default function ProfilePage() {
                 style={{ width: "86%", marginTop: 18 }}
               />
 
-              <div style={{ marginTop: 16, display: "flex", gap: 12, width: "92%", maxWidth: 360 }}>
+              <div
+                style={{
+                  marginTop: 16,
+                  display: "flex",
+                  gap: 12,
+                  width: "92%",
+                  maxWidth: 360,
+                }}
+              >
                 <button
                   onClick={() => {
                     setShowCropper(false);
@@ -1076,7 +1037,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* SETTINGS DRAWER */}
+          {/* ================= SETTINGS DRAWER ================= */}
           {settingsOpen && (
             <div
               style={{
@@ -1103,99 +1064,44 @@ export default function ProfilePage() {
                   flexDirection: "column",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
-                  <button
-                    onClick={() => setSettingsOpen(false)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "rgba(255,255,255,0.75)",
-                      fontSize: 26,
-                      cursor: "pointer",
-                    }}
-                    aria-label="Close"
-                  >
-                    ×
-                  </button>
-                </div>
+                <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
 
-                {/* NOTIFICATIONS ROW */}
+                {/* NOTIFICATIONS */}
                 <div style={{ marginTop: 14 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "12px 12px",
-                      borderRadius: 14,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "#0d0d0f",
-                    }}
-                  >
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <div style={{ fontSize: 14, fontWeight: 900 }}>Notifications</div>
-                      <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
-                        {notifSupported
-                          ? notifEnabled
-                            ? "On"
-                            : "Off"
-                          : "Not supported"}
-                        {notifSupported && notifPermission === "denied" ? " • Permission denied" : ""}
-                      </div>
-                    </div>
-
-                    <TogglePill on={notifEnabled} disabled={!notifSupported || notifBusy} onClick={toggleNotifications} />
-                  </div>
-
-                  {notifSupported ? (
-                    <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8, lineHeight: 1.35 }}>
-                      Turn this ON to get chat message notifications. If iOS prompts you, hit <b>Allow</b>.
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8, lineHeight: 1.35 }}>
-                      Push requires a supported browser + PWA install + service worker.
-                    </div>
-                  )}
+                  <TogglePill
+                    on={notifEnabled}
+                    disabled={!notifSupported || notifBusy}
+                    onClick={toggleNotifications}
+                  />
                 </div>
 
                 {/* ACCOUNT */}
                 <button
                   onClick={() => setShowAccountInfo((p) => !p)}
                   style={{
-                    textAlign: "left",
-                    padding: "12px 2px",
                     marginTop: 18,
                     background: "transparent",
                     border: "none",
                     color: "white",
-                    fontSize: 14,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    cursor: "pointer",
                     fontWeight: 900,
+                    cursor: "pointer",
                   }}
                 >
-                  <span>Account</span>
-                  <span style={{ opacity: 0.7 }}>{showAccountInfo ? "˄" : "˅"}</span>
+                  Account {showAccountInfo ? "˄" : "˅"}
                 </button>
 
                 {showAccountInfo && (
-                  <div style={{ fontSize: 13, opacity: 0.9, paddingBottom: 12 }}>
-                    <div style={{ opacity: 0.6, fontSize: 11 }}>Email</div>
-                    <div style={{ wordBreak: "break-word" }}>{user?.email}</div>
-
+                  <div style={{ fontSize: 13, opacity: 0.85 }}>
+                    <div style={{ fontSize: 11, opacity: 0.6 }}>Email</div>
+                    <div>{user?.email}</div>
                     <div style={{ height: 10 }} />
-
-                    <div style={{ opacity: 0.6, fontSize: 11 }}>User ID</div>
-                    <div style={{ wordBreak: "break-word", fontSize: 12 }}>{user?.id}</div>
+                    <div style={{ fontSize: 11, opacity: 0.6 }}>User ID</div>
+                    <div style={{ fontSize: 12 }}>{user?.id}</div>
                   </div>
                 )}
 
-                {/* SPACER */}
                 <div style={{ flex: 1 }} />
 
-                {/* LOG OUT */}
                 <button
                   onClick={() => setShowLogoutConfirm(true)}
                   style={{
@@ -1211,17 +1117,11 @@ export default function ProfilePage() {
                 >
                   Log out
                 </button>
-
-                <div style={{ height: 10 }} />
-
-                <div style={{ fontSize: 11, opacity: 0.45, textAlign: "center" }}>
-                  ArmPal • Profile Settings
-                </div>
               </div>
             </div>
           )}
 
-          {/* LOGOUT CONFIRM MODAL */}
+          {/* ================= LOGOUT CONFIRM ================= */}
           {showLogoutConfirm && (
             <div
               style={{
@@ -1247,7 +1147,15 @@ export default function ProfilePage() {
                   border: "1px solid rgba(255,255,255,0.10)",
                 }}
               >
-                <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 10 }}>Log out?</h2>
+                <h2
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 900,
+                    marginBottom: 10,
+                  }}
+                >
+                  Log out?
+                </h2>
 
                 <button
                   onClick={() => setShowLogoutConfirm(false)}
