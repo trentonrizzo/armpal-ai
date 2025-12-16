@@ -26,9 +26,6 @@ import FriendProfile from "./pages/FriendProfile";
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
 
-// Workout Share Overlay (SAFE, ISOLATED)
-import WorkoutShareOverlay from "./components/workouts/WorkoutShareOverlay";
-
 // OneSignal
 import { initOneSignal } from "./onesignal";
 
@@ -59,9 +56,6 @@ function AppContent() {
       </Routes>
 
       {!isChatRoute && <BottomNav />}
-
-      {/* Global workout share overlay (activates only on /workouts) */}
-      <WorkoutShareOverlay />
     </div>
   );
 }
@@ -70,7 +64,6 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // Load session once
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -86,7 +79,6 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // Init OneSignal ONLY when session exists
   useEffect(() => {
     if (!session) return;
     initOneSignal();
