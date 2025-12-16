@@ -4,11 +4,8 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
-
-// Auth
 import AuthPage from "./AuthPage";
 
-// Pages
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
 import MeasurementsPage from "./pages/MeasurementsPage";
@@ -23,29 +20,19 @@ import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
 
-// Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
-
-// Share button (SAFE)
-import WorkoutShareButton from "./components/workouts/WorkoutShareButton";
-
-// OneSignal
+import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
+import { FaShare } from "react-icons/fa";
 import { initOneSignal } from "./onesignal";
 
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
-
-  function handleShareClick() {
-    alert("Share clicked — logic comes next");
-  }
+  const isWorkouts = location.pathname === "/workouts";
+  const [openShare, setOpenShare] = useState(false);
 
   return (
-    <div
-      className={`bg-black text-white ${
-        isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
-      }`}
-    >
+    <div className={`bg-black text-white ${isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"}`}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/home" element={<HomePage />} />
@@ -64,8 +51,21 @@ function AppContent() {
 
       {!isChatRoute && <BottomNav />}
 
-      {/* GUARANTEED SHARE ICON */}
-      <WorkoutShareButton onClick={handleShareClick} />
+      {isWorkouts && (
+        <button
+          onClick={() => setOpenShare(true)}
+          style={{
+            position: "fixed", top: 14, right: 14, zIndex: 9999,
+            width: 44, height: 44, borderRadius: 999,
+            background: "#111", border: "1px solid rgba(255,255,255,0.15)",
+            color: "white",
+          }}
+        >
+          <FaShare />
+        </button>
+      )}
+
+      <ShareWorkoutsModal open={openShare} onClose={() => setOpenShare(false)} />
     </div>
   );
 }
@@ -76,30 +76,16 @@ export default function App() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setReady(true);
+      setSession(session); setReady(true);
     });
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      }
-    );
-
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (!session) return;
-    initOneSignal();
-  }, [session]);
+  useEffect(() => { if (session) initOneSignal(); }, [session]);
 
   if (!ready) return null;
   if (!session) return <AuthPage />;
 
-  return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
-  );
+  return <AppProvider><AppContent /></AppProvider>;
 }
