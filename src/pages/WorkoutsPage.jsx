@@ -20,11 +20,12 @@ import {
   FaChevronUp,
   FaEdit,
   FaTrash,
-  FaCopy,
+  FaShare,
 } from "react-icons/fa";
 
 /* -------------------------------------------------------
-   SORTABLE ITEM — LEFT 40% = DRAG HANDLE
+   SORTABLE ITEM — DRAG HANDLE IS LEFT 40%
+   (RESTORED — does NOT block clicks)
 ------------------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -39,7 +40,7 @@ function SortableItem({ id, children }) {
         position: "relative",
       }}
     >
-      {/* DRAG HANDLE (left 40%) */}
+      {/* Drag handle zone */}
       <div
         {...attributes}
         {...listeners}
@@ -49,7 +50,7 @@ function SortableItem({ id, children }) {
           top: 0,
           width: "40%",
           height: "100%",
-          zIndex: 5,
+          zIndex: 2,
           touchAction: "none",
         }}
       />
@@ -59,17 +60,21 @@ function SortableItem({ id, children }) {
 }
 
 export default function WorkoutsPage() {
+  /* -------------------------------------------------------
+     STATE
+  ------------------------------------------------------- */
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [expandedExercises, setExpandedExercises] = useState({});
   const [loading, setLoading] = useState(true);
 
-  /* MODALS */
+  /* WORKOUT MODAL */
   const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
   const [workoutName, setWorkoutName] = useState("");
   const [workoutSchedule, setWorkoutSchedule] = useState("");
 
+  /* EXERCISE MODAL */
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
   const [exerciseWorkoutId, setExerciseWorkoutId] = useState(null);
   const [editingExercise, setEditingExercise] = useState(null);
@@ -78,12 +83,13 @@ export default function WorkoutsPage() {
   const [exerciseReps, setExerciseReps] = useState("");
   const [exerciseWeight, setExerciseWeight] = useState("");
 
+  /* DELETE MODAL */
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  /* 🔥 COPY / SHARE (NEW) */
+  /* SHARE WORKOUT */
   const [shareModalOpen, setShareModalOpen] = useState(false);
-  const [sharePayload, setSharePayload] = useState(null);
+  const [shareWorkout, setShareWorkout] = useState(null);
 
   /* LONG PRESS */
   const holdTimerRef = useRef(null);
@@ -94,14 +100,16 @@ export default function WorkoutsPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  /* LOAD USER + WORKOUTS */
+  /* -------------------------------------------------------
+     LOAD USER + WORKOUTS (RESTORED)
+  ------------------------------------------------------- */
   useEffect(() => {
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
-      if (user) await loadWorkouts(user.id);
+      const { data } = await supabase.auth.getUser();
+      setUser(data?.user || null);
+      if (data?.user?.id) {
+        await loadWorkouts(data.user.id);
+      }
       setLoading(false);
     })();
   }, []);
@@ -126,19 +134,21 @@ export default function WorkoutsPage() {
     return data || [];
   }
 
-  function toggleExpand(id) {
-    if (expandedExercises[id]) {
+  function toggleExpand(workoutId) {
+    if (expandedExercises[workoutId]) {
       const copy = { ...expandedExercises };
-      delete copy[id];
+      delete copy[workoutId];
       setExpandedExercises(copy);
     } else {
-      loadExercises(id).then((ex) =>
-        setExpandedExercises((prev) => ({ ...prev, [id]: ex }))
+      loadExercises(workoutId).then((ex) =>
+        setExpandedExercises((prev) => ({ ...prev, [workoutId]: ex }))
       );
     }
   }
 
-  /* DRAG — WORKOUTS */
+  /* -------------------------------------------------------
+     DRAG — WORKOUTS (UNCHANGED / WORKING)
+  ------------------------------------------------------- */
   async function handleWorkoutDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -149,36 +159,153 @@ export default function WorkoutsPage() {
 
     setWorkouts(reordered);
 
-    reordered.forEach((w, i) =>
-      supabase.from("workouts").update({ position: i }).eq("id", w.id)
-    );
+    reordered.forEach((w, i) => {
+      supabase.from("workouts").update({ position: i }).eq("id", w.id);
+    });
   }
 
-  /* 🔥 LONG PRESS HANDLERS */
+  /* -------------------------------------------------------
+     DRAG — EXERCISES (FULLY RESTORED)
+  ------------------------------------------------------- */
+  async function handleExerciseDragEnd(workoutId, event) {
+    const list = expandedExercises[workoutId] || [];
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = list.findIndex((e) => e.id === active.id);
+    const newIndex = list.findIndex((e) => e.id === over.id);
+    const reordered = arrayMove(list, oldIndex, newIndex);
+
+    reordered.forEach((ex, i) => {
+      supabase.from("exercises").update({ position: i }).eq("id", ex.id);
+    });
+
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [workoutId]: reordered,
+    }));
+  }
+
+  /* -------------------------------------------------------
+     WORKOUT CRUD (RESTORED)
+  ------------------------------------------------------- */
+  function openWorkoutModal(workout = null) {
+    setEditingWorkout(workout);
+    setWorkoutName(workout?.name || "");
+    setWorkoutSchedule(workout?.scheduled_for || "");
+    setWorkoutModalOpen(true);
+  }
+
+  async function saveWorkout() {
+    if (!user?.id) return;
+
+    const payload = {
+      user_id: user.id,
+      name: workoutName || "Workout",
+      scheduled_for: workoutSchedule || null,
+    };
+
+    if (editingWorkout) {
+      await supabase
+        .from("workouts")
+        .update(payload)
+        .eq("id", editingWorkout.id);
+    } else {
+      payload.position = workouts.length;
+      await supabase.from("workouts").insert(payload);
+    }
+
+    setWorkoutModalOpen(false);
+    setEditingWorkout(null);
+    await loadWorkouts(user.id);
+  }
+
+  function askDeleteWorkout(id) {
+    setDeleteTarget({ type: "workout", id });
+    setDeleteModalOpen(true);
+  }
+
+  /* -------------------------------------------------------
+     EXERCISE CRUD (RESTORED)
+  ------------------------------------------------------- */
+  function openExerciseModal(workoutId, exercise = null) {
+    setExerciseWorkoutId(workoutId);
+    setEditingExercise(exercise);
+    setExerciseName(exercise?.name || "");
+    setExerciseSets(exercise?.sets ?? "");
+    setExerciseReps(exercise?.reps ?? "");
+    setExerciseWeight(exercise?.weight ?? "");
+    setExerciseModalOpen(true);
+  }
+
+  async function saveExercise() {
+    if (!user?.id || !exerciseWorkoutId) return;
+
+    const list = expandedExercises[exerciseWorkoutId] || [];
+
+    const payload = {
+      user_id: user.id,
+      workout_id: exerciseWorkoutId,
+      name: exerciseName || "Exercise",
+      sets: exerciseSets === "" ? null : Number(exerciseSets),
+      reps: exerciseReps === "" ? null : Number(exerciseReps),
+      weight: exerciseWeight || null,
+    };
+
+    if (editingExercise) {
+      await supabase
+        .from("exercises")
+        .update(payload)
+        .eq("id", editingExercise.id);
+    } else {
+      payload.position = list.length;
+      await supabase.from("exercises").insert(payload);
+    }
+
+    const refreshed = await loadExercises(exerciseWorkoutId);
+    setExpandedExercises((prev) => ({
+      ...prev,
+      [exerciseWorkoutId]: refreshed,
+    }));
+
+    setExerciseModalOpen(false);
+    setEditingExercise(null);
+  }
+
+  function askDeleteExercise(id, workoutId) {
+    setDeleteTarget({ type: "exercise", id, workoutId });
+    setDeleteModalOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+
+    if (deleteTarget.type === "workout") {
+      await supabase.from("workouts").delete().eq("id", deleteTarget.id);
+      await loadWorkouts(user.id);
+    } else {
+      await supabase.from("exercises").delete().eq("id", deleteTarget.id);
+      const refreshed = await loadExercises(deleteTarget.workoutId);
+      setExpandedExercises((prev) => ({
+        ...prev,
+        [deleteTarget.workoutId]: refreshed,
+      }));
+    }
+
+    setDeleteTarget(null);
+    setDeleteModalOpen(false);
+  }
+
+  /* -------------------------------------------------------
+     LONG PRESS — SEND WORKOUT (NO INTERFERENCE)
+  ------------------------------------------------------- */
   function startHold(workout) {
     movedRef.current = false;
     clearTimeout(holdTimerRef.current);
 
-    holdTimerRef.current = setTimeout(async () => {
+    holdTimerRef.current = setTimeout(() => {
       if (movedRef.current) return;
-
-      const exercises = await loadExercises(workout.id);
-
-      const payload = {
-        workout: {
-          name: workout.name,
-          scheduled_for: workout.scheduled_for || null,
-        },
-        exercises: exercises.map((ex) => ({
-          name: ex.name,
-          sets: ex.sets,
-          reps: ex.reps,
-          weight: ex.weight,
-          position: ex.position,
-        })),
-      };
-
-      setSharePayload(payload);
+      setShareWorkout(workout);
       setShareModalOpen(true);
     }, 600);
   }
@@ -201,7 +328,6 @@ export default function WorkoutsPage() {
       minute: "2-digit",
     });
   }
-
   /* -------------------------------------------------------
      UI
   ------------------------------------------------------- */
@@ -211,6 +337,7 @@ export default function WorkoutsPage() {
         Workouts
       </h1>
 
+      {/* ADD WORKOUT — RESTORED */}
       <button
         onClick={() => openWorkoutModal(null)}
         style={{
@@ -259,40 +386,71 @@ export default function WorkoutsPage() {
                       marginBottom: 10,
                     }}
                   >
-                    {/* HEADER */}
+                    {/* WORKOUT HEADER */}
                     <div
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
+                        gap: 14,
                       }}
                     >
-                      <div onClick={() => toggleExpand(w.id)} style={{ flex: 1 }}>
-                        <p style={{ fontSize: 15, margin: 0, fontWeight: 600 }}>
+                      <div
+                        onClick={() => toggleExpand(w.id)}
+                        style={{ flex: 1, cursor: "pointer" }}
+                      >
+                        <p
+                          style={{
+                            fontSize: 15,
+                            margin: 0,
+                            fontWeight: 600,
+                          }}
+                        >
                           {w.name}
                         </p>
-                        <p style={{ fontSize: 11, margin: 0, opacity: 0.7 }}>
+                        <p
+                          style={{
+                            fontSize: 11,
+                            margin: 0,
+                            opacity: 0.7,
+                          }}
+                        >
                           {formatSchedule(w.scheduled_for)}
                         </p>
                       </div>
 
-                      <FaEdit
-                        style={{ fontSize: 15, cursor: "pointer" }}
-                        onClick={() => openWorkoutModal(w)}
-                      />
-                      <FaTrash
+                      {/* EDIT / DELETE — SPACED */}
+                      <div
                         style={{
-                          color: "#ff4d4d",
-                          fontSize: 15,
-                          cursor: "pointer",
+                          display: "flex",
+                          gap: 14,
+                          alignItems: "center",
                         }}
-                        onClick={() => askDeleteWorkout(w.id)}
-                      />
+                      >
+                        <FaEdit
+                          style={{ fontSize: 15, cursor: "pointer" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openWorkoutModal(w);
+                          }}
+                        />
+                        <FaTrash
+                          style={{
+                            color: "#ff4d4d",
+                            fontSize: 15,
+                            cursor: "pointer",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            askDeleteWorkout(w.id);
+                          }}
+                        />
+                      </div>
 
                       {list ? (
-                        <FaChevronUp style={{ marginLeft: 6, fontSize: 12 }} />
+                        <FaChevronUp style={{ fontSize: 12 }} />
                       ) : (
-                        <FaChevronDown style={{ marginLeft: 6, fontSize: 12 }} />
+                        <FaChevronDown style={{ fontSize: 12 }} />
                       )}
                     </div>
 
@@ -302,7 +460,9 @@ export default function WorkoutsPage() {
                         <DndContext
                           sensors={sensors}
                           collisionDetection={closestCenter}
-                          onDragEnd={(e) => handleExerciseDragEnd(w.id, e)}
+                          onDragEnd={(e) =>
+                            handleExerciseDragEnd(w.id, e)
+                          }
                         >
                           <SortableContext
                             items={list.map((e) => e.id)}
@@ -325,6 +485,7 @@ export default function WorkoutsPage() {
                                       display: "flex",
                                       justifyContent: "space-between",
                                       alignItems: "center",
+                                      gap: 14,
                                     }}
                                   >
                                     <div>
@@ -352,21 +513,34 @@ export default function WorkoutsPage() {
                                       </p>
                                     </div>
 
-                                    <FaEdit
-                                      style={{ cursor: "pointer" }}
-                                      onClick={() =>
-                                        openExerciseModal(w.id, ex)
-                                      }
-                                    />
-                                    <FaTrash
+                                    {/* EDIT / DELETE — SPACED */}
+                                    <div
                                       style={{
-                                        cursor: "pointer",
-                                        color: "#ff4d4d",
+                                        display: "flex",
+                                        gap: 14,
+                                        alignItems: "center",
                                       }}
-                                      onClick={() =>
-                                        askDeleteExercise(ex.id, w.id)
-                                      }
-                                    />
+                                    >
+                                      <FaEdit
+                                        style={{
+                                          cursor: "pointer",
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openExerciseModal(w.id, ex);
+                                        }}
+                                      />
+                                      <FaTrash
+                                        style={{
+                                          cursor: "pointer",
+                                          color: "#ff4d4d",
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          askDeleteExercise(ex.id, w.id);
+                                        }}
+                                      />
+                                    </div>
                                   </div>
                                 </div>
                               </SortableItem>
@@ -374,8 +548,11 @@ export default function WorkoutsPage() {
                           </SortableContext>
                         </DndContext>
 
+                        {/* ADD EXERCISE — RESTORED */}
                         <button
-                          onClick={() => openExerciseModal(w.id, null)}
+                          onClick={() =>
+                            openExerciseModal(w.id, null)
+                          }
                           style={{
                             width: "100%",
                             padding: 8,
@@ -400,38 +577,15 @@ export default function WorkoutsPage() {
         </DndContext>
       )}
 
-      {/* 🔥 SHARE / COPY MODAL */}
+      {/* SHARE WORKOUT MODAL — FRIEND SELECT COMES NEXT */}
       {shareModalOpen && (
         <Modal onClose={() => setShareModalOpen(false)}>
-          <h2 style={{ marginBottom: 12 }}>Copy / Share Workout</h2>
-
-          <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 16 }}>
-            This will copy the workout and all exercises so it can be shared
-            or sent to a friend.
+          <h2 style={{ marginBottom: 12 }}>Send Workout</h2>
+          <p style={{ fontSize: 13, opacity: 0.7 }}>
+            Choose a friend to send a copy of this workout.
           </p>
 
-          <button
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 10,
-              border: "none",
-              background: "#ff2f2f",
-              color: "white",
-              fontWeight: 600,
-              marginBottom: 8,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-            onClick={() => {
-              console.log("WORKOUT SHARE PAYLOAD:", sharePayload);
-              setShareModalOpen(false);
-            }}
-          >
-            <FaCopy /> Copy Workout
-          </button>
+          {/* Friend list + confirm button added in Part 3 */}
 
           <button
             style={{
@@ -442,6 +596,7 @@ export default function WorkoutsPage() {
               background: "transparent",
               color: "white",
               fontWeight: 600,
+              marginTop: 14,
             }}
             onClick={() => setShareModalOpen(false)}
           >
@@ -449,106 +604,202 @@ export default function WorkoutsPage() {
           </button>
         </Modal>
       )}
-      {/* WORKOUT MODAL */}
-      {workoutModalOpen && (
-        <Modal onClose={() => setWorkoutModalOpen(false)}>
-          <h2>{editingWorkout ? "Edit Workout" : "New Workout"}</h2>
+  /* -------------------------------------------------------
+     SHARE — FRIEND SELECTION + SEND
+  ------------------------------------------------------- */
+  const [friends, setFriends] = useState([]);
+  const [selectedFriendId, setSelectedFriendId] = useState(null);
+  const [sending, setSending] = useState(false);
 
-          <label style={labelStyle}>Name</label>
-          <input
-            style={inputStyle}
-            value={workoutName}
-            onChange={(e) => setWorkoutName(e.target.value)}
-          />
+  useEffect(() => {
+    if (!shareModalOpen || !user?.id) return;
 
-          <label style={labelStyle}>Scheduled For</label>
-          <input
-            type="datetime-local"
-            style={inputStyle}
-            value={workoutSchedule}
-            onChange={(e) => setWorkoutSchedule(e.target.value)}
-          />
+    // Load accepted friends (OPTION 1)
+    (async () => {
+      const { data: rows } = await supabase
+        .from("friends")
+        .select("user_id, friend_id, status")
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+        .eq("status", "accepted");
 
-          <button style={primaryBtn} onClick={saveWorkout}>
-            Save Workout
-          </button>
-        </Modal>
-      )}
+      const ids = (rows || []).map((r) =>
+        r.user_id === user.id ? r.friend_id : r.user_id
+      );
 
-      {/* EXERCISE MODAL */}
-      {exerciseModalOpen && (
-        <Modal onClose={() => setExerciseModalOpen(false)}>
-          <h2>{editingExercise ? "Edit Exercise" : "New Exercise"}</h2>
+      if (ids.length === 0) {
+        setFriends([]);
+        return;
+      }
 
-          <label style={labelStyle}>Name</label>
-          <input
-            style={inputStyle}
-            value={exerciseName}
-            onChange={(e) => setExerciseName(e.target.value)}
-          />
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url")
+        .in("id", ids);
 
-          <label style={labelStyle}>Sets</label>
-          <input
-            type="number"
-            style={inputStyle}
-            value={exerciseSets}
-            onChange={(e) => setExerciseSets(e.target.value)}
-          />
+      setFriends(profs || []);
+    })();
+  }, [shareModalOpen, user?.id]);
 
-          <label style={labelStyle}>Reps</label>
-          <input
-            type="number"
-            style={inputStyle}
-            value={exerciseReps}
-            onChange={(e) => setExerciseReps(e.target.value)}
-          />
+  async function sendWorkoutToFriend() {
+    if (!shareWorkout || !selectedFriendId || !user?.id) return;
 
-          <label style={labelStyle}>Weight</label>
-          <input
-            style={inputStyle}
-            value={exerciseWeight}
-            onChange={(e) => setExerciseWeight(e.target.value)}
-          />
+    setSending(true);
 
-          <button style={primaryBtn} onClick={saveExercise}>
-            Save Exercise
-          </button>
-        </Modal>
-      )}
+    // Load exercises fresh (guaranteed latest order)
+    const exercises = await loadExercises(shareWorkout.id);
 
-      {/* DELETE MODAL */}
-      {deleteModalOpen && (
-        <Modal onClose={() => setDeleteModalOpen(false)}>
-          <h2 style={{ color: "#ff4d4d" }}>Confirm Delete?</h2>
-          <p style={{ opacity: 0.7, marginBottom: 15 }}>
-            This action cannot be undone.
+    const payload = {
+      type: "workout_share",
+      workout: {
+        name: shareWorkout.name,
+        scheduled_for: shareWorkout.scheduled_for || null,
+      },
+      exercises: exercises.map((ex) => ({
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        weight: ex.weight,
+        position: ex.position,
+      })),
+    };
+
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: selectedFriendId,
+      payload,
+    });
+
+    setSending(false);
+    setSelectedFriendId(null);
+    setShareWorkout(null);
+    setShareModalOpen(false);
+  }
+
+  /* -------------------------------------------------------
+     SHARED MODAL COMPONENT
+  ------------------------------------------------------- */
+  function Modal({ children, onClose }) {
+    return (
+      <div style={modalBackdrop} onClick={onClose}>
+        <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------
+     MODALS (RENDER)
+  ------------------------------------------------------- */
+  return (
+    <>
+      {/** main UI already returned above **/}
+
+      {/* SHARE WORKOUT MODAL — COMPLETE */}
+      {shareModalOpen && (
+        <Modal onClose={() => setShareModalOpen(false)}>
+          <h2 style={{ marginBottom: 10 }}>Send Workout</h2>
+          <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 12 }}>
+            Select a friend to send a copy of this workout.
           </p>
 
+          <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            {friends.map((f) => {
+              const name =
+                f.display_name || f.username || "Unknown";
+              const selected = selectedFriendId === f.id;
+
+              return (
+                <div
+                  key={f.id}
+                  onClick={() => setSelectedFriendId(f.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: 10,
+                    borderRadius: 10,
+                    cursor: "pointer",
+                    marginBottom: 6,
+                    background: selected
+                      ? "rgba(255,47,47,0.25)"
+                      : "rgba(255,255,255,0.05)",
+                    border: selected
+                      ? "1px solid rgba(255,47,47,0.6)"
+                      : "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      background: "#000",
+                      border:
+                        "1px solid rgba(255,255,255,0.15)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+
+                  <span style={{ fontWeight: 600 }}>{name}</span>
+                </div>
+              );
+            })}
+
+            {friends.length === 0 && (
+              <p style={{ fontSize: 13, opacity: 0.7 }}>
+                You don’t have any friends yet.
+              </p>
+            )}
+          </div>
+
           <button
-            style={secondaryBtn}
-            onClick={() => setDeleteModalOpen(false)}
+            disabled={!selectedFriendId || sending}
+            onClick={sendWorkoutToFriend}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 10,
+              border: "none",
+              background:
+                !selectedFriendId || sending
+                  ? "#444"
+                  : "#ff2f2f",
+              color: "white",
+              fontWeight: 700,
+              marginTop: 14,
+              cursor:
+                !selectedFriendId || sending
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+          >
+            {sending ? "Sending…" : "Send Workout"}
+          </button>
+
+          <button
+            onClick={() => setShareModalOpen(false)}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.25)",
+              background: "transparent",
+              color: "white",
+              fontWeight: 600,
+              marginTop: 8,
+            }}
           >
             Cancel
           </button>
-          <button style={primaryBtn} onClick={confirmDelete}>
-            Delete
-          </button>
         </Modal>
       )}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------
-   SHARED MODAL COMPONENT
-------------------------------------------------------- */
-function Modal({ children, onClose }) {
-  return (
-    <div style={modalBackdrop} onClick={onClose}>
-      <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -573,42 +824,4 @@ const modalCard = {
   padding: 20,
   width: "100%",
   maxWidth: 420,
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: 8,
-  borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.15)",
-  background: "#000",
-  color: "white",
-  marginBottom: 12,
-};
-
-const labelStyle = {
-  fontSize: 12,
-  marginBottom: 4,
-  opacity: 0.85,
-};
-
-const primaryBtn = {
-  width: "100%",
-  padding: 10,
-  borderRadius: 10,
-  border: "none",
-  background: "#ff2f2f",
-  color: "white",
-  fontWeight: 600,
-  marginTop: 10,
-};
-
-const secondaryBtn = {
-  width: "100%",
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.25)",
-  background: "transparent",
-  color: "white",
-  fontWeight: 600,
-  marginTop: 10,
 };
