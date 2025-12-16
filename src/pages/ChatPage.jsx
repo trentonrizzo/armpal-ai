@@ -12,11 +12,32 @@ function formatTime(ts) {
   });
 }
 
+function timeAgo(ts) {
+  if (!ts) return "";
+  const then = new Date(ts).getTime();
+  const now = Date.now();
+  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
+
+  if (diffSec < 10) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return `yesterday`;
+  return `${diffDay}d ago`;
+}
+
 export default function ChatPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
+  const [friend, setFriend] = useState(null); // ✅ presence target
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,17 +47,34 @@ export default function ChatPage() {
   const listRef = useRef(null);
   const holdTimer = useRef(null);
 
-  // Lock background scroll (PWA safe)
+  // Presence timers/refs
+  const idleTimer = useRef(null);
+  const heartbeatTimer = useRef(null);
+  const isOnlineRef = useRef(false);
+
+  // 🔒 Lock background scroll (PWA fix) — keep existing behavior
   useEffect(() => {
-    const prev = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.body.style.touchAction = "none";
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
       document.body.style.touchAction = "";
     };
   }, []);
 
+  async function loadFriendProfile() {
+    // ✅ Minimal fields, no UI changes besides presence
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, username, display_name, is_online, last_seen")
+      .eq("id", friendId)
+      .single();
+
+    if (!error) setFriend(data);
+  }
+
+  // Load user + messages
   async function loadMessages(uid) {
     setError("");
 
@@ -49,6 +87,7 @@ export default function ChatPage() {
       .order("created_at", { ascending: true });
 
     if (error) {
+      console.error(error);
       setError(error.message);
       return;
     }
@@ -73,7 +112,7 @@ export default function ChatPage() {
         return;
       }
 
-      await loadMessages(u.id);
+      await Promise.all([loadMessages(u.id), loadFriendProfile()]);
       setLoading(false);
     })();
 
@@ -82,7 +121,7 @@ export default function ChatPage() {
     };
   }, [friendId]);
 
-  // realtime messages
+  // Realtime messages (existing behavior)
   useEffect(() => {
     if (!user) return;
 
@@ -109,7 +148,30 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
-  // auto scroll
+  // ✅ Realtime friend presence updates
+  useEffect(() => {
+    if (!friendId) return;
+
+    const ch = supabase
+      .channel(`presence-friend-${friendId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const p = payload.new;
+          if (p?.id !== friendId) return;
+          setFriend((prev) => ({
+            ...(prev || {}),
+            ...p,
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(ch);
+  }, [friendId]);
+
+  // Auto scroll (existing)
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -146,9 +208,7 @@ export default function ChatPage() {
       return;
     }
 
-    const { data } = supabase.storage
-      .from("chat-images")
-      .getPublicUrl(path);
+    const { data } = supabase.storage.from("chat-images").getPublicUrl(path);
 
     await supabase.from("messages").insert({
       sender_id: user.id,
@@ -171,14 +231,157 @@ export default function ChatPage() {
     clearTimeout(holdTimer.current);
   }
 
+  // -------------------------
+  // ✅ Presence: set self online/offline + heartbeat + inactivity
+  // -------------------------
+  async function setMyPresence(online) {
+    if (!user?.id) return;
+
+    // Prevent spam
+    if (isOnlineRef.current === online) return;
+    isOnlineRef.current = online;
+
+    const payload = online
+      ? { is_online: true, last_seen: new Date().toISOString() }
+      : { is_online: false, last_seen: new Date().toISOString() };
+
+    await supabase.from("profiles").update(payload).eq("id", user.id);
+  }
+
+  function clearIdleTimer() {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = null;
+  }
+
+  function armIdleTimer() {
+    clearIdleTimer();
+    // If no activity for 2 minutes, mark offline (requested behavior)
+    idleTimer.current = setTimeout(() => {
+      setMyPresence(false);
+    }, 2 * 60 * 1000);
+  }
+
+  function startHeartbeat() {
+    if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
+    // Every 30s while active/visible, bump last_seen (keeps "Online" fresh)
+    heartbeatTimer.current = setInterval(() => {
+      if (!user?.id) return;
+      if (document.visibilityState !== "visible") return;
+      if (!isOnlineRef.current) return;
+
+      supabase
+        .from("profiles")
+        .update({ last_seen: new Date().toISOString() })
+        .eq("id", user.id);
+    }, 30 * 1000);
+  }
+
+  function stopHeartbeat() {
+    if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
+    heartbeatTimer.current = null;
+  }
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // On enter chat: online
+    setMyPresence(true);
+    armIdleTimer();
+    startHeartbeat();
+
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        setMyPresence(true);
+        armIdleTimer();
+      } else {
+        // When app/tab hidden: mark offline
+        setMyPresence(false);
+        clearIdleTimer();
+      }
+    };
+
+    const onActivity = () => {
+      // Any interaction brings you online and resets idle timer
+      if (document.visibilityState !== "visible") return;
+      setMyPresence(true);
+      armIdleTimer();
+    };
+
+    const onBeforeUnload = () => {
+      // Best effort
+      setMyPresence(false);
+    };
+
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    // Activity signals (touch + mouse + keyboard)
+    window.addEventListener("touchstart", onActivity, { passive: true });
+    window.addEventListener("mousemove", onActivity);
+    window.addEventListener("keydown", onActivity);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("touchstart", onActivity);
+      window.removeEventListener("mousemove", onActivity);
+      window.removeEventListener("keydown", onActivity);
+
+      clearIdleTimer();
+      stopHeartbeat();
+
+      // Leaving chat page: offline
+      setMyPresence(false);
+    };
+  }, [user?.id, friendId]);
+
+  // Friend status label + online dot logic
+  const friendName =
+    friend?.display_name || friend?.username || "Chat";
+
+  const friendOnline =
+    !!friend?.is_online &&
+    friend?.last_seen &&
+    Date.now() - new Date(friend.last_seen).getTime() <= 60 * 1000; // 60s freshness window
+
+  const friendStatus = friendOnline
+    ? "Online"
+    : friend?.last_seen
+    ? `Last seen ${timeAgo(friend.last_seen)}`
+    : "";
+
   return (
     <>
-      {/* HEADER */}
+      {/* HEADER (no redesign — just adds dot + status line) */}
       <div style={header}>
         <button onClick={() => navigate("/friends")} style={backBtn}>
           <FiArrowLeft size={22} />
         </button>
-        <strong>Chat</strong>
+
+        <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <strong>{friendName}</strong>
+
+            {/* green glow dot */}
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 999,
+                background: friendOnline ? "#2dff57" : "rgba(255,255,255,0.25)",
+                boxShadow: friendOnline
+                  ? "0 0 8px rgba(45,255,87,0.9)"
+                  : "none",
+              }}
+            />
+          </div>
+
+          {!!friendStatus && (
+            <div style={{ fontSize: 12, opacity: 0.9 }}>
+              {friendStatus}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* MESSAGES */}
@@ -275,7 +478,7 @@ export default function ChatPage() {
   );
 }
 
-/* STYLES */
+/* STYLES (unchanged except header content) */
 const header = {
   position: "fixed",
   top: 0,
