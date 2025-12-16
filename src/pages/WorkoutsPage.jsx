@@ -1,5 +1,5 @@
 // src/pages/WorkoutsPage.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import {
   DndContext,
@@ -15,11 +15,16 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
+import {
+  FaChevronDown,
+  FaChevronUp,
+  FaEdit,
+  FaTrash,
+  FaCopy,
+} from "react-icons/fa";
 
 /* -------------------------------------------------------
    SORTABLE ITEM — LEFT 40% = DRAG HANDLE
-   EVERYTHING ELSE = SCROLLABLE
 ------------------------------------------------------- */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -76,6 +81,14 @@ export default function WorkoutsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  /* 🔥 COPY / SHARE (NEW) */
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [sharePayload, setSharePayload] = useState(null);
+
+  /* LONG PRESS */
+  const holdTimerRef = useRef(null);
+  const movedRef = useRef(false);
+
   /* DRAG SENSOR */
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -84,7 +97,9 @@ export default function WorkoutsPage() {
   /* LOAD USER + WORKOUTS */
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       setUser(user);
       if (user) await loadWorkouts(user.id);
       setLoading(false);
@@ -139,122 +154,41 @@ export default function WorkoutsPage() {
     );
   }
 
-  /* DRAG — EXERCISES */
-  async function handleExerciseDragEnd(workoutId, event) {
-    const list = expandedExercises[workoutId] || [];
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+  /* 🔥 LONG PRESS HANDLERS */
+  function startHold(workout) {
+    movedRef.current = false;
+    clearTimeout(holdTimerRef.current);
 
-    const oldIndex = list.findIndex((e) => e.id === active.id);
-    const newIndex = list.findIndex((e) => e.id === over.id);
-    const reordered = arrayMove(list, oldIndex, newIndex);
+    holdTimerRef.current = setTimeout(async () => {
+      if (movedRef.current) return;
 
-    reordered.forEach((e, i) =>
-      supabase.from("exercises").update({ position: i }).eq("id", e.id)
-    );
+      const exercises = await loadExercises(workout.id);
 
-    setExpandedExercises((prev) => ({ ...prev, [workoutId]: reordered }));
+      const payload = {
+        workout: {
+          name: workout.name,
+          scheduled_for: workout.scheduled_for || null,
+        },
+        exercises: exercises.map((ex) => ({
+          name: ex.name,
+          sets: ex.sets,
+          reps: ex.reps,
+          weight: ex.weight,
+          position: ex.position,
+        })),
+      };
+
+      setSharePayload(payload);
+      setShareModalOpen(true);
+    }, 600);
   }
 
-  /* WORKOUT MODAL */
-  function openWorkoutModal(workout = null) {
-    setEditingWorkout(workout);
-    setWorkoutName(workout?.name || "");
-
-    // FIXED: DO NOT CONVERT TIMEZONES
-    setWorkoutSchedule(workout?.scheduled_for || "");
-
-    setWorkoutModalOpen(true);
+  function cancelHold() {
+    clearTimeout(holdTimerRef.current);
   }
 
-  /* FINAL FIXED SAVE — NO UTC CONVERSION */
-  async function saveWorkout() {
-    if (!user) return;
-
-    const payload = {
-      user_id: user.id,
-      name: workoutName || "Workout",
-      scheduled_for: workoutSchedule || null, // ← FIXED
-    };
-
-    if (editingWorkout) {
-      await supabase.from("workouts").update(payload).eq("id", editingWorkout.id);
-    } else {
-      payload.position = workouts.length;
-      await supabase.from("workouts").insert(payload);
-    }
-
-    setWorkoutModalOpen(false);
-    setEditingWorkout(null);
-    await loadWorkouts(user.id);
-  }
-  /* DELETE CONFIRM */
-  function askDeleteWorkout(id) {
-    setDeleteTarget({ type: "workout", id });
-    setDeleteModalOpen(true);
-  }
-
-  function askDeleteExercise(id, workoutId) {
-    setDeleteTarget({ type: "exercise", id, workoutId });
-    setDeleteModalOpen(true);
-  }
-
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-
-    if (deleteTarget.type === "workout") {
-      await supabase.from("workouts").delete().eq("id", deleteTarget.id);
-      if (user) await loadWorkouts(user.id);
-    } else {
-      await supabase.from("exercises").delete().eq("id", deleteTarget.id);
-      const ex = await loadExercises(deleteTarget.workoutId);
-      setExpandedExercises((prev) => ({ ...prev, [deleteTarget.workoutId]: ex }));
-    }
-
-    setDeleteTarget(null);
-    setDeleteModalOpen(false);
-  }
-
-  /* EXERCISE MODAL */
-  function openExerciseModal(workoutId, ex = null) {
-    setExerciseWorkoutId(workoutId);
-    setEditingExercise(ex);
-    setExerciseName(ex?.name || "");
-    setExerciseSets(ex?.sets ?? "");
-    setExerciseReps(ex?.reps ?? "");
-    setExerciseWeight(ex?.weight ?? "");
-    setExerciseModalOpen(true);
-  }
-
-  async function saveExercise() {
-    if (!user || !exerciseWorkoutId) return;
-
-    const list = expandedExercises[exerciseWorkoutId] || [];
-
-    const payload = {
-      user_id: user.id,
-      workout_id: exerciseWorkoutId,
-      name: exerciseName || "Exercise",
-      sets: exerciseSets === "" ? null : Number(exerciseSets),
-      reps: exerciseReps === "" ? null : Number(exerciseReps),
-      weight: exerciseWeight || null,
-    };
-
-    if (editingExercise) {
-      await supabase
-        .from("exercises")
-        .update(payload)
-        .eq("id", editingExercise.id);
-    } else {
-      payload.position = list.length;
-      await supabase.from("exercises").insert(payload);
-    }
-
-    const ex = await loadExercises(exerciseWorkoutId);
-    setExpandedExercises((prev) => ({ ...prev, [exerciseWorkoutId]: ex }));
-
-    setExerciseModalOpen(false);
-    setEditingExercise(null);
+  function markMoved() {
+    movedRef.current = true;
   }
 
   function formatSchedule(val) {
@@ -313,6 +247,10 @@ export default function WorkoutsPage() {
               return (
                 <SortableItem key={w.id} id={w.id}>
                   <div
+                    onTouchStart={() => startHold(w)}
+                    onTouchMove={markMoved}
+                    onTouchEnd={cancelHold}
+                    onTouchCancel={cancelHold}
                     style={{
                       background: "#0f0f0f",
                       borderRadius: 12,
@@ -378,7 +316,8 @@ export default function WorkoutsPage() {
                                     borderRadius: 10,
                                     padding: 10,
                                     marginBottom: 8,
-                                    border: "1px solid rgba(255,255,255,0.06)",
+                                    border:
+                                      "1px solid rgba(255,255,255,0.06)",
                                   }}
                                 >
                                   <div
@@ -389,7 +328,12 @@ export default function WorkoutsPage() {
                                     }}
                                   >
                                     <div>
-                                      <p style={{ margin: 0, fontWeight: 600 }}>
+                                      <p
+                                        style={{
+                                          margin: 0,
+                                          fontWeight: 600,
+                                        }}
+                                      >
                                         {ex.name}
                                       </p>
                                       <p
@@ -402,20 +346,26 @@ export default function WorkoutsPage() {
                                         {(ex.sets ?? "-") +
                                           " x " +
                                           (ex.reps ?? "-") +
-                                          (ex.weight ? ` — ${ex.weight}` : "")}
+                                          (ex.weight
+                                            ? ` — ${ex.weight}`
+                                            : "")}
                                       </p>
                                     </div>
 
                                     <FaEdit
                                       style={{ cursor: "pointer" }}
-                                      onClick={() => openExerciseModal(w.id, ex)}
+                                      onClick={() =>
+                                        openExerciseModal(w.id, ex)
+                                      }
                                     />
                                     <FaTrash
                                       style={{
                                         cursor: "pointer",
                                         color: "#ff4d4d",
                                       }}
-                                      onClick={() => askDeleteExercise(ex.id, w.id)}
+                                      onClick={() =>
+                                        askDeleteExercise(ex.id, w.id)
+                                      }
                                     />
                                   </div>
                                 </div>
@@ -432,7 +382,8 @@ export default function WorkoutsPage() {
                             borderRadius: 999,
                             marginTop: 6,
                             background: "transparent",
-                            border: "1px solid rgba(255,255,255,0.15)",
+                            border:
+                              "1px solid rgba(255,255,255,0.15)",
                             color: "white",
                             fontSize: 12,
                           }}
@@ -449,6 +400,55 @@ export default function WorkoutsPage() {
         </DndContext>
       )}
 
+      {/* 🔥 SHARE / COPY MODAL */}
+      {shareModalOpen && (
+        <Modal onClose={() => setShareModalOpen(false)}>
+          <h2 style={{ marginBottom: 12 }}>Copy / Share Workout</h2>
+
+          <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 16 }}>
+            This will copy the workout and all exercises so it can be shared
+            or sent to a friend.
+          </p>
+
+          <button
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 10,
+              border: "none",
+              background: "#ff2f2f",
+              color: "white",
+              fontWeight: 600,
+              marginBottom: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+            onClick={() => {
+              console.log("WORKOUT SHARE PAYLOAD:", sharePayload);
+              setShareModalOpen(false);
+            }}
+          >
+            <FaCopy /> Copy Workout
+          </button>
+
+          <button
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.25)",
+              background: "transparent",
+              color: "white",
+              fontWeight: 600,
+            }}
+            onClick={() => setShareModalOpen(false)}
+          >
+            Cancel
+          </button>
+        </Modal>
+      )}
       {/* WORKOUT MODAL */}
       {workoutModalOpen && (
         <Modal onClose={() => setWorkoutModalOpen(false)}>
@@ -524,7 +524,10 @@ export default function WorkoutsPage() {
             This action cannot be undone.
           </p>
 
-          <button style={secondaryBtn} onClick={() => setDeleteModalOpen(false)}>
+          <button
+            style={secondaryBtn}
+            onClick={() => setDeleteModalOpen(false)}
+          >
             Cancel
           </button>
           <button style={primaryBtn} onClick={confirmDelete}>
