@@ -21,10 +21,13 @@ import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
-import FriendProfile from "./pages/FriendProfile"; // ✅ NEW
+import FriendProfile from "./pages/FriendProfile";
 
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
+
+// Workout Share Overlay (SAFE, ISOLATED)
+import WorkoutShareOverlay from "./components/workouts/WorkoutShareOverlay";
 
 // OneSignal
 import { initOneSignal } from "./onesignal";
@@ -50,12 +53,15 @@ function AppContent() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
-        <Route path="/friend/:friendId" element={<FriendProfile />} /> {/* ✅ NEW */}
+        <Route path="/friend/:friendId" element={<FriendProfile />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
+
+      {/* Global workout share overlay (activates only on /workouts) */}
+      <WorkoutShareOverlay />
     </div>
   );
 }
@@ -64,7 +70,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // 1️⃣ Load session once
+  // Load session once
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -80,7 +86,7 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // 2️⃣ Init OneSignal ONLY when session exists
+  // Init OneSignal ONLY when session exists
   useEffect(() => {
     if (!session) return;
     initOneSignal();
