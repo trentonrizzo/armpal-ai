@@ -44,91 +44,35 @@ export default function ChatPage() {
   const [error, setError] = useState("");
   const [imageView, setImageView] = useState(null);
 
-  // 🔥 NEW: workout add loading state
-  const [addingWorkoutId, setAddingWorkoutId] = useState(null);
-
   const listRef = useRef(null);
   const holdTimer = useRef(null);
 
-  // Presence refs (unchanged)
+  // presence refs
   const idleTimer = useRef(null);
   const heartbeatTimer = useRef(null);
   const isOnlineRef = useRef(false);
 
-  /* -------------------------
-     WORKOUT SHARE HELPERS
-  ------------------------- */
+  // 🔒 Lock background scroll (PWA fix)
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = "";
+    };
+  }, []);
 
-  function isWorkoutMessage(m) {
-    return m?.payload && m.payload.type === "workout_share";
-  }
-
-  function getWorkoutSummary(payload) {
-    if (!payload) return "";
-    const count = payload.exercises?.length || 0;
-    return `${count} exercise${count === 1 ? "" : "s"}`;
-  }
-
-  async function addWorkoutToMyAccount(payload) {
-    if (!user?.id || !payload) return;
-
-    try {
-      setAddingWorkoutId(payload._messageId || "pending");
-
-      // 1️⃣ Insert workout
-      const { data: workoutRow, error: wErr } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: payload.workout?.name || "Shared Workout",
-          scheduled_for: null,
-          position: 0,
-        })
-        .select()
-        .single();
-
-      if (wErr || !workoutRow) throw wErr;
-
-      // 2️⃣ Insert exercises
-      const exercises = payload.exercises || [];
-      for (let i = 0; i < exercises.length; i++) {
-        const ex = exercises[i];
-        await supabase.from("exercises").insert({
-          user_id: user.id,
-          workout_id: workoutRow.id,
-          name: ex.name || "Exercise",
-          sets: ex.sets ?? null,
-          reps: ex.reps ?? null,
-          weight: ex.weight ?? null,
-          position: i,
-        });
-      }
-    } catch (e) {
-      console.error("Add workout failed:", e);
-    } finally {
-      setAddingWorkoutId(null);
-    }
-  }
-
-  /* -------------------------
-     LOCK SCROLL (UNCHANGED)
-  ------------------------- */
-  /* -------------------------
-     LOAD FRIEND PROFILE
-  ------------------------- */
   async function loadFriendProfile() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("profiles")
       .select("id, username, display_name, is_online, last_seen")
       .eq("id", friendId)
       .single();
 
-    if (!error) setFriend(data);
+    if (data) setFriend(data);
   }
 
-  /* -------------------------
-     LOAD MESSAGES
-  ------------------------- */
   async function loadMessages(uid) {
     setError("");
 
@@ -141,7 +85,6 @@ export default function ChatPage() {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error(error);
       setError(error.message);
       return;
     }
@@ -174,10 +117,7 @@ export default function ChatPage() {
       mounted = false;
     };
   }, [friendId]);
-
-  /* -------------------------
-     REALTIME MESSAGES (UNCHANGED)
-  ------------------------- */
+  // Realtime messages
   useEffect(() => {
     if (!user) return;
 
@@ -204,18 +144,33 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
-  /* -------------------------
-     AUTO SCROLL
-  ------------------------- */
+  // Realtime friend presence updates
+  useEffect(() => {
+    if (!friendId) return;
+
+    const ch = supabase
+      .channel(`presence-friend-${friendId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const p = payload.new;
+          if (p?.id !== friendId) return;
+          setFriend((prev) => ({ ...(prev || {}), ...p }));
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(ch);
+  }, [friendId]);
+
+  // Auto scroll
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
 
-  /* -------------------------
-     MESSAGE SENDERS (UNCHANGED)
-  ------------------------- */
   async function sendMessage() {
     if (!text.trim() || !user) return;
 
@@ -246,7 +201,9 @@ export default function ChatPage() {
       return;
     }
 
-    const { data } = supabase.storage.from("chat-images").getPublicUrl(path);
+    const { data } = supabase.storage
+      .from("chat-images")
+      .getPublicUrl(path);
 
     await supabase.from("messages").insert({
       sender_id: user.id,
@@ -255,120 +212,41 @@ export default function ChatPage() {
     });
   }
 
-  /* -------------------------
-     MESSAGE LIST RENDER
-  ------------------------- */
-  const renderedMessages = messages.map((m) => {
-    const mine = m.sender_id === user?.id;
-    const isWorkout = isWorkoutMessage(m);
+  // HOLD TO DELETE
+  function startHold(m) {
+    holdTimer.current = setTimeout(async () => {
+      if (m.sender_id !== user.id) return;
+      if (!window.confirm("Delete this message?")) return;
 
-    return (
-      <div
-        key={m.id}
-        style={{
-          display: "flex",
-          justifyContent: mine ? "flex-end" : "flex-start",
-          marginBottom: 8,
-        }}
-      >
-        <div
-          onTouchStart={() => mine && startHold(m)}
-          onTouchEnd={endHold}
-          onTouchCancel={endHold}
-          style={{
-            background: mine ? "#ff2f2f" : "#1a1a1a",
-            color: "#fff",
-            padding: "10px 12px",
-            borderRadius: 16,
-            maxWidth: "80%",
-            fontSize: 15,
-          }}
-        >
-          {/* TEXT */}
-          {m.text && <div>{m.text}</div>}
+      await supabase.from("messages").delete().eq("id", m.id);
+      setMessages((prev) => prev.filter((x) => x.id !== m.id));
+    }, 500);
+  }
 
-          {/* IMAGE */}
-          {m.image_url && (
-            <img
-              src={m.image_url}
-              onClick={() => setImageView(m.image_url)}
-              style={{
-                marginTop: 6,
-                borderRadius: 12,
-                maxHeight: 220,
-                maxWidth: "100%",
-                objectFit: "cover",
-                cursor: "pointer",
-              }}
-            />
-          )}
+  // ✅✅ FIX — THIS WAS MISSING AND CAUSED THE CRASH
+  function endHold() {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }
 
-          {/* WORKOUT SHARE */}
-          {isWorkout && (
-            <div
-              style={{
-                marginTop: 6,
-                padding: 10,
-                borderRadius: 12,
-                background: "rgba(0,0,0,0.35)",
-                border: "1px solid rgba(255,255,255,0.15)",
-              }}
-            >
-              <strong>{m.payload.workout?.name || "Shared Workout"}</strong>
-
-              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                {getWorkoutSummary(m.payload)}
-              </div>
-
-              <button
-                disabled={addingWorkoutId === m.id}
-                onClick={() =>
-                  addWorkoutToMyAccount({
-                    ...m.payload,
-                    _messageId: m.id,
-                  })
-                }
-                style={{
-                  marginTop: 8,
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 999,
-                  border: "none",
-                  background: "#1fbf61",
-                  color: "#000",
-                  fontWeight: 700,
-                  opacity: addingWorkoutId === m.id ? 0.6 : 1,
-                }}
-              >
-                {addingWorkoutId === m.id
-                  ? "Adding..."
-                  : "Add to My Workouts"}
-              </button>
-            </div>
-          )}
-
-          <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>
-            {formatTime(m.created_at)}
-          </div>
-        </div>
-      </div>
-    );
-  });
-  /* -------------------------
-     PRESENCE LIFECYCLE (UNCHANGED)
-  ------------------------- */
+  // -------------------------
+  // PRESENCE — SELF ONLINE/OFFLINE
+  // -------------------------
   async function setMyPresence(online) {
     if (!user?.id) return;
     if (isOnlineRef.current === online) return;
 
     isOnlineRef.current = online;
 
-    const payload = {
-      is_online: online,
-      last_seen: new Date().toISOString(),
-    };
-
-    await supabase.from("profiles").update(payload).eq("id", user.id);
+    await supabase
+      .from("profiles")
+      .update({
+        is_online: online,
+        last_seen: new Date().toISOString(),
+      })
+      .eq("id", user.id);
   }
 
   function clearIdleTimer() {
@@ -386,9 +264,12 @@ export default function ChatPage() {
   function startHeartbeat() {
     if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
     heartbeatTimer.current = setInterval(() => {
-      if (!user?.id) return;
-      if (document.visibilityState !== "visible") return;
-      if (!isOnlineRef.current) return;
+      if (
+        !user?.id ||
+        document.visibilityState !== "visible" ||
+        !isOnlineRef.current
+      )
+        return;
 
       supabase
         .from("profiles")
@@ -425,19 +306,13 @@ export default function ChatPage() {
       armIdleTimer();
     };
 
-    const onBeforeUnload = () => {
-      setMyPresence(false);
-    };
-
-    document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("visibilitychange", onVis);
     window.addEventListener("touchstart", onActivity, { passive: true });
     window.addEventListener("mousemove", onActivity);
     window.addEventListener("keydown", onActivity);
 
     return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("touchstart", onActivity);
       window.removeEventListener("mousemove", onActivity);
       window.removeEventListener("keydown", onActivity);
@@ -447,10 +322,6 @@ export default function ChatPage() {
       setMyPresence(false);
     };
   }, [user?.id, friendId]);
-
-  /* -------------------------
-     HEADER + STATUS
-  ------------------------- */
   const friendName =
     friend?.display_name || friend?.username || "Chat";
 
@@ -480,10 +351,8 @@ export default function ChatPage() {
               style={{
                 width: 10,
                 height: 10,
-                borderRadius: 999,
-                background: friendOnline
-                  ? "#2dff57"
-                  : "rgba(255,255,255,0.25)",
+                borderRadius: "50%",
+                background: friendOnline ? "#2dff57" : "rgba(255,255,255,0.3)",
                 boxShadow: friendOnline
                   ? "0 0 8px rgba(45,255,87,0.9)"
                   : "none",
@@ -491,10 +360,10 @@ export default function ChatPage() {
             />
           </div>
 
-          {!!friendStatus && (
-            <div style={{ fontSize: 12, opacity: 0.9 }}>
+          {friendStatus && (
+            <span style={{ fontSize: 12, opacity: 0.85 }}>
               {friendStatus}
-            </div>
+            </span>
           )}
         </div>
       </div>
@@ -503,7 +372,55 @@ export default function ChatPage() {
       <div ref={listRef} style={messagesBox}>
         {loading && <div style={{ opacity: 0.6 }}>Loading…</div>}
         {error && <div style={errBox}>{error}</div>}
-        {renderedMessages}
+
+        {messages.map((m) => {
+          const mine = m.sender_id === user?.id;
+
+          return (
+            <div
+              key={m.id}
+              style={{
+                display: "flex",
+                justifyContent: mine ? "flex-end" : "flex-start",
+                marginBottom: 8,
+              }}
+            >
+              <div
+                onTouchStart={() => mine && startHold(m)}
+                onTouchEnd={endHold}
+                onTouchCancel={endHold}
+                style={{
+                  background: mine ? "#ff2f2f" : "#1a1a1a",
+                  color: "#fff",
+                  padding: "10px 12px",
+                  borderRadius: 16,
+                  maxWidth: "75%",
+                  fontSize: 16,
+                }}
+              >
+                {m.text && <div>{m.text}</div>}
+
+                {m.image_url && (
+                  <img
+                    src={m.image_url}
+                    onClick={() => setImageView(m.image_url)}
+                    style={{
+                      marginTop: 6,
+                      borderRadius: 12,
+                      maxHeight: 220,
+                      maxWidth: "100%",
+                      cursor: "pointer",
+                    }}
+                  />
+                )}
+
+                <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>
+                  {formatTime(m.created_at)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* INPUT */}
@@ -545,9 +462,7 @@ export default function ChatPage() {
   );
 }
 
-/* -------------------------
-   STYLES (UNCHANGED)
-------------------------- */
+/* STYLES */
 const header = {
   position: "fixed",
   top: 0,
@@ -579,7 +494,6 @@ const messagesBox = {
   left: 0,
   right: 0,
   overflowY: "auto",
-  overscrollBehavior: "contain",
   padding: 12,
   background: "#000",
 };
