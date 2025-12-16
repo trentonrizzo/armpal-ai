@@ -26,29 +26,29 @@ export default function ChatPage() {
   const listRef = useRef(null);
   const holdTimer = useRef(null);
 
-  // 🔒 Lock background scroll (PWA fix)
+  // Lock background scroll (PWA safe)
   useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.body.style.touchAction = "none";
     return () => {
-      document.body.style.overflow = prevOverflow;
+      document.body.style.overflow = prev;
       document.body.style.touchAction = "";
     };
   }, []);
 
-  // Load user + messages
   async function loadMessages(uid) {
     setError("");
 
     const { data, error } = await supabase
       .from("messages")
       .select("*")
-      .or(`and(sender_id.eq.${uid},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${uid})`)
+      .or(
+        `and(sender_id.eq.${uid},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${uid})`
+      )
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error(error);
       setError(error.message);
       return;
     }
@@ -82,7 +82,7 @@ export default function ChatPage() {
     };
   }, [friendId]);
 
-  // Realtime
+  // realtime messages
   useEffect(() => {
     if (!user) return;
 
@@ -109,7 +109,7 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
-  // Auto scroll
+  // auto scroll
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -138,7 +138,7 @@ export default function ChatPage() {
     const path = `${user.id}-${Date.now()}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
-      .from("chat_images")
+      .from("chat-images")
       .upload(path, file);
 
     if (uploadErr) {
@@ -147,7 +147,7 @@ export default function ChatPage() {
     }
 
     const { data } = supabase.storage
-      .from("chat_images")
+      .from("chat-images")
       .getPublicUrl(path);
 
     await supabase.from("messages").insert({
@@ -211,6 +211,7 @@ export default function ChatPage() {
                 }}
               >
                 {m.text && <div>{m.text}</div>}
+
                 {m.image_url && (
                   <img
                     src={m.image_url}
@@ -219,9 +220,13 @@ export default function ChatPage() {
                       marginTop: 6,
                       borderRadius: 12,
                       maxHeight: 220,
+                      maxWidth: "100%",
+                      objectFit: "cover",
+                      cursor: "pointer",
                     }}
                   />
                 )}
+
                 <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>
                   {formatTime(m.created_at)}
                 </div>
@@ -239,7 +244,11 @@ export default function ChatPage() {
             type="file"
             hidden
             accept="image/*"
-            onChange={(e) => sendImage(e.target.files?.[0])}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = null;
+              sendImage(file);
+            }}
           />
         </label>
 
