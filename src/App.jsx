@@ -26,12 +26,19 @@ import FriendProfile from "./pages/FriendProfile";
 // Navbar
 import BottomNav from "./components/BottomNav/BottomNav";
 
+// Share button (SAFE)
+import WorkoutShareButton from "./components/workouts/WorkoutShareButton";
+
 // OneSignal
 import { initOneSignal } from "./onesignal";
 
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
+
+  function handleShareClick() {
+    alert("Share clicked — logic comes next");
+  }
 
   return (
     <div
@@ -56,6 +63,9 @@ function AppContent() {
       </Routes>
 
       {!isChatRoute && <BottomNav />}
+
+      {/* GUARANTEED SHARE ICON */}
+      <WorkoutShareButton onClick={handleShareClick} />
     </div>
   );
 }
