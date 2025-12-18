@@ -16,10 +16,20 @@ export default function StrengthCalculatorInline() {
 
   const { prs, createPR } = useContext(AppContext);
 
-  // 1RM Formula (Epley)
+  // 1RM Formula (FIXED — exact exception)
   const calculate1RM = () => {
     if (!weight || !reps) return;
-    const rm = Math.round(weight * (1 + reps / 30));
+
+    const w = Number(weight);
+    const r = Number(reps);
+
+    // ✅ HARD EXCEPTION: true 1RM input
+    if (r === 1) {
+      setOneRM(Math.round(w));
+      return;
+    }
+
+    const rm = Math.round(w * (1 + r / 30));
     setOneRM(rm);
   };
 
@@ -98,7 +108,9 @@ export default function StrengthCalculatorInline() {
       {oneRM && (
         <>
           <div className="mt-6">
-            <h3 className="text-xl font-bold text-red-400 mb-1">Estimated 1RM</h3>
+            <h3 className="text-xl font-bold text-red-400 mb-1">
+              Estimated 1RM
+            </h3>
             <p className="text-4xl font-bold text-center">{oneRM} lbs</p>
           </div>
 
@@ -157,7 +169,9 @@ export default function StrengthCalculatorInline() {
 
           {/* Percentages */}
           <div className="mt-8">
-            <h3 className="text-lg font-bold text-red-400 mb-4">Percentages</h3>
+            <h3 className="text-lg font-bold text-red-400 mb-4">
+              Percentages
+            </h3>
 
             <div className="space-y-3">
               {percentages.map((p) => (
@@ -176,7 +190,9 @@ export default function StrengthCalculatorInline() {
 
           {/* Rep Potential */}
           <div className="mt-8">
-            <h3 className="text-lg font-bold text-red-400 mb-4">Rep Potential</h3>
+            <h3 className="text-lg font-bold text-red-400 mb-4">
+              Rep Potential
+            </h3>
 
             <div className="space-y-3">
               {repTable.map((r) => (
