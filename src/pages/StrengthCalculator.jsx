@@ -55,12 +55,18 @@ export default function StrengthCalculator() {
     loadPR();
   }, [liftName]);
 
-  // 1RM calculation
+  // 1RM calculation (FIXED)
   function calculateOneRM() {
     if (!weight || !reps) return;
 
     const w = Number(weight);
     const r = Number(reps);
+
+    // ✅ EXCEPTION: if user enters a true 1RM, do NOT inflate it
+    if (r === 1) {
+      setOneRM(Math.round(w));
+      return;
+    }
 
     const multiplier = repMultipliers[r] || (1 + r * 0.03);
     const est = Math.round(w * multiplier);
@@ -90,7 +96,6 @@ export default function StrengthCalculator() {
       <div className="bg-[#111] p-5 rounded-xl border border-gray-800 mb-6 shadow-lg">
         <h2 className="text-lg mb-3 font-semibold text-red-400">Your Lift</h2>
 
-        {/* Lift Name */}
         <input
           type="text"
           placeholder="Lift name (bench, squat)"
@@ -99,7 +104,6 @@ export default function StrengthCalculator() {
           className="w-full mb-4 p-3 bg-black border border-gray-700 rounded-lg"
         />
 
-        {/* Weight + Reps row */}
         <div className="flex gap-3 mb-4">
           <input
             type="number"
@@ -117,7 +121,6 @@ export default function StrengthCalculator() {
           />
         </div>
 
-        {/* Calc Button */}
         <button
           onClick={calculateOneRM}
           className="w-full py-3 rounded-lg bg-red-600 hover:bg-red-700 transition font-semibold"
@@ -126,16 +129,13 @@ export default function StrengthCalculator() {
         </button>
       </div>
 
-      {/* 1RM RESULTS */}
       {oneRM && (
         <div className="bg-[#111] p-5 rounded-xl border border-gray-800 mb-6 shadow-lg">
           <h2 className="text-xl font-bold text-red-400 mb-2">Estimated 1RM</h2>
-
           <p className="text-4xl font-extrabold text-white mb-3">{oneRM} lbs</p>
 
           <div className="w-full h-[2px] bg-red-700 mb-4"></div>
 
-          {/* PR COMPARISON */}
           {currentPR !== null ? (
             <div className="mb-3 text-sm">
               <p className="text-gray-400 mb-1">PR Comparison</p>
@@ -150,16 +150,17 @@ export default function StrengthCalculator() {
               </p>
 
               {oneRM > currentPR && (
-                <p className="text-red-400 font-bold mt-1">🔥 NEW PR POSSIBLE</p>
-              )}
-
-              {oneRM > currentPR && (
-                <button
-                  onClick={savePR}
-                  className="w-full py-2 mt-3 bg-red-700 rounded-lg hover:bg-red-800 transition"
-                >
-                  Save as PR
-                </button>
+                <>
+                  <p className="text-red-400 font-bold mt-1">
+                    🔥 NEW PR POSSIBLE
+                  </p>
+                  <button
+                    onClick={savePR}
+                    className="w-full py-2 mt-3 bg-red-700 rounded-lg hover:bg-red-800 transition"
+                  >
+                    Save as PR
+                  </button>
+                </>
               )}
             </div>
           ) : (
@@ -170,7 +171,6 @@ export default function StrengthCalculator() {
         </div>
       )}
 
-      {/* PERCENTAGES TABLE */}
       {oneRM && (
         <div className="bg-[#111] p-5 rounded-xl border border-gray-800 shadow-lg">
           <h2 className="text-xl font-bold mb-4">Percentages</h2>
@@ -178,15 +178,13 @@ export default function StrengthCalculator() {
           <div className="grid grid-cols-2 gap-y-3 text-sm">
             {percentages.map((row) => (
               <React.Fragment key={row.pct}>
-                {/* LEFT COLUMN */}
-                <div className="flex flex-col">
+                <div>
                   <span className="text-gray-300 font-medium">
                     {row.pct}% — {Math.round(oneRM * (row.pct / 100))} lbs
                   </span>
                 </div>
 
-                {/* RIGHT COLUMN */}
-                <div className="flex flex-col items-end">
+                <div className="text-right">
                   <span className="text-gray-300">
                     {row.reps} reps —{" "}
                     <span className="text-red-400 font-semibold">
