@@ -15,9 +15,6 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 function getVapidPublicKey() {
-  if (typeof window !== "undefined" && window.VAPID_PUBLIC_KEY) {
-    return String(window.VAPID_PUBLIC_KEY);
-  }
   try {
     return import.meta.env.VITE_VAPID_PUBLIC_KEY || null;
   } catch {
@@ -105,7 +102,7 @@ function TogglePill({ on, disabled, onClick }) {
 
 export default function SettingsOverlay({ open, onClose }) {
   const [user, setUser] = useState(null);
-  const [section, setSection] = useState(null); // notifications | account
+  const [section, setSection] = useState(null);
 
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -165,11 +162,11 @@ export default function SettingsOverlay({ open, onClose }) {
     }
   }
 
+  /* ✅ FIXED RESET FLOW */
   async function sendPasswordReset() {
     if (!user?.email) return;
 
-    // ✅ IMPORTANT: send the user to your AuthPage route so recovery UI can render
-    const redirectTo = `${window.location.origin}/auth`;
+    const redirectTo = window.location.origin; // ✅ ROOT SPA
 
     const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
       redirectTo,
@@ -298,7 +295,6 @@ export default function SettingsOverlay({ open, onClose }) {
 
         <div style={{ flex: 1 }} />
 
-        {/* LOG OUT */}
         <button
           onClick={logout}
           style={{
