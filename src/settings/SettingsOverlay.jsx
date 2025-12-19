@@ -168,15 +168,15 @@ export default function SettingsOverlay({ open, onClose }) {
   async function sendPasswordReset() {
     if (!user?.email) return;
 
+    // ✅ IMPORTANT: send the user to your AuthPage route so recovery UI can render
+    const redirectTo = `${window.location.origin}/auth`;
+
     const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: window.location.origin,
+      redirectTo,
     });
 
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("Password reset email sent.");
-    }
+    if (error) alert(error.message);
+    else alert("Password reset email sent.");
   }
 
   async function logout() {
