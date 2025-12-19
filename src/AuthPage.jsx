@@ -1,131 +1,189 @@
-// src/AuthPage.jsx
-import React, { useState } from "react";
-import { supabase } from "./supabaseClient";
+import React, { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState("login"); // login | signup
+  const [error, setError] = useState(null);
+  const [isRecovery, setIsRecovery] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  async function handleAuth(e) {
-    e.preventDefault();
+  useEffect(() => {
+    // Detect recovery mode from URL hash
+    const hash = window.location.hash || "";
+    if (hash.includes("type=recovery")) {
+      setIsRecovery(true);
+    }
+  }, []);
+
+  async function handleLogin() {
+    setError(null);
     setLoading(true);
 
-    try {
-      let result;
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (mode === "login") {
-        result = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-      } else {
-        result = await supabase.auth.signUp({
-          email,
-          password,
-        });
-      }
+    if (error) setError(error.message);
+    setLoading(false);
+  }
 
-      if (result.error) {
-        alert(result.error.message);
-      }
-    } finally {
-      setLoading(false);
+  async function handlePasswordReset() {
+    setError(null);
+
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
     }
+
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+
+    const { error } = await supabase.auth.updateUser({
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+
+    // End recovery session
+    await supabase.auth.signOut();
+
+    setSuccess(true);
+
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 1200);
   }
 
   return (
-    <div className="min-h-screen w-full bg-black flex items-center justify-center px-6">
+    <div style={styles.page}>
+      <h1 style={styles.logo}>ArmPal</h1>
+      <p style={styles.subtitle}>
+        {isRecovery ? "Reset your password" : "Welcome back"}
+      </p>
 
-      {/* ====== CARD ====== */}
-      <div
-        className="
-          w-full max-w-sm p-8 rounded-2xl relative
-          bg-[#0a0a0a] border border-[#1a1a1a]
-          shadow-[0_0_15px_rgba(255,0,0,0.35)]
-        "
-        style={{
-          boxShadow: `
-            0 0 18px rgba(255, 0, 0, 0.35),
-            inset 0 0 12px rgba(255, 0, 0, 0.20)
-          `,
-        }}
-      >
-        {/* HEADER */}
-        <h1 className="text-3xl font-extrabold text-white text-center mb-2 tracking-wide">
-          Arm<span className="text-red-500">Pal</span>
-        </h1>
+      {error && <div style={styles.error}>{error}</div>}
 
-        <p className="text-center text-sm text-neutral-400 mb-6">
-          {mode === "login" ? "Welcome back" : "Create your account"}
-        </p>
-
-        {/* FORM */}
-        <form onSubmit={handleAuth} className="space-y-4">
-
-          {/* EMAIL */}
+      {isRecovery ? (
+        success ? (
+          <div style={styles.success}>
+            Password updated. Redirecting…
+          </div>
+        ) : (
+          <>
+            <input
+              type="password"
+              placeholder="New password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input}
+            />
+            <input
+              type="password"
+              placeholder="Confirm password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              style={styles.input}
+            />
+            <button
+              onClick={handlePasswordReset}
+              disabled={loading}
+              style={styles.button}
+            >
+              {loading ? "Updating…" : "Update Password"}
+            </button>
+          </>
+        )
+      ) : (
+        <>
           <input
             type="email"
-            required
             placeholder="Email"
-            className="w-full p-3 rounded-lg bg-black border border-neutral-700 text-white text-sm focus:border-red-500 outline-none transition"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            style={styles.input}
           />
-
-          {/* PASSWORD */}
           <input
             type="password"
-            required
             placeholder="Password"
-            className="w-full p-3 rounded-lg bg-black border border-neutral-700 text-white text-sm focus:border-red-500 outline-none transition"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            style={styles.input}
           />
-
-          {/* SUBMIT BUTTON */}
           <button
+            onClick={handleLogin}
             disabled={loading}
-            className="
-              w-full py-3 rounded-lg font-bold text-white text-sm
-              bg-red-600 hover:bg-red-700 transition
-              shadow-[0_0_10px_rgba(255,0,0,0.4)]
-            "
+            style={styles.button}
           >
-            {loading
-              ? "Please wait…"
-              : mode === "login"
-              ? "Log In"
-              : "Sign Up"}
+            {loading ? "Logging in…" : "Log In"}
           </button>
-        </form>
-
-        {/* SWITCH MODE */}
-        <div className="text-center mt-5 text-neutral-400 text-xs">
-          {mode === "login" ? (
-            <span>
-              Don’t have an account?{" "}
-              <button
-                onClick={() => setMode("signup")}
-                className="text-red-500 font-semibold hover:underline"
-              >
-                Sign up
-              </button>
-            </span>
-          ) : (
-            <span>
-              Already have an account?{" "}
-              <button
-                onClick={() => setMode("login")}
-                className="text-red-500 font-semibold hover:underline"
-              >
-                Log in
-              </button>
-            </span>
-          )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
+
+/* =========================
+   STYLES
+========================= */
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#000",
+    color: "white",
+    padding: 20,
+  },
+  logo: {
+    fontSize: 32,
+    fontWeight: 900,
+    marginBottom: 4,
+  },
+  subtitle: {
+    opacity: 0.7,
+    marginBottom: 20,
+  },
+  input: {
+    width: "100%",
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.15)",
+    background: "#111",
+    color: "white",
+  },
+  button: {
+    width: "100%",
+    padding: 14,
+    borderRadius: 14,
+    border: "none",
+    background: "#ff2f2f",
+    color: "white",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  error: {
+    background: "rgba(255,47,47,0.15)",
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 10,
+    fontSize: 13,
+  },
+  success: {
+    background: "rgba(0,200,100,0.15)",
+    padding: 12,
+    borderRadius: 10,
+    fontSize: 14,
+  },
+};
