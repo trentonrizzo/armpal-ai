@@ -1,359 +1,564 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 
 /**
- * AuthPage
- * - Normal login UI
- * - Password recovery UI that reliably triggers on iOS/Safari
- *   by using BOTH:
- *     1) URL detection (hash/search/access_token/code)
- *     2) Supabase auth event: PASSWORD_RECOVERY (most reliable)
+ * ArmPal AuthPage (FULL)
+ * - Login / Sign up
+ * - Forgot password -> sends email
+ * - Password recovery -> shows Reset Password + Confirm Password
+ *
+ * IMPORTANT:
+ * Supabase recovery links come in two main shapes:
+ *  A) Implicit flow (hash): #access_token=...&refresh_token=...&type=recovery
+ *  B) PKCE flow (query):   ?code=...
+ * We support BOTH and force UI into "recovery" when detected.
  */
 
-function parseParamsFromHash(hashStr) {
-  const h = (hashStr || "").replace(/^#/, "");
-  const params = new URLSearchParams(h);
-  return params;
+function parseHashParams() {
+  try {
+    const hash = window.location.hash || "";
+    const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+    return new URLSearchParams(raw);
+  } catch {
+    return new URLSearchParams("");
+  }
 }
 
-function parseParamsFromSearch(searchStr) {
-  const s = (searchStr || "").replace(/^\?/, "");
-  const params = new URLSearchParams(s);
-  return params;
+function parseSearchParams() {
+  try {
+    const search = window.location.search || "";
+    const raw = search.startsWith("?") ? search.slice(1) : search;
+    return new URLSearchParams(raw);
+  } catch {
+    return new URLSearchParams("");
+  }
 }
 
-function urlLooksLikeRecovery() {
-  if (typeof window === "undefined") return false;
+function detectRecoveryFromUrl() {
+  if (typeof window === "undefined") return { isRecovery: false, hasCode: false };
+  const hp = parseHashParams();
+  const sp = parseSearchParams();
 
-  const hash = window.location.hash || "";
-  const search = window.location.search || "";
-
-  const hp = parseParamsFromHash(hash);
-  const sp = parseParamsFromSearch(search);
-
-  // Supabase commonly returns these in the hash for recovery:
-  // #access_token=...&refresh_token=...&type=recovery
   const typeHash = (hp.get("type") || "").toLowerCase();
   const typeSearch = (sp.get("type") || "").toLowerCase();
 
-  const hasAccessToken =
-    !!hp.get("access_token") || !!sp.get("access_token") || !!hp.get("refresh_token");
-  const hasCode = !!sp.get("code") || !!hp.get("code");
+  const hasAccessToken = !!hp.get("access_token") || !!sp.get("access_token");
+  const hasRefresh = !!hp.get("refresh_token");
+  const hasCode = !!sp.get("code") || !!hp.get("code"); // sometimes shoved in hash
 
-  if (typeHash === "recovery" || typeSearch === "recovery") return true;
-  if (hasAccessToken || hasCode) return true;
+  const isRecovery =
+    typeHash === "recovery" ||
+    typeSearch === "recovery" ||
+    hasAccessToken ||
+    hasRefresh ||
+    hasCode;
 
-  return false;
+  return { isRecovery, hasCode };
 }
 
 export default function AuthPage() {
-  const [mode, setMode] = useState("login"); // "login" | "recovery"
+  const [view, setView] = useState("login"); // login | signup | forgot | recovery
+  const [busy, setBusy] = useState(false);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [password2, setPassword2] = useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState(null); // {type:"error"|"success", text:string}
+  const [msg, setMsg] = useState(null); // {type:'error'|'success'|'info', text:string}
+  const [recoveryReady, setRecoveryReady] = useState(false);
 
-  const isRecovery = mode === "recovery";
+  const mountedRef = useRef(false);
 
   const origin = useMemo(() => {
     if (typeof window === "undefined") return "";
     return window.location.origin;
   }, []);
 
+  // ---------- Recovery bootstrap ----------
   useEffect(() => {
-    // 1) Detect recovery from URL immediately
-    if (urlLooksLikeRecovery()) {
-      setMode("recovery");
-    }
+    mountedRef.current = true;
 
-    // 2) Most reliable: Supabase emits PASSWORD_RECOVERY when link is opened correctly
+    const boot = async () => {
+      try {
+        const { isRecovery, hasCode } = detectRecoveryFromUrl();
+        if (isRecovery) {
+          setView("recovery");
+          setMsg({ type: "info", text: "Loading password reset…" });
+
+          // If PKCE code flow, exchange it for a session
+          // (Supabase will then allow updateUser({password}))
+          if (hasCode && supabase?.auth?.exchangeCodeForSession) {
+            const sp = parseSearchParams();
+            const code = sp.get("code") || "";
+            if (code) {
+              const { error } = await supabase.auth.exchangeCodeForSession(code);
+              if (error) throw error;
+
+              // Clean URL (remove code so reload doesn’t re-run exchange)
+              try {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("code");
+                url.searchParams.delete("type");
+                window.history.replaceState({}, "", url.toString());
+              } catch {}
+            }
+          }
+
+          // Give Supabase a moment to materialize session from hash token flow
+          const { data } = await supabase.auth.getSession();
+          if (!data?.session) {
+            setRecoveryReady(false);
+            setMsg({
+              type: "error",
+              text:
+                "Reset link is missing a valid session. Request a new reset email and open the newest link.",
+            });
+          } else {
+            setRecoveryReady(true);
+            setMsg(null);
+          }
+        }
+      } catch (e) {
+        setRecoveryReady(false);
+        setView("login");
+        setMsg({ type: "error", text: e?.message || "Recovery link error." });
+      }
+    };
+
+    boot();
+
+    // ALSO listen for PASSWORD_RECOVERY event (when Supabase emits it)
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (!mountedRef.current) return;
       if (event === "PASSWORD_RECOVERY") {
-        setMode("recovery");
+        setView("recovery");
+        setRecoveryReady(true);
         setMsg(null);
       }
     });
 
-    // 3) If session appears shortly after load, keep recovery mode if URL hints it
-    supabase.auth.getSession().then(({ data }) => {
-      const session = data?.session;
-      if (session && urlLooksLikeRecovery()) {
-        setMode("recovery");
-      }
-    });
-
     return () => {
+      mountedRef.current = false;
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
 
-  async function handleLogin() {
+  // ---------- Actions ----------
+  async function doLogin() {
     setMsg(null);
-    setLoading(true);
+    setBusy(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: (email || "").trim(),
         password,
       });
       if (error) throw error;
-      // App-level auth gating will take over after successful login
+      // Your app-level auth gating will take over after login
     } catch (e) {
-      setMsg({ type: "error", text: e?.message || "Login failed" });
+      setMsg({ type: "error", text: e?.message || "Login failed." });
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  async function sendResetEmail() {
+  async function doSignup() {
     setMsg(null);
-    if (!email) {
-      setMsg({ type: "error", text: "Enter your email first." });
-      return;
-    }
-
-    setLoading(true);
+    setBusy(true);
     try {
-      // Force redirect to /auth so recovery UI can render
-      const redirectTo = `${origin}/auth`;
+      if (!email) throw new Error("Enter your email.");
+      if (!password || password.length < 6) throw new Error("Password must be at least 6 characters.");
+      if (password !== password2) throw new Error("Passwords do not match.");
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
+      // Optional: redirect for email confirmation (if enabled in Supabase)
+      const { error } = await supabase.auth.signUp({
+        email: (email || "").trim(),
+        password,
+        options: {
+          emailRedirectTo: origin,
+        },
       });
       if (error) throw error;
 
       setMsg({
         type: "success",
-        text: "Reset email sent. Open the link, then you’ll see the Reset Password screen.",
+        text: "Account created. If email confirmation is enabled, check your inbox.",
       });
     } catch (e) {
-      setMsg({ type: "error", text: e?.message || "Could not send reset email" });
+      setMsg({ type: "error", text: e?.message || "Sign up failed." });
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  async function handlePasswordUpdate() {
+  async function sendResetEmail() {
     setMsg(null);
-
-    if (!password || password.length < 6) {
-      setMsg({ type: "error", text: "Password must be at least 6 characters." });
-      return;
-    }
-    if (password !== confirm) {
-      setMsg({ type: "error", text: "Passwords do not match." });
-      return;
-    }
-
-    setLoading(true);
+    setBusy(true);
     try {
+      if (!email) throw new Error("Enter your email first.");
+
+      // ✅ IMPORTANT:
+      // Use origin so the app always loads, even if /auth isn't a real route.
+      // Supabase will append tokens / code to the URL.
+      const { error } = await supabase.auth.resetPasswordForEmail((email || "").trim(), {
+        redirectTo: origin,
+      });
+      if (error) throw error;
+
+      setMsg({
+        type: "success",
+        text: "Reset email sent. Open the newest email link to reset your password.",
+      });
+    } catch (e) {
+      setMsg({ type: "error", text: e?.message || "Could not send reset email." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updatePassword() {
+    setMsg(null);
+    setBusy(true);
+    try {
+      if (!recoveryReady) throw new Error("Recovery session not ready. Request a new reset email.");
+      if (!password || password.length < 6) throw new Error("Password must be at least 6 characters.");
+      if (password !== password2) throw new Error("Passwords do not match.");
+
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
-      setMsg({ type: "success", text: "Password updated. Sending you to login…" });
+      setMsg({ type: "success", text: "Password updated. Returning to login…" });
 
-      // End recovery session so they re-login clean
+      // End recovery session so they log in clean
       await supabase.auth.signOut();
 
       setTimeout(() => {
-        window.location.href = "/auth";
-      }, 900);
+        window.location.href = "/";
+      }, 700);
     } catch (e) {
-      setMsg({ type: "error", text: e?.message || "Could not update password" });
+      setMsg({ type: "error", text: e?.message || "Could not update password." });
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
+  // ---------- UI helpers ----------
+  const isLogin = view === "login";
+  const isSignup = view === "signup";
+  const isForgot = view === "forgot";
+  const isRecovery = view === "recovery";
+
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <div style={styles.brandRow}>
-          <div style={styles.brandDot} />
-          <h1 style={styles.logo}>ArmPal</h1>
+    <div style={S.page}>
+      <div style={S.shell}>
+        <div style={S.brandRow}>
+          <div style={S.dot} />
+          <div style={{ flex: 1 }}>
+            <div style={S.brand}>ArmPal</div>
+            <div style={S.tagline}>
+              {isRecovery ? "Reset your password" : "Train. Track. Dominate."}
+            </div>
+          </div>
         </div>
 
-        <p style={styles.subtitle}>
-          {isRecovery ? "Reset your password" : "Welcome back"}
-        </p>
+        {/* Tabs */}
+        {!isRecovery && (
+          <div style={S.tabs}>
+            <button
+              onClick={() => {
+                setView("login");
+                setMsg(null);
+              }}
+              style={{ ...S.tab, ...(isLogin ? S.tabActive : {}) }}
+            >
+              Log in
+            </button>
+            <button
+              onClick={() => {
+                setView("signup");
+                setMsg(null);
+              }}
+              style={{ ...S.tab, ...(isSignup ? S.tabActive : {}) }}
+            >
+              Sign up
+            </button>
+          </div>
+        )}
 
         {msg && (
-          <div style={msg.type === "error" ? styles.error : styles.success}>
+          <div
+            style={{
+              ...S.msg,
+              ...(msg.type === "error"
+                ? S.msgError
+                : msg.type === "success"
+                ? S.msgSuccess
+                : S.msgInfo),
+            }}
+          >
             {msg.text}
           </div>
         )}
 
+        {/* Recovery */}
         {isRecovery ? (
           <>
+            <div style={S.h1}>Reset Password</div>
+            <div style={S.p}>
+              Enter a new password below. After saving, you’ll return to login.
+            </div>
+
+            <label style={S.label}>New password</label>
             <input
+              style={S.input}
               type="password"
-              placeholder="New password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-              autoComplete="new-password"
-            />
-            <input
-              type="password"
-              placeholder="Confirm new password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              style={styles.input}
+              placeholder="New password"
               autoComplete="new-password"
             />
 
-            <button
-              onClick={handlePasswordUpdate}
-              disabled={loading}
-              style={styles.primaryBtn}
-            >
-              {loading ? "Updating…" : "Update Password"}
+            <label style={S.label}>Confirm password</label>
+            <input
+              style={S.input}
+              type="password"
+              value={password2}
+              onChange={(e) => setPassword2(e.target.value)}
+              placeholder="Confirm password"
+              autoComplete="new-password"
+            />
+
+            <button onClick={updatePassword} disabled={busy} style={S.primary}>
+              {busy ? "Saving…" : "Save new password"}
             </button>
 
             <button
               onClick={() => {
-                // If they opened /auth without a valid recovery session,
-                // let them go back to login UI.
-                setMode("login");
-                setPassword("");
-                setConfirm("");
-                setMsg(null);
+                window.location.href = "/";
               }}
-              disabled={loading}
-              style={styles.ghostBtn}
+              disabled={busy}
+              style={S.ghost}
             >
               Back to login
             </button>
           </>
         ) : (
           <>
+            {/* Login / Signup / Forgot */}
+            <label style={S.label}>Email</label>
             <input
+              style={S.input}
               type="email"
-              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={styles.input}
+              placeholder="you@email.com"
               autoComplete="email"
             />
+
+            <label style={S.label}>Password</label>
             <input
+              style={S.input}
               type="password"
-              placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-              autoComplete="current-password"
+              placeholder="Password"
+              autoComplete={isSignup ? "new-password" : "current-password"}
             />
 
-            <button
-              onClick={handleLogin}
-              disabled={loading}
-              style={styles.primaryBtn}
-            >
-              {loading ? "Logging in…" : "Log In"}
-            </button>
+            {isSignup && (
+              <>
+                <label style={S.label}>Confirm password</label>
+                <input
+                  style={S.input}
+                  type="password"
+                  value={password2}
+                  onChange={(e) => setPassword2(e.target.value)}
+                  placeholder="Confirm password"
+                  autoComplete="new-password"
+                />
+              </>
+            )}
 
-            <button
-              onClick={sendResetEmail}
-              disabled={loading}
-              style={styles.ghostBtn}
-            >
-              Forgot password? Send reset email
-            </button>
+            {isForgot ? (
+              <>
+                <button onClick={sendResetEmail} disabled={busy} style={S.primary}>
+                  {busy ? "Sending…" : "Send reset email"}
+                </button>
 
-            <div style={styles.hint}>
-              (If you opened a reset link and still don’t see the reset screen,
-              refresh once — this page also listens for Supabase’s PASSWORD_RECOVERY event.)
-            </div>
+                <button
+                  onClick={() => {
+                    setView("login");
+                    setMsg(null);
+                  }}
+                  disabled={busy}
+                  style={S.ghost}
+                >
+                  Back
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={isSignup ? doSignup : doLogin}
+                  disabled={busy}
+                  style={S.primary}
+                >
+                  {busy ? "Working…" : isSignup ? "Create account" : "Log in"}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setView("forgot");
+                    setMsg(null);
+                  }}
+                  disabled={busy}
+                  style={S.linkBtn}
+                >
+                  Forgot password?
+                </button>
+              </>
+            )}
           </>
         )}
+
+        <div style={S.footerHint}>
+          ArmPal • black/white/red • clean & sexy • no clutter
+        </div>
       </div>
     </div>
   );
 }
 
-const styles = {
+// ---------- Styles (inline so nothing else can break) ----------
+const S = {
   page: {
     minHeight: "100vh",
     background: "#000",
-    color: "white",
-    padding: 18,
+    color: "#fff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    padding: 18,
   },
-  card: {
+  shell: {
     width: "100%",
-    maxWidth: 420,
+    maxWidth: 440,
     background: "#0b0b0c",
     border: "1px solid rgba(255,255,255,0.10)",
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 18,
-    boxShadow: "0 10px 40px rgba(0,0,0,0.55)",
+    boxShadow: "0 16px 55px rgba(0,0,0,0.65)",
   },
-  brandRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 6 },
-  brandDot: {
+  brandRow: { display: "flex", gap: 10, alignItems: "center", marginBottom: 12 },
+  dot: {
     width: 12,
     height: 12,
     borderRadius: 999,
     background: "#ff2f2f",
     boxShadow: "0 0 18px rgba(255,47,47,0.55)",
   },
-  logo: { fontSize: 32, fontWeight: 900, margin: 0, letterSpacing: 0.2 },
-  subtitle: { opacity: 0.75, marginTop: 0, marginBottom: 14 },
+  brand: { fontSize: 30, fontWeight: 900, lineHeight: 1 },
+  tagline: { fontSize: 12, opacity: 0.65, marginTop: 4 },
 
+  tabs: {
+    display: "flex",
+    gap: 8,
+    background: "#0f0f10",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 16,
+    padding: 6,
+    marginBottom: 12,
+  },
+  tab: {
+    flex: 1,
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "none",
+    background: "transparent",
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  tabActive: {
+    background: "rgba(255,47,47,0.12)",
+    color: "#fff",
+    boxShadow: "0 10px 24px rgba(255,47,47,0.10)",
+  },
+
+  msg: {
+    padding: 12,
+    borderRadius: 14,
+    fontSize: 13,
+    marginBottom: 12,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "#101012",
+  },
+  msgError: {
+    border: "1px solid rgba(255,47,47,0.30)",
+    background: "rgba(255,47,47,0.12)",
+  },
+  msgSuccess: {
+    border: "1px solid rgba(0,200,110,0.25)",
+    background: "rgba(0,200,110,0.12)",
+  },
+  msgInfo: {
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.06)",
+  },
+
+  h1: { fontSize: 18, fontWeight: 900, marginBottom: 6 },
+  p: { fontSize: 13, opacity: 0.7, marginBottom: 12, lineHeight: 1.35 },
+
+  label: { fontSize: 12, opacity: 0.7, marginBottom: 6, display: "block" },
   input: {
     width: "100%",
     padding: 12,
-    marginBottom: 10,
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.14)",
     background: "#101012",
-    color: "white",
+    color: "#fff",
     outline: "none",
+    marginBottom: 10,
   },
-  primaryBtn: {
+
+  primary: {
     width: "100%",
     padding: 14,
     borderRadius: 14,
     border: "none",
     background: "#ff2f2f",
-    color: "white",
+    color: "#fff",
     fontWeight: 900,
     cursor: "pointer",
+    boxShadow: "0 16px 28px rgba(255,47,47,0.16)",
     marginTop: 4,
   },
-  ghostBtn: {
+  ghost: {
     width: "100%",
     padding: 12,
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.14)",
     background: "#0f0f10",
-    color: "white",
+    color: "#fff",
     fontWeight: 800,
     cursor: "pointer",
     marginTop: 10,
   },
-  error: {
-    background: "rgba(255,47,47,0.15)",
-    border: "1px solid rgba(255,47,47,0.25)",
+  linkBtn: {
+    width: "100%",
     padding: 10,
-    borderRadius: 12,
-    marginBottom: 10,
-    fontSize: 13,
+    borderRadius: 14,
+    border: "none",
+    background: "transparent",
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: 800,
+    cursor: "pointer",
+    marginTop: 8,
   },
-  success: {
-    background: "rgba(0,200,100,0.15)",
-    border: "1px solid rgba(0,200,100,0.20)",
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 10,
-    fontSize: 13,
-  },
-  hint: {
-    marginTop: 12,
-    opacity: 0.6,
-    fontSize: 12,
-    lineHeight: 1.35,
+
+  footerHint: {
+    marginTop: 14,
+    fontSize: 11,
+    opacity: 0.45,
+    textAlign: "center",
   },
 };
