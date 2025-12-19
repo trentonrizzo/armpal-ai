@@ -105,8 +105,7 @@ function TogglePill({ on, disabled, onClick }) {
 
 export default function SettingsOverlay({ open, onClose }) {
   const [user, setUser] = useState(null);
-
-  const [section, setSection] = useState(null); // "notifications" | "account"
+  const [section, setSection] = useState(null); // notifications | account
 
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -166,6 +165,20 @@ export default function SettingsOverlay({ open, onClose }) {
     }
   }
 
+  async function sendPasswordReset() {
+    if (!user?.email) return;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: window.location.origin,
+    });
+
+    if (error) {
+      alert(error.message);
+    } else {
+      alert("Password reset email sent.");
+    }
+  }
+
   async function logout() {
     await supabase.auth.signOut();
     window.location.reload();
@@ -200,7 +213,9 @@ export default function SettingsOverlay({ open, onClose }) {
 
         {/* NOTIFICATIONS */}
         <div
-          onClick={() => setSection(section === "notifications" ? null : "notifications")}
+          onClick={() =>
+            setSection(section === "notifications" ? null : "notifications")
+          }
           style={{
             marginTop: 18,
             padding: 14,
@@ -256,6 +271,27 @@ export default function SettingsOverlay({ open, onClose }) {
 
               <div style={{ opacity: 0.6 }}>User ID</div>
               <div style={{ fontSize: 12 }}>{user?.id}</div>
+
+              <div style={{ height: 14 }} />
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendPasswordReset();
+                }}
+                style={{
+                  padding: 10,
+                  width: "100%",
+                  borderRadius: 12,
+                  background: "#1a1a1a",
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  color: "white",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Send password reset email
+              </button>
             </div>
           )}
         </div>
