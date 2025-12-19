@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "./supabaseClient"; // ✅ FIXED PATH
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
@@ -11,7 +11,7 @@ export default function AuthPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    // Detect recovery mode from URL hash
+    // Supabase recovery links use URL hash
     const hash = window.location.hash || "";
     if (hash.includes("type=recovery")) {
       setIsRecovery(true);
@@ -46,9 +46,7 @@ export default function AuthPage() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
+    const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
       setError(error.message);
@@ -56,9 +54,7 @@ export default function AuthPage() {
       return;
     }
 
-    // End recovery session
     await supabase.auth.signOut();
-
     setSuccess(true);
 
     setTimeout(() => {
@@ -77,9 +73,7 @@ export default function AuthPage() {
 
       {isRecovery ? (
         success ? (
-          <div style={styles.success}>
-            Password updated. Redirecting…
-          </div>
+          <div style={styles.success}>Password updated. Redirecting…</div>
         ) : (
           <>
             <input
