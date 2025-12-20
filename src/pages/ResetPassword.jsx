@@ -1,24 +1,31 @@
-import React, { useEffect, useState } from "react";
+// src/pages/ResetPassword.jsx
+import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
+import { useNavigate } from "react-router-dom";
 
 export default function ResetPassword() {
-  const [session, setSession] = useState(null);
+  const navigate = useNavigate();
+
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  // Supabase puts the session in the URL hash on reset
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+      if (!data.session) {
+        setError("Invalid or expired reset link.");
+      }
     });
   }, []);
 
-  async function handleReset() {
-    setError(null);
+  const handleReset = async (e) => {
+    e.preventDefault();
+    setError("");
 
-    if (!password || password.length < 6) {
+    if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
@@ -34,130 +41,63 @@ export default function ResetPassword() {
       password,
     });
 
+    setLoading(false);
+
     if (error) {
       setError(error.message);
-      setLoading(false);
-      return;
+    } else {
+      setSuccess(true);
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
     }
-
-    // Important: end recovery session
-    await supabase.auth.signOut();
-
-    setSuccess(true);
-
-    setTimeout(() => {
-      window.location.href = "/";
-    }, 1200);
-  }
-
-  if (!session) {
-    return (
-      <div style={styles.center}>
-        <div style={styles.card}>
-          <h2>Invalid or expired reset link</h2>
-          <p>Please request a new password reset.</p>
-        </div>
-      </div>
-    );
-  }
+  };
 
   return (
-    <div style={styles.center}>
-      <div style={styles.card}>
-        <h2 style={{ marginBottom: 10 }}>Reset Password</h2>
+    <div className="min-h-screen bg-black flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-neutral-900 rounded-2xl p-6">
+        <h1 className="text-white text-2xl font-bold mb-4 text-center">
+          Reset Password
+        </h1>
 
-        {error && <div style={styles.error}>{error}</div>}
+        {error && (
+          <p className="text-red-500 text-sm mb-3 text-center">{error}</p>
+        )}
 
         {success ? (
-          <div style={styles.success}>
-            Password updated. Redirecting…
-          </div>
+          <p className="text-green-500 text-center">
+            Password updated. Redirecting to login…
+          </p>
         ) : (
-          <>
+          <form onSubmit={handleReset} className="space-y-4">
             <input
               type="password"
               placeholder="New password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
+              className="w-full px-4 py-3 rounded-xl bg-black text-white border border-neutral-700 text-base"
+              required
             />
 
             <input
               type="password"
-              placeholder="Confirm password"
+              placeholder="Confirm new password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              style={styles.input}
+              className="w-full px-4 py-3 rounded-xl bg-black text-white border border-neutral-700 text-base"
+              required
             />
 
             <button
-              onClick={handleReset}
+              type="submit"
               disabled={loading}
-              style={styles.button}
+              className="w-full py-3 rounded-xl bg-red-600 text-white font-semibold disabled:opacity-50"
             >
               {loading ? "Updating…" : "Update Password"}
             </button>
-          </>
+          </form>
         )}
       </div>
     </div>
   );
 }
-
-/* =========================
-   STYLES (isolated)
-========================= */
-
-const styles = {
-  center: {
-    minHeight: "100vh",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    background: "#000",
-    padding: 20,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 360,
-    background: "#0f0f10",
-    borderRadius: 16,
-    padding: 20,
-    color: "white",
-    boxShadow: "0 0 0 1px rgba(255,255,255,0.08)",
-  },
-  input: {
-    width: "100%",
-    padding: 12,
-    marginTop: 10,
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "#111",
-    color: "white",
-    outline: "none",
-  },
-  button: {
-    marginTop: 16,
-    width: "100%",
-    padding: 14,
-    borderRadius: 14,
-    border: "none",
-    background: "#ff2f2f",
-    color: "white",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  error: {
-    background: "rgba(255,47,47,0.15)",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
-    fontSize: 13,
-  },
-  success: {
-    background: "rgba(0,200,100,0.15)",
-    padding: 12,
-    borderRadius: 10,
-    fontSize: 14,
-  },
-};
