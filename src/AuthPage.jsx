@@ -2,11 +2,11 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient";
 
 /*
-  AuthPage – FIXED RESET PASSWORD FLOW
+  AuthPage – CORRECT RESET PASSWORD FLOW (NO LOOPS)
 
-  KEY RULE:
-  If Supabase opens the app with a recovery session,
-  we FORCE the reset-password UI and block auto-redirects.
+  - Forgot password ALWAYS sends email
+  - Email link ALWAYS lands in recovery mode
+  - No App.jsx changes required
 */
 
 export default function AuthPage() {
@@ -18,11 +18,9 @@ export default function AuthPage() {
   const [msg, setMsg] = useState(null);
 
   /* ============================
-     DETECT RECOVERY *BEFORE*
-     APP REDIRECTS ANYWHERE
+     DETECT PASSWORD RECOVERY
   ============================ */
   useEffect(() => {
-    // 1. If URL contains recovery info → force recovery mode
     const hash = window.location.hash || "";
     const search = window.location.search || "";
 
@@ -34,7 +32,6 @@ export default function AuthPage() {
       setMode("recovery");
     }
 
-    // 2. Supabase auth event (most reliable)
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setMode("recovery");
@@ -50,16 +47,18 @@ export default function AuthPage() {
   async function handleLogin() {
     setLoading(true);
     setMsg(null);
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+
     if (error) setMsg({ type: "error", text: error.message });
     setLoading(false);
   }
 
   /* ============================
-     SEND RESET EMAIL
+     SEND RESET EMAIL (FIXED)
   ============================ */
   async function sendResetEmail() {
     if (!email) {
@@ -71,7 +70,7 @@ export default function AuthPage() {
     setMsg(null);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
+      redirectTo: `${window.location.origin}/auth`, // SAME PAGE, BUT RECOVERY MODE
     });
 
     if (error) {
@@ -81,15 +80,13 @@ export default function AuthPage() {
         type: "success",
         text: "Reset email sent. Open the newest email link.",
       });
-      setMode("login");
     }
 
     setLoading(false);
   }
 
   /* ============================
-     UPDATE PASSWORD (THIS IS
-     THE SCREEN YOU WANT)
+     UPDATE PASSWORD
   ============================ */
   async function handlePasswordUpdate() {
     if (password.length < 6) {
@@ -112,14 +109,13 @@ export default function AuthPage() {
       return;
     }
 
-    await supabase.auth.signOut();
-
     setMsg({
       type: "success",
       text: "Password updated. Redirecting to login…",
     });
 
-    setTimeout(() => {
+    setTimeout(async () => {
+      await supabase.auth.signOut();
       window.location.href = "/auth";
     }, 1200);
   }
@@ -155,7 +151,11 @@ export default function AuthPage() {
               onChange={(e) => setConfirm(e.target.value)}
               style={styles.input}
             />
-            <button onClick={handlePasswordUpdate} style={styles.primary}>
+            <button
+              onClick={handlePasswordUpdate}
+              style={styles.primary}
+              disabled={loading}
+            >
               Update password
             </button>
           </>
@@ -209,7 +209,7 @@ export default function AuthPage() {
 }
 
 /* ============================
-   STYLES
+   STYLES (unchanged)
 ============================ */
 const styles = {
   page: {
