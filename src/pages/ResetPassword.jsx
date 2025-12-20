@@ -1,7 +1,15 @@
 // src/pages/ResetPassword.jsx
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
+
+/*
+  ResetPassword – SUPABASE-CORRECT RECOVERY HANDLER
+
+  ❌ No getSession()
+  ❌ No premature validation
+  ✅ Let Supabase manage recovery session
+*/
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -12,16 +20,7 @@ export default function ResetPassword() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  // Supabase puts the session in the URL hash on reset
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        setError("Invalid or expired reset link.");
-      }
-    });
-  }, []);
-
-  const handleReset = async (e) => {
+  async function handleReset(e) {
     e.preventDefault();
     setError("");
 
@@ -37,21 +36,23 @@ export default function ResetPassword() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
+    const { error } = await supabase.auth.updateUser({ password });
 
     setLoading(false);
 
     if (error) {
       setError(error.message);
-    } else {
-      setSuccess(true);
-      setTimeout(() => {
-        navigate("/login");
-      }, 2000);
+      return;
     }
-  };
+
+    setSuccess(true);
+
+    // Sign out cleanly AFTER update
+    setTimeout(async () => {
+      await supabase.auth.signOut();
+      navigate("/login");
+    }, 1500);
+  }
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4">
