@@ -1,45 +1,22 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { supabase } from "./supabaseClient";
 
 /*
-  AuthPage – CORRECT RESET PASSWORD FLOW (NO LOOPS)
+  AuthPage – LOGIN + FORGOT ONLY
 
-  - Forgot password ALWAYS sends email
-  - Email link ALWAYS lands in recovery mode
-  - No App.jsx changes required
+  ❌ No recovery handling
+  ❌ No updateUser
+  ❌ No PASSWORD_RECOVERY listener
+
+  ✅ Reset emails go to /reset-password
 */
 
 export default function AuthPage() {
-  const [mode, setMode] = useState("login"); // login | forgot | recovery
+  const [mode, setMode] = useState("login"); // login | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
-
-  /* ============================
-     DETECT PASSWORD RECOVERY
-  ============================ */
-  useEffect(() => {
-    const hash = window.location.hash || "";
-    const search = window.location.search || "";
-
-    if (
-      hash.includes("type=recovery") ||
-      hash.includes("access_token") ||
-      search.includes("code=")
-    ) {
-      setMode("recovery");
-    }
-
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setMode("recovery");
-      }
-    });
-
-    return () => data.subscription.unsubscribe();
-  }, []);
 
   /* ============================
      LOGIN
@@ -58,7 +35,7 @@ export default function AuthPage() {
   }
 
   /* ============================
-     SEND RESET EMAIL (FIXED)
+     SEND RESET EMAIL (CORRECT)
   ============================ */
   async function sendResetEmail() {
     if (!email) {
@@ -70,7 +47,7 @@ export default function AuthPage() {
     setMsg(null);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`, // SAME PAGE, BUT RECOVERY MODE
+      redirectTo: `${window.location.origin}/reset-password`,
     });
 
     if (error) {
@@ -78,46 +55,12 @@ export default function AuthPage() {
     } else {
       setMsg({
         type: "success",
-        text: "Reset email sent. Open the newest email link.",
+        text: "Password reset email sent. Check your inbox.",
       });
+      setMode("login");
     }
 
     setLoading(false);
-  }
-
-  /* ============================
-     UPDATE PASSWORD
-  ============================ */
-  async function handlePasswordUpdate() {
-    if (password.length < 6) {
-      setMsg({ type: "error", text: "Password must be at least 6 characters." });
-      return;
-    }
-    if (password !== confirm) {
-      setMsg({ type: "error", text: "Passwords do not match." });
-      return;
-    }
-
-    setLoading(true);
-    setMsg(null);
-
-    const { error } = await supabase.auth.updateUser({ password });
-
-    if (error) {
-      setMsg({ type: "error", text: error.message });
-      setLoading(false);
-      return;
-    }
-
-    setMsg({
-      type: "success",
-      text: "Password updated. Redirecting to login…",
-    });
-
-    setTimeout(async () => {
-      await supabase.auth.signOut();
-      window.location.href = "/auth";
-    }, 1200);
   }
 
   /* ============================
@@ -132,33 +75,6 @@ export default function AuthPage() {
           <div style={msg.type === "error" ? styles.error : styles.success}>
             {msg.text}
           </div>
-        )}
-
-        {mode === "recovery" && (
-          <>
-            <h2>Reset password</h2>
-            <input
-              type="password"
-              placeholder="New password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-            />
-            <input
-              type="password"
-              placeholder="Confirm password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              style={styles.input}
-            />
-            <button
-              onClick={handlePasswordUpdate}
-              style={styles.primary}
-              disabled={loading}
-            >
-              Update password
-            </button>
-          </>
         )}
 
         {mode === "login" && (
