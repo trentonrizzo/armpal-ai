@@ -2,13 +2,15 @@ import React, { useState } from "react";
 import { supabase } from "./supabaseClient";
 
 /*
-  AuthPage – LOGIN + FORGOT ONLY
+  AuthPage – LOGIN + FORGOT ONLY (FINAL)
 
-  ❌ No recovery handling
-  ❌ No updateUser
-  ❌ No PASSWORD_RECOVERY listener
+  ✅ Login works
+  ✅ Forgot password sends email
+  ✅ Reset emails ALWAYS go to:
+     https://armapalapp.vercel.app/reset-password
 
-  ✅ Reset emails go to /reset-password
+  ❌ No recovery handling here
+  ❌ No updateUser here
 */
 
 export default function AuthPage() {
@@ -30,12 +32,15 @@ export default function AuthPage() {
       password,
     });
 
-    if (error) setMsg({ type: "error", text: error.message });
+    if (error) {
+      setMsg({ type: "error", text: error.message });
+    }
+
     setLoading(false);
   }
 
   /* ============================
-     SEND RESET EMAIL (CORRECT)
+     SEND RESET EMAIL (FIXED)
   ============================ */
   async function sendResetEmail() {
     if (!email) {
@@ -47,7 +52,7 @@ export default function AuthPage() {
     setMsg(null);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: "https://armapalapp.vercel.app/reset-password",
     });
 
     if (error) {
@@ -93,8 +98,8 @@ export default function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               style={styles.input}
             />
-            <button onClick={handleLogin} style={styles.primary}>
-              Log in
+            <button onClick={handleLogin} style={styles.primary} disabled={loading}>
+              {loading ? "Logging in..." : "Log in"}
             </button>
             <button onClick={() => setMode("forgot")} style={styles.secondary}>
               Forgot password?
@@ -111,8 +116,8 @@ export default function AuthPage() {
               onChange={(e) => setEmail(e.target.value)}
               style={styles.input}
             />
-            <button onClick={sendResetEmail} style={styles.primary}>
-              Send reset email
+            <button onClick={sendResetEmail} style={styles.primary} disabled={loading}>
+              {loading ? "Sending..." : "Send reset email"}
             </button>
             <button onClick={() => setMode("login")} style={styles.secondary}>
               Back
@@ -125,7 +130,7 @@ export default function AuthPage() {
 }
 
 /* ============================
-   STYLES (unchanged)
+   STYLES (UNCHANGED)
 ============================ */
 const styles = {
   page: {
