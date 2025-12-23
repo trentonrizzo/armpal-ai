@@ -19,6 +19,7 @@ import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
+import usePresence from "./hooks/usePresence";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
@@ -73,6 +74,8 @@ function AppContent() {
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
+  
+usePresence(session?.user);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
