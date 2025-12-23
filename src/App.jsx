@@ -74,7 +74,7 @@ function AppContent() {
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
-  
+
 usePresence(session?.user);
 
   useEffect(() => {
@@ -84,6 +84,21 @@ usePresence(session?.user);
     const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
   }, []);
+useEffect(() => {
+  if (!session?.user?.id) return;
+
+  const ping = async () => {
+    await supabase
+      .from("profiles")
+      .update({ last_seen: new Date().toISOString() })
+      .eq("id", session.user.id);
+  };
+
+  ping();
+  const interval = setInterval(ping, 30000);
+
+  return () => clearInterval(interval);
+}, [session?.user?.id]);
 
   useEffect(() => { if (session) initOneSignal(); }, [session]);
 
