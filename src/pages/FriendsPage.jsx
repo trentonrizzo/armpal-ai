@@ -574,7 +574,7 @@ export default function FriendsPage() {
       </section>
     </div>
   );
-
+}
 function FriendRow({
   friend,
   online,
@@ -883,4 +883,3 @@ const smallMuted = {
 const mono = {
   fontFamily: "monospace",
 };
-}
