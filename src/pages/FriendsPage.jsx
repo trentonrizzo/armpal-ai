@@ -110,9 +110,10 @@ export default function FriendsPage() {
   // - is_online true
   // - last_seen is fresh (within 60s)
   function isOnline(profile) {
-    if (!profile?.is_online) return false;
-    if (!profile?.last_seen) return false;
-    return Date.now() - new Date(profile.last_seen).getTime() < 60 * 1000; // 1 min
+  if (!profile?.last_seen) return false;
+  return Date.now() - new Date(profile.last_seen).getTime() < 60 * 1000;
+}
+
   }
 
   function formatAgoNoMonths(ts) {
@@ -575,7 +576,6 @@ export default function FriendsPage() {
       </section>
     </div>
   );
-}
 
 function FriendRow({
   friend,
