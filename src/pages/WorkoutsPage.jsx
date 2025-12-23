@@ -170,9 +170,8 @@ export default function WorkoutsPage() {
     const payload = {
       user_id: user.id,
       name: workoutName || "Workout",
-      scheduled_for: workoutSchedule
-        ? new Date(workoutSchedule).toISOString()
-        : null,
+      // ✅ FIX: do NOT force UTC via toISOString() (causes -6 hours)
+      scheduled_for: workoutSchedule ? workoutSchedule : null,
     };
 
     if (editingWorkout) {
@@ -391,31 +390,72 @@ export default function WorkoutsPage() {
           </div>
         </div>
       )}
-
       {exerciseModalOpen && (
-        <div style={modalBackdrop} onClick={() => { setExerciseModalOpen(false); setEditingExercise(null); }}>
+        <div
+          style={modalBackdrop}
+          onClick={() => {
+            setExerciseModalOpen(false);
+            setEditingExercise(null);
+          }}
+        >
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0 }}>{editingExercise ? "Edit Exercise" : "New Exercise"}</h2>
+            <h2 style={{ marginTop: 0 }}>
+              {editingExercise ? "Edit Exercise" : "New Exercise"}
+            </h2>
             <label style={labelStyle}>Name</label>
-            <input style={inputStyle} value={exerciseName} onChange={(e) => setExerciseName(e.target.value)} />
+            <input
+              style={inputStyle}
+              value={exerciseName}
+              onChange={(e) => setExerciseName(e.target.value)}
+            />
             <label style={labelStyle}>Sets</label>
-            <input style={inputStyle} type="number" value={exerciseSets} onChange={(e) => setExerciseSets(e.target.value)} />
+            <input
+              style={inputStyle}
+              type="number"
+              value={exerciseSets}
+              onChange={(e) => setExerciseSets(e.target.value)}
+            />
             <label style={labelStyle}>Reps</label>
-            <input style={inputStyle} type="number" value={exerciseReps} onChange={(e) => setExerciseReps(e.target.value)} />
+            <input
+              style={inputStyle}
+              type="number"
+              value={exerciseReps}
+              onChange={(e) => setExerciseReps(e.target.value)}
+            />
             <label style={labelStyle}>Weight</label>
-            <input style={inputStyle} value={exerciseWeight} onChange={(e) => setExerciseWeight(e.target.value)} />
-            <button style={primaryBtn} onClick={saveExercise}>Save Exercise</button>
+            <input
+              style={inputStyle}
+              value={exerciseWeight}
+              onChange={(e) => setExerciseWeight(e.target.value)}
+            />
+            <button style={primaryBtn} onClick={saveExercise}>
+              Save Exercise
+            </button>
           </div>
         </div>
       )}
 
       {deleteModalOpen && (
-        <div style={modalBackdrop} onClick={() => setDeleteModalOpen(false)}>
+        <div
+          style={modalBackdrop}
+          onClick={() => setDeleteModalOpen(false)}
+        >
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>Confirm Delete?</h2>
-            <p style={{ opacity: 0.7, marginBottom: 18 }}>This action cannot be undone.</p>
-            <button style={secondaryBtn} onClick={() => setDeleteModalOpen(false)}>Cancel</button>
-            <button style={primaryBtn} onClick={confirmDelete}>Delete</button>
+            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>
+              Confirm Delete?
+            </h2>
+            <p style={{ opacity: 0.7, marginBottom: 18 }}>
+              This action cannot be undone.
+            </p>
+            <button
+              style={secondaryBtn}
+              onClick={() => setDeleteModalOpen(false)}
+            >
+              Cancel
+            </button>
+            <button style={primaryBtn} onClick={confirmDelete}>
+              Delete
+            </button>
           </div>
         </div>
       )}
