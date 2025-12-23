@@ -264,6 +264,12 @@ export default function SettingsOverlay({ open, onClose }) {
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
                 <div style={{ opacity: 0.6 }}>Email</div>
                 <div>{user?.email}</div>
+<div style={{ height: 10 }} />
+
+<div style={{ opacity: 0.6 }}>User ID</div>
+<div style={{ fontSize: 12 }}>{user?.id}</div>
+
+<div style={{ height: 14 }} />
 
                 <div style={{ height: 14 }} />
 
