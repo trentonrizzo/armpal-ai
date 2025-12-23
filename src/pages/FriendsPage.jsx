@@ -114,8 +114,6 @@ export default function FriendsPage() {
   return Date.now() - new Date(profile.last_seen).getTime() < 60 * 1000;
 }
 
-  }
-
   function formatAgoNoMonths(ts) {
     if (!ts) return "";
     const ms = Date.now() - new Date(ts).getTime();
@@ -885,3 +883,4 @@ const smallMuted = {
 const mono = {
   fontFamily: "monospace",
 };
+}
