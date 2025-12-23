@@ -7,7 +7,7 @@ import { supabase } from "./supabaseClient";
   ✅ Login works
   ✅ Reset email works
   ✅ Recovery links DO NOT auto-login
-  ✅ No App.jsx changes
+  ✅ Redirects to /reset-password
 */
 
 export default function AuthPage() {
@@ -18,7 +18,7 @@ export default function AuthPage() {
   const [msg, setMsg] = useState(null);
 
   /* ============================
-     FIX: BLOCK AUTO LOGIN DURING RECOVERY
+     BLOCK AUTO LOGIN DURING RECOVERY
   ============================ */
   useEffect(() => {
     const hash = window.location.hash || "";
@@ -30,14 +30,11 @@ export default function AuthPage() {
       search.includes("code=");
 
     if (isRecovery) {
-      // 🔒 Kill any restored session immediately
       supabase.auth.signOut({ scope: "local" });
-
-      // Force clean login state
       setMode("login");
       setMsg({
         type: "success",
-        text: "Please set a new password from the reset page.",
+        text: "Please set a new password on the reset page.",
       });
     }
   }, []);
@@ -62,7 +59,7 @@ export default function AuthPage() {
   }
 
   /* ============================
-     SEND RESET EMAIL
+     SEND RESET EMAIL (CORRECT)
   ============================ */
   async function sendResetEmail() {
     if (!email) {
@@ -73,27 +70,18 @@ export default function AuthPage() {
     setLoading(true);
     setMsg(null);
 
-    try {
-      const res = await fetch("/api/send-reset-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
 
-      if (!res.ok) {
-        throw new Error("Failed to send reset email");
-      }
-
+    if (error) {
+      setMsg({ type: "error", text: error.message });
+    } else {
       setMsg({
         type: "success",
         text: "Password reset email sent. Check your inbox.",
       });
       setMode("login");
-    } catch {
-      setMsg({
-        type: "error",
-        text: "Could not send reset email. Try again.",
-      });
     }
 
     setLoading(false);
@@ -175,7 +163,7 @@ export default function AuthPage() {
 }
 
 /* ============================
-   STYLES (UNCHANGED)
+   STYLES
 ============================ */
 const styles = {
   page: {
