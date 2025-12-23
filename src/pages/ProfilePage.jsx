@@ -92,6 +92,54 @@ export default function ProfilePage() {
     loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+useEffect(() => {
+  if (!user?.id) return;
+
+  let heartbeat;
+
+  const setOnline = async () => {
+    await supabase
+      .from("profiles")
+      .update({
+        is_online: true,
+        last_active: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+  };
+
+  const setOffline = async () => {
+    await supabase
+      .from("profiles")
+      .update({
+        is_online: false,
+        last_seen: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+  };
+
+  // mark online immediately
+  setOnline();
+
+  // heartbeat every 30s while app is open
+  heartbeat = setInterval(setOnline, 30000);
+
+  // handle tab close / app background
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") {
+      setOffline();
+    } else {
+      setOnline();
+    }
+  };
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  return () => {
+    clearInterval(heartbeat);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    setOffline();
+  };
+}, [user?.id]);
 
   async function loadProfile() {
     try {
