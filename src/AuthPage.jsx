@@ -1,12 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 
 /*
-  AuthPage – LOGIN + FORGOT (RESEND BYPASS)
+  AuthPage – LOGIN + FORGOT (RECOVERY SAFE)
 
-  ✅ Login works (Supabase)
-  ✅ Forgot password uses /api/send-reset-email
-  ❌ NO Supabase email calls
+  ✅ Login works
+  ✅ Reset email works
+  ✅ Recovery links DO NOT auto-login
+  ✅ No App.jsx changes
 */
 
 export default function AuthPage() {
@@ -15,6 +16,31 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
+
+  /* ============================
+     FIX: BLOCK AUTO LOGIN DURING RECOVERY
+  ============================ */
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+
+    const isRecovery =
+      hash.includes("type=recovery") ||
+      hash.includes("access_token") ||
+      search.includes("code=");
+
+    if (isRecovery) {
+      // 🔒 Kill any restored session immediately
+      supabase.auth.signOut({ scope: "local" });
+
+      // Force clean login state
+      setMode("login");
+      setMsg({
+        type: "success",
+        text: "Please set a new password from the reset page.",
+      });
+    }
+  }, []);
 
   /* ============================
      LOGIN
@@ -36,7 +62,7 @@ export default function AuthPage() {
   }
 
   /* ============================
-     SEND RESET EMAIL (RESEND)
+     SEND RESET EMAIL
   ============================ */
   async function sendResetEmail() {
     if (!email) {
@@ -63,7 +89,7 @@ export default function AuthPage() {
         text: "Password reset email sent. Check your inbox.",
       });
       setMode("login");
-    } catch (err) {
+    } catch {
       setMsg({
         type: "error",
         text: "Could not send reset email. Try again.",
