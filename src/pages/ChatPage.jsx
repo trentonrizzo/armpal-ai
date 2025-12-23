@@ -200,7 +200,7 @@ export default function ChatPage() {
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
+    document.body.style.touchAction = "manipulation";
     return () => {
       document.body.style.overflow = prevOverflow;
       document.body.style.touchAction = "";
@@ -752,6 +752,8 @@ const messagesBox = {
   left: 0,
   right: 0,
   overflowY: "auto",
+  WebkitOverflowScrolling: "touch",
+overscrollBehavior: "contain",
   padding: 12,
   background: "#000",
 };
