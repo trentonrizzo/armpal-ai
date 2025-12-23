@@ -1,5 +1,5 @@
 // src/pages/ChatPage.jsx
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { FiArrowLeft, FiSend, FiImage, FiX } from "react-icons/fi";
@@ -38,13 +38,11 @@ function timeAgo(ts) {
 
 function tryParseJSON(val) {
   if (val == null) return null;
-  if (typeof val === "object") return val; // already json
+  if (typeof val === "object") return val;
   if (typeof val !== "string") return null;
 
   const s = val.trim();
   if (!s) return null;
-
-  // If it doesn't look like JSON, bail
   if (!(s.startsWith("{") || s.startsWith("["))) return null;
 
   try {
@@ -55,26 +53,14 @@ function tryParseJSON(val) {
 }
 
 function extractWorkoutShareFromMessage(m) {
-  // Try common columns where share payload could be stored
-  const candidates = [
-    m.text,
-    m.message,
-    m.body,
-    m.content,
-    m.payload,
-    m.data,
-  ];
+  const candidates = [m.text, m.message, m.body, m.content, m.payload, m.data];
 
   for (const c of candidates) {
     const parsed = tryParseJSON(c);
     if (!parsed) continue;
 
-    // Case A: { type:"workout_share", workout:{...}, exercises:[...] }
-    if (parsed?.type === "workout_share" && parsed?.workout) {
-      return parsed;
-    }
+    if (parsed?.type === "workout_share" && parsed?.workout) return parsed;
 
-    // Case B: { type:"workout_share", payload:{workout, exercises} }
     if (parsed?.type === "workout_share" && parsed?.payload?.workout) {
       return {
         type: "workout_share",
@@ -84,7 +70,6 @@ function extractWorkoutShareFromMessage(m) {
       };
     }
 
-    // Case C: some systems store just {workout, exercises} with no type
     if (parsed?.workout && Array.isArray(parsed?.exercises)) {
       return { type: "workout_share", ...parsed };
     }
@@ -99,9 +84,8 @@ function prettyLine(ex) {
   const weight = ex.weight ?? "";
 
   let mid = "";
-  if (sets != null || reps != null) {
-    mid = `${sets ?? "—"}×${reps ?? "—"}`;
-  }
+  if (sets != null || reps != null) mid = `${sets ?? "—"}×${reps ?? "—"}`;
+
   let w = "";
   if (weight) w = ` @ ${weight}`;
 
@@ -112,7 +96,6 @@ function WorkoutShareCard({ share, mine, onSave, saving }) {
   const workoutName = share?.workout?.name || "Workout";
   const exercises = Array.isArray(share?.exercises) ? share.exercises : [];
 
-  // Keep message compact in chat: show first 6, then "+X more"
   const maxShow = 6;
   const shown = exercises.slice(0, maxShow);
   const remaining = Math.max(0, exercises.length - maxShow);
@@ -139,13 +122,10 @@ function WorkoutShareCard({ share, mine, onSave, saving }) {
         ))}
 
         {remaining > 0 && (
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            + {remaining} more…
-          </div>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>+ {remaining} more…</div>
         )}
       </div>
 
-      {/* Save button (you asked for it) */}
       <button
         onClick={onSave}
         disabled={saving}
@@ -155,7 +135,7 @@ function WorkoutShareCard({ share, mine, onSave, saving }) {
           padding: "10px 12px",
           borderRadius: 12,
           border: mine ? "1px solid rgba(255,255,255,0.25)" : "none",
-          background: mine ? "rgba(0,0,0,0.25)" : "rgba(0,0,0,0.25)",
+          background: "rgba(0,0,0,0.25)",
           color: "#fff",
           fontWeight: 900,
           cursor: saving ? "not-allowed" : "pointer",
@@ -167,10 +147,6 @@ function WorkoutShareCard({ share, mine, onSave, saving }) {
     </div>
   );
 }
-
-/* ============================================================
-   MAIN
-   ============================================================ */
 
 export default function ChatPage() {
   const { friendId } = useParams();
@@ -184,7 +160,6 @@ export default function ChatPage() {
   const [error, setError] = useState("");
   const [imageView, setImageView] = useState(null);
 
-  // Save workflow state
   const [savingWorkoutKey, setSavingWorkoutKey] = useState(null);
   const [toast, setToast] = useState("");
 
@@ -195,17 +170,6 @@ export default function ChatPage() {
   const idleTimer = useRef(null);
   const heartbeatTimer = useRef(null);
   const isOnlineRef = useRef(false);
-
-  // 🔒 Lock background scroll (PWA fix)
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "manipulation";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.touchAction = "";
-    };
-  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -484,10 +448,6 @@ export default function ChatPage() {
     ? `Last seen ${timeAgo(friend.last_seen)}`
     : "";
 
-  /* ============================================================
-     SAVE SHARED WORKOUT -> my workouts table + exercises table
-     ============================================================ */
-
   async function saveSharedWorkout(share, messageId) {
     if (!user?.id) return;
     if (!share?.workout?.name) return;
@@ -497,15 +457,12 @@ export default function ChatPage() {
     setError("");
 
     try {
-      const ok = window.confirm(
-        `Save "${share.workout.name}" to your workouts?`
-      );
+      const ok = window.confirm(`Save "${share.workout.name}" to your workouts?`);
       if (!ok) {
         setSavingWorkoutKey(null);
         return;
       }
 
-      // get position = append to end
       const { data: existing, error: e1 } = await supabase
         .from("workouts")
         .select("id")
@@ -556,7 +513,7 @@ export default function ChatPage() {
   }
 
   return (
-    <>
+    <div style={shell}>
       {/* HEADER */}
       <div style={header}>
         <button onClick={() => navigate("/friends")} style={backBtn}>
@@ -572,9 +529,7 @@ export default function ChatPage() {
                 height: 10,
                 borderRadius: "50%",
                 background: friendOnline ? "#2dff57" : "rgba(255,255,255,0.3)",
-                boxShadow: friendOnline
-                  ? "0 0 8px rgba(45,255,87,0.9)"
-                  : "none",
+                boxShadow: friendOnline ? "0 0 8px rgba(45,255,87,0.9)" : "none",
               }}
             />
           </div>
@@ -584,7 +539,6 @@ export default function ChatPage() {
           )}
         </div>
       </div>
-
       {/* MESSAGES */}
       <div ref={listRef} style={messagesBox}>
         {loading && <div style={{ opacity: 0.6 }}>Loading…</div>}
@@ -619,7 +573,6 @@ export default function ChatPage() {
                   fontSize: 16,
                 }}
               >
-                {/* ✅ Workout Share Card */}
                 {share ? (
                   <WorkoutShareCard
                     share={share}
@@ -629,14 +582,10 @@ export default function ChatPage() {
                   />
                 ) : (
                   <>
-                    {/* Normal text */}
                     {m.text && <div>{m.text}</div>}
-                    {/* If your schema ever stores other text columns, you can display them here too,
-                        but we leave it as-is to avoid breaking current chat. */}
                   </>
                 )}
 
-                {/* Image */}
                 {m.image_url && (
                   <img
                     src={m.image_url}
@@ -692,7 +641,7 @@ export default function ChatPage() {
       {toast && (
         <div
           style={{
-            position: "fixed",
+            position: "absolute",
             bottom: 86,
             left: "50%",
             transform: "translateX(-50%)",
@@ -716,13 +665,20 @@ export default function ChatPage() {
           <FiX size={28} style={closeIcon} />
         </div>
       )}
-    </>
+    </div>
   );
 }
 
 /* STYLES */
-const header = {
+const shell = {
   position: "fixed",
+  inset: 0,
+  background: "#000",
+  overflow: "hidden", // body cannot scroll because the whole page is fixed
+};
+
+const header = {
+  position: "absolute",
   top: 0,
   left: 0,
   right: 0,
@@ -746,24 +702,26 @@ const backBtn = {
 };
 
 const messagesBox = {
-  position: "fixed",
+  position: "absolute",
   top: 56,
-  bottom: 72,
   left: 0,
   right: 0,
+  bottom: 72,
   overflowY: "auto",
   WebkitOverflowScrolling: "touch",
-overscrollBehavior: "contain",
+  overscrollBehavior: "contain",
+  touchAction: "pan-y",
   padding: 12,
   background: "#000",
 };
 
 const inputBar = {
-  position: "fixed",
-  bottom: "env(safe-area-inset-bottom)",
+  position: "absolute",
   left: 0,
   right: 0,
+  bottom: 0,
   height: 72,
+  paddingBottom: "env(safe-area-inset-bottom)",
   background: "#000",
   borderTop: "1px solid #222",
   display: "flex",
@@ -800,7 +758,7 @@ const errBox = {
 };
 
 const imageOverlay = {
-  position: "fixed",
+  position: "absolute",
   inset: 0,
   background: "rgba(0,0,0,0.9)",
   display: "flex",
