@@ -109,9 +109,9 @@ export default function FriendsPage() {
   // ✅ ONLINE if:
   // - is_online true
   // - last_seen is fresh (within 60s)
-  function isOnline(profile) {
+function isOnline(profile) {
   if (!profile?.last_seen) return false;
-  return Date.now() - new Date(profile.last_seen).getTime() < 60 * 1000;
+  return Date.now() - new Date(profile.last_seen).getTime() < 90 * 1000;
 }
 
   function formatAgoNoMonths(ts) {
