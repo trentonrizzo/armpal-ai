@@ -103,6 +103,7 @@ function TogglePill({ on, disabled, onClick }) {
 export default function SettingsOverlay({ open, onClose }) {
   const [user, setUser] = useState(null);
   const [section, setSection] = useState(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -162,11 +163,10 @@ export default function SettingsOverlay({ open, onClose }) {
     }
   }
 
-  /* ✅ FIXED RESET FLOW */
   async function sendPasswordReset() {
     if (!user?.email) return;
 
-    const redirectTo = window.location.origin; // ✅ ROOT SPA
+    const redirectTo = window.location.origin;
 
     const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
       redirectTo,
@@ -176,143 +176,200 @@ export default function SettingsOverlay({ open, onClose }) {
     else alert("Password reset email sent.");
   }
 
-  async function logout() {
-  const ok = window.confirm("Are you sure you want to log out?");
-  if (!ok) return;
-
-  await supabase.auth.signOut();
-  window.location.reload();
-}
-
+  async function confirmLogout() {
+    await supabase.auth.signOut();
+    window.location.reload();
+  }
 
   if (!open) return null;
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        zIndex: 9999,
-        display: "flex",
-        justifyContent: "flex-end",
-      }}
-    >
+    <>
       <div
-        onClick={(e) => e.stopPropagation()}
+        onClick={onClose}
         style={{
-          width: "74%",
-          maxWidth: 380,
-          background: "#0f0f10",
-          padding: 16,
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.6)",
+          zIndex: 9999,
           display: "flex",
-          flexDirection: "column",
+          justifyContent: "flex-end",
         }}
       >
-        <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
-
-        {/* NOTIFICATIONS */}
         <div
-          onClick={() =>
-            setSection(section === "notifications" ? null : "notifications")
-          }
+          onClick={(e) => e.stopPropagation()}
           style={{
-            marginTop: 18,
-            padding: 14,
-            borderRadius: 14,
-            background: "#111",
-            border: "1px solid rgba(255,255,255,0.1)",
-            cursor: "pointer",
+            width: "74%",
+            maxWidth: 380,
+            background: "#0f0f10",
+            padding: 16,
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          <div style={{ fontWeight: 800 }}>Notifications</div>
-          <div style={{ fontSize: 12, opacity: 0.6 }}>
-            {notifSupported
-              ? notifEnabled
-                ? "Enabled"
-                : "Disabled"
-              : "Not supported"}
+          <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
+
+          {/* NOTIFICATIONS */}
+          <div
+            onClick={() =>
+              setSection(section === "notifications" ? null : "notifications")
+            }
+            style={{
+              marginTop: 18,
+              padding: 14,
+              borderRadius: 14,
+              background: "#111",
+              border: "1px solid rgba(255,255,255,0.1)",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Notifications</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              {notifSupported
+                ? notifEnabled
+                  ? "Enabled"
+                  : "Disabled"
+                : "Not supported"}
+            </div>
+
+            {section === "notifications" && (
+              <div style={{ marginTop: 12 }}>
+                <TogglePill
+                  on={notifEnabled}
+                  disabled={!notifSupported || notifBusy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleNotifications();
+                  }}
+                />
+              </div>
+            )}
           </div>
 
-          {section === "notifications" && (
-            <div style={{ marginTop: 12 }}>
-              <TogglePill
-                on={notifEnabled}
-                disabled={!notifSupported || notifBusy}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleNotifications();
-                }}
-              />
-            </div>
-          )}
-        </div>
+          {/* ACCOUNT */}
+          <div
+            onClick={() => setSection(section === "account" ? null : "account")}
+            style={{
+              marginTop: 14,
+              padding: 14,
+              borderRadius: 14,
+              background: "#111",
+              border: "1px solid rgba(255,255,255,0.1)",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Account</div>
 
-        {/* ACCOUNT */}
+            {section === "account" && (
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+                <div style={{ opacity: 0.6 }}>Email</div>
+                <div>{user?.email}</div>
+
+                <div style={{ height: 14 }} />
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sendPasswordReset();
+                  }}
+                  style={{
+                    padding: 10,
+                    width: "100%",
+                    borderRadius: 12,
+                    background: "#1a1a1a",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    color: "white",
+                    fontWeight: 700,
+                  }}
+                >
+                  Send password reset email
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ flex: 1 }} />
+
+          <button
+            onClick={() => setShowLogoutConfirm(true)}
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              background: "#ff2f2f",
+              border: "none",
+              color: "white",
+              fontWeight: 900,
+            }}
+          >
+            Log out
+          </button>
+        </div>
+      </div>
+
+      {/* LOGOUT CONFIRM MODAL */}
+      {showLogoutConfirm && (
         <div
-          onClick={() => setSection(section === "account" ? null : "account")}
           style={{
-            marginTop: 14,
-            padding: 14,
-            borderRadius: 14,
-            background: "#111",
-            border: "1px solid rgba(255,255,255,0.1)",
-            cursor: "pointer",
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          <div style={{ fontWeight: 800 }}>Account</div>
+          <div
+            style={{
+              width: "86%",
+              maxWidth: 340,
+              background: "#111",
+              borderRadius: 16,
+              padding: 18,
+              border: "1px solid rgba(255,255,255,0.12)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16 }}>
+              Log out?
+            </div>
+            <div style={{ opacity: 0.7, marginTop: 6 }}>
+              You will need to sign back in.
+            </div>
 
-          {section === "account" && (
-            <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
-              <div style={{ opacity: 0.6 }}>Email</div>
-              <div>{user?.email}</div>
-
-              <div style={{ height: 10 }} />
-
-              <div style={{ opacity: 0.6 }}>User ID</div>
-              <div style={{ fontSize: 12 }}>{user?.id}</div>
-
-              <div style={{ height: 14 }} />
-
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendPasswordReset();
-                }}
+                onClick={() => setShowLogoutConfirm(false)}
                 style={{
-                  padding: 10,
-                  width: "100%",
+                  flex: 1,
+                  padding: 12,
                   borderRadius: 12,
                   background: "#1a1a1a",
                   border: "1px solid rgba(255,255,255,0.14)",
                   color: "white",
                   fontWeight: 700,
-                  cursor: "pointer",
                 }}
               >
-                Send password reset email
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  borderRadius: 12,
+                  background: "#ff2f2f",
+                  border: "none",
+                  color: "white",
+                  fontWeight: 900,
+                }}
+              >
+                Log out
               </button>
             </div>
-          )}
+          </div>
         </div>
-
-        <div style={{ flex: 1 }} />
-
-        <button
-          onClick={logout}
-          style={{
-            padding: 14,
-            borderRadius: 14,
-            background: "#ff2f2f",
-            border: "none",
-            color: "white",
-            fontWeight: 900,
-          }}
-        >
-          Log out
-        </button>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
