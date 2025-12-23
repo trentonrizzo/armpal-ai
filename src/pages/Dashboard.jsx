@@ -113,7 +113,7 @@ export default function Dashboard() {
       return;
     }
 
-    const est = Math.round(w * (1 + r / 30));
+    const est = r === 1 ? Math.round(w) : Math.round(w * (1 + r / 30));
     setCalculated1RM(est);
 
     if (exerciseName) fetchBestPR(exerciseName, est);
