@@ -177,9 +177,13 @@ export default function SettingsOverlay({ open, onClose }) {
   }
 
   async function logout() {
-    await supabase.auth.signOut();
-    window.location.reload();
-  }
+  const ok = window.confirm("Are you sure you want to log out?");
+  if (!ok) return;
+
+  await supabase.auth.signOut();
+  window.location.reload();
+}
+
 
   if (!open) return null;
 
