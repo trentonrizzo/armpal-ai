@@ -3,6 +3,8 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate, useParams } from "react-router-dom";
 
+const REACTIONS = ["💪", "👊", "❤️", "🔥"];
+
 export default function FriendProfile() {
   const { friendId } = useParams();
   const navigate = useNavigate();
@@ -10,26 +12,73 @@ export default function FriendProfile() {
   const [me, setMe] = useState(null);
   const [p, setP] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const [showConfirm, setShowConfirm] = useState(false);
   const [showImage, setShowImage] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // 🔥 reactions
+  const [reactionCounts, setReactionCounts] = useState({});
+  const [myReaction, setMyReaction] = useState(null);
+  const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
       setMe(data?.user || null);
 
-      const { data: prof, error } = await supabase
+      const { data: prof } = await supabase
         .from("profiles")
         .select("id, username, handle, display_name, avatar_url, bio, last_active")
         .eq("id", friendId)
         .maybeSingle();
 
-      if (error) console.error("FriendProfile load error:", error);
       setP(prof || null);
       setLoading(false);
     })();
   }, [friendId]);
+
+  useEffect(() => {
+    if (!me?.id || !friendId) return;
+    loadReactions();
+  }, [me?.id, friendId]);
+
+  async function loadReactions() {
+    const { data } = await supabase
+      .from("profile_reactions")
+      .select("emoji, from_user_id")
+      .eq("to_user_id", friendId)
+      .eq("reaction_date", today);
+
+    const counts = {};
+    let mine = null;
+
+    (data || []).forEach((r) => {
+      counts[r.emoji] = (counts[r.emoji] || 0) + 1;
+      if (r.from_user_id === me.id) mine = r.emoji;
+    });
+
+    setReactionCounts(counts);
+    setMyReaction(mine);
+  }
+
+  async function sendReaction(emoji) {
+    if (!me?.id || !friendId) return;
+
+    setMyReaction(emoji);
+
+    await supabase.from("profile_reactions").upsert(
+      {
+        from_user_id: me.id,
+        to_user_id: friendId,
+        emoji,
+        reaction_date: today,
+      },
+      { onConflict: "from_user_id,to_user_id,reaction_date" }
+    );
+
+    loadReactions();
+  }
 
   function isOnline(lastActive) {
     if (!lastActive) return false;
@@ -39,18 +88,14 @@ export default function FriendProfile() {
   function formatAgoNoMonths(ts) {
     if (!ts) return "";
     const ms = Date.now() - new Date(ts).getTime();
-    const sec = Math.floor(ms / 1000);
-    if (sec < 60) return `${sec}s`;
-    const min = Math.floor(sec / 60);
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "now";
     if (min < 60) return `${min}m`;
     const hr = Math.floor(min / 60);
     if (hr < 24) return `${hr}h`;
     const day = Math.floor(hr / 24);
     if (day < 7) return `${day}d`;
-    const wk = Math.floor(day / 7);
-    if (wk <= 53) return `${wk}w`;
-    const yr = Math.floor(day / 365);
-    return `${yr}y`;
+    return `${Math.floor(day / 7)}w`;
   }
 
   async function confirmUnadd() {
@@ -62,7 +107,8 @@ export default function FriendProfile() {
         .from("friends")
         .delete()
         .or(
-          `and(user_id.eq.${me.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${me.id})`
+          `and(user_id.eq.${me.id},friend_id.eq.${friendId}),
+           and(user_id.eq.${friendId},friend_id.eq.${me.id})`
         );
 
       navigate("/friends");
@@ -72,11 +118,11 @@ export default function FriendProfile() {
     }
   }
 
-  const displayName = p?.display_name || p?.username || p?.handle || "Profile";
+  if (loading) return <div style={wrap} />;
+  const displayName =
+    p?.display_name || p?.username || p?.handle || "Profile";
   const online = isOnline(p?.last_active);
   const lastAgo = formatAgoNoMonths(p?.last_active);
-
-  if (loading) return <div style={wrap} />;
 
   return (
     <div style={wrap}>
@@ -86,21 +132,18 @@ export default function FriendProfile() {
         <div style={{ width: 44 }} />
       </div>
 
+      {/* PROFILE CARD */}
       <div style={card}>
         <div style={row}>
           <div style={avatar} onClick={() => setShowImage(true)}>
             {p?.avatar_url ? (
-              <img
-                src={p.avatar_url}
-                alt={displayName}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
+              <img src={p.avatar_url} alt="" style={avatarImg} />
             ) : (
               displayName.charAt(0).toUpperCase()
             )}
           </div>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1 }}>
             <div style={name}>{displayName}</div>
             {p?.handle && <div style={handle}>@{p.handle}</div>}
             <div style={status}>
@@ -112,13 +155,37 @@ export default function FriendProfile() {
         <div style={bio}>{p?.bio?.trim() || "No bio yet."}</div>
       </div>
 
+      {/* 🔥 REACTIONS CARD */}
+      <div style={reactionCard}>
+        <div style={reactionTitle}>Profile Reactions</div>
+
+        <div style={reactionRow}>
+          {REACTIONS.map((emoji) => (
+            <button
+              key={emoji}
+              style={{
+                ...reactionBtn,
+                ...(myReaction === emoji ? reactionActive : {}),
+              }}
+              onClick={() => sendReaction(emoji)}
+            >
+              <span style={{ fontSize: 24 }}>{emoji}</span>
+              <span style={reactionCount}>
+                {reactionCounts[emoji] || 0}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <button style={unaddBtn} onClick={() => setShowConfirm(true)}>
         Unadd Friend
       </button>
+
       {/* IMAGE PREVIEW */}
       {showImage && p?.avatar_url && (
         <div style={overlay} onClick={() => setShowImage(false)}>
-          <img src={p.avatar_url} alt="profile" style={previewImg} />
+          <img src={p.avatar_url} alt="" style={previewImg} />
         </div>
       )}
 
@@ -207,10 +274,55 @@ const avatar = {
   cursor: "pointer",
 };
 
+const avatarImg = { width: "100%", height: "100%", objectFit: "cover" };
+
 const name = { fontSize: 24, fontWeight: 900 };
 const handle = { fontSize: 14, opacity: 0.65, marginTop: 2 };
 const status = { fontSize: 13, marginTop: 6, opacity: 0.7 };
 const bio = { marginTop: 18, fontSize: 15, opacity: 0.85 };
+
+const reactionCard = {
+  marginTop: 18,
+  background: "#101010",
+  borderRadius: 20,
+  padding: 16,
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const reactionTitle = {
+  fontSize: 15,
+  fontWeight: 900,
+  marginBottom: 12,
+  opacity: 0.85,
+};
+
+const reactionRow = {
+  display: "flex",
+  justifyContent: "space-between",
+};
+
+const reactionBtn = {
+  flex: 1,
+  margin: "0 4px",
+  padding: "10px 0",
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: "white",
+  fontWeight: 900,
+};
+
+const reactionActive = {
+  background: "rgba(255,47,47,0.20)",
+  border: "1px solid rgba(255,47,47,0.55)",
+};
+
+const reactionCount = {
+  display: "block",
+  fontSize: 12,
+  marginTop: 4,
+  opacity: 0.75,
+};
 
 const unaddBtn = {
   width: "100%",
@@ -250,7 +362,6 @@ const confirmCard = {
 
 const confirmTitle = { fontSize: 18, fontWeight: 900 };
 const confirmText = { fontSize: 13, opacity: 0.7, marginTop: 6 };
-
 const confirmActions = { display: "flex", gap: 10, marginTop: 18 };
 
 const cancelBtn = {
