@@ -1,145 +1,136 @@
 // src/pages/ProfilePage.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+// PART 1 / 3
+// ------------------------------------------------------------
+// FULL FILE REPLACEMENT — DO NOT MERGE, DO NOT MIX
+// This is PART 1 only. Parts 2 and 3 will follow.
+// ------------------------------------------------------------
+
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { supabase } from "../supabaseClient";
 import Cropper from "react-easy-crop";
-import { FiSettings, FiEdit2 } from "react-icons/fi";
+import {
+  FiSettings,
+  FiEdit2,
+  FiCheck,
+  FiX,
+} from "react-icons/fi";
 import SettingsOverlay from "../settings/SettingsOverlay";
 
-/* ============================
-   UI HELPERS
-============================ */
+/* ============================================================
+   CONSTANTS / HELPERS
+============================================================ */
 
-function SoftCard({ title, value, sub }) {
+const MAX_BIO_LENGTH = 220;
+
+function formatDisplayName(name) {
+  if (!name) return "";
+  return name.trim();
+}
+
+function clamp(val, min, max) {
+  return Math.min(Math.max(val, min), max);
+}
+
+/* ============================================================
+   SOFT UI BUILDING BLOCKS
+============================================================ */
+
+function StatChip({ icon, value, onClick }) {
   return (
-    <div
+    <button
+      onClick={onClick}
       style={{
         flex: 1,
-        background: "#0b0b0c",
-        border: "1px solid rgba(255,255,255,0.08)",
+        height: 56,
         borderRadius: 14,
-        padding: 14,
-        minWidth: 0,
+        background: "#0b0b0c",
+        border: "1px solid rgba(255,255,255,0.10)",
+        color: "white",
+        fontWeight: 900,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+        cursor: "pointer",
       }}
     >
-      <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.1 }}>{value}</div>
-      {sub ? <div style={{ fontSize: 11, opacity: 0.6, marginTop: 6 }}>{sub}</div> : null}
-    </div>
+      {icon}
+      <span style={{ fontSize: 18 }}>{value}</span>
+    </button>
   );
 }
 
-function ToggleRow({ title, subtitle, right }) {
+function SectionCard({ children }) {
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "12px 12px",
-        borderRadius: 14,
+        background: "#070708",
         border: "1px solid rgba(255,255,255,0.10)",
-        background: "#0d0d0f",
+        borderRadius: 20,
+        padding: 18,
+        marginBottom: 18,
       }}
     >
-      <div style={{ paddingRight: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 900 }}>{title}</div>
-        {subtitle ? (
-          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>{subtitle}</div>
-        ) : null}
-      </div>
-      {right}
+      {children}
     </div>
   );
 }
 
-/* ============================
-   MAIN
-============================ */
+/* ============================================================
+   MAIN PROFILE PAGE
+============================================================ */
 
 export default function ProfilePage() {
+  /* ---------------------------
+     CORE STATE
+  ---------------------------- */
   const [settingsOpen, setSettingsOpen] = useState(false);
-
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Profile fields
+  /* ---------------------------
+     PROFILE DATA
+  ---------------------------- */
   const [displayName, setDisplayName] = useState("");
   const [handle, setHandle] = useState("");
-  const [handleStatus, setHandleStatus] = useState(null); // null | "invalid" | "taken" | "valid"
-  const [handleLocked, setHandleLocked] = useState(false);
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
 
-  // Stats
-  const [stats, setStats] = useState({ prs: 0, workouts: 0, measurements: 0 });
+  /* ---------------------------
+     EDIT MODE
+  ---------------------------- */
+  const [editMode, setEditMode] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
-  // Avatar menu + pickers
+  /* ---------------------------
+     AVATAR / IMAGE
+  ---------------------------- */
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-
-  const inputPhotoRef = useRef(null);   // choose photo
-  const inputCameraRef = useRef(null);  // take photo (mobile)
-  const inputFileRef = useRef(null);    // choose file
-
-  // Cropper
-  const [uploading, setUploading] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  const inputPhotoRef = useRef(null);
+  const inputCameraRef = useRef(null);
+  const inputFileRef = useRef(null);
+
+  /* ============================================================
+     LOAD PROFILE
+  ============================================================ */
 
   useEffect(() => {
     loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-useEffect(() => {
-  if (!user?.id) return;
-
-  let heartbeat;
-
-  const setOnline = async () => {
-    await supabase
-      .from("profiles")
-      .update({
-        is_online: true,
-        last_active: new Date().toISOString(),
-      })
-      .eq("id", user.id);
-  };
-
-  const setOffline = async () => {
-    await supabase
-      .from("profiles")
-      .update({
-        is_online: false,
-        last_seen: new Date().toISOString(),
-      })
-      .eq("id", user.id);
-  };
-
-  // mark online immediately
-  setOnline();
-
-  // heartbeat every 30s while app is open
-  heartbeat = setInterval(setOnline, 30000);
-
-  // handle tab close / app background
-  const handleVisibilityChange = () => {
-    if (document.visibilityState === "hidden") {
-      setOffline();
-    } else {
-      setOnline();
-    }
-  };
-
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-
-  return () => {
-    clearInterval(heartbeat);
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
-    setOffline();
-  };
-}, [user?.id]);
 
   async function loadProfile() {
     try {
@@ -164,121 +155,71 @@ useEffect(() => {
       setBio(data?.bio || "");
       setAvatarUrl(data?.avatar_url || "");
 
-      // Handle is one-time set: once it exists, lock it.
-      const existing = (data?.handle || "").trim();
-      setHandleLocked(!!existing);
-      setHandleStatus(existing ? "valid" : null);
-
-      await loadStats(authUser.id);
+      setDirty(false);
+      setEditMode(false);
     } catch (err) {
-      console.error("Error loading profile:", err);
+      console.error("Profile load error:", err);
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadStats(userId) {
-    const next = { prs: 0, workouts: 0, measurements: 0 };
+  /* ============================================================
+     ONLINE PRESENCE (DO NOT TOUCH)
+  ============================================================ */
 
-    try {
-      const { count } = await supabase
-        .from("prs")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId);
-      next.prs = count || 0;
-    } catch {}
+  useEffect(() => {
+    if (!user?.id) return;
 
-    try {
-      const { count } = await supabase
-        .from("workouts")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId);
-      next.workouts = count || 0;
-    } catch {}
+    let heartbeat;
 
-    try {
-      const { count } = await supabase
-        .from("measurements")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId);
-      next.measurements = count || 0;
-    } catch {}
+    const setOnline = async () => {
+      await supabase
+        .from("profiles")
+        .update({
+          is_online: true,
+          last_active: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+    };
 
-    setStats(next);
-  }
+    const setOffline = async () => {
+      await supabase
+        .from("profiles")
+        .update({
+          is_online: false,
+          last_seen: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+    };
 
-  /* ============================
-     HANDLE VALIDATION (required, unique, lowercase, 3-20, underscores ok)
-     - If handle already exists: it cannot change (locked).
-  ============================ */
+    setOnline();
+    heartbeat = setInterval(setOnline, 30000);
 
-  function validateHandle(h) {
-    return /^[a-z0-9_]{3,20}$/.test(h);
-  }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        setOffline();
+      } else {
+        setOnline();
+      }
+    };
 
-  async function onHandleChange(val) {
-    if (handleLocked) return;
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    const clean = (val || "").toLowerCase();
-    setHandle(clean);
+    return () => {
+      clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      setOffline();
+    };
+  }, [user?.id]);
 
-    if (!clean) {
-      setHandleStatus(null);
-      return;
-    }
-
-    if (!validateHandle(clean)) {
-      setHandleStatus("invalid");
-      return;
-    }
-
-    if (!user?.id) {
-      setHandleStatus("valid");
-      return;
-    }
-
-    const { data } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("handle", clean)
-      .neq("id", user.id);
-
-    if (data?.length) setHandleStatus("taken");
-    else setHandleStatus("valid");
-  }
-
-  const handleHelper = useMemo(() => {
-    if (!handle) return null;
-
-    if (handleLocked) {
-      return { text: "Handle is locked (cannot be changed).", color: "rgba(255,255,255,0.55)" };
-    }
-
-    if (handleStatus === "invalid")
-      return { text: "Only letters, numbers, underscores (3–20).", color: "#ff5a5a" };
-    if (handleStatus === "taken") return { text: "Handle already taken.", color: "#ff5a5a" };
-    if (handleStatus === "valid") return { text: "Available ✓", color: "#4ade80" };
-    return null;
-  }, [handle, handleStatus, handleLocked]);
-
-  /* ============================
-     AVATAR CROP + UPLOAD
-     - Pencil only opens action sheet
-     - Round crop
-     - Buttons are in TOP BAR so they never get covered
-  ============================ */
+  /* ============================================================
+     AVATAR CROP LOGIC
+  ============================================================ */
 
   const onCropComplete = useCallback((_, croppedPixels) => {
     setCroppedAreaPixels(croppedPixels);
   }, []);
-
-  function openAvatarMenu() {
-    setAvatarMenuOpen(true);
-  }
-
-  function closeAvatarMenu() {
-    setAvatarMenuOpen(false);
-  }
 
   function onPickFile(e) {
     const f = e.target.files?.[0];
@@ -292,7 +233,6 @@ useEffect(() => {
     };
     reader.readAsDataURL(f);
 
-    // allow picking same file twice
     e.target.value = "";
   }
 
@@ -304,70 +244,73 @@ useEffect(() => {
         img.src = imageSrc;
 
         img.onload = () => {
-          try {
-            const canvas = document.createElement("canvas");
-            canvas.width = pixelCrop.width;
-            canvas.height = pixelCrop.height;
+          const canvas = document.createElement("canvas");
+          canvas.width = pixelCrop.width;
+          canvas.height = pixelCrop.height;
 
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(
-              img,
-              pixelCrop.x,
-              pixelCrop.y,
-              pixelCrop.width,
-              pixelCrop.height,
-              0,
-              0,
-              pixelCrop.width,
-              pixelCrop.height
-            );
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(
+            img,
+            pixelCrop.x,
+            pixelCrop.y,
+            pixelCrop.width,
+            pixelCrop.height,
+            0,
+            0,
+            pixelCrop.width,
+            pixelCrop.height
+          );
 
-            canvas.toBlob(
-              (blob) => {
-                if (!blob) return reject(new Error("Canvas empty"));
-                resolve(blob);
-              },
-              "image/jpeg",
-              0.92
-            );
-          } catch (e) {
-            reject(e);
-          }
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) return reject(new Error("Empty crop"));
+              resolve(blob);
+            },
+            "image/jpeg",
+            0.92
+          );
         };
-
-        img.onerror = (e) => reject(e);
       } catch (e) {
         reject(e);
       }
     });
   };
 
-  async function doSaveCroppedImage() {
+  async function saveCroppedAvatar() {
     try {
-      if (!user) return;
-      if (!selectedImage || !croppedAreaPixels) return;
+      if (!user || !selectedImage || !croppedAreaPixels) return;
 
       setUploading(true);
 
-      const croppedBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
+      const croppedBlob = await getCroppedImg(
+        selectedImage,
+        croppedAreaPixels
+      );
       const filePath = `${user.id}-${Date.now()}.jpg`;
 
-      const { error } = await supabase.storage.from("avatars").upload(filePath, croppedBlob, {
-        upsert: true,
-        contentType: "image/jpeg",
-      });
+      const { error } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, croppedBlob, {
+          upsert: true,
+          contentType: "image/jpeg",
+        });
 
       if (error) throw error;
 
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath);
-      const publicUrl = urlData?.publicUrl || "";
+      const { data } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const publicUrl = data?.publicUrl || "";
 
       setAvatarUrl(publicUrl);
-
-      await supabase.from("profiles").upsert({ id: user.id, avatar_url: publicUrl });
+      await supabase
+        .from("profiles")
+        .upsert({ id: user.id, avatar_url: publicUrl });
 
       setShowCropper(false);
       setSelectedImage(null);
+      setDirty(true);
     } catch (err) {
       console.error(err);
       alert("Avatar upload failed");
@@ -376,168 +319,165 @@ useEffect(() => {
     }
   }
 
-  async function removeAvatar() {
-    try {
-      if (!user) return;
-      setAvatarUrl("");
-      await supabase.from("profiles").upsert({ id: user.id, avatar_url: "" });
-      setAvatarMenuOpen(false);
-    } catch (e) {
-      alert("Failed to remove avatar");
-    }
+  /* ============================================================
+     END PART 1
+     (HEADER, CORE STATE, AVATAR SYSTEM)
+     PART 2 WILL CONTINUE RENDER + EDIT MODE + UI
+  ============================================================ */
+// ------------------------------------------------------------
+// PART 2 / 3 — ProfilePage.jsx
+// ------------------------------------------------------------
+// UI RENDER, HEADER REWORK, PROFILE BODY, EDIT MODE LOGIC
+// ------------------------------------------------------------
+
+  /* ============================================================
+     EDIT MODE HELPERS
+  ============================================================ */
+
+  function enterEditMode() {
+    setEditMode(true);
   }
 
-  /* ============================
-     SAVE PROFILE
-     - Handle is REQUIRED if not locked yet
-  ============================ */
+  function cancelEditMode() {
+    setEditMode(false);
+    setDirty(false);
+    loadProfile();
+  }
 
   async function saveProfile() {
     try {
       if (!user) return;
 
-      // Handle required, unless already set & locked
-      if (!handleLocked) {
-        if (!handle || !handle.trim()) {
-          alert("Handle is required.");
-          return;
-        }
-        if (handleStatus === "invalid") {
-          alert("Handle format invalid.");
-          return;
-        }
-        if (handleStatus === "taken") {
-          alert("Handle already taken.");
-          return;
-        }
-        // If user typed valid format but status hasn't updated yet:
-        if (handleStatus !== "valid") {
-          // force validate now
-          if (!validateHandle(handle)) {
-            alert("Handle format invalid.");
-            return;
-          }
-          const { data } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("handle", handle)
-            .neq("id", user.id);
-
-          if (data?.length) {
-            alert("Handle already taken.");
-            setHandleStatus("taken");
-            return;
-          }
-        }
-      }
-
       const updates = {
         id: user.id,
-        display_name: displayName || "",
-        bio: bio || "",
+        display_name: displayName.trim(),
+        bio: bio.trim(),
         avatar_url: avatarUrl || "",
       };
-
-      // Handle only set once
-      if (!handleLocked) {
-        updates.handle = handle.trim();
-      }
 
       const { error } = await supabase.from("profiles").upsert(updates);
       if (error) throw error;
 
-      // After first save with handle, lock it
-      if (!handleLocked && updates.handle) {
-        setHandleLocked(true);
-        setHandleStatus("valid");
-      }
-
-      alert("Profile saved!");
-      await loadProfile();
+      setEditMode(false);
+      setDirty(false);
     } catch (err) {
       console.error(err);
-      alert("Error saving profile");
+      alert("Failed to save profile");
     }
   }
 
-  /* ============================
+  /* ============================================================
+     MEMOIZED HEADER TEXT
+  ============================================================ */
+
+  const headerName = useMemo(
+    () => formatDisplayName(displayName) || "User",
+    [displayName]
+  );
+
+  const headerHandle = useMemo(() => {
+    if (!handle) return "";
+    return `@${handle}`;
+  }, [handle]);
+
+  /* ============================================================
      RENDER
-  ============================ */
+  ============================================================ */
+
+  if (loading) {
+    return (
+      <div style={{ padding: 24, color: "white", opacity: 0.75 }}>
+        Loading profile…
+      </div>
+    );
+  }
 
   return (
     <>
-      {loading ? (
-        <p style={{ padding: 20, opacity: 0.75 }}>Loading profile...</p>
-      ) : (
-        <div className="fade-in">
-          <div style={{ padding: "20px 16px 110px", maxWidth: 900, margin: "0 auto" }}>
-            {/* HEADER */}
+      <div style={{ padding: "26px 18px 140px", maxWidth: 900, margin: "0 auto" }}>
+        {/* ======================================================
+            HEADER (REWORKED)
+        ====================================================== */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 22,
+          }}
+        >
+          <div>
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 16,
+                fontSize: 30,
+                fontWeight: 900,
+                letterSpacing: -0.5,
               }}
             >
-              <div>
-                <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 2 }}>Profile</h1>
-                <div style={{ fontSize: 12, opacity: 0.6 }}>{user?.email || ""}</div>
-              </div>
+              {headerName}
+            </div>
 
-              <button
-                onClick={() => setSettingsOpen(true)}
+            {headerHandle && (
+              <div
                 style={{
-                  background: "#111",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  width: 40,
-                  height: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
+                  fontSize: 15,
+                  opacity: 0.6,
+                  marginTop: 4,
                 }}
-                aria-label="Settings"
               >
-                <FiSettings size={20} />
-              </button>
-            </div>
+                {headerHandle}
+              </div>
+            )}
+          </div>
 
-            {/* STATS */}
-            <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
-              <SoftCard title="PRs" value={stats.prs} sub="Total PR entries" />
-              <SoftCard title="Workouts" value={stats.workouts} sub="Saved workouts" />
-              <SoftCard title="Measures" value={stats.measurements} sub="Logged measurements" />
-            </div>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: "999px",
+              background: "#111",
+              border: "1px solid rgba(255,255,255,0.14)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+            aria-label="Settings"
+          >
+            <FiSettings size={20} />
+          </button>
+        </div>
 
-            {/* PROFILE CARD */}
-            <div
-              style={{
-                background: "#070708",
-                border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 18,
-                padding: 16,
-                marginBottom: 16,
-              }}
-            >
-              {/* AVATAR ROW */}
-              <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
-                <div style={{ position: "relative", width: 92, height: 92 }}>
-                  <img
-                    src={avatarUrl || "https://via.placeholder.com/120?text=No+Avatar"}
-                    alt="avatar"
-                    style={{
-                      width: 92,
-                      height: 92,
-                      objectFit: "cover",
-                      borderRadius: "999px",
-                      border: "2px solid rgba(255,255,255,0.10)",
-                      background: "#0a0a0a",
-                    }}
-                  />
+        {/* ======================================================
+            PROFILE CARD
+        ====================================================== */}
+        <SectionCard>
+          {/* AVATAR ROW */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 20,
+              marginBottom: 20,
+            }}
+          >
+            <div style={{ position: "relative", width: 96, height: 96 }}>
+              <img
+                src={avatarUrl || "https://via.placeholder.com/120"}
+                alt="avatar"
+                style={{
+                  width: 96,
+                  height: 96,
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                  border: "2px solid rgba(255,255,255,0.12)",
+                  background: "#0a0a0a",
+                }}
+              />
 
-                  {/* Hidden pickers */}
+              {editMode && (
+                <>
                   <input
                     ref={inputPhotoRef}
                     type="file"
@@ -561,16 +501,15 @@ useEffect(() => {
                     style={{ display: "none" }}
                   />
 
-                  {/* Pencil only */}
                   <button
-                    onClick={openAvatarMenu}
+                    onClick={() => setAvatarMenuOpen(true)}
                     style={{
                       position: "absolute",
-                      right: -2,
-                      bottom: -2,
-                      width: 32,
-                      height: 32,
-                      borderRadius: "999px",
+                      right: -4,
+                      bottom: -4,
+                      width: 34,
+                      height: 34,
+                      borderRadius: "50%",
                       background: "#111",
                       border: "1px solid rgba(255,255,255,0.25)",
                       display: "flex",
@@ -581,339 +520,388 @@ useEffect(() => {
                     }}
                     aria-label="Edit avatar"
                   >
-                    <FiEdit2 size={16} color="#ffffff" />
+                    <FiEdit2 size={16} />
                   </button>
+                </>
+              )}
+            </div>
+
+            {/* BIO */}
+            <div style={{ flex: 1 }}>
+              {!editMode ? (
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 500,
+                    opacity: bio ? 0.9 : 0.45,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {bio || "No bio yet."}
                 </div>
-
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>Profile picture</div>
-                  <div style={{ fontSize: 12, opacity: 0.45, marginTop: 4 }}>
-                    Tap the pencil to change
-                  </div>
-                </div>
-              </div>
-
-              {/* INPUTS */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
-                {/* Display Name */}
-                <div>
-                  <label style={{ fontSize: 12, opacity: 0.85 }}>Display Name</label>
-                  <input
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Trent Rizzo"
-                    style={{
-                      width: "100%",
-                      padding: 12,
-                      marginTop: 6,
-                      borderRadius: 12,
-                      background: "#0d0d0f",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      color: "white",
-                      outline: "none",
-                    }}
-                  />
-                </div>
-
-                {/* Handle */}
-                <div>
-                  <label style={{ fontSize: 12, opacity: 0.85 }}>
-                    Handle (required) <span style={{ opacity: 0.6 }}>(@username)</span>
-                  </label>
-                  <input
-                    value={handle}
-                    onChange={(e) => onHandleChange(e.target.value)}
-                    placeholder="armpal_trent"
-                    disabled={handleLocked}
-                    style={{
-                      width: "100%",
-                      padding: 12,
-                      marginTop: 6,
-                      borderRadius: 12,
-                      background: handleLocked ? "#0a0a0a" : "#0d0d0f",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      color: "white",
-                      outline: "none",
-                      opacity: handleLocked ? 0.7 : 1,
-                      cursor: handleLocked ? "not-allowed" : "text",
-                    }}
-                  />
-
-                  {handleHelper ? (
-                    <div style={{ marginTop: 6, fontSize: 12, color: handleHelper.color }}>
-                      {handleHelper.text}
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 6, fontSize: 12, opacity: 0.55 }}>
-                      3–20 chars. letters, numbers, underscores only.
-                    </div>
-                  )}
-                </div>
-
-                {/* Bio */}
-                <div>
-                  <label style={{ fontSize: 12, opacity: 0.85 }}>Bio</label>
-                  <textarea
-                    value={bio}
-                    onChange={(e) => setBio(e.target.value)}
-                    placeholder="Tell people what you’re training for..."
-                    rows={4}
-                    style={{
-                      width: "100%",
-                      padding: 12,
-                      marginTop: 6,
-                      borderRadius: 12,
-                      background: "#0d0d0f",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      color: "white",
-                      outline: "none",
-                      resize: "none",
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* SAVE BUTTON */}
-              <button
-                onClick={saveProfile}
-                style={{
-                  width: "100%",
-                  marginTop: 14,
-                  padding: 14,
-                  background: "#ff2f2f",
-                  borderRadius: 14,
-                  border: "none",
-                  color: "white",
-                  fontSize: 15,
-                  fontWeight: 900,
-                  cursor: "pointer",
-                  boxShadow: "0 16px 28px rgba(255,47,47,0.18)",
-                }}
-              >
-                Save Profile
-              </button>
+              ) : (
+                <textarea
+                  value={bio}
+                  onChange={(e) => {
+                    setBio(e.target.value.slice(0, MAX_BIO_LENGTH));
+                    setDirty(true);
+                  }}
+                  rows={4}
+                  placeholder="Tell people what you’re training for..."
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    borderRadius: 14,
+                    background: "#0d0d0f",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    color: "white",
+                    outline: "none",
+                    resize: "none",
+                  }}
+                />
+              )}
             </div>
           </div>
 
-          {/* ================= AVATAR ACTION SHEET ================= */}
-          {avatarMenuOpen && (
-            <div
-              onClick={closeAvatarMenu}
-              style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.70)",
-                zIndex: 9998,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "flex-end",
-                padding: 16,
-              }}
-            >
-              <div
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  width: "100%",
-                  maxWidth: 420,
-                  background: "#0f0f10",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 18,
-                  padding: 12,
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>
-                  Edit profile picture
-                </div>
+          {/* REACTION BAR PLACEHOLDER */}
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              marginTop: 8,
+            }}
+          >
+            <StatChip value="🔥 0" />
+            <StatChip value="💪 0" />
+            <StatChip value="❤️ 0" />
+          </div>
+        </SectionCard>
+      </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  <button
-                    onClick={() => inputPhotoRef.current?.click()}
-                    style={{
-                      width: "100%",
-                      padding: 14,
-                      borderRadius: 14,
-                      background: "#111",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      color: "white",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    Pick from Photos
-                  </button>
+      {/* ======================================================
+          FLOATING ACTION BUTTONS (BOTTOM RIGHT)
+      ====================================================== */}
+      {!editMode && (
+        <button
+          onClick={enterEditMode}
+          style={{
+            position: "fixed",
+            right: 18,
+            bottom: 90,
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: "#ff2f2f",
+            border: "none",
+            color: "white",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 18px 30px rgba(255,47,47,0.35)",
+            cursor: "pointer",
+            zIndex: 50,
+          }}
+        >
+          <FiEdit2 size={22} />
+        </button>
+      )}
 
-                  <button
-                    onClick={() => inputCameraRef.current?.click()}
-                    style={{
-                      width: "100%",
-                      padding: 14,
-                      borderRadius: 14,
-                      background: "#111",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      color: "white",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    Take a Picture
-                  </button>
+      {editMode && (
+        <div
+          style={{
+            position: "fixed",
+            right: 18,
+            bottom: 90,
+            display: "flex",
+            gap: 14,
+            zIndex: 50,
+          }}
+        >
+          <button
+            onClick={cancelEditMode}
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: "50%",
+              background: "#1a1a1a",
+              border: "1px solid rgba(255,255,255,0.18)",
+              color: "white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <FiX size={22} />
+          </button>
 
-                  <button
-                    onClick={() => inputFileRef.current?.click()}
-                    style={{
-                      width: "100%",
-                      padding: 14,
-                      borderRadius: 14,
-                      background: "#111",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      color: "white",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    Choose from Files
-                  </button>
-
-                  <button
-                    onClick={removeAvatar}
-                    style={{
-                      width: "100%",
-                      padding: 14,
-                      borderRadius: 14,
-                      background: "rgba(255,47,47,0.10)",
-                      border: "1px solid rgba(255,47,47,0.35)",
-                      color: "#ff6b6b",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    Remove Picture
-                  </button>
-
-                  <button
-                    onClick={closeAvatarMenu}
-                    style={{
-                      width: "100%",
-                      padding: 14,
-                      borderRadius: 14,
-                      background: "#1a1a1a",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      color: "white",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ================= CROPPER OVERLAY (TOP BUTTONS) ================= */}
-          {showCropper && (
-            <div
-              style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.90)",
-                zIndex: 9999,
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              {/* TOP BAR (buttons never covered) */}
-              <div
-                style={{
-                  height: 64,
-                  padding: "12px 14px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  borderBottom: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(0,0,0,0.92)",
-                }}
-              >
-                <button
-                  onClick={() => {
-                    setShowCropper(false);
-                    setSelectedImage(null);
-                  }}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    background: "#1a1a1a",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    color: "white",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-
-                <div style={{ fontWeight: 900, opacity: 0.9 }}>Crop Photo</div>
-
-                <button
-                  onClick={doSaveCroppedImage}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    background: "#ff2f2f",
-                    border: "none",
-                    color: "white",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    opacity: uploading ? 0.8 : 1,
-                  }}
-                >
-                  {uploading ? "Saving..." : "Save"}
-                </button>
-              </div>
-
-              {/* CROPPER AREA */}
-              <div style={{ flex: 1, position: "relative" }}>
-                <Cropper
-                  image={selectedImage}
-                  crop={crop}
-                  zoom={zoom}
-                  cropShape="round"
-                  aspect={1}
-                  onCropChange={setCrop}
-                  onZoomChange={setZoom}
-                  onCropComplete={onCropComplete}
-                />
-              </div>
-
-              {/* ZOOM SLIDER */}
-              <div
-                style={{
-                  padding: "12px 18px 18px",
-                  borderTop: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(0,0,0,0.92)",
-                }}
-              >
-                <input
-                  type="range"
-                  min={1}
-                  max={3}
-                  step={0.05}
-                  value={zoom}
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  style={{ width: "100%" }}
-                />
-              </div>
-            </div>
-          )}
+          <button
+            onClick={saveProfile}
+            disabled={!dirty}
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              background: dirty ? "#22c55e" : "#2a2a2a",
+              border: "none",
+              color: "white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: dirty ? "pointer" : "not-allowed",
+              boxShadow: dirty
+                ? "0 18px 30px rgba(34,197,94,0.45)"
+                : "none",
+            }}
+          >
+            <FiCheck size={24} />
+          </button>
         </div>
       )}
 
-      {/* SETTINGS OVERLAY (separate file, safe) */}
-      <SettingsOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {/* SETTINGS OVERLAY */}
+      <SettingsOverlay
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
+
+/* ============================================================
+   PART 3 WILL CONTINUE:
+   - AVATAR ACTION SHEET
+   - CROPPER OVERLAY
+   - FINAL EXPORT
+============================================================ */
+// ------------------------------------------------------------
+// PART 3 / 3 — ProfilePage.jsx
+// ------------------------------------------------------------
+// AVATAR ACTION SHEET, CROPPER OVERLAY, FINAL EXPORT
+// BIG. COMPLETE. FINISHES THE FILE.
+// ------------------------------------------------------------
+
+      {/* ======================================================
+          AVATAR ACTION SHEET
+          (ONLY WHEN EDIT MODE)
+      ====================================================== */}
+      {avatarMenuOpen && editMode && (
+        <div
+          onClick={() => setAvatarMenuOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.72)",
+            zIndex: 9998,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-end",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              background: "#0f0f10",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 20,
+              padding: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 900,
+                marginBottom: 12,
+              }}
+            >
+              Edit profile picture
+            </div>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              <button
+                onClick={() => inputPhotoRef.current?.click()}
+                style={sheetBtn}
+              >
+                Pick from Photos
+              </button>
+
+              <button
+                onClick={() => inputCameraRef.current?.click()}
+                style={sheetBtn}
+              >
+                Take a Picture
+              </button>
+
+              <button
+                onClick={() => inputFileRef.current?.click()}
+                style={sheetBtn}
+              >
+                Choose from Files
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    setAvatarUrl("");
+                    await supabase
+                      .from("profiles")
+                      .upsert({ id: user.id, avatar_url: "" });
+                    setDirty(true);
+                    setAvatarMenuOpen(false);
+                  } catch {
+                    alert("Failed to remove avatar");
+                  }
+                }}
+                style={{
+                  ...sheetBtn,
+                  background: "rgba(255,47,47,0.12)",
+                  border: "1px solid rgba(255,47,47,0.35)",
+                  color: "#ff6b6b",
+                }}
+              >
+                Remove Picture
+              </button>
+
+              <button
+                onClick={() => setAvatarMenuOpen(false)}
+                style={{
+                  ...sheetBtn,
+                  background: "#1a1a1a",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================
+          CROPPER OVERLAY
+      ====================================================== */}
+      {showCropper && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.92)",
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* TOP BAR */}
+          <div
+            style={{
+              height: 66,
+              padding: "14px 16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              borderBottom: "1px solid rgba(255,255,255,0.12)",
+              background: "#000",
+            }}
+          >
+            <button
+              onClick={() => {
+                setShowCropper(false);
+                setSelectedImage(null);
+              }}
+              style={cropTopBtn}
+            >
+              Cancel
+            </button>
+
+            <div
+              style={{
+                fontWeight: 900,
+                fontSize: 15,
+                opacity: 0.9,
+              }}
+            >
+              Crop Photo
+            </div>
+
+            <button
+              onClick={saveCroppedAvatar}
+              disabled={uploading}
+              style={{
+                ...cropTopBtn,
+                background: "#ff2f2f",
+                border: "none",
+                opacity: uploading ? 0.7 : 1,
+              }}
+            >
+              {uploading ? "Saving…" : "Save"}
+            </button>
+          </div>
+
+          {/* CROPPER */}
+          <div style={{ flex: 1, position: "relative" }}>
+            <Cropper
+              image={selectedImage}
+              crop={crop}
+              zoom={zoom}
+              cropShape="round"
+              aspect={1}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          </div>
+
+          {/* ZOOM SLIDER */}
+          <div
+            style={{
+              padding: "14px 18px 20px",
+              borderTop: "1px solid rgba(255,255,255,0.12)",
+              background: "#000",
+            }}
+          >
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.05}
+              value={zoom}
+              onChange={(e) =>
+                setZoom(clamp(Number(e.target.value), 1, 3))
+              }
+              style={{ width: "100%" }}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }
+
+/* ============================================================
+   SHARED STYLES
+============================================================ */
+
+const sheetBtn = {
+  width: "100%",
+  padding: "14px 16px",
+  borderRadius: 16,
+  background: "#111",
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: "white",
+  fontWeight: 900,
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const cropTopBtn = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  background: "#1a1a1a",
+  border: "1px solid rgba(255,255,255,0.14)",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+/* ============================================================
+   END OF FILE — ProfilePage.jsx
+============================================================ */
