@@ -109,10 +109,10 @@ export default function FriendsPage() {
   // ✅ ONLINE if:
   // - is_online true
   // - last_seen is fresh (within 60s)
-function isOnline(profile) {
-  if (!profile?.last_seen) return false;
-  return Date.now() - new Date(profile.last_seen).getTime() < 90 * 1000;
-}
+  function isOnline(profile) {
+    if (!profile?.last_seen) return false;
+    return Date.now() - new Date(profile.last_seen).getTime() < 90 * 1000;
+  }
 
   function formatAgoNoMonths(ts) {
     if (!ts) return "";
@@ -143,7 +143,6 @@ function isOnline(profile) {
     const cleaned = String(str).replace(/\s+/g, " ").trim();
     return cleaned.length > 60 ? cleaned.slice(0, 60) + "…" : cleaned;
   }
-
   // -------------------------------------------------------------------
   // LOAD EVERYTHING (friends + profiles) — stable
   // -------------------------------------------------------------------
@@ -365,7 +364,6 @@ function isOnline(profile) {
       setErrorMsg("Error sending request.");
     }
   }
-
   // -------------------------------------------------------------------
   // ACCEPT / DECLINE
   // -------------------------------------------------------------------
@@ -472,6 +470,7 @@ function isOnline(profile) {
 
         {!showAddBox && successMsg && <p style={successStyle}>{successMsg}</p>}
       </section>
+
       {/* INCOMING REQUESTS */}
       {incoming.length > 0 && (
         <section style={card}>
@@ -504,7 +503,10 @@ function isOnline(profile) {
                   <button style={acceptBtn} onClick={() => acceptRequest(req.id)}>
                     Accept
                   </button>
-                  <button style={declineBtn} onClick={() => declineRequest(req.id)}>
+                  <button
+                    style={declineBtn}
+                    onClick={() => declineRequest(req.id)}
+                  >
                     Decline
                   </button>
                 </div>
@@ -561,7 +563,6 @@ function isOnline(profile) {
               key={p.id}
               meId={user?.id}
               friend={p}
-              // ✅ CHANGED: use is_online + last_seen
               online={isOnline(p)}
               lastActiveAgo={formatAgoNoMonths(p?.last_seen)}
               preview={oneLinePreview(lastByFriend[p.id]?.text)}
@@ -575,6 +576,7 @@ function isOnline(profile) {
     </div>
   );
 }
+
 function FriendRow({
   friend,
   online,
@@ -584,27 +586,6 @@ function FriendRow({
   onOpenChat,
   onOpenProfile,
 }) {
-  const { onTouchStart, onTouchMove, isTap } = (function useTapGuardLocal() {
-    const startRef = useRef({ x: 0, y: 0, moved: false });
-
-    const onTouchStart = (e) => {
-      const touch = e.touches?.[0];
-      if (!touch) return;
-      startRef.current = { x: touch.clientX, y: touch.clientY, moved: false };
-    };
-
-    const onTouchMove = (e) => {
-      const touch = e.touches?.[0];
-      if (!touch) return;
-      const dx = Math.abs(touch.clientX - startRef.current.x);
-      const dy = Math.abs(touch.clientY - startRef.current.y);
-      if (dx > 10 || dy > 10) startRef.current.moved = true;
-    };
-
-    const isTap = () => !startRef.current.moved;
-    return { onTouchStart, onTouchMove, isTap };
-  })();
-
   const displayName =
     friend?.display_name || friend?.username || friend?.handle || "Unknown";
   const letter = (displayName || "?").trim().charAt(0).toUpperCase();
@@ -621,37 +602,37 @@ function FriendRow({
   return (
     <div
       style={rowStyle}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
       onClick={() => {
-        // tap row opens chat
-        if (isTap()) onOpenChat();
+        onOpenChat();
       }}
     >
-      <div style={rowLeft}>
-        {/* Avatar opens profile */}
-        <div
-          style={avatarCircle}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenProfile();
-          }}
-        >
-          {letter}
-          {online && <span style={onlineDot} />}
-        </div>
+      <div
+        style={avatarCircle}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenProfile();
+        }}
+      >
+        {friend?.avatar_url ? (
+          <img
+            src={friend.avatar_url}
+            alt={displayName}
+            style={{
+              width: "100%",
+              height: "100%",
+              borderRadius: "50%",
+              objectFit: "cover",
+            }}
+          />
+        ) : (
+          letter
+        )}
+        {online && <span style={onlineDot} />}
+      </div>
 
-        {/* Name opens profile (NOT blue, not link) */}
-        <div
-          style={{ minWidth: 0 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenProfile();
-          }}
-        >
-          <p style={nameText}>{displayName}</p>
-          <p style={subText}>{preview}</p>
-        </div>
+      <div style={{ minWidth: 0 }}>
+        <p style={nameText}>{displayName}</p>
+        <p style={subText}>{preview}</p>
       </div>
 
       <div style={rightWrap}>
@@ -773,7 +754,7 @@ const rowClickable = {
   border: "1px solid rgba(255,255,255,0.07)",
   marginBottom: 12,
   cursor: "pointer",
-  touchAction: "pan-y", // IMPORTANT: scroll still works
+  touchAction: "pan-y",
   userSelect: "none",
 };
 
@@ -811,6 +792,7 @@ const avatarCircle = {
   fontWeight: 900,
   position: "relative",
   flexShrink: 0,
+  overflow: "hidden", // ✅ ONLY FIX — ensures avatar image shows
 };
 
 const onlineDot = {
@@ -824,6 +806,7 @@ const onlineDot = {
   border: "2px solid #000",
   boxShadow: "0 0 10px rgba(31,191,97,0.45)",
 };
+
 const nameText = {
   fontSize: 16,
   fontWeight: 800,
