@@ -32,7 +32,7 @@ function isOnline(lastActive) {
 
 export default function FriendProfilePage() {
   const navigate = useNavigate();
-  const { id } = useParams(); // friend id
+  const { id } = useParams();
 
   const [me, setMe] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -40,13 +40,16 @@ export default function FriendProfilePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const online = useMemo(() => isOnline(profile?.last_active), [profile?.last_active]);
+  const online = useMemo(
+    () => isOnline(profile?.last_active),
+    [profile?.last_active]
+  );
+
   const lastText = online
     ? "Online"
     : profile?.last_active
     ? `Last active ${timeAgoNoMonths(profile.last_active)}`
     : "Offline";
-
   useEffect(() => {
     let alive = true;
 
@@ -74,7 +77,6 @@ export default function FriendProfilePage() {
       if (error) console.error("profile load error:", error);
       setProfile(p || null);
 
-      // counts (safe + simple)
       const [prsRes, wRes, mRes] = await Promise.all([
         supabase.from("prs").select("id", { count: "exact", head: true }).eq("user_id", id),
         supabase.from("workouts").select("id", { count: "exact", head: true }).eq("user_id", id),
@@ -101,7 +103,6 @@ export default function FriendProfilePage() {
   async function unfriend() {
     if (!me?.id || !id) return;
 
-    // serious confirmation (two-step)
     const ok1 = window.confirm("Unadd this friend?");
     if (!ok1) return;
     const ok2 = window.confirm("This cannot be undone. Confirm unadd.");
@@ -109,7 +110,6 @@ export default function FriendProfilePage() {
 
     setBusy(true);
     try {
-      // delete both directions
       const { error } = await supabase
         .from("friends")
         .delete()
@@ -128,7 +128,6 @@ export default function FriendProfilePage() {
       setBusy(false);
     }
   }
-
   const label =
     profile?.display_name || profile?.handle || profile?.username || "User";
   const handle = profile?.handle || profile?.username || "";
@@ -170,7 +169,19 @@ export default function FriendProfilePage() {
       <div style={card}>
         <div style={topRow}>
           <div style={avatar}>
-            {label.charAt(0).toUpperCase()}
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={label}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              label.charAt(0).toUpperCase()
+            )}
             {online && <span style={dot} />}
           </div>
 
@@ -212,45 +223,6 @@ export default function FriendProfilePage() {
   );
 }
 
-const wrap = {
-  padding: "14px 14px 90px",
-  maxWidth: 900,
-  margin: "0 auto",
-  color: "white",
-};
-
-const headerRow = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginBottom: 12,
-};
-
-const backBtn = {
-  width: 40,
-  height: 40,
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(0,0,0,0.35)",
-  color: "white",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const card = {
-  background: "#101010",
-  borderRadius: 18,
-  padding: 16,
-  border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 18px 40px rgba(0,0,0,0.45)",
-};
-
-const topRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: 14,
-};
-
 const avatar = {
   width: 68,
   height: 68,
@@ -263,84 +235,5 @@ const avatar = {
   fontSize: 24,
   fontWeight: 900,
   position: "relative",
-};
-
-const dot = {
-  position: "absolute",
-  right: 2,
-  bottom: 2,
-  width: 12,
-  height: 12,
-  borderRadius: "50%",
-  background: "#1fbf61",
-  border: "2px solid #000",
-};
-
-const name = {
-  fontSize: 20,
-  fontWeight: 900,
-  letterSpacing: -0.3,
-};
-
-const handleStyle = {
-  fontSize: 13,
-  opacity: 0.6,
-  fontWeight: 700,
-  marginTop: 2,
-};
-
-const last = {
-  fontSize: 12,
-  opacity: 0.55,
-  marginTop: 6,
-  fontWeight: 700,
-};
-
-const bio = {
-  marginTop: 14,
-  lineHeight: 1.35,
-  fontSize: 14,
-  opacity: 0.92,
-  whiteSpace: "pre-wrap",
-};
-
-const statsRow = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr 1fr",
-  gap: 10,
-  marginTop: 14,
-};
-
-const statCard = {
-  background: "#101010",
-  borderRadius: 16,
-  padding: 14,
-  border: "1px solid rgba(255,255,255,0.08)",
-  textAlign: "center",
-  boxShadow: "0 16px 34px rgba(0,0,0,0.35)",
-};
-
-const statNum = {
-  fontSize: 20,
-  fontWeight: 900,
-};
-
-const statLbl = {
-  fontSize: 12,
-  opacity: 0.6,
-  fontWeight: 700,
-  marginTop: 4,
-};
-
-const dangerBtn = {
-  width: "100%",
-  marginTop: 14,
-  padding: "14px 16px",
-  borderRadius: 16,
-  border: "1px solid rgba(255,47,47,0.35)",
-  background: "rgba(255,47,47,0.12)",
-  color: "white",
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: "0 14px 40px rgba(255,47,47,0.12)",
+  overflow: "hidden", // ✅ REQUIRED for image clipping
 };
