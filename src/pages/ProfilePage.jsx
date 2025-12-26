@@ -94,6 +94,32 @@ function ReactionPill({ emoji, count }) {
     </div>
   );
 }
+function BigActionCard({ icon, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        height: 72,
+        borderRadius: 18,
+        background: "#0b0b0c",
+        border: "1px solid rgba(255,255,255,0.14)",
+        display: "flex",
+        alignItems: "center",
+        gap: 18,
+        padding: "0 22px",
+        color: "white",
+        fontSize: 18,
+        fontWeight: 900,
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+    >
+      <div>{icon}</div>
+      <div>{label}</div>
+    </button>
+  );
+}
 
 /* ============================================================
    MAIN COMPONENT
