@@ -1,8 +1,8 @@
 // src/pages/ProfilePage.jsx
+// FULL FILE REPLACEMENT
 // PART 1 / 3
 // ------------------------------------------------------------
-// FULL FILE REPLACEMENT — DO NOT MERGE, DO NOT MIX
-// This is PART 1 only. Parts 2 and 3 will follow.
+// Core imports, helpers, state, effects, avatar logic
 // ------------------------------------------------------------
 
 import React, {
@@ -23,23 +23,47 @@ import {
 import SettingsOverlay from "../settings/SettingsOverlay";
 
 /* ============================================================
-   CONSTANTS / HELPERS
+   CONSTANTS
 ============================================================ */
 
 const MAX_BIO_LENGTH = 220;
 
-function formatDisplayName(name) {
-  if (!name) return "";
-  return name.trim();
-}
+/* ============================================================
+   SMALL HELPERS
+============================================================ */
 
 function clamp(val, min, max) {
   return Math.min(Math.max(val, min), max);
 }
 
+function cleanText(v) {
+  return (v || "").trim();
+}
+
+function formatDisplayName(v) {
+  if (!v) return "";
+  return v.trim();
+}
+
 /* ============================================================
-   SOFT UI BUILDING BLOCKS
+   UI ATOMS (SAFE, PURE)
 ============================================================ */
+
+function SectionCard({ children }) {
+  return (
+    <div
+      style={{
+        background: "#070708",
+        border: "1px solid rgba(255,255,255,0.10)",
+        borderRadius: 20,
+        padding: 18,
+        marginBottom: 18,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function StatChip({ icon, value, onClick }) {
   return (
@@ -60,57 +84,41 @@ function StatChip({ icon, value, onClick }) {
         cursor: "pointer",
       }}
     >
-      {icon}
+      <span style={{ fontSize: 18 }}>{icon}</span>
       <span style={{ fontSize: 18 }}>{value}</span>
     </button>
   );
 }
 
-function SectionCard({ children }) {
-  return (
-    <div
-      style={{
-        background: "#070708",
-        border: "1px solid rgba(255,255,255,0.10)",
-        borderRadius: 20,
-        padding: 18,
-        marginBottom: 18,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 /* ============================================================
-   MAIN PROFILE PAGE
+   MAIN COMPONENT
 ============================================================ */
 
 export default function ProfilePage() {
-  /* ---------------------------
+  /* ----------------------------------------------------------
      CORE STATE
-  ---------------------------- */
+  ---------------------------------------------------------- */
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* ---------------------------
+  /* ----------------------------------------------------------
      PROFILE DATA
-  ---------------------------- */
+  ---------------------------------------------------------- */
   const [displayName, setDisplayName] = useState("");
   const [handle, setHandle] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
 
-  /* ---------------------------
+  /* ----------------------------------------------------------
      EDIT MODE
-  ---------------------------- */
+  ---------------------------------------------------------- */
   const [editMode, setEditMode] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  /* ---------------------------
-     AVATAR / IMAGE
-  ---------------------------- */
+  /* ----------------------------------------------------------
+     AVATAR / IMAGE STATE
+  ---------------------------------------------------------- */
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -124,7 +132,7 @@ export default function ProfilePage() {
   const inputFileRef = useRef(null);
 
   /* ============================================================
-     LOAD PROFILE
+     INITIAL LOAD
   ============================================================ */
 
   useEffect(() => {
@@ -165,7 +173,7 @@ export default function ProfilePage() {
   }
 
   /* ============================================================
-     ONLINE PRESENCE (DO NOT TOUCH)
+     ONLINE PRESENCE — DO NOT TOUCH
   ============================================================ */
 
   useEffect(() => {
@@ -214,7 +222,7 @@ export default function ProfilePage() {
   }, [user?.id]);
 
   /* ============================================================
-     AVATAR CROP LOGIC
+     AVATAR CROP LOGIC (UNCHANGED BEHAVIOR)
   ============================================================ */
 
   const onCropComplete = useCallback((_, croppedPixels) => {
@@ -321,15 +329,13 @@ export default function ProfilePage() {
 
   /* ============================================================
      END PART 1
-     (HEADER, CORE STATE, AVATAR SYSTEM)
-     PART 2 WILL CONTINUE RENDER + EDIT MODE + UI
+     PART 2 WILL CONTAIN:
+     - Header render
+     - Profile card
+     - Bio edit
+     - 4 reaction icons
+     - PR / Workouts / Measures buttons
   ============================================================ */
-// ------------------------------------------------------------
-// PART 2 / 3 — ProfilePage.jsx
-// ------------------------------------------------------------
-// UI RENDER, HEADER REWORK, PROFILE BODY, EDIT MODE LOGIC
-// ------------------------------------------------------------
-
   /* ============================================================
      EDIT MODE HELPERS
   ============================================================ */
@@ -350,8 +356,8 @@ export default function ProfilePage() {
 
       const updates = {
         id: user.id,
-        display_name: displayName.trim(),
-        bio: bio.trim(),
+        display_name: cleanText(displayName),
+        bio: cleanText(bio),
         avatar_url: avatarUrl || "",
       };
 
@@ -367,7 +373,7 @@ export default function ProfilePage() {
   }
 
   /* ============================================================
-     MEMOIZED HEADER TEXT
+     MEMOIZED HEADER VALUES
   ============================================================ */
 
   const headerName = useMemo(
@@ -381,7 +387,7 @@ export default function ProfilePage() {
   }, [handle]);
 
   /* ============================================================
-     RENDER
+     RENDER GUARD
   ============================================================ */
 
   if (loading) {
@@ -392,26 +398,37 @@ export default function ProfilePage() {
     );
   }
 
+  /* ============================================================
+     MAIN RENDER
+  ============================================================ */
+
   return (
     <>
-      <div style={{ padding: "26px 18px 140px", maxWidth: 900, margin: "0 auto" }}>
+      <div
+        style={{
+          padding: "28px 18px 160px",
+          maxWidth: 900,
+          margin: "0 auto",
+        }}
+      >
         {/* ======================================================
-            HEADER (REWORKED)
+            HEADER (BIG NAME + HANDLE)
         ====================================================== */}
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "space-between",
-            marginBottom: 22,
+            marginBottom: 26,
           }}
         >
           <div>
             <div
               style={{
-                fontSize: 30,
+                fontSize: 34,
                 fontWeight: 900,
-                letterSpacing: -0.5,
+                letterSpacing: -0.6,
+                lineHeight: 1.1,
               }}
             >
               {headerName}
@@ -420,9 +437,9 @@ export default function ProfilePage() {
             {headerHandle && (
               <div
                 style={{
-                  fontSize: 15,
+                  fontSize: 16,
                   opacity: 0.6,
-                  marginTop: 4,
+                  marginTop: 6,
                 }}
               >
                 {headerHandle}
@@ -453,22 +470,23 @@ export default function ProfilePage() {
             PROFILE CARD
         ====================================================== */}
         <SectionCard>
-          {/* AVATAR ROW */}
+          {/* ---------------- AVATAR + BIO ---------------- */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
               gap: 20,
-              marginBottom: 20,
+              alignItems: "center",
+              marginBottom: 18,
             }}
           >
-            <div style={{ position: "relative", width: 96, height: 96 }}>
+            {/* AVATAR */}
+            <div style={{ position: "relative", width: 100, height: 100 }}>
               <img
                 src={avatarUrl || "https://via.placeholder.com/120"}
                 alt="avatar"
                 style={{
-                  width: 96,
-                  height: 96,
+                  width: 100,
+                  height: 100,
                   borderRadius: "50%",
                   objectFit: "cover",
                   border: "2px solid rgba(255,255,255,0.12)",
@@ -505,8 +523,8 @@ export default function ProfilePage() {
                     onClick={() => setAvatarMenuOpen(true)}
                     style={{
                       position: "absolute",
-                      right: -4,
-                      bottom: -4,
+                      right: -6,
+                      bottom: -6,
                       width: 34,
                       height: 34,
                       borderRadius: "50%",
@@ -518,7 +536,6 @@ export default function ProfilePage() {
                       cursor: "pointer",
                       boxShadow: "0 6px 14px rgba(0,0,0,0.5)",
                     }}
-                    aria-label="Edit avatar"
                   >
                     <FiEdit2 size={16} />
                   </button>
@@ -531,10 +548,10 @@ export default function ProfilePage() {
               {!editMode ? (
                 <div
                   style={{
-                    fontSize: 16,
+                    fontSize: 17,
                     fontWeight: 500,
+                    lineHeight: 1.55,
                     opacity: bio ? 0.9 : 0.45,
-                    lineHeight: 1.5,
                   }}
                 >
                   {bio || "No bio yet."}
@@ -550,30 +567,44 @@ export default function ProfilePage() {
                   placeholder="Tell people what you’re training for..."
                   style={{
                     width: "100%",
-                    padding: 12,
+                    padding: 14,
                     borderRadius: 14,
                     background: "#0d0d0f",
                     border: "1px solid rgba(255,255,255,0.14)",
                     color: "white",
                     outline: "none",
                     resize: "none",
+                    fontSize: 15,
                   }}
                 />
               )}
             </div>
           </div>
 
-          {/* REACTION BAR PLACEHOLDER */}
+          {/* ---------------- REACTIONS BAR (4 ICONS) ---------------- */}
           <div
             style={{
               display: "flex",
               gap: 12,
-              marginTop: 8,
+              marginBottom: 18,
             }}
           >
-            <StatChip value="🔥 0" />
-            <StatChip value="💪 0" />
-            <StatChip value="❤️ 0" />
+            <StatChip icon="🔥" value={0} />
+            <StatChip icon="💪" value={0} />
+            <StatChip icon="❤️" value={0} />
+            <StatChip icon="🤝" value={0} />
+          </div>
+
+          {/* ---------------- PERSONAL ACTION BUTTONS ---------------- */}
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+            }}
+          >
+            <StatChip icon="🏋️" value="PRs" onClick={() => {}} />
+            <StatChip icon="📋" value="Workouts" onClick={() => {}} />
+            <StatChip icon="📏" value="Measures" onClick={() => {}} />
           </div>
         </SectionCard>
       </div>
@@ -587,9 +618,9 @@ export default function ProfilePage() {
           style={{
             position: "fixed",
             right: 18,
-            bottom: 90,
-            width: 56,
-            height: 56,
+            bottom: 92,
+            width: 54,
+            height: 54,
             borderRadius: "50%",
             background: "#ff2f2f",
             border: "none",
@@ -602,7 +633,7 @@ export default function ProfilePage() {
             zIndex: 50,
           }}
         >
-          <FiEdit2 size={22} />
+          <FiEdit2 size={20} />
         </button>
       )}
 
@@ -611,7 +642,7 @@ export default function ProfilePage() {
           style={{
             position: "fixed",
             right: 18,
-            bottom: 90,
+            bottom: 92,
             display: "flex",
             gap: 14,
             zIndex: 50,
@@ -620,8 +651,8 @@ export default function ProfilePage() {
           <button
             onClick={cancelEditMode}
             style={{
-              width: 52,
-              height: 52,
+              width: 50,
+              height: 50,
               borderRadius: "50%",
               background: "#1a1a1a",
               border: "1px solid rgba(255,255,255,0.18)",
@@ -639,8 +670,8 @@ export default function ProfilePage() {
             onClick={saveProfile}
             disabled={!dirty}
             style={{
-              width: 56,
-              height: 56,
+              width: 54,
+              height: 54,
               borderRadius: "50%",
               background: dirty ? "#22c55e" : "#2a2a2a",
               border: "none",
@@ -659,25 +690,19 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* SETTINGS OVERLAY */}
+      {/* SETTINGS OVERLAY (SAFE) */}
       <SettingsOverlay
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       />
 
-/* ============================================================
-   PART 3 WILL CONTINUE:
-   - AVATAR ACTION SHEET
-   - CROPPER OVERLAY
-   - FINAL EXPORT
-============================================================ */
-// ------------------------------------------------------------
-// PART 3 / 3 — ProfilePage.jsx
-// ------------------------------------------------------------
-// AVATAR ACTION SHEET, CROPPER OVERLAY, FINAL EXPORT
-// BIG. COMPLETE. FINISHES THE FILE.
-// ------------------------------------------------------------
-
+  /* ============================================================
+     PART 3 WILL CONTAIN:
+     - Avatar action sheet
+     - Cropper overlay
+     - Shared styles
+     - Final close + export
+  ============================================================ */
       {/* ======================================================
           AVATAR ACTION SHEET
           (ONLY WHEN EDIT MODE)
@@ -904,4 +929,9 @@ const cropTopBtn = {
 
 /* ============================================================
    END OF FILE — ProfilePage.jsx
+   ✔ header fixed
+   ✔ bottom section fixed
+   ✔ 4 reactions
+   ✔ edit/save logic correct
+   ✔ settings untouched
 ============================================================ */
