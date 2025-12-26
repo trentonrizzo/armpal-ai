@@ -49,6 +49,7 @@ export default function FriendProfile() {
     const yr = Math.floor(day / 365);
     return `${yr}y`;
   }
+
   async function unaddFriend() {
     if (!me?.id || !friendId) return;
 
@@ -74,7 +75,9 @@ export default function FriendProfile() {
   return (
     <div style={wrap}>
       <div style={topRow}>
-        <button style={backBtn} onClick={() => navigate(-1)}>←</button>
+        <button style={backBtn} onClick={() => navigate(-1)}>
+          ←
+        </button>
         <div style={topTitle}>Profile</div>
         <div style={{ width: 44 }} />
       </div>
@@ -116,6 +119,7 @@ export default function FriendProfile() {
 
         <div style={bio}>{p?.bio?.trim() ? p.bio : "No bio yet."}</div>
       </div>
+
       <div style={statsRow}>
         <div style={statCard}>
           <div style={statNum}>0</div>
@@ -137,6 +141,51 @@ export default function FriendProfile() {
     </div>
   );
 }
+const wrap = {
+  minHeight: "100vh",
+  padding: "16px 16px 90px",
+  background: "black",
+  color: "white",
+};
+
+const topRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 14,
+};
+
+const topTitle = {
+  fontSize: 18,
+  fontWeight: 800,
+  opacity: 0.8,
+};
+
+const backBtn = {
+  width: 44,
+  height: 44,
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.04)",
+  color: "white",
+  fontSize: 18,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const card = {
+  background: "#101010",
+  borderRadius: 18,
+  padding: 16,
+  border: "1px solid rgba(255,255,255,0.08)",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
+};
+
+const row = {
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+};
 
 const avatar = {
   width: 64,
@@ -150,5 +199,69 @@ const avatar = {
   fontSize: 26,
   fontWeight: 900,
   flexShrink: 0,
-  overflow: "hidden", // ✅ REQUIRED for image clipping
+  overflow: "hidden", // ✅ NEW: clips the image inside the circle
+};
+
+const name = {
+  fontSize: 22,
+  fontWeight: 900,
+};
+
+const handle = {
+  fontSize: 13,
+  opacity: 0.65,
+  marginTop: 2,
+};
+
+const status = {
+  fontSize: 12,
+  marginTop: 6,
+};
+
+const onlineWrap = { display: "inline-flex", alignItems: "center", gap: 8 };
+
+const dot = {
+  width: 10,
+  height: 10,
+  borderRadius: "50%",
+  background: "#1fbf61",
+  boxShadow: "0 0 10px rgba(31,191,97,0.45)",
+};
+
+const bio = {
+  marginTop: 14,
+  fontSize: 14,
+  opacity: 0.8,
+  whiteSpace: "pre-wrap",
+};
+
+const statsRow = {
+  display: "flex",
+  gap: 12,
+  marginTop: 14,
+};
+
+const statCard = {
+  flex: 1,
+  background: "#101010",
+  borderRadius: 16,
+  padding: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  textAlign: "center",
+};
+
+const statNum = { fontSize: 22, fontWeight: 900 };
+const statLbl = { fontSize: 12, opacity: 0.7, marginTop: 4 };
+
+const unaddBtn = {
+  width: "100%",
+  marginTop: 16,
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid rgba(255,47,47,0.22)",
+  background: "rgba(255,47,47,0.10)",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
+  boxShadow: "0 10px 30px rgba(255,47,47,0.10)",
 };
