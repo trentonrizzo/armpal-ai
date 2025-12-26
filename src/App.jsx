@@ -25,6 +25,7 @@ import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
 import { initOneSignal } from "./onesignal";
+import ResetPassword from "./pages/ResetPassword";
 
 function AppContent() {
   const location = useLocation();
@@ -48,6 +49,7 @@ function AppContent() {
         <Route path="/friend/:friendId" element={<FriendProfile />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
