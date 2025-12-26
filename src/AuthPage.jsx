@@ -2,18 +2,20 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 
 /*
-  AuthPage – LOGIN + FORGOT (RECOVERY SAFE)
+  AuthPage – LOGIN + SIGNUP + FORGOT (RECOVERY SAFE)
 
   ✅ Login works
+  ✅ Signup works
   ✅ Reset email works
   ✅ Recovery links DO NOT auto-login
   ✅ Redirects to /reset-password
 */
 
 export default function AuthPage() {
-  const [mode, setMode] = useState("login"); // login | forgot
+  const [mode, setMode] = useState("login"); // login | signup | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
 
@@ -59,7 +61,39 @@ export default function AuthPage() {
   }
 
   /* ============================
-     SEND RESET EMAIL (CORRECT)
+     SIGN UP
+  ============================ */
+  async function handleSignup() {
+    if (password !== confirm) {
+      setMsg({ type: "error", text: "Passwords do not match." });
+      return;
+    }
+
+    setLoading(true);
+    setMsg(null);
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      setMsg({ type: "error", text: error.message });
+    } else {
+      setMsg({
+        type: "success",
+        text: "Account created! Check your email to verify.",
+      });
+      setMode("login");
+      setPassword("");
+      setConfirm("");
+    }
+
+    setLoading(false);
+  }
+
+  /* ============================
+     SEND RESET EMAIL
   ============================ */
   async function sendResetEmail() {
     if (!email) {
@@ -117,6 +151,7 @@ export default function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               style={styles.input}
             />
+
             <button
               onClick={handleLogin}
               style={styles.primary}
@@ -124,11 +159,60 @@ export default function AuthPage() {
             >
               {loading ? "Logging in..." : "Log in"}
             </button>
+
             <button
-              onClick={() => setMode("forgot")}
+              onClick={() => setMode("signup")}
               style={styles.secondary}
             >
+              Create account
+            </button>
+
+            <button
+              onClick={() => setMode("forgot")}
+              style={styles.link}
+            >
               Forgot password?
+            </button>
+          </>
+        )}
+
+        {mode === "signup" && (
+          <>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={styles.input}
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input}
+            />
+            <input
+              type="password"
+              placeholder="Confirm password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              style={styles.input}
+            />
+
+            <button
+              onClick={handleSignup}
+              style={styles.primary}
+              disabled={loading}
+            >
+              {loading ? "Creating..." : "Create account"}
+            </button>
+
+            <button
+              onClick={() => setMode("login")}
+              style={styles.secondary}
+            >
+              Back to login
             </button>
           </>
         )}
@@ -209,6 +293,14 @@ const styles = {
     borderRadius: 14,
     color: "white",
     marginTop: 10,
+  },
+  link: {
+    background: "none",
+    border: "none",
+    color: "#aaa",
+    marginTop: 10,
+    textAlign: "center",
+    cursor: "pointer",
   },
   error: {
     background: "rgba(255,47,47,0.15)",
