@@ -33,8 +33,20 @@ function AppContent() {
   const isWorkouts = location.pathname === "/workouts";
   const [openShare, setOpenShare] = useState(false);
 
+  /* ============================
+     APPLY SAVED THEME (SAFE)
+  ============================ */
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    document.body.setAttribute("data-theme", savedTheme);
+  }, []);
+
   return (
-    <div className={`bg-black text-white ${isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"}`}>
+    <div
+      className={`bg-black text-white ${
+        isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
+      }`}
+    >
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/home" element={<HomePage />} />
@@ -58,9 +70,15 @@ function AppContent() {
         <button
           onClick={() => setOpenShare(true)}
           style={{
-            position: "fixed", top: 14, right: 14, zIndex: 9999,
-            width: 44, height: 44, borderRadius: 999,
-            background: "#111", border: "1px solid rgba(255,255,255,0.15)",
+            position: "fixed",
+            top: 14,
+            right: 14,
+            zIndex: 9999,
+            width: 44,
+            height: 44,
+            borderRadius: 999,
+            background: "#111",
+            border: "1px solid rgba(255,255,255,0.15)",
             color: "white",
           }}
         >
@@ -68,7 +86,10 @@ function AppContent() {
         </button>
       )}
 
-      <ShareWorkoutsModal open={openShare} onClose={() => setOpenShare(false)} />
+      <ShareWorkoutsModal
+        open={openShare}
+        onClose={() => setOpenShare(false)}
+      />
     </div>
   );
 }
@@ -77,35 +98,47 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
-usePresence(session?.user);
+  usePresence(session?.user);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session); setReady(true);
+      setSession(session);
+      setReady(true);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) =>
+      setSession(s)
+    );
+
     return () => listener.subscription.unsubscribe();
   }, []);
-useEffect(() => {
-  if (!session?.user?.id) return;
 
-  const ping = async () => {
-    await supabase
-      .from("profiles")
-      .update({ last_seen: new Date().toISOString() })
-      .eq("id", session.user.id);
-  };
+  useEffect(() => {
+    if (!session?.user?.id) return;
 
-  ping();
-  const interval = setInterval(ping, 30000);
+    const ping = async () => {
+      await supabase
+        .from("profiles")
+        .update({ last_seen: new Date().toISOString() })
+        .eq("id", session.user.id);
+    };
 
-  return () => clearInterval(interval);
-}, [session?.user?.id]);
+    ping();
+    const interval = setInterval(ping, 30000);
 
-  useEffect(() => { if (session) initOneSignal(); }, [session]);
+    return () => clearInterval(interval);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (session) initOneSignal();
+  }, [session]);
 
   if (!ready) return null;
   if (!session) return <AuthPage />;
 
-  return <AppProvider><AppContent /></AppProvider>;
+  return (
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
+  );
 }
