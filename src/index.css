@@ -11,11 +11,13 @@
   --card: #0a0a0a;
   --card-2: #111111;
 
-  --red: #e00000;
-  --red-soft: #ff1a1a;
+  --accent: #e00000;
+  --accent-soft: #ff1a1a;
 
   --text: #ffffff;
   --text-dim: #c8c8c8;
+
+  --border: rgba(255, 255, 255, 0.12);
 }
 
 /* =============================== */
@@ -28,15 +30,11 @@
   box-sizing: border-box;
 }
 
-/* 🚨 IMPORTANT FIX:
-   DO NOT force height rules globally.
-*/
 html,
 body {
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, sans-serif;
-
   overflow-x: hidden;
 
   padding-top: env(safe-area-inset-top);
@@ -44,7 +42,6 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
-/* Let React control layout height */
 #root {
   min-height: 100vh;
   display: flex;
@@ -52,7 +49,7 @@ body {
 }
 
 /* =============================== */
-/*            SCROLLBAR             */
+/*            SCROLLBAR            */
 /* =============================== */
 
 ::-webkit-scrollbar {
@@ -74,7 +71,7 @@ body {
 
 .card {
   background: var(--card);
-  border: 1px solid #1a1a1a;
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 18px;
 }
@@ -86,7 +83,7 @@ body {
 .section-title {
   font-size: 1.3rem;
   font-weight: 800;
-  color: var(--red);
+  color: var(--accent);
   margin-bottom: 12px;
 }
 
@@ -105,7 +102,7 @@ body {
   padding: 16px;
   border-radius: 12px;
   text-align: center;
-  border: 1px solid #1b1b1b;
+  border: 1px solid var(--border);
 }
 
 .stat-number {
@@ -126,7 +123,7 @@ body {
 
 .qa-btn {
   background: var(--card);
-  border: 1px solid #1b1b1b;
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px;
   text-align: center;
@@ -135,19 +132,19 @@ body {
 }
 
 .qa-btn:hover {
-  border-color: var(--red);
-  color: var(--red-soft);
+  border-color: var(--accent);
+  color: var(--accent-soft);
   transform: translateY(-1px);
 }
 
 .qa-btn-red {
-  background: rgba(224, 0, 0, 0.2);
-  border: 1px solid rgba(224, 0, 0, 0.4);
-  color: var(--red);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
 }
 
 .qa-btn-red:hover {
-  background: rgba(224, 0, 0, 0.35);
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 /* =============================== */
@@ -156,7 +153,7 @@ body {
 
 .strength-bar {
   width: 100%;
-  background: #1a1a1a;
+  background: var(--card-2);
   height: 10px;
   border-radius: 20px;
   overflow: hidden;
@@ -164,7 +161,7 @@ body {
 
 .strength-fill {
   height: 100%;
-  background: var(--red-soft);
+  background: var(--accent-soft);
   border-radius: 20px;
   transition: width 0.4s ease;
 }
@@ -178,7 +175,7 @@ body {
   height: 76px;
   object-fit: cover;
   border-radius: 18px;
-  border: 2px solid var(--red);
+  border: 2px solid var(--accent);
 }
 
 /* =============================== */
@@ -209,6 +206,10 @@ body {
   scrollbar-width: none;
 }
 
+.animate-slideUp {
+  animation: slideUp 0.25s ease-out;
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(100%);
@@ -218,10 +219,6 @@ body {
     transform: translateY(0);
     opacity: 1;
   }
-}
-
-.animate-slideUp {
-  animation: slideUp 0.25s ease-out;
 }
 
 /* =============================== */
@@ -241,9 +238,9 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: var(--red-soft);
-  box-shadow: 0 0 0 1px rgba(255, 47, 47, 0.7);
-  background: #050505;
+  border-color: var(--accent-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  background: var(--card);
 }
 
 html {
@@ -251,7 +248,7 @@ html {
 }
 
 /* =============================== */
-/*        LIGHT MODE OVERRIDES     */
+/*           LIGHT MODE            */
 /* =============================== */
 
 body[data-theme="light"] {
@@ -262,12 +259,12 @@ body[data-theme="light"] {
   --text: #111111;
   --text-dim: #555555;
 
-  /* Accent: RED → PURPLE */
-  --red: #6a5cff;
-  --red-soft: #7b6dff;
+  --accent: #6a5cff;
+  --accent-soft: #7b6dff;
+
+  --border: rgba(0, 0, 0, 0.12);
 }
 
-/* Light mode scrollbar */
 body[data-theme="light"] ::-webkit-scrollbar-thumb {
   background: #cfcfe6;
 }
