@@ -59,7 +59,7 @@ async function removeSubscription(userId, endpoint) {
 }
 
 /* ============================
-   THEME HELPERS (SAFE)
+   THEME HELPERS
 ============================ */
 
 function getCurrentTheme() {
@@ -72,76 +72,7 @@ function setTheme(next) {
 }
 
 /* ============================
-   STYLES (theme-driven)
-============================ */
-
-const s = {
-  backdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.6)",
-    zIndex: 9999,
-    display: "flex",
-    justifyContent: "flex-end",
-  },
-  panel: {
-    width: "74%",
-    maxWidth: 380,
-    background: "var(--bg-main)",
-    color: "var(--text-main)",
-    padding: 16,
-    display: "flex",
-    flexDirection: "column",
-    borderLeft: "1px solid var(--border-soft)",
-  },
-  card: {
-    padding: 14,
-    borderRadius: 14,
-    background: "var(--bg-card)",
-    border: "1px solid var(--border-soft)",
-    cursor: "pointer",
-  },
-  subtle: { fontSize: 12, color: "var(--text-muted)" },
-  btnSoft: {
-    padding: 10,
-    width: "100%",
-    borderRadius: 12,
-    background: "var(--bg-main)",
-    border: "1px solid var(--border-soft)",
-    color: "var(--text-main)",
-    fontWeight: 700,
-  },
-  btnDanger: {
-    padding: 14,
-    borderRadius: 14,
-    background: "var(--accent-main)",
-    border: "none",
-    color: "#fff",
-    fontWeight: 900,
-  },
-  modalBackdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.7)",
-    zIndex: 10000,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modal: {
-    width: "86%",
-    maxWidth: 340,
-    background: "var(--bg-card)",
-    color: "var(--text-main)",
-    borderRadius: 16,
-    padding: 18,
-    border: "1px solid var(--border-soft)",
-    textAlign: "center",
-  },
-};
-
-/* ============================
-   TOGGLE PILL
+   TOGGLE
 ============================ */
 
 function TogglePill({ on, disabled, onClick }) {
@@ -155,15 +86,14 @@ function TogglePill({ on, disabled, onClick }) {
         borderRadius: 999,
         border: "1px solid var(--border-soft)",
         background: disabled
-          ? "rgba(0,0,0,0.12)"
+          ? "rgba(0,0,0,0.2)"
           : on
           ? "var(--accent-main)"
-          : "var(--bg-main)",
+          : "var(--bg-card)",
         padding: 2,
         cursor: disabled ? "not-allowed" : "pointer",
         display: "flex",
         justifyContent: on ? "flex-end" : "flex-start",
-        transition: "background 0.18s ease",
       }}
     >
       <div
@@ -173,7 +103,6 @@ function TogglePill({ on, disabled, onClick }) {
           borderRadius: 999,
           background: "var(--text-main)",
           opacity: disabled ? 0.6 : 1,
-          transition: "transform 0.18s ease",
         }}
       />
     </button>
@@ -198,7 +127,6 @@ export default function SettingsOverlay({ open, onClose }) {
   useEffect(() => {
     if (!open) return;
 
-    // sync theme state each time panel opens (in case it changed elsewhere)
     setThemeState(getCurrentTheme());
 
     supabase.auth.getUser().then(({ data }) => setUser(data?.user));
@@ -261,10 +189,8 @@ export default function SettingsOverlay({ open, onClose }) {
   async function sendPasswordReset() {
     if (!user?.email) return;
 
-    const redirectTo = window.location.origin;
-
     const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo,
+      redirectTo: window.location.origin,
     });
 
     if (error) alert(error.message);
@@ -280,8 +206,33 @@ export default function SettingsOverlay({ open, onClose }) {
 
   return (
     <>
-      <div onClick={onClose} style={s.backdrop}>
-        <div onClick={(e) => e.stopPropagation()} style={s.panel}>
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.6)",
+          zIndex: 9999,
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: "74%",
+            maxWidth: 380,
+            height: "100vh",
+            background: "var(--bg-main)",
+            color: "var(--text-main)",
+            padding: 16,
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            borderLeft: "1px solid var(--border-soft)",
+          }}
+        >
           <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
 
           {/* APPEARANCE */}
@@ -289,23 +240,22 @@ export default function SettingsOverlay({ open, onClose }) {
             onClick={() =>
               setSection(section === "appearance" ? null : "appearance")
             }
-            style={{ ...s.card, marginTop: 18 }}
+            style={{
+              marginTop: 18,
+              padding: 14,
+              borderRadius: 14,
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-soft)",
+            }}
           >
             <div style={{ fontWeight: 800 }}>Appearance</div>
-            <div style={s.subtle}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
               {theme === "light" ? "Light mode" : "Dark mode"}
             </div>
 
             {section === "appearance" && (
               <div style={{ marginTop: 12 }}>
-                <TogglePill
-                  on={theme === "light"}
-                  disabled={false}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTheme();
-                  }}
-                />
+                <TogglePill on={theme === "light"} onClick={toggleTheme} />
               </div>
             )}
           </div>
@@ -315,10 +265,16 @@ export default function SettingsOverlay({ open, onClose }) {
             onClick={() =>
               setSection(section === "notifications" ? null : "notifications")
             }
-            style={{ ...s.card, marginTop: 14 }}
+            style={{
+              marginTop: 14,
+              padding: 14,
+              borderRadius: 14,
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-soft)",
+            }}
           >
             <div style={{ fontWeight: 800 }}>Notifications</div>
-            <div style={s.subtle}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
               {notifSupported
                 ? notifEnabled
                   ? "Enabled"
@@ -331,10 +287,7 @@ export default function SettingsOverlay({ open, onClose }) {
                 <TogglePill
                   on={notifEnabled}
                   disabled={!notifSupported || notifBusy}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleNotifications();
-                  }}
+                  onClick={toggleNotifications}
                 />
               </div>
             )}
@@ -343,30 +296,39 @@ export default function SettingsOverlay({ open, onClose }) {
           {/* ACCOUNT */}
           <div
             onClick={() => setSection(section === "account" ? null : "account")}
-            style={{ ...s.card, marginTop: 14 }}
+            style={{
+              marginTop: 14,
+              padding: 14,
+              borderRadius: 14,
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-soft)",
+            }}
           >
             <div style={{ fontWeight: 800 }}>Account</div>
 
             {section === "account" && (
-              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
-                <div style={{ ...s.subtle, fontSize: 12 }}>Email</div>
-                <div style={{ wordBreak: "break-word" }}>{user?.email}</div>
+              <div style={{ marginTop: 10, fontSize: 13 }}>
+                <div style={{ color: "var(--text-muted)" }}>Email</div>
+                <div>{user?.email}</div>
 
                 <div style={{ height: 10 }} />
 
-                <div style={{ ...s.subtle, fontSize: 12 }}>User ID</div>
-                <div style={{ fontSize: 12, wordBreak: "break-word" }}>
-                  {user?.id}
-                </div>
+                <div style={{ color: "var(--text-muted)" }}>User ID</div>
+                <div style={{ fontSize: 12 }}>{user?.id}</div>
 
                 <div style={{ height: 14 }} />
 
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sendPasswordReset();
+                  onClick={sendPasswordReset}
+                  style={{
+                    padding: 10,
+                    width: "100%",
+                    borderRadius: 12,
+                    background: "var(--bg-main)",
+                    border: "1px solid var(--border-soft)",
+                    color: "var(--text-main)",
+                    fontWeight: 700,
                   }}
-                  style={s.btnSoft}
                 >
                   Send password reset email
                 </button>
@@ -378,17 +340,46 @@ export default function SettingsOverlay({ open, onClose }) {
 
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            style={s.btnDanger}
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              background: "var(--accent-main)",
+              border: "none",
+              color: "#fff",
+              fontWeight: 900,
+              marginTop: 20,
+            }}
           >
             Log out
           </button>
         </div>
       </div>
 
-      {/* LOGOUT CONFIRM MODAL */}
+      {/* LOGOUT CONFIRM */}
       {showLogoutConfirm && (
-        <div style={s.modalBackdrop}>
-          <div style={s.modal}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "86%",
+              maxWidth: 340,
+              background: "var(--bg-card)",
+              color: "var(--text-main)",
+              borderRadius: 16,
+              padding: 18,
+              border: "1px solid var(--border-soft)",
+              textAlign: "center",
+            }}
+          >
             <div style={{ fontWeight: 900, fontSize: 16 }}>Log out?</div>
             <div style={{ color: "var(--text-muted)", marginTop: 6 }}>
               You will need to sign back in.
