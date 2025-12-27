@@ -43,7 +43,7 @@ function AppContent() {
 
   return (
     <div
-      className={`bg-black text-white ${
+      className={`${
         isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
       }`}
     >
@@ -77,9 +77,9 @@ function AppContent() {
             width: 44,
             height: 44,
             borderRadius: 999,
-            background: "#111",
+            background: "var(--card)",
             border: "1px solid rgba(255,255,255,0.15)",
-            color: "white",
+            color: "var(--text)",
           }}
         >
           <FaShare />
