@@ -59,6 +59,19 @@ async function removeSubscription(userId, endpoint) {
 }
 
 /* ============================
+   THEME HELPERS (SAFE)
+============================ */
+
+function getCurrentTheme() {
+  return document.body.getAttribute("data-theme") || "dark";
+}
+
+function setTheme(next) {
+  document.body.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next);
+}
+
+/* ============================
    TOGGLE PILL
 ============================ */
 
@@ -109,6 +122,8 @@ export default function SettingsOverlay({ open, onClose }) {
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
 
+  const [theme, setThemeState] = useState(getCurrentTheme());
+
   useEffect(() => {
     if (!open) return;
 
@@ -127,6 +142,12 @@ export default function SettingsOverlay({ open, onClose }) {
         .catch(() => setNotifEnabled(false));
     }
   }, [open]);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    setThemeState(next);
+  }
 
   async function toggleNotifications() {
     if (!user || !notifSupported) return;
@@ -209,13 +230,46 @@ export default function SettingsOverlay({ open, onClose }) {
         >
           <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
 
+          {/* APPEARANCE */}
+          <div
+            onClick={() =>
+              setSection(section === "appearance" ? null : "appearance")
+            }
+            style={{
+              marginTop: 18,
+              padding: 14,
+              borderRadius: 14,
+              background: "#111",
+              border: "1px solid rgba(255,255,255,0.1)",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Appearance</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              {theme === "light" ? "Light mode" : "Dark mode"}
+            </div>
+
+            {section === "appearance" && (
+              <div style={{ marginTop: 12 }}>
+                <TogglePill
+                  on={theme === "light"}
+                  disabled={false}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTheme();
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
           {/* NOTIFICATIONS */}
           <div
             onClick={() =>
               setSection(section === "notifications" ? null : "notifications")
             }
             style={{
-              marginTop: 18,
+              marginTop: 14,
               padding: 14,
               borderRadius: 14,
               background: "#111",
@@ -264,12 +318,11 @@ export default function SettingsOverlay({ open, onClose }) {
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
                 <div style={{ opacity: 0.6 }}>Email</div>
                 <div>{user?.email}</div>
-<div style={{ height: 10 }} />
 
-<div style={{ opacity: 0.6 }}>User ID</div>
-<div style={{ fontSize: 12 }}>{user?.id}</div>
+                <div style={{ height: 10 }} />
 
-<div style={{ height: 14 }} />
+                <div style={{ opacity: 0.6 }}>User ID</div>
+                <div style={{ fontSize: 12 }}>{user?.id}</div>
 
                 <div style={{ height: 14 }} />
 
@@ -336,9 +389,7 @@ export default function SettingsOverlay({ open, onClose }) {
               textAlign: "center",
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 16 }}>
-              Log out?
-            </div>
+            <div style={{ fontWeight: 900, fontSize: 16 }}>Log out?</div>
             <div style={{ opacity: 0.7, marginTop: 6 }}>
               You will need to sign back in.
             </div>

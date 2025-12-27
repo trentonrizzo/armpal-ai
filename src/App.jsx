@@ -34,7 +34,7 @@ function AppContent() {
   const [openShare, setOpenShare] = useState(false);
 
   /* ============================
-     APPLY SAVED THEME (SAFE)
+     APPLY SAVED THEME
   ============================ */
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") || "dark";
@@ -129,8 +129,19 @@ export default function App() {
     return () => clearInterval(interval);
   }, [session?.user?.id]);
 
+  /* ============================
+     🔥 FORCE SERVICE WORKER RESET
+  ============================ */
   useEffect(() => {
-    if (session) initOneSignal();
+    if (!session) return;
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => reg.unregister());
+      });
+    }
+
+    initOneSignal();
   }, [session]);
 
   if (!ready) return null;

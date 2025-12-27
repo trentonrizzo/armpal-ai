@@ -10,8 +10,10 @@
   --bg: #000000;
   --card: #0a0a0a;
   --card-2: #111111;
+
   --red: #e00000;
   --red-soft: #ff1a1a;
+
   --text: #ffffff;
   --text-dim: #c8c8c8;
 }
@@ -28,16 +30,12 @@
 
 /* 🚨 IMPORTANT FIX:
    DO NOT force height rules globally.
-   This was killing chat layouts.
 */
 html,
 body {
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, sans-serif;
-
-  /* ❌ REMOVED: min-height: 100% */
-  /* ❌ REMOVED: height: 100% */
 
   overflow-x: hidden;
 
@@ -243,11 +241,37 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: #ff2f2f;
+  border-color: var(--red-soft);
   box-shadow: 0 0 0 1px rgba(255, 47, 47, 0.7);
   background: #050505;
 }
 
 html {
   scroll-behavior: smooth;
+}
+
+/* =============================== */
+/*        LIGHT MODE OVERRIDES     */
+/* =============================== */
+
+body[data-theme="light"] {
+  --bg: #ffffff;
+  --card: #f4f5f7;
+  --card-2: #ededf1;
+
+  --text: #111111;
+  --text-dim: #555555;
+
+  /* Accent: RED → PURPLE */
+  --red: #6a5cff;
+  --red-soft: #7b6dff;
+}
+
+/* Light mode scrollbar */
+body[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #cfcfe6;
+}
+
+body[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #b6b6dd;
 }
