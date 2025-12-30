@@ -34,7 +34,7 @@ function timeAgo(ts) {
 
 /* ============================================================
    WORKOUT SHARE: parsing + rendering + save-to-my-workouts
-   ============================================================ */
+============================================================ */
 
 function tryParseJSON(val) {
   if (val == null) return null;
@@ -147,6 +147,27 @@ function WorkoutShareCard({ share, mine, onSave, saving }) {
     </div>
   );
 }
+
+/* ============================================================
+   VIDEO URL FALLBACK (if DB doesn't have video_url yet)
+============================================================ */
+
+function extractInlineVideoUrl(m) {
+  const direct = m?.video_url;
+  if (direct) return direct;
+
+  const t = (m?.text || "").trim();
+  if (!t) return null;
+
+  // Our fallback format: "VIDEO:<url>"
+  if (t.startsWith("VIDEO:")) {
+    const url = t.slice("VIDEO:".length).trim();
+    if (url.startsWith("http")) return url;
+  }
+
+  return null;
+}
+
 export default function ChatPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
@@ -185,7 +206,6 @@ export default function ChatPage() {
 
     if (data) setFriend(data);
   }
-
   async function loadMessages(uid) {
     setError("");
 
@@ -258,6 +278,26 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
+  // Realtime friend presence updates
+  useEffect(() => {
+    if (!friendId) return;
+
+    const ch = supabase
+      .channel(`presence-friend-${friendId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles" },
+        (payload) => {
+          const p = payload.new;
+          if (p?.id !== friendId) return;
+          setFriend((prev) => ({ ...(prev || {}), ...p }));
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(ch);
+  }, [friendId]);
+
   // Auto scroll
   useEffect(() => {
     if (listRef.current) {
@@ -280,9 +320,6 @@ export default function ChatPage() {
     if (error) setError(error.message);
   }
 
-  // =========================
-  // IMAGE UPLOAD (EXISTING)
-  // =========================
   async function sendImage(file) {
     if (!file || !user) return;
 
@@ -307,11 +344,11 @@ export default function ChatPage() {
     });
   }
 
-  // =========================
-  // VIDEO UPLOAD (NEW)
-  // =========================
+  // VIDEO upload (with safe fallback if video_url column is missing)
   async function sendVideo(file) {
     if (!file || !user) return;
+
+    setError("");
 
     const ext = file.name.split(".").pop();
     const path = `${user.id}-${Date.now()}.${ext}`;
@@ -321,17 +358,44 @@ export default function ChatPage() {
       .upload(path, file);
 
     if (uploadErr) {
+      // Most common: bucket doesn't exist / RLS / size limit
       setError(uploadErr.message);
       return;
     }
 
     const { data } = supabase.storage.from("chat-videos").getPublicUrl(path);
+    const url = data?.publicUrl;
 
-    await supabase.from("messages").insert({
+    if (!url) {
+      setError("Failed to get public video URL.");
+      return;
+    }
+
+    // Try the proper way first
+    const { error: insertErr } = await supabase.from("messages").insert({
       sender_id: user.id,
       receiver_id: friendId,
-      video_url: data.publicUrl,
+      video_url: url,
     });
+
+    if (!insertErr) return;
+
+    // Fallback: if DB doesn't have video_url column yet, still send as text and render it
+    const msg = (insertErr.message || "").toLowerCase();
+    if (msg.includes("video_url") || msg.includes("column")) {
+      const { error: fallbackErr } = await supabase.from("messages").insert({
+        sender_id: user.id,
+        receiver_id: friendId,
+        text: `VIDEO:${url}`,
+      });
+
+      if (fallbackErr) setError(fallbackErr.message);
+      else setToast("✅ Video sent (enable video_url column for full support)");
+      return;
+    }
+
+    // Other DB error
+    setError(insertErr.message);
   }
 
   // HOLD TO DELETE
@@ -456,6 +520,70 @@ export default function ChatPage() {
     ? `Last seen ${timeAgo(friend.last_seen)}`
     : "";
 
+  async function saveSharedWorkout(share, messageId) {
+    if (!user?.id) return;
+    if (!share?.workout?.name) return;
+
+    const key = `${messageId || "m"}-${share?.workout?.id || share?.workout?.name}`;
+    setSavingWorkoutKey(key);
+    setError("");
+
+    try {
+      const ok = window.confirm(`Save "${share.workout.name}" to your workouts?`);
+      if (!ok) {
+        setSavingWorkoutKey(null);
+        return;
+      }
+
+      const { data: existing, error: e1 } = await supabase
+        .from("workouts")
+        .select("id")
+        .eq("user_id", user.id);
+
+      if (e1) throw e1;
+
+      const position = (existing || []).length;
+
+      const { data: insertedWorkout, error: e2 } = await supabase
+        .from("workouts")
+        .insert({
+          user_id: user.id,
+          name: share.workout.name,
+          scheduled_for: null,
+          position,
+        })
+        .select("id")
+        .single();
+
+      if (e2) throw e2;
+
+      const newWorkoutId = insertedWorkout.id;
+
+      const exercises = Array.isArray(share.exercises) ? share.exercises : [];
+      if (exercises.length) {
+        const rows = exercises.map((ex, idx) => ({
+          user_id: user.id,
+          workout_id: newWorkoutId,
+          name: ex.name || "Exercise",
+          sets: ex.sets === "" || ex.sets == null ? null : Number(ex.sets),
+          reps: ex.reps === "" || ex.reps == null ? null : Number(ex.reps),
+          weight: ex.weight ?? null,
+          position: typeof ex.position === "number" ? ex.position : idx,
+        }));
+
+        const { error: e3 } = await supabase.from("exercises").insert(rows);
+        if (e3) throw e3;
+      }
+
+      setToast("✅ Saved to your workouts");
+    } catch (e) {
+      console.error("SAVE WORKOUT ERROR:", e);
+      setError(e?.message || "Failed saving workout.");
+    } finally {
+      setSavingWorkoutKey(null);
+    }
+  }
+
   return (
     <div style={shell}>
       {/* HEADER */}
@@ -465,7 +593,19 @@ export default function ChatPage() {
         </button>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <strong>{friendName}</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <strong>{friendName}</strong>
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
+                background: friendOnline ? "#2dff57" : "rgba(255,255,255,0.3)",
+                boxShadow: friendOnline ? "0 0 8px rgba(45,255,87,0.9)" : "none",
+              }}
+            />
+          </div>
+
           {friendStatus && (
             <span style={{ fontSize: 12, opacity: 0.85 }}>{friendStatus}</span>
           )}
@@ -479,6 +619,12 @@ export default function ChatPage() {
 
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
+          const share = extractWorkoutShareFromMessage(m);
+
+          const saveKey = `${m.id}-${share?.workout?.id || share?.workout?.name || "w"}`;
+          const saving = savingWorkoutKey === saveKey;
+
+          const videoUrl = extractInlineVideoUrl(m);
 
           return (
             <div
@@ -502,7 +648,18 @@ export default function ChatPage() {
                   fontSize: 16,
                 }}
               >
-                {m.text && <div>{m.text}</div>}
+                {share ? (
+                  <WorkoutShareCard
+                    share={share}
+                    mine={mine}
+                    saving={saving}
+                    onSave={() => saveSharedWorkout(share, m.id)}
+                  />
+                ) : (
+                  <>
+                    {m.text && !m.text.startsWith("VIDEO:") && <div>{m.text}</div>}
+                  </>
+                )}
 
                 {m.image_url && (
                   <img
@@ -518,9 +675,9 @@ export default function ChatPage() {
                   />
                 )}
 
-                {m.video_url && (
+                {videoUrl && (
                   <video
-                    src={m.video_url}
+                    src={videoUrl}
                     controls
                     playsInline
                     style={{
@@ -586,6 +743,27 @@ export default function ChatPage() {
         </button>
       </div>
 
+      {/* TOAST */}
+      {toast && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 86,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(0,0,0,0.85)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            color: "#fff",
+            padding: "10px 14px",
+            borderRadius: 999,
+            fontWeight: 800,
+            zIndex: 9999,
+          }}
+        >
+          {toast}
+        </div>
+      )}
+
       {/* IMAGE VIEW */}
       {imageView && (
         <div style={imageOverlay} onClick={() => setImageView(null)}>
@@ -602,7 +780,7 @@ const shell = {
   position: "fixed",
   inset: 0,
   background: "#000",
-  overflow: "hidden",
+  overflow: "hidden", // body cannot scroll because the whole page is fixed
 };
 
 const header = {
@@ -636,6 +814,9 @@ const messagesBox = {
   right: 0,
   bottom: 72,
   overflowY: "auto",
+  WebkitOverflowScrolling: "touch",
+  overscrollBehavior: "contain",
+  touchAction: "pan-y",
   padding: 12,
   background: "#000",
 };
@@ -646,6 +827,7 @@ const inputBar = {
   right: 0,
   bottom: 0,
   height: 72,
+  paddingBottom: "env(safe-area-inset-bottom)",
   background: "#000",
   borderTop: "1px solid #222",
   display: "flex",
