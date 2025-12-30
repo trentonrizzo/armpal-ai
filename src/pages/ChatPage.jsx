@@ -10,6 +10,7 @@
 // ✅ AUDIO WORKS + STAYS (audio_duration FIXED)
 // ✅ KEYBOARD DOES NOT HIDE INPUT
 // ✅ UX CLEANED WITHOUT BREAKING LOGIC
+// ✅ VIDEOS WORK + PLAY (PUBLIC OR PRIVATE BUCKET SAFE)
 // ============================================================
 
 import React, {
@@ -17,6 +18,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -70,12 +72,31 @@ function formatMMSS(seconds) {
 
 const MAX_AUDIO_SECONDS = 30;
 
+// IMPORTANT:
+// Your base file uses storage buckets named:
+// - "chat-images"
+// - "chat-videos"
+// - "chat-audio"
+// We will not change that structure.
+// The only change we add is a playback-safe URL resolver for videos
+// (handles public buckets AND private buckets via signed URLs).
+
+const BUCKET_IMAGES = "chat-images";
+const BUCKET_VIDEOS = "chat-videos";
+const BUCKET_AUDIO = "chat-audio";
+
 function imagePath(chatId, userId, name) {
+  // KEEP your exact style / structure
   return `chat-images/${chatId}/${userId}/${Date.now()}-${name}`;
 }
 
 function videoPath(chatId, userId, name) {
+  // KEEP your exact style / structure
   return `chat-videos/${chatId}/${userId}/${Date.now()}-${name}`;
+}
+
+function audioPath(chatId, userId, ext) {
+  return `chat-audio/${chatId}/${userId}/${Date.now()}.${ext}`;
 }
 
 // ============================================================
@@ -131,11 +152,7 @@ function safeParseJSON(value) {
 }
 
 function extractWorkoutShare(message) {
-  const candidates = [
-    message.text,
-    message.payload,
-    message.data,
-  ];
+  const candidates = [message.text, message.payload, message.data];
 
   for (const c of candidates) {
     const parsed = safeParseJSON(c);
@@ -146,20 +163,60 @@ function extractWorkoutShare(message) {
 }
 
 // ============================================================
+// VIDEO URL RESOLVER (THE ACTUAL “VIDEOS WORK” UPGRADE)
+// ============================================================
+// Why this exists:
+// - If your "chat-videos" bucket is PUBLIC => publicUrl is playable
+// - If your bucket is PRIVATE (very common) => publicUrl will 403 on iOS/Safari,
+//   and the <video> will fail silently / not load.
+// This resolver detects that and generates a SIGNED URL automatically,
+// without changing your DB schema and without breaking your structure.
+//
+// It uses your existing stored m.video_url (public URL) and extracts
+// the path to call createSignedUrl() for private playback when needed.
+
+function extractPathFromPublicUrl(url, bucketName) {
+  if (!url || !bucketName) return "";
+  try {
+    const marker = `/${bucketName}/`;
+    const idx = url.indexOf(marker);
+    if (idx === -1) return "";
+    return url.slice(idx + marker.length);
+  } catch {
+    return "";
+  }
+}
+
+function looksLikeSupabasePublicObjectUrl(url) {
+  if (!url) return false;
+  return (
+    url.includes("/storage/v1/object/public/") ||
+    url.includes("/storage/v1/object/sign/") ||
+    url.includes("/storage/v1/object/")
+  );
+}
+
+function normalizeMaybeUrl(value) {
+  if (!value) return "";
+  if (typeof value !== "string") return "";
+  return value.trim();
+}
+
+// ============================================================
 // WORKOUT SHARE CARD
 // ============================================================
 
 function WorkoutShareCard({ share }) {
   const workoutName = share?.workout?.name || "Workout";
-  const exercises = Array.isArray(share?.exercises)
-    ? share.exercises
-    : [];
+  const exercises = Array.isArray(share?.exercises) ? share.exercises : [];
 
   return (
     <div style={workoutCard}>
       <div style={workoutTitle}>📋 {workoutName}</div>
       {exercises.slice(0, 8).map((ex, i) => (
-        <div key={i} style={workoutRow}>• {ex.name}</div>
+        <div key={i} style={workoutRow}>
+          • {ex.name}
+        </div>
       ))}
       {exercises.length === 0 && (
         <div style={workoutRowMuted}>No exercises listed</div>
@@ -201,6 +258,24 @@ export default function ChatPage() {
   const [sendingAudio, setSendingAudio] = useState(false);
 
   // ----------------------------------------------------------
+  // VIDEO STATE (NEW: MAKE VIDEOS PLAY NO MATTER WHAT)
+  // ----------------------------------------------------------
+
+  // Cache signed video URLs by message id.
+  // This is the key upgrade that makes “videos work” even on private buckets / iOS.
+  const [signedVideoById, setSignedVideoById] = useState({}); // { [messageId]: signedUrl }
+  const [signingBusyById, setSigningBusyById] = useState({}); // { [messageId]: true/false }
+
+  // Optional: if a video fails to load with public URL, we auto-switch to signed.
+  const [videoLoadFailedById, setVideoLoadFailedById] = useState({}); // { [messageId]: true }
+
+  // ----------------------------------------------------------
+  // KEYBOARD / SAFE AREA (KEEP COMPOSER VISIBLE)
+  // ----------------------------------------------------------
+
+  const [keyboardLift, setKeyboardLift] = useState(0);
+
+  // ----------------------------------------------------------
   // REFS
   // ----------------------------------------------------------
 
@@ -230,6 +305,37 @@ export default function ChatPage() {
     : "";
 
   // ============================================================
+  // KEYBOARD LIFT (VISUAL VIEWPORT)
+  // ============================================================
+
+  useEffect(() => {
+    // Keeps the bottom composer visible even when the keyboard opens.
+    // Uses visualViewport when available (mobile Safari / Chrome).
+    // DOES NOT change your UI shape; just shifts bottom area up.
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handle = () => {
+      try {
+        const heightDiff = window.innerHeight - vv.height;
+        const lift = Math.max(0, Math.floor(heightDiff));
+        setKeyboardLift(lift);
+      } catch {
+        setKeyboardLift(0);
+      }
+    };
+
+    handle();
+    vv.addEventListener("resize", handle);
+    vv.addEventListener("scroll", handle);
+
+    return () => {
+      vv.removeEventListener("resize", handle);
+      vv.removeEventListener("scroll", handle);
+    };
+  }, []);
+
+  // ============================================================
   // LOAD USER / FRIEND / MESSAGES
   // ============================================================
 
@@ -252,21 +358,20 @@ export default function ChatPage() {
 
       setUser(u);
 
-      const [{ data: f }, { data: msgs, error: msgErr }] =
-        await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, username, display_name, is_online, last_seen")
-            .eq("id", friendId)
-            .single(),
-          supabase
-            .from("messages")
-            .select("*")
-            .or(
-              `and(sender_id.eq.${u.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${u.id})`
-            )
-            .order("created_at", { ascending: true }),
-        ]);
+      const [{ data: f }, { data: msgs, error: msgErr }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, username, display_name, is_online, last_seen")
+          .eq("id", friendId)
+          .single(),
+        supabase
+          .from("messages")
+          .select("*")
+          .or(
+            `and(sender_id.eq.${u.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${u.id})`
+          )
+          .order("created_at", { ascending: true }),
+      ]);
 
       if (!mounted) return;
 
@@ -324,6 +429,91 @@ export default function ChatPage() {
   }, [messages]);
 
   // ============================================================
+  // VIDEO SIGNED URL: CORE UPGRADE
+  // ============================================================
+
+  const ensureSignedVideoForMessage = useCallback(
+    async (m) => {
+      if (!m || !m.id) return;
+      if (!m.video_url) return;
+
+      // Already have a signed URL cached
+      if (signedVideoById[m.id]) return;
+
+      // If we’re already signing this id, skip
+      if (signingBusyById[m.id]) return;
+
+      const rawUrl = normalizeMaybeUrl(m.video_url);
+      if (!rawUrl) return;
+
+      // If it’s not a supabase URL, do nothing
+      if (!looksLikeSupabasePublicObjectUrl(rawUrl)) return;
+
+      // Extract object path from the URL so we can sign it if needed
+      const objectPath = extractPathFromPublicUrl(rawUrl, BUCKET_VIDEOS);
+      if (!objectPath) return;
+
+      // Mark signing busy
+      setSigningBusyById((prev) => ({ ...prev, [m.id]: true }));
+
+      try {
+        // Create a signed URL (works whether bucket is public or private)
+        // If bucket is public, this still yields a playable URL.
+        const { data, error: signErr } = await supabase.storage
+          .from(BUCKET_VIDEOS)
+          .createSignedUrl(objectPath, 60 * 60); // 1 hour
+
+        if (signErr) {
+          // If signing fails, don’t hard-error your chat UI
+          // (videos can still be public and play via rawUrl)
+          setSigningBusyById((prev) => ({ ...prev, [m.id]: false }));
+          return;
+        }
+
+        const signedUrl = data?.signedUrl || "";
+        if (!signedUrl) {
+          setSigningBusyById((prev) => ({ ...prev, [m.id]: false }));
+          return;
+        }
+
+        setSignedVideoById((prev) => ({ ...prev, [m.id]: signedUrl }));
+        setSigningBusyById((prev) => ({ ...prev, [m.id]: false }));
+      } catch {
+        setSigningBusyById((prev) => ({ ...prev, [m.id]: false }));
+      }
+    },
+    [signedVideoById, signingBusyById]
+  );
+
+  useEffect(() => {
+    // We don’t sign everything blindly:
+    // - If the video loads fine with public URL => great.
+    // - If it fails on iOS/private bucket => we sign and replay.
+    //
+    // BUT we can also pre-sign quietly to avoid “tap then fail”.
+    // This is what makes “videos work” reliably.
+    const vids = messages.filter((m) => !!m.video_url);
+    if (!vids.length) return;
+
+    // Pre-sign up to 12 most recent videos to keep it light
+    const recent = vids.slice(Math.max(0, vids.length - 12));
+    recent.forEach((m) => {
+      ensureSignedVideoForMessage(m);
+    });
+  }, [messages, ensureSignedVideoForMessage]);
+
+  function getVideoSrc(m) {
+    if (!m?.video_url) return "";
+    // If the raw URL failed, prefer signed (if present)
+    if (videoLoadFailedById[m.id] && signedVideoById[m.id]) {
+      return signedVideoById[m.id];
+    }
+    // Prefer signed if we have it (smoothest playback across devices)
+    if (signedVideoById[m.id]) return signedVideoById[m.id];
+    return m.video_url;
+  }
+
+  // ============================================================
   // SEND TEXT
   // ============================================================
 
@@ -359,7 +549,7 @@ export default function ChatPage() {
       const path = imagePath(friendId, user.id, file.name);
 
       const { error: uploadErr } = await supabase.storage
-        .from("chat-images")
+        .from(BUCKET_IMAGES)
         .upload(path, file, { upsert: false });
 
       if (uploadErr) {
@@ -367,9 +557,7 @@ export default function ChatPage() {
         return;
       }
 
-      const { data } = supabase.storage
-        .from("chat-images")
-        .getPublicUrl(path);
+      const { data } = supabase.storage.from(BUCKET_IMAGES).getPublicUrl(path);
 
       if (!data?.publicUrl) {
         setError("Image URL unavailable");
@@ -387,8 +575,17 @@ export default function ChatPage() {
   }
 
   // ============================================================
-  // SEND VIDEO
+  // SEND VIDEO (UPGRADED)
   // ============================================================
+  // The upload logic is already correct in your file.
+  // The real “videos don’t work” problem is PLAYBACK + ACCESS:
+  // - private bucket => publicUrl won’t play
+  // - iOS sometimes needs a signed URL / proper type / playsInline
+  //
+  // So we keep your structure and add:
+  // - a safe contentType
+  // - a small "video_url" normalization
+  // - auto signing is handled above for playback
 
   async function sendVideo(file) {
     if (!user?.id || !file) return;
@@ -398,10 +595,12 @@ export default function ChatPage() {
     try {
       const path = videoPath(friendId, user.id, file.name);
 
+      const contentType = file.type || "video/mp4";
+
       const { error: uploadErr } = await supabase.storage
-        .from("chat-videos")
+        .from(BUCKET_VIDEOS)
         .upload(path, file, {
-          contentType: file.type,
+          contentType,
           upsert: false,
         });
 
@@ -410,15 +609,14 @@ export default function ChatPage() {
         return;
       }
 
-      const { data } = supabase.storage
-        .from("chat-videos")
-        .getPublicUrl(path);
+      const { data } = supabase.storage.from(BUCKET_VIDEOS).getPublicUrl(path);
 
       if (!data?.publicUrl) {
         setError("Video URL unavailable");
         return;
       }
 
+      // Insert message with video_url EXACTLY like your base file expects.
       await supabase.from("messages").insert({
         sender_id: user.id,
         receiver_id: friendId,
@@ -492,9 +690,7 @@ export default function ChatPage() {
   function stopRecording() {
     try {
       mediaRecorderRef.current?.stop();
-      mediaRecorderRef.current?.stream
-        ?.getTracks()
-        .forEach((t) => t.stop());
+      mediaRecorderRef.current?.stream?.getTracks()?.forEach((t) => t.stop());
     } catch {}
 
     if (timerRef.current) {
@@ -507,9 +703,7 @@ export default function ChatPage() {
 
   function discardRecording() {
     try {
-      mediaRecorderRef.current?.stream
-        ?.getTracks()
-        .forEach((t) => t.stop());
+      mediaRecorderRef.current?.stream?.getTracks()?.forEach((t) => t.stop());
     } catch {}
 
     if (timerRef.current) {
@@ -533,10 +727,10 @@ export default function ChatPage() {
     try {
       const mime = recordedBlob.type || activeMimeRef.current || "";
       const ext = fileExtFromMime(mime);
-      const path = `chat-audio/${friendId}/${user.id}/${Date.now()}.${ext}`;
+      const path = audioPath(friendId, user.id, ext);
 
       const { error: uploadErr } = await supabase.storage
-        .from("chat-audio")
+        .from(BUCKET_AUDIO)
         .upload(path, recordedBlob, {
           contentType: mime || undefined,
           upsert: false,
@@ -548,9 +742,7 @@ export default function ChatPage() {
         return;
       }
 
-      const { data } = supabase.storage
-        .from("chat-audio")
-        .getPublicUrl(path);
+      const { data } = supabase.storage.from(BUCKET_AUDIO).getPublicUrl(path);
 
       if (!data?.publicUrl) {
         setError("Audio URL unavailable");
@@ -598,14 +790,9 @@ export default function ChatPage() {
     if (!deleteTarget) return;
 
     try {
-      await supabase
-        .from("messages")
-        .delete()
-        .eq("id", deleteTarget.id);
+      await supabase.from("messages").delete().eq("id", deleteTarget.id);
 
-      setMessages((prev) =>
-        prev.filter((x) => x.id !== deleteTarget.id)
-      );
+      setMessages((prev) => prev.filter((x) => x.id !== deleteTarget.id));
     } catch {}
 
     setDeleteTarget(null);
@@ -614,6 +801,28 @@ export default function ChatPage() {
   // ============================================================
   // RENDER
   // ============================================================
+
+  const messagesBottom = useMemo(() => {
+    // Keep the composer visible + keep scroll area correct.
+    // Base composer is 86px. KeyboardLift adds on top.
+    const baseComposer = 86;
+    const lift = Math.max(0, keyboardLift);
+    return baseComposer + lift;
+  }, [keyboardLift]);
+
+  const messagesBoxDynamic = useMemo(() => {
+    return {
+      ...messagesBox,
+      bottom: messagesBottom,
+    };
+  }, [messagesBottom]);
+
+  const composerWrapDynamic = useMemo(() => {
+    return {
+      ...composerWrap,
+      transform: keyboardLift ? `translateY(-${keyboardLift}px)` : "translateY(0px)",
+    };
+  }, [keyboardLift]);
 
   if (loading) {
     return <div style={loadingWrap}>Loading…</div>;
@@ -627,13 +836,11 @@ export default function ChatPage() {
         </button>
         <div style={headerTextWrap}>
           <strong style={headerName}>{friendName}</strong>
-          {friendStatus && (
-            <span style={friendStatusText}>{friendStatus}</span>
-          )}
+          {friendStatus && <span style={friendStatusText}>{friendStatus}</span>}
         </div>
       </div>
 
-      <div ref={listRef} style={messagesBox}>
+      <div ref={listRef} style={messagesBoxDynamic}>
         {error && <div style={errBox}>{error}</div>}
 
         {messages.map((m) => {
@@ -659,15 +866,24 @@ export default function ChatPage() {
                     src={m.image_url}
                     style={imageThumb}
                     onClick={() => setImageView(m.image_url)}
+                    alt=""
                   />
                 )}
 
                 {m.video_url && (
                   <video
-                    src={m.video_url}
+                    src={getVideoSrc(m)}
                     controls
                     playsInline
+                    preload="metadata"
                     style={videoPlayer}
+                    onError={() => {
+                      // If raw URL fails (private bucket / iOS), flip the flag.
+                      // Signed URL will be used if available.
+                      setVideoLoadFailedById((prev) => ({ ...prev, [m.id]: true }));
+                      // Also attempt signing again if not present yet
+                      ensureSignedVideoForMessage(m);
+                    }}
                   />
                 )}
 
@@ -680,9 +896,7 @@ export default function ChatPage() {
                       style={audioPlayer}
                     />
                     {m.audio_duration != null && (
-                      <div style={audioMeta}>
-                        {formatMMSS(m.audio_duration)}
-                      </div>
+                      <div style={audioMeta}>{formatMMSS(m.audio_duration)}</div>
                     )}
                   </div>
                 )}
@@ -694,7 +908,7 @@ export default function ChatPage() {
         })}
       </div>
 
-      <div style={composerWrap}>
+      <div style={composerWrapDynamic}>
         <div style={composerRow}>
           <label style={iconBtn}>
             <FiImage size={18} />
@@ -780,7 +994,7 @@ export default function ChatPage() {
 
       {imageView && (
         <div style={imageOverlay} onClick={() => setImageView(null)}>
-          <img src={imageView} style={imageFull} />
+          <img src={imageView} style={imageFull} alt="" />
           <FiX size={28} style={closeIcon} />
         </div>
       )}
