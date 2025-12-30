@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { FiArrowLeft, FiSend, FiImage, FiX } from "react-icons/fi";
+import { FiArrowLeft, FiSend, FiImage, FiVideo, FiX } from "react-icons/fi";
 
 function formatTime(ts) {
   if (!ts) return "";
@@ -147,7 +147,6 @@ function WorkoutShareCard({ share, mine, onSave, saving }) {
     </div>
   );
 }
-
 export default function ChatPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
@@ -259,26 +258,6 @@ export default function ChatPage() {
     return () => supabase.removeChannel(channel);
   }, [user, friendId]);
 
-  // Realtime friend presence updates
-  useEffect(() => {
-    if (!friendId) return;
-
-    const ch = supabase
-      .channel(`presence-friend-${friendId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "profiles" },
-        (payload) => {
-          const p = payload.new;
-          if (p?.id !== friendId) return;
-          setFriend((prev) => ({ ...(prev || {}), ...p }));
-        }
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(ch);
-  }, [friendId]);
-
   // Auto scroll
   useEffect(() => {
     if (listRef.current) {
@@ -301,6 +280,9 @@ export default function ChatPage() {
     if (error) setError(error.message);
   }
 
+  // =========================
+  // IMAGE UPLOAD (EXISTING)
+  // =========================
   async function sendImage(file) {
     if (!file || !user) return;
 
@@ -325,6 +307,33 @@ export default function ChatPage() {
     });
   }
 
+  // =========================
+  // VIDEO UPLOAD (NEW)
+  // =========================
+  async function sendVideo(file) {
+    if (!file || !user) return;
+
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}-${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("chat-videos")
+      .upload(path, file);
+
+    if (uploadErr) {
+      setError(uploadErr.message);
+      return;
+    }
+
+    const { data } = supabase.storage.from("chat-videos").getPublicUrl(path);
+
+    await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: friendId,
+      video_url: data.publicUrl,
+    });
+  }
+
   // HOLD TO DELETE
   function startHold(m) {
     holdTimer.current = setTimeout(async () => {
@@ -342,7 +351,6 @@ export default function ChatPage() {
       holdTimer.current = null;
     }
   }
-
   // -------------------------
   // PRESENCE — SELF ONLINE/OFFLINE
   // -------------------------
@@ -448,70 +456,6 @@ export default function ChatPage() {
     ? `Last seen ${timeAgo(friend.last_seen)}`
     : "";
 
-  async function saveSharedWorkout(share, messageId) {
-    if (!user?.id) return;
-    if (!share?.workout?.name) return;
-
-    const key = `${messageId || "m"}-${share?.workout?.id || share?.workout?.name}`;
-    setSavingWorkoutKey(key);
-    setError("");
-
-    try {
-      const ok = window.confirm(`Save "${share.workout.name}" to your workouts?`);
-      if (!ok) {
-        setSavingWorkoutKey(null);
-        return;
-      }
-
-      const { data: existing, error: e1 } = await supabase
-        .from("workouts")
-        .select("id")
-        .eq("user_id", user.id);
-
-      if (e1) throw e1;
-
-      const position = (existing || []).length;
-
-      const { data: insertedWorkout, error: e2 } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: share.workout.name,
-          scheduled_for: null,
-          position,
-        })
-        .select("id")
-        .single();
-
-      if (e2) throw e2;
-
-      const newWorkoutId = insertedWorkout.id;
-
-      const exercises = Array.isArray(share.exercises) ? share.exercises : [];
-      if (exercises.length) {
-        const rows = exercises.map((ex, idx) => ({
-          user_id: user.id,
-          workout_id: newWorkoutId,
-          name: ex.name || "Exercise",
-          sets: ex.sets === "" || ex.sets == null ? null : Number(ex.sets),
-          reps: ex.reps === "" || ex.reps == null ? null : Number(ex.reps),
-          weight: ex.weight ?? null,
-          position: typeof ex.position === "number" ? ex.position : idx,
-        }));
-
-        const { error: e3 } = await supabase.from("exercises").insert(rows);
-        if (e3) throw e3;
-      }
-
-      setToast("✅ Saved to your workouts");
-    } catch (e) {
-      console.error("SAVE WORKOUT ERROR:", e);
-      setError(e?.message || "Failed saving workout.");
-    } finally {
-      setSavingWorkoutKey(null);
-    }
-  }
-
   return (
     <div style={shell}>
       {/* HEADER */}
@@ -521,24 +465,13 @@ export default function ChatPage() {
         </button>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <strong>{friendName}</strong>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background: friendOnline ? "#2dff57" : "rgba(255,255,255,0.3)",
-                boxShadow: friendOnline ? "0 0 8px rgba(45,255,87,0.9)" : "none",
-              }}
-            />
-          </div>
-
+          <strong>{friendName}</strong>
           {friendStatus && (
             <span style={{ fontSize: 12, opacity: 0.85 }}>{friendStatus}</span>
           )}
         </div>
       </div>
+
       {/* MESSAGES */}
       <div ref={listRef} style={messagesBox}>
         {loading && <div style={{ opacity: 0.6 }}>Loading…</div>}
@@ -546,10 +479,6 @@ export default function ChatPage() {
 
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
-          const share = extractWorkoutShareFromMessage(m);
-
-          const saveKey = `${m.id}-${share?.workout?.id || share?.workout?.name || "w"}`;
-          const saving = savingWorkoutKey === saveKey;
 
           return (
             <div
@@ -573,18 +502,7 @@ export default function ChatPage() {
                   fontSize: 16,
                 }}
               >
-                {share ? (
-                  <WorkoutShareCard
-                    share={share}
-                    mine={mine}
-                    saving={saving}
-                    onSave={() => saveSharedWorkout(share, m.id)}
-                  />
-                ) : (
-                  <>
-                    {m.text && <div>{m.text}</div>}
-                  </>
-                )}
+                {m.text && <div>{m.text}</div>}
 
                 {m.image_url && (
                   <img
@@ -600,6 +518,21 @@ export default function ChatPage() {
                   />
                 )}
 
+                {m.video_url && (
+                  <video
+                    src={m.video_url}
+                    controls
+                    playsInline
+                    style={{
+                      marginTop: 6,
+                      borderRadius: 12,
+                      maxHeight: 260,
+                      maxWidth: "100%",
+                      background: "#000",
+                    }}
+                  />
+                )}
+
                 <div style={{ fontSize: 10, opacity: 0.7, marginTop: 6 }}>
                   {formatTime(m.created_at)}
                 </div>
@@ -611,6 +544,7 @@ export default function ChatPage() {
 
       {/* INPUT */}
       <div style={inputBar}>
+        {/* IMAGE */}
         <label style={{ display: "flex", alignItems: "center" }}>
           <FiImage size={22} />
           <input
@@ -621,6 +555,21 @@ export default function ChatPage() {
               const file = e.target.files?.[0];
               e.target.value = null;
               sendImage(file);
+            }}
+          />
+        </label>
+
+        {/* VIDEO */}
+        <label style={{ display: "flex", alignItems: "center" }}>
+          <FiVideo size={22} />
+          <input
+            type="file"
+            hidden
+            accept="video/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = null;
+              sendVideo(file);
             }}
           />
         </label>
@@ -636,27 +585,6 @@ export default function ChatPage() {
           <FiSend size={20} />
         </button>
       </div>
-
-      {/* TOAST */}
-      {toast && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 86,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(0,0,0,0.85)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            color: "#fff",
-            padding: "10px 14px",
-            borderRadius: 999,
-            fontWeight: 800,
-            zIndex: 9999,
-          }}
-        >
-          {toast}
-        </div>
-      )}
 
       {/* IMAGE VIEW */}
       {imageView && (
@@ -674,7 +602,7 @@ const shell = {
   position: "fixed",
   inset: 0,
   background: "#000",
-  overflow: "hidden", // body cannot scroll because the whole page is fixed
+  overflow: "hidden",
 };
 
 const header = {
@@ -708,9 +636,6 @@ const messagesBox = {
   right: 0,
   bottom: 72,
   overflowY: "auto",
-  WebkitOverflowScrolling: "touch",
-  overscrollBehavior: "contain",
-  touchAction: "pan-y",
   padding: 12,
   background: "#000",
 };
@@ -721,7 +646,6 @@ const inputBar = {
   right: 0,
   bottom: 0,
   height: 72,
-  paddingBottom: "env(safe-area-inset-bottom)",
   background: "#000",
   borderTop: "1px solid #222",
   display: "flex",
