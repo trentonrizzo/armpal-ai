@@ -14,7 +14,7 @@ import {
 } from "react-icons/fi";
 
 /* ============================================================
-   TIME HELPERS (UNCHANGED)
+   TIME HELPERS
 ============================================================ */
 
 function formatTime(ts) {
@@ -41,12 +41,12 @@ function timeAgo(ts) {
   if (diffHr < 24) return `${diffHr}h ago`;
 
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return `yesterday`;
+  if (diffDay === 1) return "yesterday";
   return `${diffDay}d ago`;
 }
 
 /* ============================================================
-   AUDIO HELPERS (NEW)
+   AUDIO HELPERS
 ============================================================ */
 
 const MAX_AUDIO_SECONDS = 30;
@@ -56,18 +56,15 @@ function getAudioPath({ chatId, userId }) {
 }
 
 /* ============================================================
-   WORKOUT SHARE (UNCHANGED)
+   WORKOUT SHARE HELPERS
 ============================================================ */
 
 function tryParseJSON(val) {
-  if (val == null) return null;
+  if (!val) return null;
   if (typeof val === "object") return val;
   if (typeof val !== "string") return null;
-
   const s = val.trim();
-  if (!s) return null;
-  if (!(s.startsWith("{") || s.startsWith("["))) return null;
-
+  if (!s.startsWith("{") && !s.startsWith("[")) return null;
   try {
     return JSON.parse(s);
   } catch {
@@ -76,52 +73,61 @@ function tryParseJSON(val) {
 }
 
 function extractWorkoutShareFromMessage(m) {
-  const candidates = [m.text, m.message, m.body, m.content, m.payload, m.data];
-
-  for (const c of candidates) {
-    const parsed = tryParseJSON(c);
-    if (!parsed) continue;
-
-    if (parsed?.type === "workout_share" && parsed?.workout) return parsed;
-
-    if (parsed?.type === "workout_share" && parsed?.payload?.workout) {
-      return {
-        type: "workout_share",
-        workout: parsed.payload.workout,
-        exercises: parsed.payload.exercises || [],
-        sent_at: parsed.payload.sent_at || parsed.sent_at || null,
-      };
-    }
-
-    if (parsed?.workout && Array.isArray(parsed?.exercises)) {
-      return { type: "workout_share", ...parsed };
-    }
+  const fields = [m.text, m.message, m.body, m.payload, m.data];
+  for (const f of fields) {
+    const parsed = tryParseJSON(f);
+    if (parsed?.type === "workout_share") return parsed;
   }
-
   return null;
 }
 
+function WorkoutShareCard({ share, mine, onSave, saving }) {
+  const workoutName = share?.workout?.name || "Workout";
+  const exercises = Array.isArray(share?.exercises) ? share.exercises : [];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ fontWeight: 900 }}>📋 {workoutName}</div>
+      {exercises.slice(0, 6).map((ex, i) => (
+        <div key={i} style={{ fontSize: 13, opacity: 0.9 }}>
+          • {ex.name}
+        </div>
+      ))}
+      <button
+        onClick={onSave}
+        disabled={saving}
+        style={{
+          marginTop: 6,
+          padding: "8px 10px",
+          borderRadius: 10,
+          background: mine ? "#000" : "#ff2f2f",
+          color: "#fff",
+          border: "none",
+          fontWeight: 800,
+          opacity: saving ? 0.6 : 1,
+        }}
+      >
+        {saving ? "Saving…" : "Save to My Workouts"}
+      </button>
+    </div>
+  );
+}
+
 /* ============================================================
-   VIDEO URL FALLBACK (UNCHANGED)
+   VIDEO FALLBACK
 ============================================================ */
 
 function extractInlineVideoUrl(m) {
-  const direct = m?.video_url;
-  if (direct) return direct;
-
-  const t = (m?.text || "").trim();
-  if (!t) return null;
-
-  if (t.startsWith("VIDEO:")) {
-    const url = t.slice("VIDEO:".length).trim();
-    if (url.startsWith("http")) return url;
+  if (m.video_url) return m.video_url;
+  if (m.text?.startsWith("VIDEO:")) {
+    const u = m.text.replace("VIDEO:", "").trim();
+    if (u.startsWith("http")) return u;
   }
-
   return null;
 }
 
 /* ============================================================
-   MAIN COMPONENT
+   MAIN COMPONENT — STATE
 ============================================================ */
 
 export default function ChatPage() {
@@ -134,230 +140,52 @@ export default function ChatPage() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [imageView, setImageView] = useState(null);
-
-  const [savingWorkoutKey, setSavingWorkoutKey] = useState(null);
   const [toast, setToast] = useState("");
 
-  // -------------------------
-  // DELETE / VIDEO (UNCHANGED)
-  // -------------------------
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [savingWorkoutKey, setSavingWorkoutKey] = useState(null);
 
-  // -------------------------
-  // AUDIO STATE (NEW)
-  // -------------------------
+  const listRef = useRef(null);
+  const holdTimer = useRef(null);
+
+  /* presence */
+  const idleTimer = useRef(null);
+  const heartbeatTimer = useRef(null);
+  const isOnlineRef = useRef(false);
+
+  /* audio */
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordDuration, setRecordDuration] = useState(0);
   const [sendingAudio, setSendingAudio] = useState(false);
 
   const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const recordTimerRef = useRef(null);
-
-  const listRef = useRef(null);
-  const holdTimer = useRef(null);
-
-  // -------------------------
-  // PRESENCE REFS (UNCHANGED)
-  // -------------------------
-  const idleTimer = useRef(null);
-  const heartbeatTimer = useRef(null);
-  const isOnlineRef = useRef(false);
-
-  /* ============================================================
-     AUDIO RECORD CONTROL (NEW)
-  ============================================================ */
-
-  async function startRecording() {
-    if (isRecording) return;
-    setError("");
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      const recorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm",
-      });
-
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, {
-          type: "audio/webm",
-        });
-        setRecordedBlob(blob);
-        audioChunksRef.current = [];
-      };
-
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setIsRecording(true);
-      setRecordDuration(0);
-
-      recordTimerRef.current = setInterval(() => {
-        setRecordDuration((d) => {
-          if (d + 1 >= MAX_AUDIO_SECONDS) {
-            stopRecording();
-            return MAX_AUDIO_SECONDS;
-          }
-          return d + 1;
-        });
-      }, 1000);
-    } catch (e) {
-      setError("Microphone permission denied.");
-    }
-  }
-
-  function stopRecording() {
-    if (!mediaRecorderRef.current) return;
-
-    mediaRecorderRef.current.stop();
-    mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
-    mediaRecorderRef.current = null;
-
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-
-    setIsRecording(false);
-  }
-
-  function cancelRecording() {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
-      mediaRecorderRef.current = null;
-    }
-
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-
-    audioChunksRef.current = [];
-    setRecordedBlob(null);
-    setIsRecording(false);
-    setRecordDuration(0);
-  }
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
 
   /* ============================================================
      CONTINUES IN PART 2
   ============================================================ */
   /* ============================================================
-     AUDIO SEND (NEW)
+     FRIEND PRESENCE + DERIVED LABELS
   ============================================================ */
 
-  async function sendRecordedAudio() {
-    if (!recordedBlob || !user || sendingAudio) return;
-    setSendingAudio(true);
-    setError("");
+  const friendName =
+    friend?.display_name || friend?.username || "Chat";
 
-    try {
-      const path = getAudioPath({
-        chatId: friendId,
-        userId: user.id,
-      });
+  const friendOnline =
+    !!friend?.is_online &&
+    friend?.last_seen &&
+    Date.now() - new Date(friend.last_seen).getTime() <= 60 * 1000;
 
-      const { error: uploadErr } = await supabase.storage
-        .from("chat-audio")
-        .upload(path, recordedBlob, {
-          contentType: "audio/webm",
-        });
-
-      if (uploadErr) {
-        setSendingAudio(false);
-        setError(uploadErr.message);
-        return;
-      }
-
-      const { data } = supabase.storage
-        .from("chat-audio")
-        .getPublicUrl(path);
-
-      const audioUrl = data?.publicUrl;
-
-      if (!audioUrl) {
-        setSendingAudio(false);
-        setError("Failed to get audio URL.");
-        return;
-      }
-
-      const { error: insertErr } = await supabase.from("messages").insert({
-        sender_id: user.id,
-        receiver_id: friendId,
-        audio_url: audioUrl,
-        audio_duration: recordDuration,
-      });
-
-      if (insertErr) {
-        setSendingAudio(false);
-        setError(insertErr.message);
-        return;
-      }
-
-      setRecordedBlob(null);
-      setRecordDuration(0);
-      setToast("🎙️ Voice message sent");
-    } catch (e) {
-      setError("Failed sending audio.");
-    } finally {
-      setSendingAudio(false);
-    }
-  }
+  const friendStatus = friendOnline
+    ? "Online"
+    : friend?.last_seen
+    ? `Last seen ${timeAgo(friend.last_seen)}`
+    : "";
 
   /* ============================================================
-     TOAST TIMER (UNCHANGED)
-  ============================================================ */
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(""), 2200);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  /* ============================================================
-     LOAD FRIEND + MESSAGES (UNCHANGED)
-  ============================================================ */
-
-  async function loadFriendProfile() {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, is_online, last_seen")
-      .eq("id", friendId)
-      .single();
-
-    if (data) setFriend(data);
-  }
-
-  async function loadMessages(uid) {
-    setError("");
-
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .or(
-        `and(sender_id.eq.${uid},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${uid})`
-      )
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
-    setMessages(data || []);
-  }
-
-  /* ============================================================
-     INITIAL LOAD (UNCHANGED)
+     LOAD USER / FRIEND / MESSAGES
   ============================================================ */
 
   useEffect(() => {
@@ -365,19 +193,41 @@ export default function ChatPage() {
 
     (async () => {
       setLoading(true);
+
       const { data } = await supabase.auth.getUser();
       if (!mounted) return;
 
       const u = data?.user;
-      setUser(u);
-
       if (!u) {
         setError("Not logged in");
         setLoading(false);
         return;
       }
 
-      await Promise.all([loadMessages(u.id), loadFriendProfile()]);
+      setUser(u);
+
+      const [{ data: f }, { data: msgs, error: msgErr }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, username, display_name, is_online, last_seen")
+            .eq("id", friendId)
+            .single(),
+          supabase
+            .from("messages")
+            .select("*")
+            .or(
+              `and(sender_id.eq.${u.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${u.id})`
+            )
+            .order("created_at", { ascending: true }),
+        ]);
+
+      if (!mounted) return;
+
+      setFriend(f || null);
+      if (msgErr) setError(msgErr.message);
+      setMessages(msgs || []);
+
       setLoading(false);
     })();
 
@@ -387,7 +237,7 @@ export default function ChatPage() {
   }, [friendId]);
 
   /* ============================================================
-     REALTIME MESSAGES (UNCHANGED)
+     REALTIME MESSAGE INSERTS
   ============================================================ */
 
   useEffect(() => {
@@ -401,13 +251,17 @@ export default function ChatPage() {
         (payload) => {
           const m = payload.new;
           const match =
-            (m.sender_id === user.id && m.receiver_id === friendId) ||
-            (m.sender_id === friendId && m.receiver_id === user.id);
+            (m.sender_id === user.id &&
+              m.receiver_id === friendId) ||
+            (m.sender_id === friendId &&
+              m.receiver_id === user.id);
 
           if (!match) return;
 
           setMessages((prev) =>
-            prev.some((x) => x.id === m.id) ? prev : [...prev, m]
+            prev.some((x) => x.id === m.id)
+              ? prev
+              : [...prev, m]
           );
         }
       )
@@ -417,133 +271,296 @@ export default function ChatPage() {
   }, [user, friendId]);
 
   /* ============================================================
-     SCROLL (UNCHANGED)
+     FRIEND PRESENCE REALTIME
+  ============================================================ */
+
+  useEffect(() => {
+    if (!friendId) return;
+
+    const ch = supabase
+      .channel(`presence-${friendId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+        },
+        (payload) => {
+          const p = payload.new;
+          if (p?.id !== friendId) return;
+          setFriend((prev) => ({ ...(prev || {}), ...p }));
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(ch);
+  }, [friendId]);
+
+  /* ============================================================
+     AUTO SCROLL
   ============================================================ */
 
   useEffect(() => {
     if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
+      listRef.current.scrollTop =
+        listRef.current.scrollHeight;
     }
   }, [messages]);
 
   /* ============================================================
-     SEND TEXT / IMAGE / VIDEO (UNCHANGED)
+     DELETE — HOLD TO ACTIVATE
   ============================================================ */
 
-  async function sendMessage() {
-    if (!text.trim() || !user) return;
-
-    const msg = text.trim();
-    setText("");
-
-    const { error } = await supabase.from("messages").insert({
-      sender_id: user.id,
-      receiver_id: friendId,
-      text: msg,
-    });
-
-    if (error) setError(error.message);
+  function startHold(m) {
+    if (m.sender_id !== user?.id) return;
+    holdTimer.current = setTimeout(
+      () => setDeleteTarget(m),
+      500
+    );
   }
 
-  async function sendImage(file) {
-    if (!file || !user) return;
+  function endHold() {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }
 
-    const ext = file.name.split(".").pop();
-    const path = `${user.id}-${Date.now()}.${ext}`;
+  async function confirmDeleteMessage() {
+    if (!deleteTarget) return;
 
-    const { error: uploadErr } = await supabase.storage
-      .from("chat-images")
-      .upload(path, file);
+    await supabase
+      .from("messages")
+      .delete()
+      .eq("id", deleteTarget.id);
 
-    if (uploadErr) {
-      setError(uploadErr.message);
-      return;
+    setMessages((prev) =>
+      prev.filter((x) => x.id !== deleteTarget.id)
+    );
+
+    setDeleteTarget(null);
+  }
+
+  /* ============================================================
+     SAVE WORKOUT SHARE
+  ============================================================ */
+
+  async function saveSharedWorkout(share, messageId) {
+    if (!user?.id || !share?.workout?.name) return;
+
+    const key = `${messageId}-${share.workout.name}`;
+    setSavingWorkoutKey(key);
+    setError("");
+
+    try {
+      const { data: existing, error: e1 } =
+        await supabase
+          .from("workouts")
+          .select("id")
+          .eq("user_id", user.id);
+
+      if (e1) throw e1;
+
+      const position = (existing || []).length;
+
+      const { data: inserted, error: e2 } =
+        await supabase
+          .from("workouts")
+          .insert({
+            user_id: user.id,
+            name: share.workout.name,
+            position,
+          })
+          .select("id")
+          .single();
+
+      if (e2) throw e2;
+
+      const workoutId = inserted.id;
+
+      const exercises = Array.isArray(
+        share.exercises
+      )
+        ? share.exercises
+        : [];
+
+      if (exercises.length) {
+        const rows = exercises.map(
+          (ex, idx) => ({
+            user_id: user.id,
+            workout_id: workoutId,
+            name: ex.name || "Exercise",
+            sets:
+              ex.sets === "" || ex.sets == null
+                ? null
+                : Number(ex.sets),
+            reps:
+              ex.reps === "" || ex.reps == null
+                ? null
+                : Number(ex.reps),
+            weight: ex.weight ?? null,
+            position: idx,
+          })
+        );
+
+        const { error: e3 } =
+          await supabase
+            .from("exercises")
+            .insert(rows);
+
+        if (e3) throw e3;
+      }
+
+      setToast("✅ Saved to your workouts");
+    } catch (e) {
+      setError(e.message || "Save failed");
+    } finally {
+      setSavingWorkoutKey(null);
+    }
+  }
+
+  /* ============================================================
+     AUDIO RECORD CONTROL
+  ============================================================ */
+
+  async function startRecording() {
+    if (isRecording) return;
+    setError("");
+
+    const stream =
+      await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+    const recorder = new MediaRecorder(stream, {
+      mimeType: "audio/webm",
+    });
+
+    chunksRef.current = [];
+
+    recorder.ondataavailable = (e) => {
+      if (e.data?.size)
+        chunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, {
+        type: "audio/webm",
+      });
+      setRecordedBlob(blob);
+      chunksRef.current = [];
+    };
+
+    recorder.start();
+    mediaRecorderRef.current = recorder;
+    setIsRecording(true);
+    setRecordDuration(0);
+
+    timerRef.current = setInterval(() => {
+      setRecordDuration((d) => {
+        if (d + 1 >= MAX_AUDIO_SECONDS) {
+          stopRecording();
+          return MAX_AUDIO_SECONDS;
+        }
+        return d + 1;
+      });
+    }, 1000);
+  }
+
+  function stopRecording() {
+    if (!mediaRecorderRef.current) return;
+
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current.stream
+      .getTracks()
+      .forEach((t) => t.stop());
+
+    mediaRecorderRef.current = null;
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
 
-    const { data } = supabase.storage.from("chat-images").getPublicUrl(path);
+    setIsRecording(false);
+  }
 
-    await supabase.from("messages").insert({
-      sender_id: user.id,
-      receiver_id: friendId,
-      image_url: data.publicUrl,
-    });
+  function cancelRecording() {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stream
+        .getTracks()
+        .forEach((t) => t.stop());
+      mediaRecorderRef.current = null;
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    chunksRef.current = [];
+    setRecordedBlob(null);
+    setIsRecording(false);
+    setRecordDuration(0);
+  }
+
+  async function sendRecordedAudio() {
+    if (!recordedBlob || sendingAudio) return;
+
+    setSendingAudio(true);
+    setError("");
+
+    try {
+      const path = getAudioPath({
+        chatId: friendId,
+        userId: user.id,
+      });
+
+      const { error: upErr } =
+        await supabase.storage
+          .from("chat-audio")
+          .upload(path, recordedBlob, {
+            contentType: "audio/webm",
+          });
+
+      if (upErr) throw upErr;
+
+      const { data } =
+        supabase.storage
+          .from("chat-audio")
+          .getPublicUrl(path);
+
+      await supabase.from("messages").insert({
+        sender_id: user.id,
+        receiver_id: friendId,
+        audio_url: data.publicUrl,
+        audio_duration: recordDuration,
+      });
+
+      setRecordedBlob(null);
+      setRecordDuration(0);
+    } catch (e) {
+      setError(e.message || "Audio send failed");
+    } finally {
+      setSendingAudio(false);
+    }
   }
 
   /* ============================================================
      CONTINUES IN PART 3
   ============================================================ */
   /* ============================================================
-     MESSAGE RENDER HELPERS (NEW)
+     RENDER
   ============================================================ */
 
-  function AudioMessageBubble({ url, duration }) {
-    const audioRef = useRef(null);
-    const [playing, setPlaying] = useState(false);
-
-    function togglePlay() {
-      if (!audioRef.current) return;
-
-      if (playing) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
-      }
-    }
-
-    useEffect(() => {
-      const a = audioRef.current;
-      if (!a) return;
-
-      const onEnd = () => setPlaying(false);
-      a.addEventListener("ended", onEnd);
-      return () => a.removeEventListener("ended", onEnd);
-    }, []);
-
+  if (loading) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          minWidth: 180,
-        }}
-      >
-        <button
-          onClick={togglePlay}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            border: "none",
-            background: "#000",
-            color: "#fff",
-            fontWeight: 900,
-          }}
-        >
-          {playing ? "❚❚" : "▶"}
-        </button>
-
-        <div style={{ flex: 1 }}>
-          <div
-            style={{
-              height: 6,
-              background: "rgba(255,255,255,0.25)",
-              borderRadius: 999,
-            }}
-          />
-          <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>
-            {duration ? `${duration}s` : "Voice message"}
-          </div>
-        </div>
-
-        <audio ref={audioRef} src={url} preload="metadata" />
+      <div style={{ color: "#fff", padding: 20 }}>
+        Loading…
       </div>
     );
   }
-
-  /* ============================================================
-     RENDER
-  ============================================================ */
 
   return (
     <div style={shell}>
@@ -561,16 +578,17 @@ export default function ChatPage() {
                 width: 10,
                 height: 10,
                 borderRadius: "50%",
-                background: friendOnline ? "#2dff57" : "rgba(255,255,255,0.3)",
+                background: friendOnline
+                  ? "#2dff57"
+                  : "rgba(255,255,255,0.3)",
                 boxShadow: friendOnline
                   ? "0 0 8px rgba(45,255,87,0.9)"
                   : "none",
               }}
             />
           </div>
-
           {friendStatus && (
-            <span style={{ fontSize: 12, opacity: 0.85 }}>
+            <span style={{ fontSize: 12, opacity: 0.8 }}>
               {friendStatus}
             </span>
           )}
@@ -579,15 +597,15 @@ export default function ChatPage() {
 
       {/* MESSAGES */}
       <div ref={listRef} style={messagesBox}>
-        {loading && <div style={{ opacity: 0.6 }}>Loading…</div>}
         {error && <div style={errBox}>{error}</div>}
 
         {messages.map((m) => {
           const mine = m.sender_id === user?.id;
           const share = extractWorkoutShareFromMessage(m);
-          const saveKey = `${m.id}-${share?.workout?.id || "w"}`;
-          const saving = savingWorkoutKey === saveKey;
           const videoUrl = extractInlineVideoUrl(m);
+          const saving =
+            savingWorkoutKey ===
+            `${m.id}-${share?.workout?.name || ""}`;
 
           return (
             <div
@@ -595,7 +613,7 @@ export default function ChatPage() {
               style={{
                 display: "flex",
                 justifyContent: mine ? "flex-end" : "flex-start",
-                marginBottom: 8,
+                marginBottom: 10,
               }}
             >
               <div
@@ -609,36 +627,58 @@ export default function ChatPage() {
                   borderRadius: 16,
                   maxWidth: "78%",
                   fontSize: 16,
+                  position: "relative",
                 }}
               >
+                {/* WORKOUT SHARE */}
                 {share ? (
                   <WorkoutShareCard
                     share={share}
                     mine={mine}
                     saving={saving}
-                    onSave={() => saveSharedWorkout(share, m.id)}
+                    onSave={() =>
+                      saveSharedWorkout(share, m.id)
+                    }
                   />
                 ) : (
                   <>
-                    {m.text && !m.text.startsWith("VIDEO:") && (
-                      <div>{m.text}</div>
-                    )}
+                    {m.text &&
+                      !m.text.startsWith("VIDEO:") && (
+                        <div>{m.text}</div>
+                      )}
                   </>
                 )}
 
+                {/* AUDIO */}
                 {m.audio_url && (
-                  <div style={{ marginTop: 6 }}>
-                    <AudioMessageBubble
-                      url={m.audio_url}
-                      duration={m.audio_duration}
+                  <div style={{ marginTop: 8 }}>
+                    <audio
+                      src={m.audio_url}
+                      controls
+                      preload="metadata"
+                      style={{ width: "100%" }}
                     />
+                    {m.audio_duration && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          opacity: 0.7,
+                          marginTop: 2,
+                        }}
+                      >
+                        {m.audio_duration}s
+                      </div>
+                    )}
                   </div>
                 )}
 
+                {/* IMAGE */}
                 {m.image_url && (
                   <img
                     src={m.image_url}
-                    onClick={() => setImageView(m.image_url)}
+                    onClick={() =>
+                      setImageView(m.image_url)
+                    }
                     style={{
                       marginTop: 6,
                       borderRadius: 12,
@@ -649,6 +689,7 @@ export default function ChatPage() {
                   />
                 )}
 
+                {/* VIDEO */}
                 {videoUrl && (
                   <video
                     src={videoUrl}
@@ -665,7 +706,13 @@ export default function ChatPage() {
                   />
                 )}
 
-                <div style={{ fontSize: 10, opacity: 0.7, marginTop: 6 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    opacity: 0.7,
+                    marginTop: 6,
+                  }}
+                >
                   {formatTime(m.created_at)}
                 </div>
               </div>
@@ -674,9 +721,6 @@ export default function ChatPage() {
         })}
       </div>
 
-      
-       
-      
       {/* INPUT BAR */}
       <div style={inputBar}>
         {/* IMAGE */}
@@ -689,7 +733,7 @@ export default function ChatPage() {
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = null;
-              sendImage(file);
+              if (file) sendImage(file);
             }}
           />
         </label>
@@ -704,12 +748,12 @@ export default function ChatPage() {
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = null;
-              sendVideo(file);
+              if (file) sendVideo(file);
             }}
           />
         </label>
 
-        {/* AUDIO */}
+        {/* AUDIO CONTROLS */}
         {!recordedBlob && !isRecording && (
           <button onClick={startRecording} style={micBtn}>
             <FiMic size={22} />
@@ -724,7 +768,10 @@ export default function ChatPage() {
 
         {recordedBlob && !isRecording && (
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={cancelRecording} style={cancelAudioBtn}>
+            <button
+              onClick={cancelRecording}
+              style={cancelAudioBtn}
+            >
               <FiX size={18} />
             </button>
             <button
@@ -737,7 +784,7 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* TEXT INPUT */}
+        {/* TEXT */}
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -750,7 +797,7 @@ export default function ChatPage() {
         </button>
       </div>
 
-      {/* DELETE CONFIRM MODAL */}
+      {/* DELETE CONFIRM */}
       {deleteTarget && (
         <div style={deleteOverlay}>
           <div style={deleteModal}>
@@ -758,11 +805,17 @@ export default function ChatPage() {
             <div style={{ fontWeight: 900, fontSize: 18 }}>
               Delete message?
             </div>
-            <div style={{ opacity: 0.8, textAlign: "center" }}>
+            <div style={{ opacity: 0.8 }}>
               This can’t be undone.
             </div>
 
-            <div style={{ display: "flex", gap: 10, width: "100%" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                width: "100%",
+              }}
+            >
               <button
                 onClick={() => setDeleteTarget(null)}
                 style={cancelBtn}
@@ -785,7 +838,10 @@ export default function ChatPage() {
 
       {/* IMAGE VIEW */}
       {imageView && (
-        <div style={imageOverlay} onClick={() => setImageView(null)}>
+        <div
+          style={imageOverlay}
+          onClick={() => setImageView(null)}
+        >
           <img src={imageView} style={imageFull} />
           <FiX size={28} style={closeIcon} />
         </div>
@@ -793,9 +849,8 @@ export default function ChatPage() {
     </div>
   );
 }
-
 /* ============================================================
-   AUDIO BUTTON STYLES (NEW)
+   AUDIO BUTTON STYLES
 ============================================================ */
 
 const micBtn = {
@@ -805,6 +860,9 @@ const micBtn = {
   background: "#222",
   border: "none",
   color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const stopBtn = {
@@ -814,6 +872,9 @@ const stopBtn = {
   background: "#ff2f2f",
   border: "none",
   color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const cancelAudioBtn = {
@@ -823,6 +884,9 @@ const cancelAudioBtn = {
   background: "#333",
   border: "none",
   color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const sendAudioBtn = {
@@ -832,13 +896,13 @@ const sendAudioBtn = {
   background: "#ff2f2f",
   border: "none",
   color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 /* ============================================================
-   EXISTING STYLES BELOW (UNCHANGED)
-============================================================ */
-/* ============================================================
-   DELETE MODAL STYLES
+   DELETE MODAL
 ============================================================ */
 
 const deleteOverlay = {
@@ -904,7 +968,7 @@ const toastStyle = {
 };
 
 /* ============================================================
-   BASE CHAT STYLES
+   BASE CHAT LAYOUT
 ============================================================ */
 
 const shell = {
@@ -936,6 +1000,9 @@ const backBtn = {
   width: 36,
   height: 36,
   color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const messagesBox = {
@@ -985,6 +1052,9 @@ const sendBtn = {
   background: "#ff2f2f",
   border: "none",
   color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const errBox = {
