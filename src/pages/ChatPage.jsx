@@ -674,9 +674,9 @@ export default function ChatPage() {
         })}
       </div>
 
-      /* ============================================================
-         INPUT BAR CONTINUES IN PART 4
-      ============================================================ */
+      
+       
+      
       {/* INPUT BAR */}
       <div style={inputBar}>
         {/* IMAGE */}
