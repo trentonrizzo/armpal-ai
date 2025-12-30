@@ -879,3 +879,116 @@ const toastStyle = {
   fontWeight: 800,
   zIndex: 9999,
 };
+/* ============================================================
+   RESTORED BASE CHAT STYLES (FIX BLACK SCREEN)
+============================================================ */
+
+const shell = {
+  position: "fixed",
+  inset: 0,
+  background: "#000",
+  overflow: "hidden",
+};
+
+const header = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 56,
+  background: "#e00000",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "0 12px",
+  zIndex: 10,
+};
+
+const backBtn = {
+  background: "rgba(255,255,255,0.2)",
+  border: "none",
+  borderRadius: 18,
+  width: 36,
+  height: 36,
+  color: "#fff",
+};
+
+const messagesBox = {
+  position: "absolute",
+  top: 56,
+  left: 0,
+  right: 0,
+  bottom: 72,
+  overflowY: "auto",
+  WebkitOverflowScrolling: "touch",
+  overscrollBehavior: "contain",
+  touchAction: "pan-y",
+  padding: 12,
+  background: "#000",
+};
+
+const inputBar = {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  height: 72,
+  paddingBottom: "env(safe-area-inset-bottom)",
+  background: "#000",
+  borderTop: "1px solid #222",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "0 12px",
+};
+
+const input = {
+  flex: 1,
+  height: 44,
+  borderRadius: 12,
+  border: "1px solid #333",
+  background: "#111",
+  color: "#fff",
+  padding: "0 12px",
+  fontSize: 16,
+};
+
+const sendBtn = {
+  width: 44,
+  height: 44,
+  borderRadius: 12,
+  background: "#ff2f2f",
+  border: "none",
+  color: "#fff",
+};
+
+const errBox = {
+  background: "rgba(255,47,47,0.25)",
+  padding: 10,
+  borderRadius: 12,
+  marginBottom: 10,
+};
+
+const imageOverlay = {
+  position: "absolute",
+  inset: 0,
+  background: "rgba(0,0,0,0.9)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 999,
+};
+
+const imageFull = {
+  maxWidth: "90%",
+  maxHeight: "80%",
+  borderRadius: 12,
+};
+
+const closeIcon = {
+  position: "absolute",
+  top: 20,
+  right: 20,
+  color: "#fff",
+};
