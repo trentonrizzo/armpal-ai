@@ -7,6 +7,7 @@ export default function Analytics() {
   const [tab, setTab] = useState("bodyweight");
 
   const [weights, setWeights] = useState([]);
+  const [activeIndex, setActiveIndex] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,46 +27,60 @@ export default function Analytics() {
       return;
     }
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("bodyweight_logs")
       .select("weight, logged_at")
       .eq("user_id", user.id)
       .order("logged_at", { ascending: true });
 
-    if (error) {
-      setWeights([]);
-    } else {
-      setWeights(data || []);
-    }
-
+    setWeights(data || []);
+    setActiveIndex(null);
     setLoading(false);
   }
 
-  const latest =
-    weights.length > 0 ? weights[weights.length - 1].weight : null;
+  const latest = weights.length
+    ? weights[weights.length - 1].weight
+    : null;
 
-  /* ===== GRAPH MATH ===== */
+  /* ===== GRAPH CONSTANTS ===== */
+  const W = 320;
+  const H = 200;
+  const PAD = 40;
+
   const maxW = Math.max(...weights.map((w) => w.weight), 0);
   const minW = Math.min(...weights.map((w) => w.weight), maxW);
 
-  function getX(i) {
-    return (i / Math.max(weights.length - 1, 1)) * 280 + 10;
+  function x(i) {
+    return (
+      PAD +
+      (i / Math.max(weights.length - 1, 1)) * (W - PAD * 2)
+    );
   }
 
-  function getY(w) {
-    if (maxW === minW) return 80;
-    return 150 - ((w - minW) / (maxW - minW)) * 120;
+  function y(w) {
+    if (maxW === minW) return H / 2;
+    return (
+      H -
+      PAD -
+      ((w - minW) / (maxW - minW)) * (H - PAD * 2)
+    );
   }
 
-  const path =
+  const linePath =
     weights.length > 1
       ? weights
           .map(
             (w, i) =>
-              `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(w.weight)}`
+              `${i === 0 ? "M" : "L"} ${x(i)} ${y(w.weight)}`
           )
           .join(" ")
       : "";
+
+  const areaPath =
+    linePath +
+    ` L ${x(weights.length - 1)} ${H - PAD} L ${x(0)} ${
+      H - PAD
+    } Z`;
 
   return (
     <div
@@ -136,11 +151,10 @@ export default function Analytics() {
             <p style={{ opacity: 0.7 }}>Loading bodyweight…</p>
           ) : weights.length === 0 ? (
             <p style={{ opacity: 0.7 }}>
-              No bodyweight logged yet. Start tracking to see analytics.
+              No bodyweight logged yet.
             </p>
           ) : (
             <>
-              {/* HERO */}
               <div style={{ fontSize: 13, opacity: 0.75 }}>
                 Current Bodyweight
               </div>
@@ -157,57 +171,117 @@ export default function Analytics() {
               {/* GRAPH */}
               <svg
                 width="100%"
-                height="170"
-                viewBox="0 0 300 170"
+                viewBox={`0 0 ${W} ${H}`}
                 style={{ marginBottom: 12 }}
               >
+                {/* Y AXIS LABELS */}
+                <text
+                  x={4}
+                  y={PAD}
+                  fontSize="10"
+                  fill="#aaa"
+                >
+                  {maxW} lb
+                </text>
+                <text
+                  x={4}
+                  y={H - PAD}
+                  fontSize="10"
+                  fill="#aaa"
+                >
+                  {minW} lb
+                </text>
+
+                {/* AREA */}
                 <path
-                  d={path}
+                  d={areaPath}
+                  fill="rgba(255,47,47,0.15)"
+                />
+
+                {/* LINE */}
+                <path
+                  d={linePath}
                   fill="none"
                   stroke="#ff2f2f"
                   strokeWidth="3"
                 />
+
+                {/* DOTS */}
                 {weights.map((w, i) => (
                   <circle
                     key={i}
-                    cx={getX(i)}
-                    cy={getY(w.weight)}
-                    r="3"
+                    cx={x(i)}
+                    cy={y(w.weight)}
+                    r={activeIndex === i ? 6 : 4}
                     fill="#ff2f2f"
+                    onClick={() => setActiveIndex(i)}
                   />
                 ))}
+
+                {/* TOOLTIP */}
+                {activeIndex !== null && (
+                  <>
+                    <rect
+                      x={x(activeIndex) - 42}
+                      y={y(weights[activeIndex].weight) - 40}
+                      width="84"
+                      height="32"
+                      rx="8"
+                      fill="#1a1a1f"
+                      stroke="rgba(255,255,255,0.12)"
+                    />
+                    <text
+                      x={x(activeIndex)}
+                      y={y(weights[activeIndex].weight) - 22}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill="#fff"
+                      fontWeight="700"
+                    >
+                      {weights[activeIndex].weight} lb
+                    </text>
+                    <text
+                      x={x(activeIndex)}
+                      y={y(weights[activeIndex].weight) - 10}
+                      textAnchor="middle"
+                      fontSize="9"
+                      fill="#aaa"
+                    >
+                      {new Date(
+                        weights[activeIndex].logged_at
+                      ).toLocaleDateString()}
+                    </text>
+                  </>
+                )}
               </svg>
 
               {/* LIST */}
-              <div>
-                {weights
-                  .slice()
-                  .reverse()
-                  .map((w, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        fontSize: 13,
-                        padding: "6px 0",
-                        borderBottom:
-                          "1px solid rgba(255,255,255,0.06)",
-                      }}
-                    >
-                      <span>
-                        {new Date(w.logged_at).toLocaleDateString()}
-                      </span>
-                      <span>{w.weight} lb</span>
-                    </div>
-                  ))}
-              </div>
+              {weights
+                .slice()
+                .reverse()
+                .map((w, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 13,
+                      padding: "6px 0",
+                      borderBottom:
+                        "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <span>
+                      {new Date(w.logged_at).toLocaleDateString()}
+                    </span>
+                    <span>{w.weight} lb</span>
+                  </div>
+                ))}
             </>
           )}
         </div>
       )}
 
-      {/* PLACEHOLDERS */}
       {tab !== "bodyweight" && (
         <div
           style={{
