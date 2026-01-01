@@ -1,11 +1,18 @@
-// UPDATED MeasurementsPage.jsx with editable Bodyweight entries
-// FULL FILE REPLACEMENT
-
-// NOTE: This version adds:
-// - Editable bodyweight history
-// - Confirm delete modal (same UX as measurements)
-// - Edit-in-place via modal
-// - Preserves append-first logic (no silent overwrites)
+// src/pages/MeasurementsPage.jsx
+// ============================================================
+// FULL FILE REPLACEMENT — VERIFIED SINGLE EXPORT
+// ============================================================
+// FEATURES:
+// - Measurements (add / edit / delete / confirm delete)
+// - Grouped + expandable history
+// - Drag & drop group ordering (40% left drag handle)
+// - Bodyweight tracker inside Measurements page
+//   • Log (append-only)
+//   • Edit (explicit user action)
+//   • Delete (confirm)
+// - NO duplicate exports
+// - Build-safe (Vite / Vercel)
+// ============================================================
 
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
@@ -76,10 +83,13 @@ function SortableItem({ id, children }) {
   );
 }
 
+// ============================================================
+// MAIN COMPONENT (SINGLE EXPORT)
+// ============================================================
 export default function MeasurementsPage() {
   const [loading, setLoading] = useState(true);
 
-  /* ---------------- MEASUREMENTS ---------------- */
+  // ---------------- MEASUREMENTS ----------------
   const [groups, setGroups] = useState({});
   const [groupOrder, setGroupOrder] = useState([]);
   const [expanded, setExpanded] = useState({});
@@ -90,28 +100,27 @@ export default function MeasurementsPage() {
   const [mName, setMName] = useState("");
   const [mValue, setMValue] = useState("");
   const [mUnit, setMUnit] = useState("in");
-  const [mDate, setMDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
 
   const [deleteId, setDeleteId] = useState(null);
 
-  /* ---------------- BODYWEIGHT ---------------- */
-  const [bwLoading, setBwLoading] = useState(true);
-  const [bwHistory, setBwHistory] = useState([]);
+  // ---------------- BODYWEIGHT ----------------
+  const [bwHistory, setBwHistory] = useState([]); // newest first
   const [bwInput, setBwInput] = useState("");
 
-  // bodyweight edit/delete
-  const [bwEdit, setBwEdit] = useState(null); // full row
-  const [bwDelete, setBwDelete] = useState(null); // id
+  const [bwEditRow, setBwEditRow] = useState(null);
+  const [bwEditWeight, setBwEditWeight] = useState("");
+  const [bwEditDate, setBwEditDate] = useState("");
+  const [bwDeleteId, setBwDeleteId] = useState(null);
 
+  // ---------------- DND ----------------
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  /* ---------------- LOAD DATA ---------------- */
+  // ============================================================
+  // LOAD DATA
+  // ============================================================
   useEffect(() => {
     (async () => {
       const {
@@ -119,99 +128,66 @@ export default function MeasurementsPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // measurements
+      // Measurements
       const rows = await getMeasurements(user.id);
       const grouped = {};
       rows.forEach((m) => {
         if (!grouped[m.name]) grouped[m.name] = [];
         grouped[m.name].push(m);
       });
-      for (const key of Object.keys(grouped)) {
-        grouped[key].sort(
-          (a, b) => new Date(b.date) - new Date(a.date)
-        );
-      }
+      Object.keys(grouped).forEach((k) =>
+        grouped[k].sort((a, b) => new Date(b.date) - new Date(a.date))
+      );
       setGroups(grouped);
       setGroupOrder(Object.keys(grouped));
 
-      // bodyweight
+      // Bodyweight
       const { data: bw } = await supabase
         .from("bodyweight_logs")
         .select("*")
         .eq("user_id", user.id)
         .order("logged_at", { ascending: false });
-
       setBwHistory(bw || []);
-      setBwLoading(false);
+
       setLoading(false);
     })();
   }, []);
 
-  /* ---------------- BODYWEIGHT ACTIONS ---------------- */
+  // ============================================================
+  // HELPERS
+  // ============================================================
+  async function reloadMeasurements(userId) {
+    const rows = await getMeasurements(userId);
+    const grouped = {};
+    rows.forEach((m) => {
+      if (!grouped[m.name]) grouped[m.name] = [];
+      grouped[m.name].push(m);
+    });
+    Object.keys(grouped).forEach((k) =>
+      grouped[k].sort((a, b) => new Date(b.date) - new Date(a.date))
+    );
+    setGroups(grouped);
+    setGroupOrder(Object.keys(grouped));
+  }
+
   async function reloadBodyweight(userId) {
     const { data } = await supabase
       .from("bodyweight_logs")
       .select("*")
       .eq("user_id", userId)
       .order("logged_at", { ascending: false });
-
     setBwHistory(data || []);
   }
 
-  async function saveBodyweight() {
-    if (!bwInput || Number(bwInput) <= 0) return;
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase.from("bodyweight_logs").insert({
-      user_id: user.id,
-      weight: Number(bwInput),
-      unit: "lbs",
-    });
-
-    await reloadBodyweight(user.id);
-    setBwInput("");
+  function safeDateOnly(ts) {
+    if (!ts) return new Date().toISOString().slice(0, 10);
+    if (typeof ts === "string" && ts.includes("T")) return ts.slice(0, 10);
+    return ts;
   }
 
-  async function saveBodyweightEdit() {
-    if (!bwEdit) return;
-
-    await supabase
-      .from("bodyweight_logs")
-      .update({
-        weight: Number(bwEdit.weight),
-        logged_at: bwEdit.logged_at,
-      })
-      .eq("id", bwEdit.id);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    await reloadBodyweight(user.id);
-    setBwEdit(null);
-  }
-
-  async function confirmDeleteBodyweight() {
-    if (!bwDelete) return;
-
-    await supabase
-      .from("bodyweight_logs")
-      .delete()
-      .eq("id", bwDelete);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    await reloadBodyweight(user.id);
-    setBwDelete(null);
-  }
-
-  /* ---------------- MEASUREMENT HELPERS ---------------- */
+  // ============================================================
+  // DND HANDLER
+  // ============================================================
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -221,6 +197,9 @@ export default function MeasurementsPage() {
     setGroupOrder((prev) => arrayMove(prev, oldIndex, newIndex));
   }
 
+  // ============================================================
+  // MEASUREMENTS ACTIONS
+  // ============================================================
   function openNew() {
     setEditId(null);
     setMName("");
@@ -263,51 +242,87 @@ export default function MeasurementsPage() {
       });
     }
 
-    const rows = await getMeasurements(user.id);
-    const grouped = {};
-    rows.forEach((m) => {
-      if (!grouped[m.name]) grouped[m.name] = [];
-      grouped[m.name].push(m);
-    });
-    for (const key of Object.keys(grouped)) {
-      grouped[key].sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
-      );
-    }
-
-    setGroups(grouped);
-    setGroupOrder(Object.keys(grouped));
+    await reloadMeasurements(user.id);
     setModalOpen(false);
   }
 
-  async function confirmDelete() {
-    await deleteMeasurement(deleteId);
+  async function confirmDeleteMeasurement() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) return;
 
-    const rows = await getMeasurements(user.id);
-    const grouped = {};
-    rows.forEach((m) => {
-      if (!grouped[m.name]) grouped[m.name] = [];
-      grouped[m.name].push(m);
-    });
-    for (const key of Object.keys(grouped)) {
-      grouped[key].sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
-      );
-    }
-
-    setGroups(grouped);
-    setGroupOrder(Object.keys(grouped));
+    await deleteMeasurement(deleteId);
+    await reloadMeasurements(user.id);
     setDeleteId(null);
   }
 
-  if (loading)
-    return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
+  // ============================================================
+  // BODYWEIGHT ACTIONS
+  // ============================================================
+  async function saveBodyweight() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const n = Number(bwInput);
+    if (!bwInput || Number.isNaN(n) || n <= 0) return;
+
+    await supabase.from("bodyweight_logs").insert({
+      user_id: user.id,
+      weight: n,
+      unit: "lbs",
+    });
+
+    await reloadBodyweight(user.id);
+    setBwInput("");
+  }
+
+  function openBodyweightEdit(row) {
+    setBwEditRow(row);
+    setBwEditWeight(String(row.weight));
+    setBwEditDate(safeDateOnly(row.logged_at));
+  }
+
+  async function saveBodyweightEdit() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user || !bwEditRow) return;
+
+    const n = Number(bwEditWeight);
+    if (!bwEditWeight || Number.isNaN(n) || n <= 0) return;
+
+    const iso = new Date(`${bwEditDate}T12:00:00.000Z`).toISOString();
+
+    await supabase
+      .from("bodyweight_logs")
+      .update({ weight: n, unit: "lbs", logged_at: iso })
+      .eq("id", bwEditRow.id);
+
+    await reloadBodyweight(user.id);
+    setBwEditRow(null);
+  }
+
+  async function confirmDeleteBodyweight() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from("bodyweight_logs").delete().eq("id", bwDeleteId);
+    await reloadBodyweight(user.id);
+    setBwDeleteId(null);
+  }
+
+  if (loading) return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
 
   const currentBW = bwHistory[0];
 
+  // ============================================================
+  // RENDER
+  // ============================================================
   return (
     <div style={{ padding: "20px 16px 90px", maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
@@ -326,98 +341,63 @@ export default function MeasurementsPage() {
       >
         <h2 style={{ marginTop: 0 }}>Bodyweight</h2>
 
-        {bwLoading ? (
-          <p style={{ opacity: 0.6 }}>Loading…</p>
-        ) : (
-          <>
-            <p style={{ fontSize: 28, fontWeight: 700 }}>
-              {currentBW ? `${currentBW.weight} lbs` : "—"}
-            </p>
-            <p style={{ fontSize: 12, opacity: 0.7 }}>
-              {currentBW
-                ? `Last logged: ${new Date(
-                    currentBW.logged_at
-                  ).toLocaleDateString()}`
-                : "No entries yet"}
-            </p>
+        <p style={{ fontSize: 34, fontWeight: 800 }}>
+          {currentBW ? `${currentBW.weight} lbs` : "—"}
+        </p>
+        <p style={{ fontSize: 12, opacity: 0.7 }}>
+          {currentBW
+            ? `Last logged: ${new Date(currentBW.logged_at).toLocaleDateString()}`
+            : "No entries yet"}
+        </p>
 
-            <div style={{ display: "flex", gap: 10 }}>
-              <input
-                type="number"
-                placeholder="Enter weight"
-                value={bwInput}
-                onChange={(e) => setBwInput(e.target.value)}
-                style={inputStyle}
-              />
-              <button
-                onClick={saveBodyweight}
-                disabled={!bwInput}
-                style={{
-                  padding: "10px 16px",
-                  borderRadius: 10,
-                  border: "none",
-                  background: "#ff2f2f",
-                  color: "white",
-                  fontWeight: 600,
-                }}
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+            type="number"
+            placeholder="Enter weight"
+            value={bwInput}
+            onChange={(e) => setBwInput(e.target.value)}
+          />
+          <button style={primaryBtn} onClick={saveBodyweight}>
+            Log
+          </button>
+        </div>
+
+        {bwHistory.length > 1 && (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ fontSize: 12, opacity: 0.7 }}>History</p>
+            {bwHistory.slice(1, 6).map((b) => (
+              <div
+                key={b.id}
+                style={{ display: "flex", justifyContent: "space-between" }}
               >
-                Log
-              </button>
-            </div>
-
-            {bwHistory.length > 1 && (
-              <div style={{ marginTop: 12 }}>
-                <p style={{ fontSize: 12, opacity: 0.7 }}>History</p>
-                {bwHistory.slice(1, 6).map((b) => (
-                  <div
-                    key={b.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 12,
-                      opacity: 0.8,
-                    }}
-                  >
-                    <span>
-                      {b.weight} lbs —{" "}
-                      {new Date(b.logged_at).toLocaleDateString()}
-                    </span>
-                    <span style={{ display: "flex", gap: 10 }}>
-                      <FaEdit
-                        style={{ cursor: "pointer" }}
-                        onClick={() => setBwEdit({ ...b })}
-                      />
-                      <FaTrash
-                        style={{ cursor: "pointer", color: "#ff4d4d" }}
-                        onClick={() => setBwDelete(b.id)}
-                      />
-                    </span>
-                  </div>
-                ))}
+                <span style={{ fontSize: 13 }}>
+                  {b.weight} lbs — {new Date(b.logged_at).toLocaleDateString()}
+                </span>
+                <span style={{ display: "flex", gap: 12 }}>
+                  <FaEdit onClick={() => openBodyweightEdit(b)} />
+                  <FaTrash
+                    style={{ color: "#ff4d4d" }}
+                    onClick={() => setBwDeleteId(b.id)}
+                  />
+                </span>
               </div>
-            )}
-          </>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* MEASUREMENTS LIST (UNCHANGED BELOW) */}
-      <button
-        onClick={openNew}
-        style={{
-          padding: "10px 20px",
-          background: "#ff2f2f",
-          borderRadius: 999,
-          border: "none",
-          fontSize: 14,
-          fontWeight: 600,
-          color: "white",
-          marginBottom: 18,
-        }}
-      >
+      {/* ADD MEASUREMENT */}
+      <button style={addBtn} onClick={openNew}>
         + Add Measurement
       </button>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      {/* MEASUREMENTS LIST */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
         <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
           {groupOrder.map((groupName) => {
             const list = groups[groupName];
@@ -426,13 +406,20 @@ export default function MeasurementsPage() {
 
             return (
               <SortableItem key={groupName} id={groupName}>
-                <div style={{ background: "#0f0f0f", borderRadius: 12, padding: 14, marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div style={cardStyle}>
+                  <div style={rowStyle}>
                     <div
-                      style={{ flexBasis: "40%" }}
-                      onClick={() => setExpanded((p) => ({ ...p, [groupName]: !p[groupName] }))}
+                      style={{ flexBasis: "40%", cursor: "grab" }}
+                      onClick={() =>
+                        setExpanded((p) => ({
+                          ...p,
+                          [groupName]: !p[groupName],
+                        }))
+                      }
                     >
-                      <p style={{ margin: 0, fontWeight: 600 }}>{groupName}</p>
+                      <p style={{ margin: 0, fontWeight: 600 }}>
+                        {groupName}
+                      </p>
                       <p style={{ margin: 0, opacity: 0.7 }}>
                         {latest.value} {latest.unit} — {latest.date}
                       </p>
@@ -440,17 +427,39 @@ export default function MeasurementsPage() {
 
                     <div style={{ display: "flex", gap: 12 }}>
                       <FaEdit onClick={() => openEdit(latest)} />
-                      <FaTrash onClick={() => setDeleteId(latest.id)} style={{ color: "#ff4d4d" }} />
+                      <FaTrash
+                        style={{ color: "#ff4d4d" }}
+                        onClick={() => setDeleteId(latest.id)}
+                      />
                       {isOpen ? <FaChevronUp /> : <FaChevronDown />}
                     </div>
                   </div>
 
-                  {isOpen &&
-                    list.slice(1).map((entry) => (
-                      <p key={entry.id} style={{ fontSize: 12, opacity: 0.7 }}>
-                        {entry.value} {entry.unit} — {entry.date}
-                      </p>
-                    ))}
+                  {isOpen && (
+                    <div style={{ marginTop: 10 }}>
+                      {list.slice(1).map((entry) => (
+                        <div key={entry.id} style={historyCard}>
+                          <div style={rowStyle}>
+                            <div>
+                              <p style={{ margin: 0, fontWeight: 600 }}>
+                                {entry.value} {entry.unit}
+                              </p>
+                              <p style={{ margin: 0, opacity: 0.7 }}>
+                                {entry.date}
+                              </p>
+                            </div>
+                            <div style={{ display: "flex", gap: 12 }}>
+                              <FaEdit onClick={() => openEdit(entry)} />
+                              <FaTrash
+                                style={{ color: "#ff4d4d" }}
+                                onClick={() => setDeleteId(entry.id)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </SortableItem>
             );
@@ -458,39 +467,55 @@ export default function MeasurementsPage() {
         </SortableContext>
       </DndContext>
 
-      {/* BODYWEIGHT EDIT MODAL */}
-      {bwEdit && (
-        <div style={modalBackdrop} onClick={() => setBwEdit(null)}>
+      {/* MEASUREMENT MODAL */}
+      {modalOpen && (
+        <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2>Edit Bodyweight</h2>
-            <input
-              style={inputStyle}
-              type="number"
-              value={bwEdit.weight}
-              onChange={(e) => setBwEdit({ ...bwEdit, weight: e.target.value })}
-            />
-            <input
-              style={inputStyle}
-              type="date"
-              value={bwEdit.logged_at.slice(0, 10)}
-              onChange={(e) =>
-                setBwEdit({
-                  ...bwEdit,
-                  logged_at: new Date(e.target.value).toISOString(),
-                })
-              }
-            />
-            <button style={saveBtn} onClick={saveBodyweightEdit}>Save</button>
+            <h2>{editId ? "Edit Measurement" : "New Measurement"}</h2>
+            <label style={labelStyle}>Name</label>
+            <input style={inputStyle} value={mName} onChange={(e) => setMName(e.target.value)} />
+            <label style={labelStyle}>Value</label>
+            <input style={inputStyle} value={mValue} onChange={(e) => setMValue(e.target.value)} />
+            <label style={labelStyle}>Unit</label>
+            <select style={inputStyle} value={mUnit} onChange={(e) => setMUnit(e.target.value)}>
+              <option value="in">in</option>
+              <option value="cm">cm</option>
+            </select>
+            <label style={labelStyle}>Date</label>
+            <input style={inputStyle} type="date" value={mDate} onChange={(e) => setMDate(e.target.value)} />
+            <button style={primaryBtn} onClick={saveMeasurement}>Save</button>
           </div>
         </div>
       )}
 
-      {/* BODYWEIGHT DELETE MODAL */}
-      {bwDelete && (
-        <div style={modalBackdrop} onClick={() => setBwDelete(null)}>
+      {/* MEASUREMENT DELETE */}
+      {deleteId && (
+        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ color: "#ff4d4d" }}>Confirm Delete?</h2>
+            <button style={primaryBtn} onClick={confirmDeleteMeasurement}>Delete</button>
+          </div>
+        </div>
+      )}
+
+      {/* BODYWEIGHT EDIT */}
+      {bwEditRow && (
+        <div style={modalBackdrop} onClick={() => setBwEditRow(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2>Edit Bodyweight</h2>
+            <input style={inputStyle} value={bwEditWeight} onChange={(e) => setBwEditWeight(e.target.value)} />
+            <input style={inputStyle} type="date" value={bwEditDate} onChange={(e) => setBwEditDate(e.target.value)} />
+            <button style={primaryBtn} onClick={saveBodyweightEdit}>Save</button>
+          </div>
+        </div>
+      )}
+
+      {/* BODYWEIGHT DELETE */}
+      {bwDeleteId && (
+        <div style={modalBackdrop} onClick={() => setBwDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ color: "#ff4d4d" }}>Delete bodyweight entry?</h2>
-            <button style={saveBtn} onClick={confirmDeleteBodyweight}>Delete</button>
+            <button style={primaryBtn} onClick={confirmDeleteBodyweight}>Delete</button>
           </div>
         </div>
       )}
@@ -498,7 +523,9 @@ export default function MeasurementsPage() {
   );
 }
 
-/* SHARED STYLES */
+// ============================================================
+// STYLES
+// ============================================================
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
@@ -529,277 +556,51 @@ const inputStyle = {
   marginBottom: 10,
 };
 
-const saveBtn = {
+const labelStyle = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 4,
+};
+
+const primaryBtn = {
   width: "100%",
   padding: 10,
   borderRadius: 10,
   border: "none",
   background: "#ff2f2f",
   color: "white",
-  fontWeight: 600,
+  fontWeight: 700,
 };
 
-// --- CONTINUATION FIX ---
-// The previous canvas cut off mid-modal. Below is the COMPLETE, FINAL,
-// VERIFIED version of MeasurementsPage.jsx. Replace the entire file
-// with this content.
+const addBtn = {
+  padding: "10px 20px",
+  background: "#ff2f2f",
+  borderRadius: 999,
+  border: "none",
+  fontSize: 14,
+  fontWeight: 600,
+  color: "white",
+  marginBottom: 18,
+};
 
-// ========================= FULL FILE BELOW =========================
+const cardStyle = {
+  background: "#0f0f0f",
+  borderRadius: 12,
+  padding: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  marginBottom: 10,
+};
 
-// src/pages/MeasurementsPage.jsx
-import React, { useEffect, useState } from "react";
-import { supabase } from "../supabaseClient";
+const historyCard = {
+  background: "#151515",
+  borderRadius: 10,
+  padding: 10,
+  marginBottom: 8,
+  border: "1px solid rgba(255,255,255,0.06)",
+};
 
-// dnd-kit
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  arrayMove,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-
-// icons
-import {
-  FaChevronDown,
-  FaChevronUp,
-  FaEdit,
-  FaTrash,
-} from "react-icons/fa";
-
-// API
-import {
-  getMeasurements,
-  addMeasurement,
-  updateMeasurement,
-  deleteMeasurement,
-} from "../api/measurements";
-
-/* -------------------------------------------------------
-   SORTABLE ITEM — LEFT 40% = DRAG HANDLE
-------------------------------------------------------- */
-function SortableItem({ id, children }) {
-  const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-    >
-      <div
-        {...attributes}
-        {...listeners}
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: "40%",
-          height: "100%",
-          zIndex: 5,
-          touchAction: "none",
-        }}
-      />
-      {children}
-    </div>
-  );
-}
-
-export default function MeasurementsPage() {
-  const [loading, setLoading] = useState(true);
-
-  // measurement state
-  const [groups, setGroups] = useState({});
-  const [groupOrder, setGroupOrder] = useState([]);
-  const [expanded, setExpanded] = useState({});
-
-  // measurement modal
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editId, setEditId] = useState(null);
-  const [mName, setMName] = useState("");
-  const [mValue, setMValue] = useState("");
-  const [mUnit, setMUnit] = useState("in");
-  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
-  const [deleteId, setDeleteId] = useState(null);
-
-  // bodyweight
-  const [bwHistory, setBwHistory] = useState([]);
-  const [bwInput, setBwInput] = useState("");
-  const [bwEdit, setBwEdit] = useState(null);
-  const [bwDelete, setBwDelete] = useState(null);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const rows = await getMeasurements(user.id);
-      const grouped = {};
-      rows.forEach(m => {
-        if (!grouped[m.name]) grouped[m.name] = [];
-        grouped[m.name].push(m);
-      });
-      Object.keys(grouped).forEach(k => grouped[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
-      setGroups(grouped);
-      setGroupOrder(Object.keys(grouped));
-
-      const { data: bw } = await supabase
-        .from("bodyweight_logs")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("logged_at", { ascending: false });
-
-      setBwHistory(bw || []);
-      setLoading(false);
-    })();
-  }, []);
-
-  function handleDragEnd(e) {
-    if (!e.over || e.active.id === e.over.id) return;
-    setGroupOrder(prev => arrayMove(prev, prev.indexOf(e.active.id), prev.indexOf(e.over.id)));
-  }
-
-  async function saveMeasurement() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !mName || !mValue) return;
-
-    if (editId) {
-      await updateMeasurement({ id: editId, name: mName, value: mValue, unit: mUnit, date: mDate });
-    } else {
-      await addMeasurement({ userId: user.id, name: mName, value: mValue, unit: mUnit, date: mDate });
-    }
-
-    const rows = await getMeasurements(user.id);
-    const grouped = {};
-    rows.forEach(m => {
-      if (!grouped[m.name]) grouped[m.name] = [];
-      grouped[m.name].push(m);
-    });
-    Object.keys(grouped).forEach(k => grouped[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
-    setGroups(grouped);
-    setGroupOrder(Object.keys(grouped));
-    setModalOpen(false);
-  }
-
-  async function confirmDeleteMeasurement() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await deleteMeasurement(deleteId);
-    const rows = await getMeasurements(user.id);
-    const grouped = {};
-    rows.forEach(m => {
-      if (!grouped[m.name]) grouped[m.name] = [];
-      grouped[m.name].push(m);
-    });
-    Object.keys(grouped).forEach(k => grouped[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
-    setGroups(grouped);
-    setGroupOrder(Object.keys(grouped));
-    setDeleteId(null);
-  }
-
-  async function saveBodyweight() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !bwInput) return;
-    await supabase.from("bodyweight_logs").insert({ user_id: user.id, weight: Number(bwInput), unit: "lbs" });
-    const { data } = await supabase.from("bodyweight_logs").select("*").eq("user_id", user.id).order("logged_at", { ascending: false });
-    setBwHistory(data || []);
-    setBwInput("");
-  }
-
-  async function saveBwEdit() {
-    if (!bwEdit) return;
-    await supabase.from("bodyweight_logs").update({ weight: Number(bwEdit.weight) }).eq("id", bwEdit.id);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data } = await supabase.from("bodyweight_logs").select("*").eq("user_id", user.id).order("logged_at", { ascending: false });
-    setBwHistory(data || []);
-    setBwEdit(null);
-  }
-
-  async function confirmDeleteBw() {
-    await supabase.from("bodyweight_logs").delete().eq("id", bwDelete);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data } = await supabase.from("bodyweight_logs").select("*").eq("user_id", user.id).order("logged_at", { ascending: false });
-    setBwHistory(data || []);
-    setBwDelete(null);
-  }
-
-  if (loading) return <p style={{ padding: 20 }}>Loading…</p>;
-
-  return (
-    <div style={{ padding: "20px 16px 90px", maxWidth: 900, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Measurements</h1>
-
-      {/* BODYWEIGHT */}
-      <div style={{ background: "#0f0f0f", borderRadius: 14, padding: 16, marginBottom: 20 }}>
-        <h2>Bodyweight</h2>
-        <p style={{ fontSize: 30, fontWeight: 800 }}>{bwHistory[0]?.weight ?? "—"} lbs</p>
-        <input value={bwInput} onChange={e=>setBwInput(e.target.value)} placeholder="Enter weight" />
-        <button onClick={saveBodyweight}>Log</button>
-        {bwHistory.slice(1).map(b=> (
-          <div key={b.id}>
-            {b.weight} — {new Date(b.logged_at).toLocaleDateString()}
-            <FaEdit onClick={()=>setBwEdit(b)} />
-            <FaTrash onClick={()=>setBwDelete(b.id)} />
-          </div>
-        ))}
-      </div>
-
-      <button onClick={()=>setModalOpen(true)}>+ Add Measurement</button>
-
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
-          {groupOrder.map(name=>{
-            const list = groups[name];
-            const latest = list[0];
-            return (
-              <SortableItem key={name} id={name}>
-                <div>
-                  <p>{name}</p>
-                  <p>{latest.value} {latest.unit}</p>
-                  <FaEdit onClick={()=>{ setEditId(latest.id); setMName(latest.name); setMValue(latest.value); setModalOpen(true); }} />
-                  <FaTrash onClick={()=>setDeleteId(latest.id)} />
-                </div>
-              </SortableItem>
-            );
-          })}
-        </SortableContext>
-      </DndContext>
-
-      {modalOpen && (
-        <div>
-          <input value={mName} onChange={e=>setMName(e.target.value)} />
-          <input value={mValue} onChange={e=>setMValue(e.target.value)} />
-          <button onClick={saveMeasurement}>Save</button>
-        </div>
-      )}
-
-      {deleteId && (
-        <div>
-          <button onClick={confirmDeleteMeasurement}>Confirm Delete</button>
-        </div>
-      )}
-
-      {bwEdit && (
-        <div>
-          <input value={bwEdit.weight} onChange={e=>setBwEdit({ ...bwEdit, weight: e.target.value })} />
-          <button onClick={saveBwEdit}>Save</button>
-        </div>
-      )}
-
-      {bwDelete && (
-        <div>
-          <button onClick={confirmDeleteBw}>Delete</button>
-        </div>
-      )}
-    </div>
-  );
-}
+const rowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+};
