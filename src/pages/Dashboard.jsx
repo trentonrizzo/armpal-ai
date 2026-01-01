@@ -1,7 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
@@ -10,6 +10,8 @@ import { FiUsers } from "react-icons/fi";
 import SmartAnalytics from "../components/SmartAnalytics";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const [user, setUser] = useState(null);
   const [displayName, setDisplayName] = useState("Athlete");
   const [goals, setGoals] = useState([]);
@@ -255,99 +257,21 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* SMART ANALYTICS (READ-ONLY) */}
-      <SmartAnalytics />
+      {/* SMART ANALYTICS (READ-ONLY) — CLICKABLE TO FULL PAGE */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => navigate("/analytics")}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") navigate("/analytics");
+        }}
+        style={{ cursor: "pointer" }}
+      >
+        <SmartAnalytics />
+      </div>
 
       {/* GOALS */}
-      <section style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginBottom: 8,
-          }}
-        >
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Top Goals</h2>
-          <Link to="/goals" style={{ fontSize: 12, opacity: 0.8 }}>
-            View all
-          </Link>
-        </div>
-        <div
-          style={{
-            background: "#101010",
-            borderRadius: 12,
-            padding: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
-          }}
-        >
-          {loadingGoals ? (
-            <p style={{ fontSize: 13, opacity: 0.7 }}>Loading goals...</p>
-          ) : goals.length === 0 ? (
-            <p style={{ fontSize: 13, opacity: 0.7 }}>
-              No goals yet. Add some to start tracking your progress.
-            </p>
-          ) : (
-            goals.map((goal) => {
-              const progress = getProgress(goal);
-
-              return (
-                <div
-                  key={goal.id}
-                  style={{
-                    marginBottom: 10,
-                    paddingBottom: 8,
-                    borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <div>
-                      <p
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 600,
-                          margin: 0,
-                        }}
-                      >
-                        {goal.title}
-                      </p>
-                      <p style={{ fontSize: 11, opacity: 0.7, margin: 0 }}>
-                        {goal.current_value} / {goal.target_value} {goal.unit}
-                      </p>
-                    </div>
-                    <span style={{ fontSize: 12, opacity: 0.8 }}>
-                      {progress}%
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      height: 6,
-                      background: "rgba(255,255,255,0.06)",
-                      borderRadius: 999,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${progress}%`,
-                        height: "100%",
-                        background: "linear-gradient(90deg, #ff2f2f, #ff6b4a)",
-                        transition: "width 0.25s ease",
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
+      {/* REMOVED — goals belong in /analytics and /goals */}
 
       {/* STRENGTH CALCULATOR */}
       <section style={{ marginBottom: 20 }}>
