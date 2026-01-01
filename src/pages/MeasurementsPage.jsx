@@ -350,15 +350,36 @@ export default function MeasurementsPage() {
             : "No entries yet"}
         </p>
 
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <input
-            style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+            style={{
+              ...inputStyle,
+              marginBottom: 0,
+              flex: 1,
+              height: 44,
+              fontSize: 16,
+              padding: "0 12px",
+            }}
             type="number"
+            inputMode="decimal"
             placeholder="Enter weight"
             value={bwInput}
             onChange={(e) => setBwInput(e.target.value)}
           />
-          <button style={primaryBtn} onClick={saveBodyweight}>
+          <button
+            style={{
+              height: 44,
+              padding: "0 16px",
+              borderRadius: 10,
+              border: "none",
+              background: "#ff2f2f",
+              color: "white",
+              fontWeight: 700,
+              minWidth: 80,
+              flexShrink: 0,
+            }}
+            onClick={saveBodyweight}
+          >
             Log
           </button>
         </div>
