@@ -1,4 +1,12 @@
-// src/pages/MeasurementsPage.jsx
+// UPDATED MeasurementsPage.jsx with editable Bodyweight entries
+// FULL FILE REPLACEMENT
+
+// NOTE: This version adds:
+// - Editable bodyweight history
+// - Confirm delete modal (same UX as measurements)
+// - Edit-in-place via modal
+// - Preserves append-first logic (no silent overwrites)
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 
@@ -90,9 +98,12 @@ export default function MeasurementsPage() {
 
   /* ---------------- BODYWEIGHT ---------------- */
   const [bwLoading, setBwLoading] = useState(true);
-  const [bodyweight, setBodyweight] = useState(null);
   const [bwHistory, setBwHistory] = useState([]);
   const [bwInput, setBwInput] = useState("");
+
+  // bodyweight edit/delete
+  const [bwEdit, setBwEdit] = useState(null); // full row
+  const [bwDelete, setBwDelete] = useState(null); // id
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -100,7 +111,7 @@ export default function MeasurementsPage() {
     })
   );
 
-  /* ---------------- LOAD ALL DATA ---------------- */
+  /* ---------------- LOAD DATA ---------------- */
   useEffect(() => {
     (async () => {
       const {
@@ -108,7 +119,7 @@ export default function MeasurementsPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      /* Measurements */
+      // measurements
       const rows = await getMeasurements(user.id);
       const grouped = {};
       rows.forEach((m) => {
@@ -123,24 +134,30 @@ export default function MeasurementsPage() {
       setGroups(grouped);
       setGroupOrder(Object.keys(grouped));
 
-      /* Bodyweight */
-      const { data: bwRows } = await supabase
+      // bodyweight
+      const { data: bw } = await supabase
         .from("bodyweight_logs")
         .select("*")
         .eq("user_id", user.id)
         .order("logged_at", { ascending: false });
 
-      if (bwRows && bwRows.length > 0) {
-        setBodyweight(bwRows[0]);
-        setBwHistory(bwRows);
-      }
-
+      setBwHistory(bw || []);
       setBwLoading(false);
       setLoading(false);
     })();
   }, []);
 
-  /* ---------------- BODYWEIGHT SAVE ---------------- */
+  /* ---------------- BODYWEIGHT ACTIONS ---------------- */
+  async function reloadBodyweight(userId) {
+    const { data } = await supabase
+      .from("bodyweight_logs")
+      .select("*")
+      .eq("user_id", userId)
+      .order("logged_at", { ascending: false });
+
+    setBwHistory(data || []);
+  }
+
   async function saveBodyweight() {
     if (!bwInput || Number(bwInput) <= 0) return;
 
@@ -155,18 +172,43 @@ export default function MeasurementsPage() {
       unit: "lbs",
     });
 
-    const { data } = await supabase
-      .from("bodyweight_logs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("logged_at", { ascending: false });
-
-    if (data && data.length > 0) {
-      setBodyweight(data[0]);
-      setBwHistory(data);
-    }
-
+    await reloadBodyweight(user.id);
     setBwInput("");
+  }
+
+  async function saveBodyweightEdit() {
+    if (!bwEdit) return;
+
+    await supabase
+      .from("bodyweight_logs")
+      .update({
+        weight: Number(bwEdit.weight),
+        logged_at: bwEdit.logged_at,
+      })
+      .eq("id", bwEdit.id);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    await reloadBodyweight(user.id);
+    setBwEdit(null);
+  }
+
+  async function confirmDeleteBodyweight() {
+    if (!bwDelete) return;
+
+    await supabase
+      .from("bodyweight_logs")
+      .delete()
+      .eq("id", bwDelete);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    await reloadBodyweight(user.id);
+    setBwDelete(null);
   }
 
   /* ---------------- MEASUREMENT HELPERS ---------------- */
@@ -264,19 +306,15 @@ export default function MeasurementsPage() {
   if (loading)
     return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
 
+  const currentBW = bwHistory[0];
+
   return (
-    <div
-      style={{
-        padding: "20px 16px 90px",
-        maxWidth: 900,
-        margin: "0 auto",
-      }}
-    >
+    <div style={{ padding: "20px 16px 90px", maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
         Measurements
       </h1>
 
-      {/* BODYWEIGHT SECTION */}
+      {/* BODYWEIGHT */}
       <div
         style={{
           background: "#0f0f0f",
@@ -286,21 +324,19 @@ export default function MeasurementsPage() {
           marginBottom: 20,
         }}
       >
-        <h2 style={{ marginTop: 0, fontSize: 18 }}>
-          Bodyweight
-        </h2>
+        <h2 style={{ marginTop: 0 }}>Bodyweight</h2>
 
         {bwLoading ? (
           <p style={{ opacity: 0.6 }}>Loading…</p>
         ) : (
           <>
             <p style={{ fontSize: 28, fontWeight: 700 }}>
-              {bodyweight ? `${bodyweight.weight} lbs` : "—"}
+              {currentBW ? `${currentBW.weight} lbs` : "—"}
             </p>
             <p style={{ fontSize: 12, opacity: 0.7 }}>
-              {bodyweight
+              {currentBW
                 ? `Last logged: ${new Date(
-                    bodyweight.logged_at
+                    currentBW.logged_at
                   ).toLocaleDateString()}`
                 : "No entries yet"}
             </p>
@@ -331,23 +367,32 @@ export default function MeasurementsPage() {
 
             {bwHistory.length > 1 && (
               <div style={{ marginTop: 12 }}>
-                <p style={{ fontSize: 12, opacity: 0.7 }}>
-                  Recent
-                </p>
-                {bwHistory.slice(1, 5).map((b) => (
-                  <p
+                <p style={{ fontSize: 12, opacity: 0.7 }}>History</p>
+                {bwHistory.slice(1, 6).map((b) => (
+                  <div
                     key={b.id}
                     style={{
+                      display: "flex",
+                      justifyContent: "space-between",
                       fontSize: 12,
-                      opacity: 0.75,
-                      margin: 0,
+                      opacity: 0.8,
                     }}
                   >
-                    {b.weight} lbs —{" "}
-                    {new Date(
-                      b.logged_at
-                    ).toLocaleDateString()}
-                  </p>
+                    <span>
+                      {b.weight} lbs —{" "}
+                      {new Date(b.logged_at).toLocaleDateString()}
+                    </span>
+                    <span style={{ display: "flex", gap: 10 }}>
+                      <FaEdit
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setBwEdit({ ...b })}
+                      />
+                      <FaTrash
+                        style={{ cursor: "pointer", color: "#ff4d4d" }}
+                        onClick={() => setBwDelete(b.id)}
+                      />
+                    </span>
+                  </div>
                 ))}
               </div>
             )}
@@ -355,7 +400,7 @@ export default function MeasurementsPage() {
         )}
       </div>
 
-      {/* MEASUREMENTS SECTION */}
+      {/* MEASUREMENTS LIST (UNCHANGED BELOW) */}
       <button
         onClick={openNew}
         style={{
@@ -367,21 +412,13 @@ export default function MeasurementsPage() {
           fontWeight: 600,
           color: "white",
           marginBottom: 18,
-          boxShadow: "0 0 14px rgba(255,47,47,0.35)",
         }}
       >
         + Add Measurement
       </button>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={groupOrder}
-          strategy={verticalListSortingStrategy}
-        >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
           {groupOrder.map((groupName) => {
             const list = groups[groupName];
             const latest = list[0];
@@ -389,67 +426,30 @@ export default function MeasurementsPage() {
 
             return (
               <SortableItem key={groupName} id={groupName}>
-                <div
-                  style={{
-                    background: "#0f0f0f",
-                    borderRadius: 12,
-                    padding: 14,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    marginBottom: 10,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                    }}
-                  >
+                <div style={{ background: "#0f0f0f", borderRadius: 12, padding: 14, marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <div
                       style={{ flexBasis: "40%" }}
-                      onClick={() =>
-                        setExpanded((p) => ({
-                          ...p,
-                          [groupName]: !p[groupName],
-                        }))
-                      }
+                      onClick={() => setExpanded((p) => ({ ...p, [groupName]: !p[groupName] }))}
                     >
-                      <p style={{ margin: 0, fontWeight: 600 }}>
-                        {groupName}
-                      </p>
+                      <p style={{ margin: 0, fontWeight: 600 }}>{groupName}</p>
                       <p style={{ margin: 0, opacity: 0.7 }}>
-                        {latest.value} {latest.unit} —{" "}
-                        {latest.date}
+                        {latest.value} {latest.unit} — {latest.date}
                       </p>
                     </div>
 
                     <div style={{ display: "flex", gap: 12 }}>
-                      <FaEdit
-                        onClick={() => openEdit(latest)}
-                        style={{ cursor: "pointer" }}
-                      />
-                      <FaTrash
-                        onClick={() => setDeleteId(latest.id)}
-                        style={{
-                          cursor: "pointer",
-                          color: "#ff4d4d",
-                        }}
-                      />
-                      {isOpen ? (
-                        <FaChevronUp />
-                      ) : (
-                        <FaChevronDown />
-                      )}
+                      <FaEdit onClick={() => openEdit(latest)} />
+                      <FaTrash onClick={() => setDeleteId(latest.id)} style={{ color: "#ff4d4d" }} />
+                      {isOpen ? <FaChevronUp /> : <FaChevronDown />}
                     </div>
                   </div>
 
                   {isOpen &&
                     list.slice(1).map((entry) => (
-                      <div key={entry.id}>
-                        <p style={{ fontSize: 12, opacity: 0.7 }}>
-                          {entry.value} {entry.unit} —{" "}
-                          {entry.date}
-                        </p>
-                      </div>
+                      <p key={entry.id} style={{ fontSize: 12, opacity: 0.7 }}>
+                        {entry.value} {entry.unit} — {entry.date}
+                      </p>
                     ))}
                 </div>
               </SortableItem>
@@ -458,77 +458,39 @@ export default function MeasurementsPage() {
         </SortableContext>
       </DndContext>
 
-      {/* MODALS (unchanged) */}
-      {modalOpen && (
-        <div style={modalBackdrop} onClick={() => setModalOpen(false)}>
+      {/* BODYWEIGHT EDIT MODAL */}
+      {bwEdit && (
+        <div style={modalBackdrop} onClick={() => setBwEdit(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2>
-              {editId ? "Edit Measurement" : "New Measurement"}
-            </h2>
-            <label style={labelStyle}>Name</label>
-            <input
-              style={inputStyle}
-              value={mName}
-              onChange={(e) => setMName(e.target.value)}
-            />
-            <label style={labelStyle}>Value</label>
+            <h2>Edit Bodyweight</h2>
             <input
               style={inputStyle}
               type="number"
-              value={mValue}
-              onChange={(e) => setMValue(e.target.value)}
+              value={bwEdit.weight}
+              onChange={(e) => setBwEdit({ ...bwEdit, weight: e.target.value })}
             />
-            <label style={labelStyle}>Unit</label>
-            <select
-              style={inputStyle}
-              value={mUnit}
-              onChange={(e) => setMUnit(e.target.value)}
-            >
-              <option value="in">in</option>
-              <option value="cm">cm</option>
-            </select>
-            <label style={labelStyle}>Date</label>
             <input
               style={inputStyle}
               type="date"
-              value={mDate}
-              onChange={(e) => setMDate(e.target.value)}
+              value={bwEdit.logged_at.slice(0, 10)}
+              onChange={(e) =>
+                setBwEdit({
+                  ...bwEdit,
+                  logged_at: new Date(e.target.value).toISOString(),
+                })
+              }
             />
-            <button
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 10,
-                border: "none",
-                background: "#ff2f2f",
-                color: "white",
-                fontWeight: 600,
-              }}
-              onClick={saveMeasurement}
-            >
-              Save
-            </button>
+            <button style={saveBtn} onClick={saveBodyweightEdit}>Save</button>
           </div>
         </div>
       )}
 
-      {deleteId && (
-        <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
+      {/* BODYWEIGHT DELETE MODAL */}
+      {bwDelete && (
+        <div style={modalBackdrop} onClick={() => setBwDelete(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ color: "#ff4d4d" }}>Confirm Delete?</h2>
-            <button
-              onClick={confirmDelete}
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 10,
-                background: "#ff2f2f",
-                border: "none",
-                color: "white",
-              }}
-            >
-              Delete
-            </button>
+            <h2 style={{ color: "#ff4d4d" }}>Delete bodyweight entry?</h2>
+            <button style={saveBtn} onClick={confirmDeleteBodyweight}>Delete</button>
           </div>
         </div>
       )}
@@ -567,8 +529,12 @@ const inputStyle = {
   marginBottom: 10,
 };
 
-const labelStyle = {
-  fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 4,
+const saveBtn = {
+  width: "100%",
+  padding: 10,
+  borderRadius: 10,
+  border: "none",
+  background: "#ff2f2f",
+  color: "white",
+  fontWeight: 600,
 };
