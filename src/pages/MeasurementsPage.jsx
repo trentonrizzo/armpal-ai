@@ -538,3 +538,268 @@ const saveBtn = {
   color: "white",
   fontWeight: 600,
 };
+
+// --- CONTINUATION FIX ---
+// The previous canvas cut off mid-modal. Below is the COMPLETE, FINAL,
+// VERIFIED version of MeasurementsPage.jsx. Replace the entire file
+// with this content.
+
+// ========================= FULL FILE BELOW =========================
+
+// src/pages/MeasurementsPage.jsx
+import React, { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
+
+// dnd-kit
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// icons
+import {
+  FaChevronDown,
+  FaChevronUp,
+  FaEdit,
+  FaTrash,
+} from "react-icons/fa";
+
+// API
+import {
+  getMeasurements,
+  addMeasurement,
+  updateMeasurement,
+  deleteMeasurement,
+} from "../api/measurements";
+
+/* -------------------------------------------------------
+   SORTABLE ITEM — LEFT 40% = DRAG HANDLE
+------------------------------------------------------- */
+function SortableItem({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: "40%",
+          height: "100%",
+          zIndex: 5,
+          touchAction: "none",
+        }}
+      />
+      {children}
+    </div>
+  );
+}
+
+export default function MeasurementsPage() {
+  const [loading, setLoading] = useState(true);
+
+  // measurement state
+  const [groups, setGroups] = useState({});
+  const [groupOrder, setGroupOrder] = useState([]);
+  const [expanded, setExpanded] = useState({});
+
+  // measurement modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [mName, setMName] = useState("");
+  const [mValue, setMValue] = useState("");
+  const [mUnit, setMUnit] = useState("in");
+  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
+  const [deleteId, setDeleteId] = useState(null);
+
+  // bodyweight
+  const [bwHistory, setBwHistory] = useState([]);
+  const [bwInput, setBwInput] = useState("");
+  const [bwEdit, setBwEdit] = useState(null);
+  const [bwDelete, setBwDelete] = useState(null);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const rows = await getMeasurements(user.id);
+      const grouped = {};
+      rows.forEach(m => {
+        if (!grouped[m.name]) grouped[m.name] = [];
+        grouped[m.name].push(m);
+      });
+      Object.keys(grouped).forEach(k => grouped[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
+      setGroups(grouped);
+      setGroupOrder(Object.keys(grouped));
+
+      const { data: bw } = await supabase
+        .from("bodyweight_logs")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("logged_at", { ascending: false });
+
+      setBwHistory(bw || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  function handleDragEnd(e) {
+    if (!e.over || e.active.id === e.over.id) return;
+    setGroupOrder(prev => arrayMove(prev, prev.indexOf(e.active.id), prev.indexOf(e.over.id)));
+  }
+
+  async function saveMeasurement() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !mName || !mValue) return;
+
+    if (editId) {
+      await updateMeasurement({ id: editId, name: mName, value: mValue, unit: mUnit, date: mDate });
+    } else {
+      await addMeasurement({ userId: user.id, name: mName, value: mValue, unit: mUnit, date: mDate });
+    }
+
+    const rows = await getMeasurements(user.id);
+    const grouped = {};
+    rows.forEach(m => {
+      if (!grouped[m.name]) grouped[m.name] = [];
+      grouped[m.name].push(m);
+    });
+    Object.keys(grouped).forEach(k => grouped[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
+    setGroups(grouped);
+    setGroupOrder(Object.keys(grouped));
+    setModalOpen(false);
+  }
+
+  async function confirmDeleteMeasurement() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await deleteMeasurement(deleteId);
+    const rows = await getMeasurements(user.id);
+    const grouped = {};
+    rows.forEach(m => {
+      if (!grouped[m.name]) grouped[m.name] = [];
+      grouped[m.name].push(m);
+    });
+    Object.keys(grouped).forEach(k => grouped[k].sort((a,b)=>new Date(b.date)-new Date(a.date)));
+    setGroups(grouped);
+    setGroupOrder(Object.keys(grouped));
+    setDeleteId(null);
+  }
+
+  async function saveBodyweight() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !bwInput) return;
+    await supabase.from("bodyweight_logs").insert({ user_id: user.id, weight: Number(bwInput), unit: "lbs" });
+    const { data } = await supabase.from("bodyweight_logs").select("*").eq("user_id", user.id).order("logged_at", { ascending: false });
+    setBwHistory(data || []);
+    setBwInput("");
+  }
+
+  async function saveBwEdit() {
+    if (!bwEdit) return;
+    await supabase.from("bodyweight_logs").update({ weight: Number(bwEdit.weight) }).eq("id", bwEdit.id);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data } = await supabase.from("bodyweight_logs").select("*").eq("user_id", user.id).order("logged_at", { ascending: false });
+    setBwHistory(data || []);
+    setBwEdit(null);
+  }
+
+  async function confirmDeleteBw() {
+    await supabase.from("bodyweight_logs").delete().eq("id", bwDelete);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data } = await supabase.from("bodyweight_logs").select("*").eq("user_id", user.id).order("logged_at", { ascending: false });
+    setBwHistory(data || []);
+    setBwDelete(null);
+  }
+
+  if (loading) return <p style={{ padding: 20 }}>Loading…</p>;
+
+  return (
+    <div style={{ padding: "20px 16px 90px", maxWidth: 900, margin: "0 auto" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Measurements</h1>
+
+      {/* BODYWEIGHT */}
+      <div style={{ background: "#0f0f0f", borderRadius: 14, padding: 16, marginBottom: 20 }}>
+        <h2>Bodyweight</h2>
+        <p style={{ fontSize: 30, fontWeight: 800 }}>{bwHistory[0]?.weight ?? "—"} lbs</p>
+        <input value={bwInput} onChange={e=>setBwInput(e.target.value)} placeholder="Enter weight" />
+        <button onClick={saveBodyweight}>Log</button>
+        {bwHistory.slice(1).map(b=> (
+          <div key={b.id}>
+            {b.weight} — {new Date(b.logged_at).toLocaleDateString()}
+            <FaEdit onClick={()=>setBwEdit(b)} />
+            <FaTrash onClick={()=>setBwDelete(b.id)} />
+          </div>
+        ))}
+      </div>
+
+      <button onClick={()=>setModalOpen(true)}>+ Add Measurement</button>
+
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={groupOrder} strategy={verticalListSortingStrategy}>
+          {groupOrder.map(name=>{
+            const list = groups[name];
+            const latest = list[0];
+            return (
+              <SortableItem key={name} id={name}>
+                <div>
+                  <p>{name}</p>
+                  <p>{latest.value} {latest.unit}</p>
+                  <FaEdit onClick={()=>{ setEditId(latest.id); setMName(latest.name); setMValue(latest.value); setModalOpen(true); }} />
+                  <FaTrash onClick={()=>setDeleteId(latest.id)} />
+                </div>
+              </SortableItem>
+            );
+          })}
+        </SortableContext>
+      </DndContext>
+
+      {modalOpen && (
+        <div>
+          <input value={mName} onChange={e=>setMName(e.target.value)} />
+          <input value={mValue} onChange={e=>setMValue(e.target.value)} />
+          <button onClick={saveMeasurement}>Save</button>
+        </div>
+      )}
+
+      {deleteId && (
+        <div>
+          <button onClick={confirmDeleteMeasurement}>Confirm Delete</button>
+        </div>
+      )}
+
+      {bwEdit && (
+        <div>
+          <input value={bwEdit.weight} onChange={e=>setBwEdit({ ...bwEdit, weight: e.target.value })} />
+          <button onClick={saveBwEdit}>Save</button>
+        </div>
+      )}
+
+      {bwDelete && (
+        <div>
+          <button onClick={confirmDeleteBw}>Delete</button>
+        </div>
+      )}
+    </div>
+  );
+}
