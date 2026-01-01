@@ -27,10 +27,10 @@ export default function Analytics() {
     }
 
     const { data, error } = await supabase
-      .from("bodyweight")
-      .select("weight, date")
+      .from("bodyweight_logs")
+      .select("weight, logged_at")
       .eq("user_id", user.id)
-      .order("date", { ascending: true });
+      .order("logged_at", { ascending: true });
 
     if (error) {
       setWeights([]);
@@ -41,9 +41,10 @@ export default function Analytics() {
     setLoading(false);
   }
 
-  const latest = weights.length ? weights[weights.length - 1].weight : null;
+  const latest =
+    weights.length > 0 ? weights[weights.length - 1].weight : null;
 
-  /* ---------- GRAPH HELPERS ---------- */
+  /* ===== GRAPH MATH ===== */
   const maxW = Math.max(...weights.map((w) => w.weight), 0);
   const minW = Math.min(...weights.map((w) => w.weight), maxW);
 
@@ -59,12 +60,22 @@ export default function Analytics() {
   const path =
     weights.length > 1
       ? weights
-          .map((w, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(w.weight)}`)
+          .map(
+            (w, i) =>
+              `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(w.weight)}`
+          )
           .join(" ")
       : "";
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b0b0f", color: "#fff", padding: 16 }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0b0b0f",
+        color: "#fff",
+        padding: 16,
+      }}
+    >
       <button
         onClick={() => navigate(-1)}
         style={{
@@ -78,11 +89,11 @@ export default function Analytics() {
         ← Back
       </button>
 
-      <div style={{ marginTop: 14, fontSize: 22, fontWeight: 800 }}>
+      <div style={{ marginTop: 14, fontSize: 22, fontWeight: 900 }}>
         Smart Analytics
       </div>
 
-      {/* Tabs */}
+      {/* TABS */}
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         {[
           ["bodyweight", "Bodyweight"],
@@ -99,7 +110,7 @@ export default function Analytics() {
               border: "1px solid rgba(255,255,255,0.12)",
               background:
                 tab === key
-                  ? "linear-gradient(90deg, #ff2f2f, #ff6b4a)"
+                  ? "linear-gradient(90deg, #ff2f2f, #ff3b3b)"
                   : "rgba(255,255,255,0.04)",
               color: "#fff",
               fontWeight: 800,
@@ -110,15 +121,15 @@ export default function Analytics() {
         ))}
       </div>
 
-      {/* BODYWEIGHT ANALYTICS */}
+      {/* BODYWEIGHT */}
       {tab === "bodyweight" && (
         <div
           style={{
             marginTop: 14,
-            padding: 14,
-            borderRadius: 16,
+            padding: 16,
+            borderRadius: 18,
             border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(255,255,255,0.04)",
+            background: "#101014",
           }}
         >
           {loading ? (
@@ -129,13 +140,27 @@ export default function Analytics() {
             </p>
           ) : (
             <>
-              <div style={{ fontSize: 14, opacity: 0.8 }}>Current Bodyweight</div>
-              <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 10 }}>
+              {/* HERO */}
+              <div style={{ fontSize: 13, opacity: 0.75 }}>
+                Current Bodyweight
+              </div>
+              <div
+                style={{
+                  fontSize: 34,
+                  fontWeight: 900,
+                  marginBottom: 12,
+                }}
+              >
                 {latest} lb
               </div>
 
               {/* GRAPH */}
-              <svg width="100%" height="160" viewBox="0 0 300 160">
+              <svg
+                width="100%"
+                height="170"
+                viewBox="0 0 300 170"
+                style={{ marginBottom: 12 }}
+              >
                 <path
                   d={path}
                   fill="none"
@@ -148,13 +173,13 @@ export default function Analytics() {
                     cx={getX(i)}
                     cy={getY(w.weight)}
                     r="3"
-                    fill="#fff"
+                    fill="#ff2f2f"
                   />
                 ))}
               </svg>
 
               {/* LIST */}
-              <div style={{ marginTop: 12 }}>
+              <div>
                 {weights
                   .slice()
                   .reverse()
@@ -165,11 +190,14 @@ export default function Analytics() {
                         display: "flex",
                         justifyContent: "space-between",
                         fontSize: 13,
-                        padding: "4px 0",
-                        borderBottom: "1px solid rgba(255,255,255,0.06)",
+                        padding: "6px 0",
+                        borderBottom:
+                          "1px solid rgba(255,255,255,0.06)",
                       }}
                     >
-                      <span>{new Date(w.date).toLocaleDateString()}</span>
+                      <span>
+                        {new Date(w.logged_at).toLocaleDateString()}
+                      </span>
                       <span>{w.weight} lb</span>
                     </div>
                   ))}
@@ -184,10 +212,10 @@ export default function Analytics() {
         <div
           style={{
             marginTop: 14,
-            padding: 14,
-            borderRadius: 16,
+            padding: 16,
+            borderRadius: 18,
             border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(255,255,255,0.04)",
+            background: "#101014",
             opacity: 0.7,
           }}
         >
