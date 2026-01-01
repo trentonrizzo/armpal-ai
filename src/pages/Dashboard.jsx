@@ -6,6 +6,9 @@ import { Link } from "react-router-dom";
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
 
+// SMART ANALYTICS (READ-ONLY)
+import SmartAnalytics from "../components/SmartAnalytics";
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [displayName, setDisplayName] = useState("Athlete");
@@ -251,6 +254,9 @@ export default function Dashboard() {
           Don’t wait for motivation — build it under the bar.
         </div>
       </section>
+
+      {/* SMART ANALYTICS (READ-ONLY) */}
+      <SmartAnalytics />
 
       {/* GOALS */}
       <section style={{ marginBottom: 20 }}>
@@ -556,9 +562,7 @@ export default function Dashboard() {
                     }}
                   >
                     <span>{row.reps}</span>
-                    <span style={{ textAlign: "right" }}>
-                      {row.weight} lb
-                    </span>
+                    <span style={{ textAlign: "right" }}>{row.weight} lb</span>
                   </div>
                 ))}
               </div>
