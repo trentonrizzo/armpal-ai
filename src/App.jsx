@@ -21,6 +21,9 @@ import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
 import usePresence from "./hooks/usePresence";
 
+/* 🔹 ADDED: Smart Analytics page */
+import Analytics from "./pages/Analytics";
+
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
@@ -62,6 +65,9 @@ function AppContent() {
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* 🔹 ADDED: Smart Analytics route */}
+        <Route path="/analytics" element={<Analytics />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
