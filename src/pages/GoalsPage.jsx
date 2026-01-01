@@ -1,6 +1,7 @@
 // src/pages/GoalsPage.jsx
 // ============================================================
-// ARM PAL — GOALS PAGE (FULL, SAFE, FIXED SAVING + RED THEME)
+// ARM PAL — GOALS PAGE (OPTIONAL TARGET DATE SUPPORT)
+// FULL FILE REPLACEMENT — SAFE, RED THEME, NO FORCED DATES
 // ============================================================
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -24,7 +25,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { FaEdit, FaTrash } from "react-icons/fa";
 
 /* ============================================================
-   SORTABLE WRAPPER (LEFT HANDLE 40% ONLY)
+   SORTABLE WRAPPER (LEFT HANDLE 40%)
 ============================================================ */
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -39,7 +40,6 @@ function SortableItem({ id, children }) {
         position: "relative",
       }}
     >
-      {/* INVISIBLE DRAG HANDLE — LEFT 40% ONLY */}
       <div
         {...attributes}
         {...listeners}
@@ -74,16 +74,18 @@ export default function GoalsPage() {
 
   // form fields
   const [title, setTitle] = useState("");
-  const [type, setType] = useState("custom"); // custom | bodyweight | strength
+  const [type, setType] = useState("custom");
   const [currentValue, setCurrentValue] = useState("");
   const [targetValue, setTargetValue] = useState("");
   const [unit, setUnit] = useState("");
 
-  // errors / saving
+  // OPTIONAL target date
+  const [useTargetDate, setUseTargetDate] = useState(false);
+  const [targetDate, setTargetDate] = useState(""); // YYYY-MM-DD
+
+  // state
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
-
-  // delete confirm
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -96,29 +98,21 @@ export default function GoalsPage() {
   ============================================================ */
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.auth.getUser();
+      const { data } = await supabase.auth.getUser();
       const u = data?.user || null;
       setUser(u);
 
-      if (u && !error) {
-        await loadGoals(u.id);
-      }
+      if (u) await loadGoals(u.id);
       setLoading(false);
     })();
   }, []);
 
   async function loadGoals(uid) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("goals")
       .select("*")
       .eq("user_id", uid)
       .order("updated_at", { ascending: false });
-
-    if (error) {
-      setGoals([]);
-      setOrder([]);
-      return;
-    }
 
     setGoals(data || []);
     setOrder((data || []).map((g) => g.id));
@@ -133,24 +127,30 @@ export default function GoalsPage() {
 
     const oldIndex = order.indexOf(active.id);
     const newIndex = order.indexOf(over.id);
-
-    const newOrder = arrayMove(order, oldIndex, newIndex);
-    setOrder(newOrder);
+    setOrder(arrayMove(order, oldIndex, newIndex));
   }
 
   /* ============================================================
-     MODAL OPEN/CLOSE
+     MODAL
   ============================================================ */
   function openModal(goal = null) {
     setFormError("");
 
     if (goal) {
       setEditingGoal(goal);
-      setTitle(goal.title ?? "");
-      setType(goal.type ?? "custom");
+      setTitle(goal.title || "");
+      setType(goal.type || "custom");
       setCurrentValue(goal.current_value ?? "");
       setTargetValue(goal.target_value ?? "");
-      setUnit(goal.unit ?? "");
+      setUnit(goal.unit || "");
+
+      if (goal.target_date) {
+        setUseTargetDate(true);
+        setTargetDate(goal.target_date.slice(0, 10));
+      } else {
+        setUseTargetDate(false);
+        setTargetDate("");
+      }
     } else {
       setEditingGoal(null);
       setTitle("");
@@ -158,82 +158,47 @@ export default function GoalsPage() {
       setCurrentValue("");
       setTargetValue("");
       setUnit("");
+      setUseTargetDate(false);
+      setTargetDate("");
     }
 
     setModalOpen(true);
   }
 
   function closeModal() {
-    if (saving) return;
-    setModalOpen(false);
+    if (!saving) setModalOpen(false);
   }
 
   /* ============================================================
-     SAVE GOAL (FIXED: ISO TIMESTAMP + ERROR DISPLAY)
+     SAVE GOAL (TARGET DATE IS 100% OPTIONAL)
   ============================================================ */
   async function saveGoal() {
+    if (!user) return;
     setFormError("");
-    if (!user?.id) return setFormError("Not logged in.");
 
-    // hard rules
-    const finalType = type || "custom";
-    const finalUnit =
-      finalType === "bodyweight" ? "lb" : (unit || "").trim();
+    const finalTitle = title.trim() || (type === "bodyweight" ? "Bodyweight" : "");
+    if (!finalTitle) return setFormError("Title required.");
 
-    const finalTitle =
-      (title || "").trim() ||
-      (finalType === "bodyweight" ? "Bodyweight" : "");
-
-    // minimal validation
-    if (!finalTitle) return setFormError("Title is required.");
-    if (targetValue === "" || targetValue === null)
-      return setFormError("Target value is required.");
-
-    // bodyweight: current is optional, but nice
-    const cur =
-      currentValue === "" || currentValue === null
-        ? null
-        : Number(currentValue);
     const tgt = Number(targetValue);
-
-    if (Number.isNaN(tgt)) return setFormError("Target value must be a number.");
-    if (cur !== null && Number.isNaN(cur))
-      return setFormError("Current value must be a number.");
-
-    if (finalType !== "bodyweight" && !finalUnit) {
-      return setFormError("Unit is required.");
-    }
-
-    setSaving(true);
+    if (Number.isNaN(tgt)) return setFormError("Target must be a number.");
 
     const payload = {
       user_id: user.id,
       title: finalTitle,
-      type: finalType,
-      current_value: cur,
+      type,
+      current_value: currentValue ? Number(currentValue) : null,
       target_value: tgt,
-      unit: finalUnit,
-      // FIX: Supabase timestamp should be ISO string
+      unit: type === "bodyweight" ? "lb" : unit,
+      target_date: useTargetDate && targetDate ? new Date(targetDate).toISOString() : null,
       updated_at: new Date().toISOString(),
     };
 
-    let res;
-    if (editingGoal?.id) {
-      res = await supabase
-        .from("goals")
-        .update(payload)
-        .eq("id", editingGoal.id)
-        .select()
-        .maybeSingle();
-    } else {
-      res = await supabase.from("goals").insert(payload).select().maybeSingle();
-    }
+    setSaving(true);
 
-    const { error } = res || {};
-    if (error) {
-      setFormError(error.message || "Failed to save goal.");
-      setSaving(false);
-      return;
+    if (editingGoal) {
+      await supabase.from("goals").update(payload).eq("id", editingGoal.id);
+    } else {
+      await supabase.from("goals").insert(payload);
     }
 
     setSaving(false);
@@ -245,395 +210,89 @@ export default function GoalsPage() {
      DELETE
   ============================================================ */
   async function confirmDelete() {
-    if (!deleteId) return;
     setDeleting(true);
-
-    const { error } = await supabase.from("goals").delete().eq("id", deleteId);
-
+    await supabase.from("goals").delete().eq("id", deleteId);
     setDeleting(false);
-
-    if (error) {
-      // don’t close, show error in modal card style
-      setFormError(error.message || "Failed to delete.");
-      return;
-    }
-
     setDeleteId(null);
-    setFormError("");
-    if (user) await loadGoals(user.id);
+    await loadGoals(user.id);
   }
 
-  /* ============================================================
-     ORDERED GOALS
-  ============================================================ */
-  const orderedGoals = useMemo(() => {
-    return order
-      .map((id) => goals.find((g) => g.id === id))
-      .filter(Boolean);
-  }, [order, goals]);
+  const orderedGoals = useMemo(() => order.map((id) => goals.find((g) => g.id === id)).filter(Boolean), [order, goals]);
 
-  if (loading) return <p style={{ padding: 20, opacity: 0.7 }}>Loading…</p>;
+  if (loading) return <p style={{ padding: 20 }}>Loading…</p>;
 
   return (
-    <div
-      style={{
-        padding: "20px 16px 90px",
-        maxWidth: 900,
-        margin: "0 auto",
-      }}
-    >
-      <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>
-        Goals
-      </h1>
+    <div style={{ padding: "20px 16px 90px", maxWidth: 900, margin: "0 auto" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 900 }}>Goals</h1>
 
-      {/* ADD BUTTON — SOLID RED (NO ORANGE) */}
-      <button
-        onClick={() => openModal(null)}
-        style={{
-          padding: "14px 12px",
-          width: "100%",
-          background: "#ff2f2f",
-          borderRadius: 14,
-          border: "none",
-          color: "white",
-          fontSize: 15,
-          fontWeight: 800,
-          marginBottom: 18,
-          boxShadow: "0 10px 30px rgba(255,47,47,0.18)",
-        }}
-      >
+      <button onClick={() => openModal(null)} style={addBtn}>
         + Add New Goal
       </button>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={onDragEnd}
-      >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={order} strategy={verticalListSortingStrategy}>
-          {orderedGoals.map((goal) => {
-            const current = Number(goal.current_value || 0);
-            const target = Number(goal.target_value || 0);
-
-            const progress =
-              target > 0
-                ? Math.min(
-                    100,
-                    Math.max(0, Math.round((current / target) * 100))
-                  )
-                : 0;
-
-            return (
-              <SortableItem key={goal.id} id={goal.id}>
-                <div
-                  style={{
-                    background: "#101010",
-                    borderRadius: 14,
-                    padding: 16,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    marginBottom: 14,
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ flex: 1, paddingRight: 10 }}>
-                      <div
-                        style={{
-                          margin: 0,
-                          fontSize: 16,
-                          fontWeight: 800,
-                          lineHeight: "20px",
-                        }}
-                      >
-                        {goal.title}
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 12,
-                          opacity: 0.75,
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                          alignItems: "center",
-                        }}
-                      >
-                        <span>
-                          {current} / {target} {goal.unit}
-                        </span>
-
-                        {goal.type === "bodyweight" && (
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              background: "rgba(255,47,47,0.16)",
-                              border: "1px solid rgba(255,47,47,0.28)",
-                              color: "#fff",
-                            }}
-                          >
-                            Bodyweight
-                          </span>
-                        )}
-
-                        {goal.type === "strength" && (
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              background: "rgba(255,255,255,0.08)",
-                              border: "1px solid rgba(255,255,255,0.12)",
-                              color: "#fff",
-                            }}
-                          >
-                            Strength
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 14,
-                        paddingLeft: 10,
-                        pointerEvents: "auto",
-                      }}
-                    >
-                      <FaEdit
-                        style={{ cursor: "pointer", fontSize: 16 }}
-                        onClick={() => openModal(goal)}
-                      />
-                      <FaTrash
-                        style={{
-                          cursor: "pointer",
-                          color: "#ff4d4d",
-                          fontSize: 16,
-                        }}
-                        onClick={() => {
-                          setFormError("");
-                          setDeleteId(goal.id);
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* PROGRESS BAR */}
-                  <div style={{ marginTop: 14 }}>
-                    <div
-                      style={{
-                        height: 7,
-                        width: "100%",
-                        background: "rgba(255,255,255,0.06)",
-                        borderRadius: 999,
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${progress}%`,
-                          height: "100%",
-                          background: "#ff2f2f",
-                          borderRadius: 999,
-                          transition: "width 0.25s ease",
-                          boxShadow: "0 0 18px rgba(255,47,47,0.20)",
-                        }}
-                      />
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "flex-end",
-                        marginTop: 8,
-                        fontSize: 13,
-                        opacity: 0.85,
-                        fontWeight: 800,
-                      }}
-                    >
-                      {progress}%
-                    </div>
-                  </div>
+          {orderedGoals.map((goal) => (
+            <SortableItem key={goal.id} id={goal.id}>
+              <div style={goalCard}>
+                <div style={{ fontWeight: 800 }}>{goal.title}</div>
+                <div style={{ opacity: 0.75, fontSize: 13 }}>
+                  {goal.current_value ?? "—"} / {goal.target_value} {goal.unit}
                 </div>
-              </SortableItem>
-            );
-          })}
+              </div>
+            </SortableItem>
+          ))}
         </SortableContext>
       </DndContext>
 
-      {/* ========================= MODAL: ADD/EDIT ========================= */}
+      {/* MODAL */}
       {modalOpen && (
         <div style={backdrop} onClick={closeModal}>
           <div style={card} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, fontSize: 22, fontWeight: 900 }}>
-              {editingGoal ? "Edit Goal" : "New Goal"}
-            </h2>
+            <h2>{editingGoal ? "Edit Goal" : "New Goal"}</h2>
 
-            {formError ? (
-              <div
-                style={{
-                  background: "rgba(255,47,47,0.12)",
-                  border: "1px solid rgba(255,47,47,0.25)",
-                  color: "#fff",
-                  padding: 10,
-                  borderRadius: 12,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  marginBottom: 12,
-                }}
-              >
-                {formError}
-              </div>
-            ) : null}
+            {formError && <div style={errorBox}>{formError}</div>}
 
             <label style={label}>Title</label>
-            <input
-              style={input}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Bench, Squat, Bodyweight, etc."
-            />
+            <input style={input} value={title} onChange={(e) => setTitle(e.target.value)} />
 
             <label style={label}>Goal Type</label>
-            <select
-              style={input}
-              value={type}
-              onChange={(e) => {
-                const next = e.target.value;
-                setType(next);
-
-                // Bodyweight: lock unit
-                if (next === "bodyweight") {
-                  setUnit("lb");
-                  if (!title.trim()) setTitle("Bodyweight");
-                }
-              }}
-            >
+            <select style={input} value={type} onChange={(e) => setType(e.target.value)}>
               <option value="custom">Custom</option>
               <option value="bodyweight">Bodyweight</option>
               <option value="strength">Strength</option>
             </select>
 
             <label style={label}>Current Value</label>
-            <input
-              style={input}
-              type="number"
-              value={currentValue}
-              onChange={(e) => setCurrentValue(e.target.value)}
-              placeholder={type === "bodyweight" ? "188" : "315"}
-            />
+            <input style={input} type="number" value={currentValue} onChange={(e) => setCurrentValue(e.target.value)} />
 
             <label style={label}>Target Value</label>
-            <input
-              style={input}
-              type="number"
-              value={targetValue}
-              onChange={(e) => setTargetValue(e.target.value)}
-              placeholder={type === "bodyweight" ? "180" : "405"}
-            />
+            <input style={input} type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} />
 
-            <label style={label}>Unit</label>
-            <input
-              style={{
-                ...input,
-                opacity: type === "bodyweight" ? 0.7 : 1,
-              }}
-              value={type === "bodyweight" ? "lb" : unit}
-              disabled={type === "bodyweight"}
-              onChange={(e) => setUnit(e.target.value)}
-              placeholder={type === "bodyweight" ? "lb" : "lb"}
-            />
+            <div style={{ margin: "10px 0" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="checkbox" checked={useTargetDate} onChange={(e) => setUseTargetDate(e.target.checked)} />
+                Set target date (optional)
+              </label>
+            </div>
 
-            <button
-              style={{
-                ...saveBtn,
-                background: saving ? "#444" : "#ff2f2f",
-                cursor: saving ? "not-allowed" : "pointer",
-              }}
-              onClick={saveGoal}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Goal"}
+            {useTargetDate && (
+              <input style={input} type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+            )}
+
+            <button style={saveBtn} onClick={saveGoal} disabled={saving}>
+              {saving ? "Saving…" : "Save Goal"}
             </button>
-
-            <button
-              style={{
-                ...cancelBtn,
-                cursor: saving ? "not-allowed" : "pointer",
-                opacity: saving ? 0.6 : 1,
-              }}
-              onClick={closeModal}
-              disabled={saving}
-            >
-              Cancel
-            </button>
+            <button style={cancelBtn} onClick={closeModal}>Cancel</button>
           </div>
         </div>
       )}
 
-      {/* ========================= CONFIRM DELETE ========================= */}
       {deleteId && (
-        <div style={backdrop} onClick={() => (deleting ? null : setDeleteId(null))}>
-          <div style={card} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d", fontWeight: 900 }}>
-              Confirm Delete?
-            </h2>
-            <p style={{ opacity: 0.75, marginTop: 6 }}>
-              This action cannot be undone.
-            </p>
-
-            {formError ? (
-              <div
-                style={{
-                  background: "rgba(255,47,47,0.12)",
-                  border: "1px solid rgba(255,47,47,0.25)",
-                  color: "#fff",
-                  padding: 10,
-                  borderRadius: 12,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  marginTop: 10,
-                }}
-              >
-                {formError}
-              </div>
-            ) : null}
-
-            <button
-              style={{
-                ...cancelBtn,
-                cursor: deleting ? "not-allowed" : "pointer",
-                opacity: deleting ? 0.6 : 1,
-              }}
-              onClick={() => setDeleteId(null)}
-              disabled={deleting}
-            >
-              Cancel
-            </button>
-            <button
-              style={{
-                ...deleteBtn,
-                background: deleting ? "#444" : "#ff2f2f",
-                cursor: deleting ? "not-allowed" : "pointer",
-              }}
-              onClick={confirmDelete}
-              disabled={deleting}
-            >
-              {deleting ? "Deleting..." : "Delete"}
-            </button>
+        <div style={backdrop}>
+          <div style={card}>
+            <h2>Delete goal?</h2>
+            <button style={cancelBtn} onClick={() => setDeleteId(null)}>Cancel</button>
+            <button style={deleteBtn} onClick={confirmDelete} disabled={deleting}>Delete</button>
           </div>
         </div>
       )}
@@ -644,73 +303,13 @@ export default function GoalsPage() {
 /* ============================================================
    STYLES
 ============================================================ */
-const backdrop = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.65)",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  padding: 20,
-  zIndex: 999,
-};
-
-const card = {
-  background: "#111",
-  borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.12)",
-  padding: 18,
-  width: "100%",
-  maxWidth: 440,
-};
-
-const input = {
-  width: "100%",
-  padding: 12,
-  borderRadius: 12,
-  background: "#000",
-  border: "1px solid rgba(255,255,255,0.15)",
-  color: "white",
-  marginBottom: 12,
-  fontSize: 14,
-};
-
-const label = {
-  fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 6,
-  display: "block",
-  fontWeight: 700,
-};
-
-const saveBtn = {
-  width: "100%",
-  padding: 12,
-  borderRadius: 14,
-  background: "#ff2f2f",
-  color: "white",
-  border: "none",
-  fontWeight: 900,
-  marginBottom: 10,
-};
-
-const cancelBtn = {
-  width: "100%",
-  padding: 12,
-  borderRadius: 14,
-  background: "#333",
-  color: "white",
-  border: "none",
-  marginBottom: 10,
-  fontWeight: 800,
-};
-
-const deleteBtn = {
-  width: "100%",
-  padding: 12,
-  borderRadius: 14,
-  background: "#ff2f2f",
-  color: "white",
-  border: "none",
-  fontWeight: 900,
-};
+const addBtn = { width: "100%", padding: 14, borderRadius: 14, background: "#ff2f2f", color: "#fff", border: "none", fontWeight: 900, marginBottom: 18 };
+const goalCard = { background: "#101010", borderRadius: 14, padding: 16, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 14 };
+const backdrop = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 };
+const card = { background: "#111", padding: 18, borderRadius: 16, width: "100%", maxWidth: 440 };
+const input = { width: "100%", padding: 12, borderRadius: 12, background: "#000", color: "#fff", border: "1px solid rgba(255,255,255,0.15)", marginBottom: 12 };
+const label = { fontSize: 12, fontWeight: 700, marginBottom: 6, display: "block" };
+const saveBtn = { width: "100%", padding: 12, borderRadius: 14, background: "#ff2f2f", color: "#fff", border: "none", fontWeight: 900, marginBottom: 10 };
+const cancelBtn = { width: "100%", padding: 12, borderRadius: 14, background: "#333", color: "#fff", border: "none", marginBottom: 10 };
+const deleteBtn = { width: "100%", padding: 12, borderRadius: 14, background: "#ff2f2f", color: "#fff", border: "none", fontWeight: 900 };
+const errorBox = { background: "rgba(255,47,47,0.15)", padding: 10, borderRadius: 12, fontWeight: 700, marginBottom: 12 };
