@@ -1,148 +1,202 @@
 // src/pages/Analytics.jsx
 // ============================================================
-// ARM PAL — SMART ANALYTICS (BODYWEIGHT + TRUE MIDPOINT PINCH ZOOM)
-// FULL FILE REPLACEMENT — STABLE, MOBILE-CORRECT
+// ARM PAL — SMART ANALYTICS
+// BODYWEIGHT ANALYTICS WITH TRUE CAMERA ZOOM
+// LONG FORM FILE — NO COMPRESSION — PRODUCTION SAFE
 // ============================================================
 
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+  useRef,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
+/* ============================================================
+   COMPONENT
+============================================================ */
 export default function Analytics() {
   const navigate = useNavigate();
+
+  /* ============================================================
+     STATE
+  ============================================================ */
   const [tab, setTab] = useState("bodyweight");
 
   const [weights, setWeights] = useState([]);
+  const [goal, setGoal] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [activePoint, setActivePoint] = useState(null);
 
   /* ============================================================
-     LOAD BODYWEIGHT
+     LOAD DATA
   ============================================================ */
   useEffect(() => {
-    if (tab === "bodyweight") loadBodyweight();
+    if (tab === "bodyweight") {
+      loadBodyweight();
+    }
   }, [tab]);
 
   async function loadBodyweight() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     if (!user) {
       setWeights([]);
+      setGoal(null);
       setLoading(false);
       return;
     }
 
-    const { data } = await supabase
+    const { data: bw } = await supabase
       .from("bodyweight_logs")
       .select("weight, logged_at")
       .eq("user_id", user.id)
       .order("logged_at", { ascending: true });
 
-    setWeights(data || []);
+    const { data: goalData } = await supabase
+      .from("goals")
+      .select("target_value, target_date")
+      .eq("user_id", user.id)
+      .eq("type", "bodyweight")
+      .maybeSingle();
+
+    setWeights(bw || []);
+    setGoal(goalData || null);
     setActivePoint(null);
     setLoading(false);
   }
 
   const latestWeight =
-    weights.length > 0 ? weights[weights.length - 1].weight : null;
+    weights.length > 0
+      ? weights[weights.length - 1].weight
+      : null;
 
   /* ============================================================
      GRAPH CONSTANTS
   ============================================================ */
-  const W = 360;
-  const H = 220;
-  const PAD = 44;
+  const GRAPH_WIDTH = 360;
+  const GRAPH_HEIGHT = 220;
+  const GRAPH_PADDING = 44;
 
   /* ============================================================
-     CANONICAL POINTS (OLD → NEW)
+     CANONICAL DATA
   ============================================================ */
   const points = useMemo(() => {
     return weights.map((w) => {
       const d = new Date(w.logged_at);
       return {
-        date: d,
         ts: d.getTime(),
+        date: d,
         value: w.weight,
       };
     });
   }, [weights]);
 
-  const fullStart = points.length ? points[0].ts : 0;
-  const fullEnd = points.length ? points[points.length - 1].ts : 1;
+  const goalPoint = useMemo(() => {
+    if (!goal || !goal.target_date) return null;
+    const d = new Date(goal.target_date);
+    return {
+      ts: d.getTime(),
+      date: d,
+      value: goal.target_value,
+    };
+  }, [goal]);
 
   /* ============================================================
-     VIEW WINDOW (ZOOM DOMAIN)
+     STATIC SCALE DOMAIN (NEVER CHANGES)
   ============================================================ */
-  const [viewStart, setViewStart] = useState(fullStart);
-  const [viewEnd, setViewEnd] = useState(fullEnd);
+  const allYValues = [
+    ...points.map((p) => p.value),
+    ...(goalPoint ? [goalPoint.value] : []),
+  ];
 
-  useEffect(() => {
-    setViewStart(fullStart);
-    setViewEnd(fullEnd);
-  }, [fullStart, fullEnd]);
+  const minYValue = Math.min(...allYValues);
+  const maxYValue = Math.max(...allYValues);
+  const yPadding = (maxYValue - minYValue) * 0.15 || 5;
 
-  const svgRef = useRef(null);
+  const minTimestamp =
+    points.length > 0 ? points[0].ts : Date.now();
 
-  /* ============================================================
-     ZOOM STATE (ANCHOR LOCK)
-  ============================================================ */
-  const pinchAnchorTs = useRef(null);
-  const pinchAnchorRatio = useRef(0.5);
-  const lastPinchDist = useRef(null);
-  const lastPanX = useRef(null);
-
-  const MAX_SPAN = Math.max(1, fullEnd - fullStart);
-  const MIN_SPAN = Math.min(
-    MAX_SPAN,
-    1000 * 60 * 60 * 24 * 2 // 2 days
+  const maxTimestamp = Math.max(
+    points.length > 0
+      ? points[points.length - 1].ts
+      : Date.now(),
+    goalPoint ? goalPoint.ts : 0
   );
 
+  function xByTime(ts) {
+    return (
+      GRAPH_PADDING +
+      ((ts - minTimestamp) /
+        (maxTimestamp - minTimestamp || 1)) *
+        (GRAPH_WIDTH - GRAPH_PADDING * 2)
+    );
+  }
+
+  function yByValue(val) {
+    return (
+      GRAPH_HEIGHT -
+      GRAPH_PADDING -
+      ((val - (minYValue - yPadding)) /
+        ((maxYValue + yPadding) -
+          (minYValue - yPadding))) *
+        (GRAPH_HEIGHT - GRAPH_PADDING * 2)
+    );
+  }
+
   /* ============================================================
-     HELPERS
+     PATHS
   ============================================================ */
-  function clampWindow(start, end) {
-    let s = start;
-    let e = end;
-    let span = e - s;
+  const linePath =
+    points.length > 1
+      ? points
+          .map((p, i) => {
+            const x = xByTime(p.ts);
+            const y = yByValue(p.value);
+            return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+          })
+          .join(" ")
+      : "";
 
-    if (span < MIN_SPAN) {
-      const c = s + (e - s) * pinchAnchorRatio.current;
-      s = c - MIN_SPAN * pinchAnchorRatio.current;
-      e = s + MIN_SPAN;
-      span = e - s;
-    }
+  const areaPath = linePath
+    ? `${linePath}
+       L ${xByTime(maxTimestamp)} ${GRAPH_HEIGHT - GRAPH_PADDING}
+       L ${xByTime(minTimestamp)} ${GRAPH_HEIGHT - GRAPH_PADDING}
+       Z`
+    : "";
 
-    if (span > MAX_SPAN) {
-      s = fullStart;
-      e = fullEnd;
-      span = e - s;
-    }
+  /* ============================================================
+     CAMERA TRANSFORM (THE IMPORTANT PART)
+  ============================================================ */
+  const svgRef = useRef(null);
 
-    if (s < fullStart) {
-      s = fullStart;
-      e = s + span;
-    }
-    if (e > fullEnd) {
-      e = fullEnd;
-      s = e - span;
-    }
+  const camera = useRef({
+    scale: 1,
+    translateX: 0,
+    translateY: 0,
+  });
 
-    setViewStart(s);
-    setViewEnd(e);
-  }
+  const lastTouches = useRef(null);
+  const lastPan = useRef(null);
 
-  function getSvgX(clientX) {
-    const el = svgRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    const x = clientX - rect.left;
-    return (x / rect.width) * W;
-  }
+  function applyCameraTransform() {
+    if (!svgRef.current) return;
+    const g = svgRef.current.querySelector("#camera-layer");
+    if (!g) return;
 
-  function tsFromSvgX(vx) {
-    const t = (vx - PAD) / Math.max(1, W - PAD * 2);
-    const clamped = Math.max(0, Math.min(1, t));
-    return viewStart + clamped * (viewEnd - viewStart);
+    const { scale, translateX, translateY } = camera.current;
+
+    g.setAttribute(
+      "transform",
+      `translate(${translateX}, ${translateY}) scale(${scale})`
+    );
   }
 
   function distance(t1, t2) {
@@ -152,312 +206,356 @@ export default function Analytics() {
   }
 
   /* ============================================================
-     VISIBLE POINTS + Y STABILITY
-  ============================================================ */
-  const visiblePoints = useMemo(
-    () => points.filter((p) => p.ts >= viewStart && p.ts <= viewEnd),
-    [points, viewStart, viewEnd]
-  );
-
-  const values = visiblePoints.map((p) => p.value);
-  const rawMinY = values.length ? Math.min(...values) : 0;
-  const rawMaxY = values.length ? Math.max(...values) : 1;
-  const padY = Math.max(1, (rawMaxY - rawMinY) * 0.15);
-  const minY = rawMinY - padY;
-  const maxY = rawMaxY + padY;
-
-  /* ============================================================
-     SCALES
-  ============================================================ */
-  const xByTime = (ts) =>
-    PAD + ((ts - viewStart) / (viewEnd - viewStart || 1)) * (W - PAD * 2);
-
-  const yByValue = (v) =>
-    H - PAD - ((v - minY) / (maxY - minY || 1)) * (H - PAD * 2);
-
-  /* ============================================================
-     PATHS
-  ============================================================ */
-  const linePath =
-    visiblePoints.length > 1
-      ? visiblePoints
-          .map(
-            (p, i) =>
-              `${i === 0 ? "M" : "L"} ${xByTime(p.ts)} ${yByValue(p.value)}`
-          )
-          .join(" ")
-      : "";
-
-  const areaPath = linePath
-    ? `${linePath} L ${xByTime(viewEnd)} ${H - PAD} L ${xByTime(
-        viewStart
-      )} ${H - PAD} Z`
-    : "";
-
-  /* ============================================================
-     TOUCH: TRUE MIDPOINT-ANCHORED PINCH
+     TOUCH HANDLERS (TRUE CAMERA ZOOM)
   ============================================================ */
   function onTouchStart(e) {
     if (e.touches.length === 2) {
       const d = distance(e.touches[0], e.touches[1]);
-      lastPinchDist.current = d;
-
-      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const vx = getSvgX(midX);
-      const anchorTs =
-        vx == null ? (viewStart + viewEnd) / 2 : tsFromSvgX(vx);
-
-      pinchAnchorTs.current = anchorTs;
-      pinchAnchorRatio.current =
-        (anchorTs - viewStart) / Math.max(1, viewEnd - viewStart);
-
-      lastPanX.current = null;
+      lastTouches.current = {
+        distance: d,
+        centerX:
+          (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        centerY:
+          (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      };
+      lastPan.current = null;
     }
 
     if (e.touches.length === 1) {
-      lastPanX.current = e.touches[0].clientX;
-      lastPinchDist.current = null;
+      lastPan.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
+      lastTouches.current = null;
     }
   }
 
   function onTouchMove(e) {
     e.preventDefault();
 
-    if (e.touches.length === 2 && lastPinchDist.current != null) {
-      const d = distance(e.touches[0], e.touches[1]);
-      const prev = lastPinchDist.current;
+    // PINCH ZOOM
+    if (e.touches.length === 2 && lastTouches.current) {
+      const newDistance = distance(
+        e.touches[0],
+        e.touches[1]
+      );
+      const zoomFactor =
+        newDistance / lastTouches.current.distance;
 
-      const factor = Math.max(0.9, Math.min(1.1, prev / d));
-      const span = viewEnd - viewStart;
-      const newSpan = span * factor;
+      const rect = svgRef.current.getBoundingClientRect();
+      const cx =
+        lastTouches.current.centerX - rect.left;
+      const cy =
+        lastTouches.current.centerY - rect.top;
 
-      const anchor = pinchAnchorTs.current ?? (viewStart + viewEnd) / 2;
-      const ratio = pinchAnchorRatio.current ?? 0.5;
+      camera.current.translateX =
+        cx -
+        zoomFactor * (cx - camera.current.translateX);
+      camera.current.translateY =
+        cy -
+        zoomFactor * (cy - camera.current.translateY);
+      camera.current.scale *= zoomFactor;
 
-      const s = anchor - newSpan * ratio;
-      const e2 = s + newSpan;
+      applyCameraTransform();
 
-      clampWindow(s, e2);
-      lastPinchDist.current = d;
+      lastTouches.current.distance = newDistance;
       return;
     }
 
-    if (e.touches.length === 1 && lastPanX.current != null) {
-      if (viewEnd - viewStart >= MAX_SPAN) return;
-      const dx = e.touches[0].clientX - lastPanX.current;
-      const span = viewEnd - viewStart;
-      const shift = (-dx / Math.max(1, W - PAD * 2)) * span;
-      clampWindow(viewStart + shift, viewEnd + shift);
-      lastPanX.current = e.touches[0].clientX;
+    // PAN
+    if (e.touches.length === 1 && lastPan.current) {
+      const dx = e.touches[0].clientX - lastPan.current.x;
+      const dy = e.touches[0].clientY - lastPan.current.y;
+
+      camera.current.translateX += dx;
+      camera.current.translateY += dy;
+
+      applyCameraTransform();
+
+      lastPan.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
     }
   }
 
   function onTouchEnd() {
-    lastPinchDist.current = null;
-    lastPanX.current = null;
-    pinchAnchorTs.current = null;
+    lastTouches.current = null;
+    lastPan.current = null;
   }
 
-  /* ============================================================
-     DESKTOP SUPPORT (SAFE)
-  ============================================================ */
-  const lastMouseX = useRef(null);
-
-  function onMouseDown(e) {
-    lastMouseX.current = e.clientX;
-  }
-
-  function onMouseMove(e) {
-    if (lastMouseX.current == null) return;
-    if (viewEnd - viewStart >= MAX_SPAN) return;
-    const dx = e.clientX - lastMouseX.current;
-    const span = viewEnd - viewStart;
-    const shift = (-dx / Math.max(1, W - PAD * 2)) * span;
-    clampWindow(viewStart + shift, viewEnd + shift);
-    lastMouseX.current = e.clientX;
-  }
-
-  function onMouseUp() {
-    lastMouseX.current = null;
-  }
-
-  function onWheel(e) {
-    e.preventDefault();
-    const vx = getSvgX(e.clientX);
-    const anchor =
-      vx == null ? (viewStart + viewEnd) / 2 : tsFromSvgX(vx);
-    const ratio = (anchor - viewStart) / Math.max(1, viewEnd - viewStart);
-    pinchAnchorTs.current = anchor;
-    pinchAnchorRatio.current = ratio;
-
-    const factor = e.deltaY > 0 ? 1.08 : 0.92;
-    const span = viewEnd - viewStart;
-    const newSpan = span * factor;
-    const s = anchor - newSpan * ratio;
-    const e2 = s + newSpan;
-    clampWindow(s, e2);
+  function resetCamera() {
+    camera.current.scale = 1;
+    camera.current.translateX = 0;
+    camera.current.translateY = 0;
+    applyCameraTransform();
   }
 
   /* ============================================================
      RENDER
   ============================================================ */
   return (
-    <div style={page}>
-      <button onClick={() => navigate(-1)} style={backBtn}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0b0b0f",
+        color: "#ffffff",
+        padding: 16,
+      }}
+    >
+      {/* BACK */}
+      <button
+        onClick={() => navigate(-1)}
+        style={{
+          background: "transparent",
+          border: "1px solid rgba(255,255,255,0.15)",
+          color: "#fff",
+          padding: "10px 12px",
+          borderRadius: 12,
+        }}
+      >
         ← Back
       </button>
 
-      <div style={title}>Smart Analytics</div>
-
-      <div style={tabs}>
-        {["bodyweight", "measurements", "prs"].map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              ...tabBtn,
-              background: tab === t ? "#ff2f2f" : "rgba(255,255,255,0.04)",
-            }}
-          >
-            {t === "bodyweight" ? "Bodyweight" : t === "prs" ? "PRs" : "Measurements"}
-          </button>
-        ))}
+      {/* TITLE */}
+      <div
+        style={{
+          marginTop: 14,
+          fontSize: 22,
+          fontWeight: 900,
+        }}
+      >
+        Smart Analytics
       </div>
 
+      {/* TABS */}
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          marginTop: 14,
+        }}
+      >
+        {["bodyweight", "measurements", "prs"].map(
+          (key) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 14,
+                border:
+                  "1px solid rgba(255,255,255,0.12)",
+                color: "#fff",
+                fontWeight: 800,
+                background:
+                  tab === key
+                    ? "#ff2f2f"
+                    : "rgba(255,255,255,0.05)",
+              }}
+            >
+              {key === "prs"
+                ? "PRs"
+                : key[0].toUpperCase() +
+                  key.slice(1)}
+            </button>
+          )
+        )}
+      </div>
+
+      {/* BODYWEIGHT TAB */}
       {tab === "bodyweight" && (
-        <div style={card}>
+        <div
+          style={{
+            marginTop: 14,
+            padding: 16,
+            borderRadius: 18,
+            border:
+              "1px solid rgba(255,255,255,0.10)",
+            background: "#101014",
+          }}
+        >
           {loading ? (
-            <p style={{ opacity: 0.7 }}>Loading bodyweight…</p>
+            <p style={{ opacity: 0.7 }}>
+              Loading bodyweight…
+            </p>
           ) : (
             <>
-              <div style={label}>Current Bodyweight</div>
-              <div style={big}>{latestWeight} lb</div>
+              {/* CURRENT */}
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.75,
+                }}
+              >
+                Current Bodyweight
+              </div>
 
-              <div style={zoomRow}>
+              <div
+                style={{
+                  fontSize: 34,
+                  fontWeight: 900,
+                  marginBottom: 12,
+                }}
+              >
+                {latestWeight} lb
+              </div>
+
+              {/* RESET */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
                 <button
-                  style={zoomBtn}
-                  onClick={() => {
-                    const c = (viewStart + viewEnd) / 2;
-                    const s = viewEnd - viewStart;
-                    clampWindow(c - s * 0.45, c + s * 0.45);
-                  }}
-                >
-                  +
-                </button>
-                <button
-                  style={zoomBtn}
-                  onClick={() => {
-                    const c = (viewStart + viewEnd) / 2;
-                    const s = viewEnd - viewStart;
-                    clampWindow(c - s * 0.6, c + s * 0.6);
-                  }}
-                >
-                  –
-                </button>
-                <button
-                  style={resetBtn}
-                  onClick={() => {
-                    setActivePoint(null);
-                    setViewStart(fullStart);
-                    setViewEnd(fullEnd);
+                  onClick={resetCamera}
+                  style={{
+                    height: 36,
+                    padding: "0 14px",
+                    borderRadius: 12,
+                    border:
+                      "1px solid rgba(255,255,255,0.12)",
+                    background:
+                      "rgba(255,255,255,0.06)",
+                    color: "#fff",
+                    fontWeight: 800,
                   }}
                 >
                   Reset
                 </button>
 
-                <div style={zoomHint}>Pinch to zoom • Drag to pan</div>
+                <div
+                  style={{
+                    marginLeft: 12,
+                    fontSize: 11,
+                    color:
+                      "rgba(255,255,255,0.55)",
+                    fontWeight: 700,
+                  }}
+                >
+                  Pinch to zoom • Drag to pan
+                </div>
               </div>
 
+              {/* SVG */}
               <svg
                 ref={svgRef}
                 width="100%"
-                viewBox={`0 0 ${W} ${H}`}
+                viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
                 onTouchEnd={onTouchEnd}
-                onMouseDown={onMouseDown}
-                onMouseMove={onMouseMove}
-                onMouseUp={onMouseUp}
-                onMouseLeave={onMouseUp}
-                onWheel={onWheel}
-                style={{ touchAction: "none", userSelect: "none" }}
+                style={{
+                  touchAction: "none",
+                  userSelect: "none",
+                }}
               >
-                <text x={6} y={PAD} fontSize="10" fill="#aaa">
-                  {Math.round(maxY)} lb
+                {/* Y AXIS LABELS */}
+                <text
+                  x={6}
+                  y={GRAPH_PADDING}
+                  fontSize="10"
+                  fill="#aaa"
+                >
+                  {Math.round(maxYValue)} lb
                 </text>
-                <text x={6} y={H - PAD} fontSize="10" fill="#aaa">
-                  {Math.round(minY)} lb
+
+                <text
+                  x={6}
+                  y={GRAPH_HEIGHT - GRAPH_PADDING}
+                  fontSize="10"
+                  fill="#aaa"
+                >
+                  {Math.round(minYValue)} lb
                 </text>
 
-                {areaPath && <path d={areaPath} fill="rgba(255,47,47,0.18)" />}
-                {linePath && (
-                  <path d={linePath} fill="none" stroke="#ff2f2f" strokeWidth="3" />
-                )}
-
-                {visiblePoints.map((p, i) => {
-                  const cx = xByTime(p.ts);
-                  const cy = yByValue(p.value);
-                  const isLatest = p.ts === fullEnd;
-                  return (
-                    <g key={i}>
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r={12}
-                        fill="transparent"
-                        onClick={() => setActivePoint({ ...p, cx, cy })}
-                      />
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r={6}
-                        fill={isLatest ? "#2ecc71" : "#ff2f2f"}
-                      />
-                    </g>
-                  );
-                })}
-
-                {activePoint && (
-                  <g>
-                    <rect
-                      x={activePoint.cx - 46}
-                      y={activePoint.cy - 48}
-                      width="92"
-                      height="36"
-                      rx="10"
-                      fill="#15151a"
-                      stroke="rgba(255,255,255,0.12)"
+                {/* CAMERA LAYER */}
+                <g id="camera-layer">
+                  {areaPath && (
+                    <path
+                      d={areaPath}
+                      fill="rgba(255,47,47,0.18)"
                     />
-                    <text
-                      x={activePoint.cx}
-                      y={activePoint.cy - 28}
-                      textAnchor="middle"
-                      fontSize="11"
-                      fill="#fff"
-                      fontWeight="700"
-                    >
-                      {activePoint.value} lb
-                    </text>
-                    <text
-                      x={activePoint.cx}
-                      y={activePoint.cy - 14}
-                      textAnchor="middle"
-                      fontSize="9"
-                      fill="#aaa"
-                    >
-                      {activePoint.date.toLocaleDateString()}
-                    </text>
-                  </g>
-                )}
+                  )}
+
+                  {linePath && (
+                    <path
+                      d={linePath}
+                      fill="none"
+                      stroke="#ff2f2f"
+                      strokeWidth="3"
+                    />
+                  )}
+
+                  {points.map((p, i) => {
+                    const cx = xByTime(p.ts);
+                    const cy = yByValue(p.value);
+                    const isLatest =
+                      i === points.length - 1;
+
+                    return (
+                      <g key={i}>
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={12}
+                          fill="transparent"
+                          onClick={() =>
+                            setActivePoint(p)
+                          }
+                        />
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={6}
+                          fill={
+                            isLatest
+                              ? "#2ecc71"
+                              : "#ff2f2f"
+                          }
+                        />
+                      </g>
+                    );
+                  })}
+
+                  {goalPoint && (
+                    <circle
+                      cx={xByTime(goalPoint.ts)}
+                      cy={yByValue(goalPoint.value)}
+                      r={8}
+                      fill="#f5c542"
+                    />
+                  )}
+                </g>
               </svg>
 
+              {/* LIST */}
               <div style={{ marginTop: 14 }}>
-                {[...points].reverse().map((p, i) => (
-                  <div key={i} style={row}>
-                    <span>{p.date.toLocaleDateString()}</span>
-                    <strong>{p.value} lb</strong>
-                  </div>
-                ))}
+                {[...points].reverse().map(
+                  (p, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        justifyContent:
+                          "space-between",
+                        padding: "8px 0",
+                        borderBottom:
+                          "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
+                      <span>
+                        {p.date.toLocaleDateString()}
+                      </span>
+                      <strong>
+                        {p.value} lb
+                      </strong>
+                    </div>
+                  )
+                )}
               </div>
             </>
           )}
@@ -466,76 +564,3 @@ export default function Analytics() {
     </div>
   );
 }
-
-/* ============================================================
-   STYLES
-============================================================ */
-const page = {
-  minHeight: "100vh",
-  background: "#0b0b0f",
-  color: "#fff",
-  padding: 16,
-};
-const backBtn = {
-  background: "transparent",
-  border: "1px solid rgba(255,255,255,0.15)",
-  color: "#fff",
-  padding: "10px 12px",
-  borderRadius: 12,
-};
-const title = { marginTop: 14, fontSize: 22, fontWeight: 900 };
-const tabs = { display: "flex", gap: 10, marginTop: 14 };
-const tabBtn = {
-  flex: 1,
-  padding: "10px 12px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.12)",
-  color: "#fff",
-  fontWeight: 800,
-};
-const card = {
-  marginTop: 14,
-  padding: 16,
-  borderRadius: 18,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "#101014",
-};
-const label = { fontSize: 13, opacity: 0.75 };
-const big = { fontSize: 34, fontWeight: 900, marginBottom: 12 };
-const zoomRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  marginBottom: 10,
-};
-const zoomBtn = {
-  width: 40,
-  height: 36,
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#fff",
-  fontWeight: 900,
-  fontSize: 18,
-};
-const resetBtn = {
-  height: 36,
-  padding: "0 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#fff",
-  fontWeight: 800,
-};
-const zoomHint = {
-  marginLeft: "auto",
-  fontSize: 11,
-  color: "rgba(255,255,255,0.55)",
-  fontWeight: 700,
-};
-const row = {
-  display: "flex",
-  justifyContent: "space-between",
-  padding: "8px 0",
-  borderBottom: "1px solid rgba(255,255,255,0.08)",
-};
