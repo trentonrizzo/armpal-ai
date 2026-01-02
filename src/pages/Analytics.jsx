@@ -1,7 +1,7 @@
 // src/pages/Analytics.jsx
 // ============================================================
-// ARM PAL — SMART ANALYTICS (BODYWEIGHT + TRUE MOBILE ZOOM/PAN)
-// FULL FILE REPLACEMENT — RESTORES LIST + ADDS PINCH ZOOM
+// ARM PAL — SMART ANALYTICS (BODYWEIGHT + TRUE MIDPOINT PINCH ZOOM)
+// FULL FILE REPLACEMENT — STABLE, MOBILE-CORRECT
 // ============================================================
 
 import React, { useEffect, useState, useMemo, useRef } from "react";
@@ -25,11 +25,7 @@ export default function Analytics() {
 
   async function loadBodyweight() {
     setLoading(true);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       setWeights([]);
       setLoading(false);
@@ -58,16 +54,15 @@ export default function Analytics() {
   const PAD = 44;
 
   /* ============================================================
-     CANONICAL POINTS (OLD -> NEW)
+     CANONICAL POINTS (OLD → NEW)
   ============================================================ */
   const points = useMemo(() => {
-    return (weights || []).map((w) => {
+    return weights.map((w) => {
       const d = new Date(w.logged_at);
       return {
         date: d,
         ts: d.getTime(),
         value: w.weight,
-        raw: w,
       };
     });
   }, [weights]);
@@ -88,32 +83,36 @@ export default function Analytics() {
 
   const svgRef = useRef(null);
 
-  // Touch state for mobile pinch/pan
-  const lastTouchDist = useRef(null);
+  /* ============================================================
+     ZOOM STATE (ANCHOR LOCK)
+  ============================================================ */
+  const pinchAnchorTs = useRef(null);
+  const pinchAnchorRatio = useRef(0.5);
+  const lastPinchDist = useRef(null);
   const lastPanX = useRef(null);
-  const lastMode = useRef(null); // "pinch" | "pan" | null
+
+  const MAX_SPAN = Math.max(1, fullEnd - fullStart);
+  const MIN_SPAN = Math.min(
+    MAX_SPAN,
+    1000 * 60 * 60 * 24 * 2 // 2 days
+  );
 
   /* ============================================================
      HELPERS
   ============================================================ */
-  const MAX_SPAN = Math.max(1, fullEnd - fullStart);
-  const MIN_SPAN = 1000 * 60 * 60 * 24 * 2; // 2 days minimum window
-
   function clampWindow(start, end) {
     let s = start;
     let e = end;
     let span = e - s;
 
-    const minSpan = Math.min(MIN_SPAN, MAX_SPAN);
-    const maxSpan = MAX_SPAN;
-
-    if (span < minSpan) {
-      const c = (s + e) / 2;
-      s = c - minSpan / 2;
-      e = c + minSpan / 2;
+    if (span < MIN_SPAN) {
+      const c = s + (e - s) * pinchAnchorRatio.current;
+      s = c - MIN_SPAN * pinchAnchorRatio.current;
+      e = s + MIN_SPAN;
       span = e - s;
     }
-    if (span > maxSpan) {
+
+    if (span > MAX_SPAN) {
       s = fullStart;
       e = fullEnd;
       span = e - s;
@@ -132,37 +131,18 @@ export default function Analytics() {
     setViewEnd(e);
   }
 
-  function zoomAt(centerTs, factor) {
-    const span = viewEnd - viewStart;
-    const newSpan = span * factor;
-
-    const s = centerTs - newSpan / 2;
-    const e = centerTs + newSpan / 2;
-
-    clampWindow(s, e);
-  }
-
-  function panByPixels(dxPixels) {
-    const span = viewEnd - viewStart;
-    const drawableW = Math.max(1, W - PAD * 2);
-    const shift = (-dxPixels / drawableW) * span;
-    clampWindow(viewStart + shift, viewEnd + shift);
-  }
-
   function getSvgX(clientX) {
     const el = svgRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
     const x = clientX - rect.left;
-    // Convert screen x -> viewBox x (0..W)
-    const vx = (x / rect.width) * W;
-    return vx;
+    return (x / rect.width) * W;
   }
 
-  function tsFromViewBoxX(vx) {
+  function tsFromSvgX(vx) {
     const t = (vx - PAD) / Math.max(1, W - PAD * 2);
-    const clampedT = Math.max(0, Math.min(1, t));
-    return viewStart + clampedT * (viewEnd - viewStart);
+    const clamped = Math.max(0, Math.min(1, t));
+    return viewStart + clamped * (viewEnd - viewStart);
   }
 
   function distance(t1, t2) {
@@ -172,18 +152,22 @@ export default function Analytics() {
   }
 
   /* ============================================================
-     VISIBLE POINTS
+     VISIBLE POINTS + Y STABILITY
   ============================================================ */
-  const visiblePoints = useMemo(() => {
-    return points.filter((p) => p.ts >= viewStart && p.ts <= viewEnd);
-  }, [points, viewStart, viewEnd]);
+  const visiblePoints = useMemo(
+    () => points.filter((p) => p.ts >= viewStart && p.ts <= viewEnd),
+    [points, viewStart, viewEnd]
+  );
 
   const values = visiblePoints.map((p) => p.value);
-  const minY = values.length ? Math.min(...values) : 0;
-  const maxY = values.length ? Math.max(...values) : 1;
+  const rawMinY = values.length ? Math.min(...values) : 0;
+  const rawMaxY = values.length ? Math.max(...values) : 1;
+  const padY = Math.max(1, (rawMaxY - rawMinY) * 0.15);
+  const minY = rawMinY - padY;
+  const maxY = rawMaxY + padY;
 
   /* ============================================================
-     SCALES (TIME-BASED)
+     SCALES
   ============================================================ */
   const xByTime = (ts) =>
     PAD + ((ts - viewStart) / (viewEnd - viewStart || 1)) * (W - PAD * 2);
@@ -192,7 +176,7 @@ export default function Analytics() {
     H - PAD - ((v - minY) / (maxY - minY || 1)) * (H - PAD * 2);
 
   /* ============================================================
-     LINE + AREA PATHS
+     PATHS
   ============================================================ */
   const linePath =
     visiblePoints.length > 1
@@ -211,122 +195,107 @@ export default function Analytics() {
     : "";
 
   /* ============================================================
-     BOTTOM AXIS LABELS (TIMELINE)
-  ============================================================ */
-  const xTicks = useMemo(() => {
-    const ticks = [];
-    const count = 4; // keep clean on mobile
-    for (let i = 0; i < count; i++) {
-      const t = count === 1 ? 0 : i / (count - 1);
-      const ts = viewStart + t * (viewEnd - viewStart);
-      ticks.push({
-        ts,
-        x: PAD + t * (W - PAD * 2),
-        label: new Date(ts).toLocaleDateString(),
-      });
-    }
-    return ticks;
-  }, [viewStart, viewEnd]);
-
-  /* ============================================================
-     TOUCH HANDLERS (MOBILE PINCH + PAN)
+     TOUCH: TRUE MIDPOINT-ANCHORED PINCH
   ============================================================ */
   function onTouchStart(e) {
-    if (!e.touches) return;
-
     if (e.touches.length === 2) {
-      lastMode.current = "pinch";
-      lastTouchDist.current = distance(e.touches[0], e.touches[1]);
+      const d = distance(e.touches[0], e.touches[1]);
+      lastPinchDist.current = d;
+
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const vx = getSvgX(midX);
+      const anchorTs =
+        vx == null ? (viewStart + viewEnd) / 2 : tsFromSvgX(vx);
+
+      pinchAnchorTs.current = anchorTs;
+      pinchAnchorRatio.current =
+        (anchorTs - viewStart) / Math.max(1, viewEnd - viewStart);
+
       lastPanX.current = null;
-    } else if (e.touches.length === 1) {
-      // pan only makes sense when zoomed in
-      lastMode.current = "pan";
+    }
+
+    if (e.touches.length === 1) {
       lastPanX.current = e.touches[0].clientX;
-      lastTouchDist.current = null;
+      lastPinchDist.current = null;
     }
   }
 
   function onTouchMove(e) {
-    if (!e.touches) return;
-
-    // prevent page scroll while interacting with chart
     e.preventDefault();
 
-    if (e.touches.length === 2) {
-      // PINCH ZOOM
+    if (e.touches.length === 2 && lastPinchDist.current != null) {
       const d = distance(e.touches[0], e.touches[1]);
-      const prev = lastTouchDist.current;
-      if (!prev) {
-        lastTouchDist.current = d;
-        return;
-      }
+      const prev = lastPinchDist.current;
 
-      // Determine zoom factor from pinch change
-      // If fingers move apart -> zoom IN (factor < 1)
-      // If fingers move together -> zoom OUT (factor > 1)
-      const ratio = prev / d;
-      const factor = Math.max(0.85, Math.min(1.25, ratio));
+      const factor = Math.max(0.9, Math.min(1.1, prev / d));
+      const span = viewEnd - viewStart;
+      const newSpan = span * factor;
 
-      // Zoom around midpoint of two touches
-      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const vx = getSvgX(midX);
-      const centerTs = vx == null ? (viewStart + viewEnd) / 2 : tsFromViewBoxX(vx);
+      const anchor = pinchAnchorTs.current ?? (viewStart + viewEnd) / 2;
+      const ratio = pinchAnchorRatio.current ?? 0.5;
 
-      zoomAt(centerTs, factor);
+      const s = anchor - newSpan * ratio;
+      const e2 = s + newSpan;
 
-      lastTouchDist.current = d;
-      lastMode.current = "pinch";
-      lastPanX.current = null;
+      clampWindow(s, e2);
+      lastPinchDist.current = d;
       return;
     }
 
-    if (e.touches.length === 1 && lastMode.current === "pan") {
-      // PAN
-      // Only pan if actually zoomed in (window smaller than full)
-      if ((viewEnd - viewStart) >= MAX_SPAN) return;
-
-      const x = e.touches[0].clientX;
-      const prevX = lastPanX.current;
-      if (prevX == null) {
-        lastPanX.current = x;
-        return;
-      }
-
-      const dx = x - prevX;
-      panByPixels(dx);
-      lastPanX.current = x;
+    if (e.touches.length === 1 && lastPanX.current != null) {
+      if (viewEnd - viewStart >= MAX_SPAN) return;
+      const dx = e.touches[0].clientX - lastPanX.current;
+      const span = viewEnd - viewStart;
+      const shift = (-dx / Math.max(1, W - PAD * 2)) * span;
+      clampWindow(viewStart + shift, viewEnd + shift);
+      lastPanX.current = e.touches[0].clientX;
     }
   }
 
   function onTouchEnd() {
-    lastTouchDist.current = null;
+    lastPinchDist.current = null;
     lastPanX.current = null;
-    lastMode.current = null;
+    pinchAnchorTs.current = null;
   }
 
   /* ============================================================
-     CLICK/DRAG SUPPORT (DESKTOP SAFE)
+     DESKTOP SUPPORT (SAFE)
   ============================================================ */
   const lastMouseX = useRef(null);
+
   function onMouseDown(e) {
     lastMouseX.current = e.clientX;
   }
+
   function onMouseMove(e) {
     if (lastMouseX.current == null) return;
-    if ((viewEnd - viewStart) >= MAX_SPAN) return;
+    if (viewEnd - viewStart >= MAX_SPAN) return;
     const dx = e.clientX - lastMouseX.current;
-    panByPixels(dx);
+    const span = viewEnd - viewStart;
+    const shift = (-dx / Math.max(1, W - PAD * 2)) * span;
+    clampWindow(viewStart + shift, viewEnd + shift);
     lastMouseX.current = e.clientX;
   }
+
   function onMouseUp() {
     lastMouseX.current = null;
   }
+
   function onWheel(e) {
     e.preventDefault();
     const vx = getSvgX(e.clientX);
-    const centerTs = vx == null ? (viewStart + viewEnd) / 2 : tsFromViewBoxX(vx);
-    const factor = e.deltaY > 0 ? 1.12 : 0.89;
-    zoomAt(centerTs, factor);
+    const anchor =
+      vx == null ? (viewStart + viewEnd) / 2 : tsFromSvgX(vx);
+    const ratio = (anchor - viewStart) / Math.max(1, viewEnd - viewStart);
+    pinchAnchorTs.current = anchor;
+    pinchAnchorRatio.current = ratio;
+
+    const factor = e.deltaY > 0 ? 1.08 : 0.92;
+    const span = viewEnd - viewStart;
+    const newSpan = span * factor;
+    const s = anchor - newSpan * ratio;
+    const e2 = s + newSpan;
+    clampWindow(s, e2);
   }
 
   /* ============================================================
@@ -364,17 +333,24 @@ export default function Analytics() {
               <div style={label}>Current Bodyweight</div>
               <div style={big}>{latestWeight} lb</div>
 
-              {/* Zoom controls (always works on mobile) */}
               <div style={zoomRow}>
                 <button
                   style={zoomBtn}
-                  onClick={() => zoomAt((viewStart + viewEnd) / 2, 0.85)}
+                  onClick={() => {
+                    const c = (viewStart + viewEnd) / 2;
+                    const s = viewEnd - viewStart;
+                    clampWindow(c - s * 0.45, c + s * 0.45);
+                  }}
                 >
                   +
                 </button>
                 <button
                   style={zoomBtn}
-                  onClick={() => zoomAt((viewStart + viewEnd) / 2, 1.18)}
+                  onClick={() => {
+                    const c = (viewStart + viewEnd) / 2;
+                    const s = viewEnd - viewStart;
+                    clampWindow(c - s * 0.6, c + s * 0.6);
+                  }}
                 >
                   –
                 </button>
@@ -389,48 +365,39 @@ export default function Analytics() {
                   Reset
                 </button>
 
-                <div style={zoomHint}>
-                  Pinch to zoom • Drag to pan
-                </div>
+                <div style={zoomHint}>Pinch to zoom • Drag to pan</div>
               </div>
 
               <svg
                 ref={svgRef}
                 width="100%"
                 viewBox={`0 0 ${W} ${H}`}
-                onWheel={onWheel}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
                 onMouseDown={onMouseDown}
                 onMouseMove={onMouseMove}
                 onMouseUp={onMouseUp}
                 onMouseLeave={onMouseUp}
-                onTouchStart={onTouchStart}
-                onTouchMove={onTouchMove}
-                onTouchEnd={onTouchEnd}
-                style={{
-                  touchAction: "none",
-                  userSelect: "none",
-                }}
+                onWheel={onWheel}
+                style={{ touchAction: "none", userSelect: "none" }}
               >
-                {/* Y AXIS */}
                 <text x={6} y={PAD} fontSize="10" fill="#aaa">
-                  {maxY} lb
+                  {Math.round(maxY)} lb
                 </text>
                 <text x={6} y={H - PAD} fontSize="10" fill="#aaa">
-                  {minY} lb
+                  {Math.round(minY)} lb
                 </text>
 
-                {/* AREA + LINE */}
                 {areaPath && <path d={areaPath} fill="rgba(255,47,47,0.18)" />}
                 {linePath && (
                   <path d={linePath} fill="none" stroke="#ff2f2f" strokeWidth="3" />
                 )}
 
-                {/* DOTS */}
                 {visiblePoints.map((p, i) => {
                   const cx = xByTime(p.ts);
                   const cy = yByValue(p.value);
                   const isLatest = p.ts === fullEnd;
-
                   return (
                     <g key={i}>
                       <circle
@@ -450,22 +417,6 @@ export default function Analytics() {
                   );
                 })}
 
-                {/* TIMELINE (X AXIS) */}
-                {xTicks.map((t, i) => (
-                  <g key={i}>
-                    <text
-                      x={t.x}
-                      y={H - 10}
-                      textAnchor="middle"
-                      fontSize="9"
-                      fill="#aaa"
-                    >
-                      {t.label}
-                    </text>
-                  </g>
-                ))}
-
-                {/* TOOLTIP */}
                 {activePoint && (
                   <g>
                     <rect
@@ -500,7 +451,6 @@ export default function Analytics() {
                 )}
               </svg>
 
-              {/* LIST (NEWEST -> OLDEST) — RESTORED */}
               <div style={{ marginTop: 14 }}>
                 {[...points].reverse().map((p, i) => (
                   <div key={i} style={row}>
@@ -511,12 +461,6 @@ export default function Analytics() {
               </div>
             </>
           )}
-        </div>
-      )}
-
-      {tab !== "bodyweight" && (
-        <div style={{ ...card, opacity: 0.65 }}>
-          Coming next…
         </div>
       )}
     </div>
@@ -532,7 +476,6 @@ const page = {
   color: "#fff",
   padding: 16,
 };
-
 const backBtn = {
   background: "transparent",
   border: "1px solid rgba(255,255,255,0.15)",
@@ -540,7 +483,6 @@ const backBtn = {
   padding: "10px 12px",
   borderRadius: 12,
 };
-
 const title = { marginTop: 14, fontSize: 22, fontWeight: 900 };
 const tabs = { display: "flex", gap: 10, marginTop: 14 };
 const tabBtn = {
@@ -551,7 +493,6 @@ const tabBtn = {
   color: "#fff",
   fontWeight: 800,
 };
-
 const card = {
   marginTop: 14,
   padding: 16,
@@ -559,17 +500,14 @@ const card = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#101014",
 };
-
 const label = { fontSize: 13, opacity: 0.75 };
 const big = { fontSize: 34, fontWeight: 900, marginBottom: 12 };
-
 const zoomRow = {
   display: "flex",
   alignItems: "center",
   gap: 10,
   marginBottom: 10,
 };
-
 const zoomBtn = {
   width: 40,
   height: 36,
@@ -580,7 +518,6 @@ const zoomBtn = {
   fontWeight: 900,
   fontSize: 18,
 };
-
 const resetBtn = {
   height: 36,
   padding: "0 12px",
@@ -590,14 +527,12 @@ const resetBtn = {
   color: "#fff",
   fontWeight: 800,
 };
-
 const zoomHint = {
   marginLeft: "auto",
   fontSize: 11,
   color: "rgba(255,255,255,0.55)",
   fontWeight: 700,
 };
-
 const row = {
   display: "flex",
   justifyContent: "space-between",
