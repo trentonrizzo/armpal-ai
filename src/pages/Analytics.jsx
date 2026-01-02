@@ -1,15 +1,15 @@
 // src/pages/Analytics.jsx
 // ============================================================
 // ARM PAL — SMART ANALYTICS
-// BODYWEIGHT ANALYTICS WITH TRUE CAMERA ZOOM
-// LONG FORM FILE — NO COMPRESSION — PRODUCTION SAFE
+// BODYWEIGHT ANALYTICS — TRUE CAMERA ZOOM (SVG-UNIT CORRECT)
+// LONG FORM — NO COMPRESSION — SAFE FOR YOUR PROJECT
 // ============================================================
 
 import React, {
   useEffect,
-  useState,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -32,6 +32,42 @@ export default function Analytics() {
   const [activePoint, setActivePoint] = useState(null);
 
   /* ============================================================
+     GRAPH CONSTANTS
+  ============================================================ */
+  const GRAPH_WIDTH = 360;
+  const GRAPH_HEIGHT = 220;
+  const PAD = 44;
+
+  /* ============================================================
+     SVG REFS
+  ============================================================ */
+  const svgRef = useRef(null);
+  const cameraGroupRef = useRef(null);
+
+  /* ============================================================
+     CAMERA STATE (kept in refs for smooth touch)
+     NOTE: THESE ARE SVG-UNIT TRANSLATIONS (viewBox units)
+  ============================================================ */
+  const camRef = useRef({
+    scale: 1,
+    tx: 0,
+    ty: 0,
+  });
+
+  const pinchRef = useRef({
+    active: false,
+    lastDist: null,
+    anchorSvgX: 0,
+    anchorSvgY: 0,
+  });
+
+  const panRef = useRef({
+    active: false,
+    lastX: null,
+    lastY: null,
+  });
+
+  /* ============================================================
      LOAD DATA
   ============================================================ */
   useEffect(() => {
@@ -50,6 +86,7 @@ export default function Analytics() {
     if (!user) {
       setWeights([]);
       setGoal(null);
+      setActivePoint(null);
       setLoading(false);
       return;
     }
@@ -60,6 +97,7 @@ export default function Analytics() {
       .eq("user_id", user.id)
       .order("logged_at", { ascending: true });
 
+    // pull your bodyweight goal (future date like 2026-07-11)
     const { data: goalData } = await supabase
       .from("goals")
       .select("target_value, target_date")
@@ -71,27 +109,24 @@ export default function Analytics() {
     setGoal(goalData || null);
     setActivePoint(null);
     setLoading(false);
+
+    // whenever data reloads, reset camera so you don't get "lost"
+    requestAnimationFrame(() => {
+      resetCamera();
+    });
   }
 
   const latestWeight =
-    weights.length > 0
-      ? weights[weights.length - 1].weight
-      : null;
+    weights.length > 0 ? weights[weights.length - 1].weight : null;
 
   /* ============================================================
-     GRAPH CONSTANTS
-  ============================================================ */
-  const GRAPH_WIDTH = 360;
-  const GRAPH_HEIGHT = 220;
-  const GRAPH_PADDING = 44;
-
-  /* ============================================================
-     CANONICAL DATA
+     CANONICAL POINTS
   ============================================================ */
   const points = useMemo(() => {
-    return weights.map((w) => {
+    return (weights || []).map((w) => {
       const d = new Date(w.logged_at);
       return {
+        type: "weight",
         ts: d.getTime(),
         date: d,
         value: w.weight,
@@ -103,6 +138,7 @@ export default function Analytics() {
     if (!goal || !goal.target_date) return null;
     const d = new Date(goal.target_date);
     return {
+      type: "goal",
       ts: d.getTime(),
       date: d,
       value: goal.target_value,
@@ -110,185 +146,285 @@ export default function Analytics() {
   }, [goal]);
 
   /* ============================================================
-     STATIC SCALE DOMAIN (NEVER CHANGES)
+     STATIC DOMAIN (includes future goal ts/value)
+     - This keeps your gold dot on the chart always.
   ============================================================ */
-  const allYValues = [
+  const minTs = points.length ? points[0].ts : Date.now();
+  const maxTs = Math.max(
+    points.length ? points[points.length - 1].ts : Date.now(),
+    goalPoint ? goalPoint.ts : 0
+  );
+
+  const allValues = [
     ...points.map((p) => p.value),
     ...(goalPoint ? [goalPoint.value] : []),
   ];
 
-  const minYValue = Math.min(...allYValues);
-  const maxYValue = Math.max(...allYValues);
-  const yPadding = (maxYValue - minYValue) * 0.15 || 5;
-
-  const minTimestamp =
-    points.length > 0 ? points[0].ts : Date.now();
-
-  const maxTimestamp = Math.max(
-    points.length > 0
-      ? points[points.length - 1].ts
-      : Date.now(),
-    goalPoint ? goalPoint.ts : 0
-  );
+  const minVal = allValues.length ? Math.min(...allValues) : 0;
+  const maxVal = allValues.length ? Math.max(...allValues) : 1;
+  const yPad = (maxVal - minVal) * 0.15 || 5;
 
   function xByTime(ts) {
     return (
-      GRAPH_PADDING +
-      ((ts - minTimestamp) /
-        (maxTimestamp - minTimestamp || 1)) *
-        (GRAPH_WIDTH - GRAPH_PADDING * 2)
+      PAD +
+      ((ts - minTs) / (maxTs - minTs || 1)) *
+        (GRAPH_WIDTH - PAD * 2)
     );
   }
 
-  function yByValue(val) {
+  function yByValue(v) {
     return (
       GRAPH_HEIGHT -
-      GRAPH_PADDING -
-      ((val - (minYValue - yPadding)) /
-        ((maxYValue + yPadding) -
-          (minYValue - yPadding))) *
-        (GRAPH_HEIGHT - GRAPH_PADDING * 2)
+      PAD -
+      ((v - (minVal - yPad)) /
+        ((maxVal + yPad) - (minVal - yPad))) *
+        (GRAPH_HEIGHT - PAD * 2)
     );
   }
 
   /* ============================================================
      PATHS
   ============================================================ */
-  const linePath =
-    points.length > 1
-      ? points
-          .map((p, i) => {
-            const x = xByTime(p.ts);
-            const y = yByValue(p.value);
-            return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-          })
-          .join(" ")
-      : "";
+  const linePath = useMemo(() => {
+    if (points.length <= 1) return "";
+    return points
+      .map((p, i) => {
+        const x = xByTime(p.ts);
+        const y = yByValue(p.value);
+        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+      })
+      .join(" ");
+  }, [points, minTs, maxTs, minVal, maxVal, yPad]);
 
-  const areaPath = linePath
-    ? `${linePath}
-       L ${xByTime(maxTimestamp)} ${GRAPH_HEIGHT - GRAPH_PADDING}
-       L ${xByTime(minTimestamp)} ${GRAPH_HEIGHT - GRAPH_PADDING}
-       Z`
-    : "";
+  const areaPath = useMemo(() => {
+    if (!linePath) return "";
+    const baseY = GRAPH_HEIGHT - PAD;
+    return `${linePath} L ${xByTime(maxTs)} ${baseY} L ${xByTime(minTs)} ${baseY} Z`;
+  }, [linePath, minTs, maxTs]);
 
   /* ============================================================
-     CAMERA TRANSFORM (THE IMPORTANT PART)
+     TIMELINE LABELS (X AXIS)
   ============================================================ */
-  const svgRef = useRef(null);
+  const xTicks = useMemo(() => {
+    const ticks = [];
+    const count = 4;
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0 : i / (count - 1);
+      const ts = minTs + t * (maxTs - minTs);
+      ticks.push({
+        x: PAD + t * (GRAPH_WIDTH - PAD * 2),
+        label: new Date(ts).toLocaleDateString(),
+      });
+    }
+    return ticks;
+  }, [minTs, maxTs]);
 
-  const camera = useRef({
-    scale: 1,
-    translateX: 0,
-    translateY: 0,
-  });
+  /* ============================================================
+     SVG COORDINATE CONVERSION (THIS IS THE CRITICAL FIX)
+     Convert clientX/Y -> SVG viewBox coordinates so zoom is stable.
+  ============================================================ */
+  function clientToSvg(clientX, clientY) {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
 
-  const lastTouches = useRef(null);
-  const lastPan = useRef(null);
+    // Use SVGPoint + screen CTM inverse (reliable for viewBox)
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
 
-  function applyCameraTransform() {
-    if (!svgRef.current) return;
-    const g = svgRef.current.querySelector("#camera-layer");
-    if (!g) return;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
 
-    const { scale, translateX, translateY } = camera.current;
+    const inv = ctm.inverse();
+    const sp = pt.matrixTransform(inv);
+    return { x: sp.x, y: sp.y };
+  }
 
-    g.setAttribute(
+  /* ============================================================
+     CAMERA APPLY + CLAMP
+     You said: NO weird drifting on axes.
+     So:
+     - Allow zoom everywhere
+     - Pan only when zoomed
+     - Pan only LEFT/RIGHT (horizontal)
+     - Lock vertical movement (ty = 0)
+     - Clamp tx so you can't fling it into infinity
+  ============================================================ */
+  function clampCamera() {
+    const cam = camRef.current;
+
+    // clamp scale so it feels sane
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 8;
+    cam.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cam.scale));
+
+    // lock vertical drift (you hated up/down)
+    cam.ty = 0;
+
+    // clamp horizontal so chart doesn't "fly away"
+    // When scaled, content width = GRAPH_WIDTH * scale.
+    // Keep it within the viewBox:
+    // tx max = 0 (fully left aligned)
+    // tx min = GRAPH_WIDTH - GRAPH_WIDTH*scale (fully right aligned)
+    const minTx = GRAPH_WIDTH - GRAPH_WIDTH * cam.scale;
+    const maxTx = 0;
+
+    cam.tx = Math.max(minTx, Math.min(maxTx, cam.tx));
+
+    camRef.current = cam;
+  }
+
+  function applyCamera() {
+    if (!cameraGroupRef.current) return;
+    clampCamera();
+    const cam = camRef.current;
+    cameraGroupRef.current.setAttribute(
       "transform",
-      `translate(${translateX}, ${translateY}) scale(${scale})`
+      `translate(${cam.tx}, ${cam.ty}) scale(${cam.scale})`
     );
   }
 
-  function distance(t1, t2) {
-    const dx = t1.clientX - t2.clientX;
-    const dy = t1.clientY - t2.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
+  function resetCamera() {
+    camRef.current.scale = 1;
+    camRef.current.tx = 0;
+    camRef.current.ty = 0;
+    applyCamera();
   }
 
   /* ============================================================
-     TOUCH HANDLERS (TRUE CAMERA ZOOM)
+     TRUE PINCH ZOOM (ANCHOR LOCKED IN SVG UNITS)
+     This ensures:
+     - Dot under your pinch gets bigger
+     - Nothing "slides away"
+     - It zooms INTO where you're pinching
   ============================================================ */
   function onTouchStart(e) {
+    if (!e.touches) return;
+
+    // pinch
     if (e.touches.length === 2) {
-      const d = distance(e.touches[0], e.touches[1]);
-      lastTouches.current = {
-        distance: d,
-        centerX:
-          (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        centerY:
-          (e.touches[0].clientY + e.touches[1].clientY) / 2,
-      };
-      lastPan.current = null;
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      const anchor = clientToSvg(midX, midY);
+
+      pinchRef.current.active = true;
+      pinchRef.current.lastDist = dist;
+      pinchRef.current.anchorSvgX = anchor.x;
+      pinchRef.current.anchorSvgY = anchor.y;
+
+      panRef.current.active = false;
+      panRef.current.lastX = null;
+      panRef.current.lastY = null;
+
+      return;
     }
 
+    // pan (only when zoomed)
     if (e.touches.length === 1) {
-      lastPan.current = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-      };
-      lastTouches.current = null;
+      panRef.current.active = true;
+      panRef.current.lastX = e.touches[0].clientX;
+      panRef.current.lastY = e.touches[0].clientY;
+
+      pinchRef.current.active = false;
+      pinchRef.current.lastDist = null;
     }
   }
 
   function onTouchMove(e) {
+    if (!e.touches) return;
     e.preventDefault();
 
-    // PINCH ZOOM
-    if (e.touches.length === 2 && lastTouches.current) {
-      const newDistance = distance(
-        e.touches[0],
-        e.touches[1]
-      );
-      const zoomFactor =
-        newDistance / lastTouches.current.distance;
+    // pinch zoom
+    if (e.touches.length === 2 && pinchRef.current.active) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
 
-      const rect = svgRef.current.getBoundingClientRect();
-      const cx =
-        lastTouches.current.centerX - rect.left;
-      const cy =
-        lastTouches.current.centerY - rect.top;
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-      camera.current.translateX =
-        cx -
-        zoomFactor * (cx - camera.current.translateX);
-      camera.current.translateY =
-        cy -
-        zoomFactor * (cy - camera.current.translateY);
-      camera.current.scale *= zoomFactor;
+      const prev = pinchRef.current.lastDist || dist;
 
-      applyCameraTransform();
+      // Smooth factor (keep gradual)
+      // >1 means zoom in, <1 zoom out
+      let factor = dist / prev;
+      factor = Math.max(0.92, Math.min(1.08, factor)); // gradual like you want
 
-      lastTouches.current.distance = newDistance;
+      const cam = camRef.current;
+      const anchorX = pinchRef.current.anchorSvgX;
+      const anchorY = pinchRef.current.anchorSvgY;
+
+      // IMPORTANT:
+      // We are in SVG units, so this is stable:
+      // New transform keeps anchor point visually fixed.
+      cam.tx = anchorX - factor * (anchorX - cam.tx);
+      cam.ty = anchorY - factor * (anchorY - cam.ty);
+      cam.scale = cam.scale * factor;
+
+      camRef.current = cam;
+      applyCamera();
+
+      pinchRef.current.lastDist = dist;
       return;
     }
 
-    // PAN
-    if (e.touches.length === 1 && lastPan.current) {
-      const dx = e.touches[0].clientX - lastPan.current.x;
-      const dy = e.touches[0].clientY - lastPan.current.y;
+    // pan (horizontal only, only if zoomed)
+    if (e.touches.length === 1 && panRef.current.active) {
+      const cam = camRef.current;
 
-      camera.current.translateX += dx;
-      camera.current.translateY += dy;
+      // only pan if zoomed in (otherwise it feels like "axis moving")
+      if (cam.scale <= 1.01) {
+        panRef.current.lastX = e.touches[0].clientX;
+        panRef.current.lastY = e.touches[0].clientY;
+        return;
+      }
 
-      applyCameraTransform();
+      const currX = e.touches[0].clientX;
+      const prevX = panRef.current.lastX;
 
-      lastPan.current = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-      };
+      // convert client dx -> SVG units dx
+      const a = clientToSvg(prevX, 0);
+      const b = clientToSvg(currX, 0);
+      const dxSvg = b.x - a.x;
+
+      // horizontal pan only
+      cam.tx += dxSvg;
+      cam.ty = 0;
+
+      camRef.current = cam;
+      applyCamera();
+
+      panRef.current.lastX = currX;
+      panRef.current.lastY = e.touches[0].clientY;
     }
   }
 
   function onTouchEnd() {
-    lastTouches.current = null;
-    lastPan.current = null;
+    pinchRef.current.active = false;
+    pinchRef.current.lastDist = null;
+
+    panRef.current.active = false;
+    panRef.current.lastX = null;
+    panRef.current.lastY = null;
   }
 
-  function resetCamera() {
-    camera.current.scale = 1;
-    camera.current.translateX = 0;
-    camera.current.translateY = 0;
-    applyCameraTransform();
+  /* ============================================================
+     CLICK TOOLTIP (optional)
+     This stays as your simple tap tooltip.
+  ============================================================ */
+  function formatDate(d) {
+    try {
+      return d.toLocaleDateString();
+    } catch {
+      return "";
+    }
   }
 
   /* ============================================================
@@ -299,7 +435,7 @@ export default function Analytics() {
       style={{
         minHeight: "100vh",
         background: "#0b0b0f",
-        color: "#ffffff",
+        color: "#fff",
         padding: 16,
       }}
     >
@@ -336,59 +472,49 @@ export default function Analytics() {
           marginTop: 14,
         }}
       >
-        {["bodyweight", "measurements", "prs"].map(
-          (key) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              style={{
-                flex: 1,
-                padding: "10px 12px",
-                borderRadius: 14,
-                border:
-                  "1px solid rgba(255,255,255,0.12)",
-                color: "#fff",
-                fontWeight: 800,
-                background:
-                  tab === key
-                    ? "#ff2f2f"
-                    : "rgba(255,255,255,0.05)",
-              }}
-            >
-              {key === "prs"
-                ? "PRs"
-                : key[0].toUpperCase() +
-                  key.slice(1)}
-            </button>
-          )
-        )}
+        {[
+          ["bodyweight", "Bodyweight"],
+          ["measurements", "Measurements"],
+          ["prs", "PRs"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#fff",
+              fontWeight: 800,
+              background:
+                tab === key
+                  ? "#ff2f2f"
+                  : "rgba(255,255,255,0.05)",
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* BODYWEIGHT TAB */}
+      {/* BODYWEIGHT */}
       {tab === "bodyweight" && (
         <div
           style={{
             marginTop: 14,
             padding: 16,
             borderRadius: 18,
-            border:
-              "1px solid rgba(255,255,255,0.10)",
+            border: "1px solid rgba(255,255,255,0.10)",
             background: "#101014",
           }}
         >
           {loading ? (
-            <p style={{ opacity: 0.7 }}>
-              Loading bodyweight…
-            </p>
+            <p style={{ opacity: 0.7 }}>Loading…</p>
           ) : (
             <>
               {/* CURRENT */}
-              <div
-                style={{
-                  fontSize: 13,
-                  opacity: 0.75,
-                }}
-              >
+              <div style={{ fontSize: 13, opacity: 0.75 }}>
                 Current Bodyweight
               </div>
 
@@ -402,24 +528,26 @@ export default function Analytics() {
                 {latestWeight} lb
               </div>
 
-              {/* RESET */}
+              {/* CONTROLS */}
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
+                  gap: 10,
                   marginBottom: 10,
                 }}
               >
                 <button
-                  onClick={resetCamera}
+                  onClick={() => {
+                    resetCamera();
+                    setActivePoint(null);
+                  }}
                   style={{
                     height: 36,
                     padding: "0 14px",
                     borderRadius: 12,
-                    border:
-                      "1px solid rgba(255,255,255,0.12)",
-                    background:
-                      "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.06)",
                     color: "#fff",
                     fontWeight: 800,
                   }}
@@ -429,14 +557,12 @@ export default function Analytics() {
 
                 <div
                   style={{
-                    marginLeft: 12,
                     fontSize: 11,
-                    color:
-                      "rgba(255,255,255,0.55)",
+                    color: "rgba(255,255,255,0.55)",
                     fontWeight: 700,
                   }}
                 >
-                  Pinch to zoom • Drag to pan
+                  Pinch to zoom • Drag to pan (only when zoomed)
                 </div>
               </div>
 
@@ -453,27 +579,31 @@ export default function Analytics() {
                   userSelect: "none",
                 }}
               >
-                {/* Y AXIS LABELS */}
-                <text
-                  x={6}
-                  y={GRAPH_PADDING}
-                  fontSize="10"
-                  fill="#aaa"
-                >
-                  {Math.round(maxYValue)} lb
+                {/* Y LABELS */}
+                <text x={6} y={PAD} fontSize="10" fill="#aaa">
+                  {Math.round(maxVal)} lb
+                </text>
+                <text x={6} y={GRAPH_HEIGHT - PAD} fontSize="10" fill="#aaa">
+                  {Math.round(minVal)} lb
                 </text>
 
-                <text
-                  x={6}
-                  y={GRAPH_HEIGHT - GRAPH_PADDING}
-                  fontSize="10"
-                  fill="#aaa"
-                >
-                  {Math.round(minYValue)} lb
-                </text>
+                {/* X LABELS (timeline) */}
+                {xTicks.map((t, i) => (
+                  <text
+                    key={i}
+                    x={t.x}
+                    y={GRAPH_HEIGHT - 10}
+                    textAnchor="middle"
+                    fontSize="9"
+                    fill="#aaa"
+                  >
+                    {t.label}
+                  </text>
+                ))}
 
-                {/* CAMERA LAYER */}
-                <g id="camera-layer">
+                {/* CAMERA GROUP */}
+                <g id="camera-layer" ref={cameraGroupRef}>
+                  {/* AREA */}
                   {areaPath && (
                     <path
                       d={areaPath}
@@ -481,6 +611,7 @@ export default function Analytics() {
                     />
                   )}
 
+                  {/* LINE */}
                   {linePath && (
                     <path
                       d={linePath}
@@ -490,75 +621,150 @@ export default function Analytics() {
                     />
                   )}
 
+                  {/* WEIGHT DOTS */}
                   {points.map((p, i) => {
                     const cx = xByTime(p.ts);
                     const cy = yByValue(p.value);
-                    const isLatest =
-                      i === points.length - 1;
+                    const isLatest = i === points.length - 1;
 
                     return (
                       <g key={i}>
+                        {/* tap target */}
                         <circle
                           cx={cx}
                           cy={cy}
                           r={12}
                           fill="transparent"
-                          onClick={() =>
-                            setActivePoint(p)
-                          }
+                          onClick={() => {
+                            setActivePoint({
+                              type: "weight",
+                              value: p.value,
+                              date: p.date,
+                              cx,
+                              cy,
+                            });
+                          }}
                         />
+                        {/* visible dot */}
                         <circle
                           cx={cx}
                           cy={cy}
                           r={6}
-                          fill={
-                            isLatest
-                              ? "#2ecc71"
-                              : "#ff2f2f"
-                          }
+                          fill={isLatest ? "#2ecc71" : "#ff2f2f"}
                         />
                       </g>
                     );
                   })}
 
+                  {/* GOAL DOT (GOLD) */}
                   {goalPoint && (
-                    <circle
-                      cx={xByTime(goalPoint.ts)}
-                      cy={yByValue(goalPoint.value)}
-                      r={8}
-                      fill="#f5c542"
-                    />
+                    <g>
+                      <circle
+                        cx={xByTime(goalPoint.ts)}
+                        cy={yByValue(goalPoint.value)}
+                        r={9}
+                        fill="#f5c542"
+                        onClick={() => {
+                          setActivePoint({
+                            type: "goal",
+                            value: goalPoint.value,
+                            date: goalPoint.date,
+                            cx: xByTime(goalPoint.ts),
+                            cy: yByValue(goalPoint.value),
+                          });
+                        }}
+                      />
+                    </g>
+                  )}
+
+                  {/* TOOLTIP (scales with camera; you can keep or remove) */}
+                  {activePoint && (
+                    <g>
+                      <rect
+                        x={activePoint.cx - 52}
+                        y={activePoint.cy - 52}
+                        width="104"
+                        height="40"
+                        rx="10"
+                        fill="#15151a"
+                        stroke="rgba(255,255,255,0.12)"
+                      />
+                      <text
+                        x={activePoint.cx}
+                        y={activePoint.cy - 32}
+                        textAnchor="middle"
+                        fontSize="11"
+                        fill="#fff"
+                        fontWeight="700"
+                      >
+                        {activePoint.value} lb
+                      </text>
+                      <text
+                        x={activePoint.cx}
+                        y={activePoint.cy - 16}
+                        textAnchor="middle"
+                        fontSize="9"
+                        fill="#aaa"
+                      >
+                        {activePoint.type === "goal"
+                          ? `Goal: ${formatDate(activePoint.date)}`
+                          : formatDate(activePoint.date)}
+                      </text>
+                    </g>
                   )}
                 </g>
               </svg>
 
-              {/* LIST */}
+              {/* LIST (NEWEST -> OLDEST) */}
               <div style={{ marginTop: 14 }}>
-                {[...points].reverse().map(
-                  (p, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: "flex",
-                        justifyContent:
-                          "space-between",
-                        padding: "8px 0",
-                        borderBottom:
-                          "1px solid rgba(255,255,255,0.08)",
-                      }}
-                    >
-                      <span>
-                        {p.date.toLocaleDateString()}
-                      </span>
-                      <strong>
-                        {p.value} lb
-                      </strong>
-                    </div>
-                  )
-                )}
+                {[...points].reverse().map((p, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "8px 0",
+                      borderBottom:
+                        "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <span>{formatDate(p.date)}</span>
+                    <strong>{p.value} lb</strong>
+                  </div>
+                ))}
               </div>
+
+              {/* SMALL NOTE ABOUT GOAL */}
+              {goalPoint && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 12,
+                    opacity: 0.7,
+                  }}
+                >
+                  Goal shown in gold ({formatDate(goalPoint.date)}).
+                  Zoom out to see future spacing.
+                </div>
+              )}
             </>
           )}
+        </div>
+      )}
+
+      {/* PLACEHOLDERS */}
+      {tab !== "bodyweight" && (
+        <div
+          style={{
+            marginTop: 14,
+            padding: 16,
+            borderRadius: 18,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "#101014",
+            opacity: 0.7,
+          }}
+        >
+          Coming next…
         </div>
       )}
     </div>
