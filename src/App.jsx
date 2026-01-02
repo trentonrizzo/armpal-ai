@@ -21,8 +21,9 @@ import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
 import usePresence from "./hooks/usePresence";
 
-/* 🔹 ADDED: Smart Analytics page */
+// Analytics pages
 import Analytics from "./pages/Analytics";
+import MeasurementAnalytics from "./pages/MeasurementAnalytics";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
@@ -66,8 +67,12 @@ function AppContent() {
         <Route path="/enable-notifications" element={<EnableNotifications />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* 🔹 ADDED: Smart Analytics route */}
+        {/* ANALYTICS */}
         <Route path="/analytics" element={<Analytics />} />
+        <Route
+          path="/analytics/measurements"
+          element={<MeasurementAnalytics />}
+        />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
@@ -136,7 +141,7 @@ export default function App() {
   }, [session?.user?.id]);
 
   /* ============================
-     🔥 FORCE SERVICE WORKER RESET
+     FORCE SERVICE WORKER RESET
   ============================ */
   useEffect(() => {
     if (!session) return;
