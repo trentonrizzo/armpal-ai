@@ -1,40 +1,47 @@
 // src/pages/Analytics.jsx
 // ============================================================
 // ARM PAL — SMART ANALYTICS
-// BODYWEIGHT (NOW) + MEASUREMENTS (WIRED) + FUTURE GOAL DOT + TRUE CAMERA ZOOM
-// FULL FILE REPLACEMENT — LONG FORM (NO CRAMMED STYLE BLOCKS)
+// BODYWEIGHT + MEASUREMENTS + PRs (ALL WIRED)
+// FULL FILE REPLACEMENT — LONG FORM (NO CRAMMING)
 // ============================================================
-// WHAT THIS FILE DOES:
-// ✅ Bodyweight chart renders with a clean ArmPal look
+// BODYWEIGHT TAB:
+// ✅ Bodyweight chart renders with clean ArmPal look
 // ✅ Points are chronological (left→right)
 // ✅ Line follows dots perfectly
 // ✅ Gold dot shows FUTURE bodyweight goal (target_date)
 // ✅ Bottom list shows newest→oldest entries
-// ✅ TRUE CAMERA ZOOM (pinch) — dots/line scale larger
-// ✅ TRUE PAN (drag) — once zoomed, pan left/right AND up/down
-// ✅ No "invisible ceiling" / border that blocks vertical movement
+// ✅ TRUE CAMERA ZOOM (pinch)
+// ✅ TRUE PAN (drag) when zoomed
+// ✅ No invisible ceiling — vertical pan works
 // ✅ Reset returns to default view
 //
-// ✅ Measurements tab NOW SHOWS REAL MEASUREMENT ANALYTICS (multi-select overlay)
-// ✅ Uses your same TRUE CAMERA ENGINE (pinch + pan)
-// ✅ Pulls from public.measurements schema
-// ✅ Selector chips, multi-series lines + dots, bottom list
+// MEASUREMENTS TAB:
+// ✅ Multi-select any number of measurement names
+// ✅ Each selection renders its own line + dots (color cycled)
+// ✅ Same TRUE CAMERA engine
+// ✅ Bottom list updates based on selected
+//
+// PRs TAB:
+// ✅ Mirrors Measurements analytics 1:1
+// ✅ Multi-select lift_name(s)
+// ✅ Y-axis = weight (higher = higher)
+// ✅ X-axis = date
+// ✅ Line only if 2+ points for that lift
+// ✅ Same TRUE CAMERA engine + tooltips + bottom list
+//
+// NOTE: PRs table is public."PRs" with fields:
+// id, user_id, lift_name, weight, unit, date, reps, notes, order_index
 // ============================================================
 
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 /* ============================================================
-   MEASUREMENT COLOR PALETTE (ORDER MATTERS)
+   COLOR PALETTES
 ============================================================ */
-const MEAS_LINE_COLORS = [
-  "#ff2f2f", // red (ArmPal primary)
+const SERIES_COLORS = [
+  "#ff2f2f", // ArmPal red
   "#3b82f6", // blue
   "#22c55e", // green
   "#a855f7", // purple
@@ -43,30 +50,56 @@ const MEAS_LINE_COLORS = [
 ];
 
 /* ============================================================
+   SHARED SMALL HELPERS
+============================================================ */
+function clamp(v, min, max) {
+  return Math.min(Math.max(v, min), max);
+}
+
+function safeNum(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
+}
+
+function safeText(t) {
+  if (t === null || t === undefined) return "";
+  return String(t);
+}
+
+function formatDateMaybe(d) {
+  try {
+    if (!d) return "";
+    return d.toLocaleDateString();
+  } catch {
+    return "";
+  }
+}
+
+/* ============================================================
    MEASUREMENTS TAB PANEL (EMBEDDED)
    - This is NOT a separate page.
-   - It renders cleanly inside Analytics tabs.
+   - It renders inside Analytics tabs.
 ============================================================ */
 function MeasurementsTabPanel() {
-  /* ============================================================
+  /* ============================
      STATE
-  ============================================================ */
+  ============================ */
   const [loading, setLoading] = useState(true);
-  const [allRows, setAllRows] = useState([]); // raw measurements
-  const [names, setNames] = useState([]); // distinct measurement names
-  const [selected, setSelected] = useState([]); // selected measurement names
+  const [allRows, setAllRows] = useState([]);
+  const [names, setNames] = useState([]);
+  const [selected, setSelected] = useState([]);
   const [activePoint, setActivePoint] = useState(null);
 
-  /* ============================================================
-     GRAPH CONSTANTS (MATCH BODYWEIGHT)
-  ============================================================ */
+  /* ============================
+     GRAPH CONSTANTS
+  ============================ */
   const GRAPH_W = 360;
   const GRAPH_H = 220;
   const PAD = 44;
 
-  /* ============================================================
+  /* ============================
      SVG + CAMERA REFS
-  ============================================================ */
+  ============================ */
   const svgRef = useRef(null);
   const cameraGroupRef = useRef(null);
 
@@ -74,9 +107,9 @@ function MeasurementsTabPanel() {
   const pinchRef = useRef({ active: false, lastDist: null, ax: 0, ay: 0 });
   const panRef = useRef({ active: false, lastX: null, lastY: null });
 
-  /* ============================================================
-     LOAD MEASUREMENTS
-  ============================================================ */
+  /* ============================
+     LOAD
+  ============================ */
   useEffect(() => {
     loadMeasurements();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,15 +140,12 @@ function MeasurementsTabPanel() {
     const rows = data || [];
     setAllRows(rows);
 
-    const distinctNames = [
-      ...new Set(rows.map((r) => r.name).filter(Boolean)),
-    ];
-    setNames(distinctNames);
+    const distinct = [...new Set(rows.map((r) => r.name).filter(Boolean))];
+    setNames(distinct);
 
-    // Optional: auto-select first measurement if none selected
-    // (keeps the tab from feeling empty the first time)
-    if (distinctNames.length && selected.length === 0) {
-      setSelected([distinctNames[0]]);
+    // Keep UX from feeling empty on first open
+    if (distinct.length && selected.length === 0) {
+      setSelected([distinct[0]]);
     }
 
     setLoading(false);
@@ -125,32 +155,34 @@ function MeasurementsTabPanel() {
     });
   }
 
-  /* ============================================================
-     GROUP DATA BY NAME
-  ============================================================ */
+  /* ============================
+     GROUP BY NAME (selected only)
+  ============================ */
   const grouped = useMemo(() => {
     const map = {};
     for (const row of allRows) {
-      if (!row.name || !selected.includes(row.name)) continue;
-      if (!map[row.name]) map[row.name] = [];
-      map[row.name].push({
+      const nm = row?.name;
+      if (!nm || !selected.includes(nm)) continue;
+
+      if (!map[nm]) map[nm] = [];
+      map[nm].push({
         ts: new Date(row.date).getTime(),
         date: new Date(row.date),
-        value: Number(row.value),
-        unit: row.unit || "",
-        name: row.name,
+        value: safeNum(row.value, 0),
+        unit: safeText(row.unit || ""),
+        name: nm,
       });
     }
     return map;
   }, [allRows, selected]);
 
-  /* ============================================================
-     DOMAIN (ALL SELECTED SERIES)
-  ============================================================ */
   const allPoints = useMemo(() => {
     return Object.values(grouped).flat();
   }, [grouped]);
 
+  /* ============================
+     DOMAIN (all selected)
+  ============================ */
   const minTs = useMemo(() => {
     if (!allPoints.length) return Date.now();
     return Math.min(...allPoints.map((p) => p.ts));
@@ -176,9 +208,9 @@ function MeasurementsTabPanel() {
     return span * 0.15 || 1;
   }, [minVal, maxVal]);
 
-  /* ============================================================
+  /* ============================
      SCALE HELPERS
-  ============================================================ */
+  ============================ */
   function xByTime(ts) {
     const d = maxTs - minTs || 1;
     return PAD + ((ts - minTs) / d) * (GRAPH_W - PAD * 2);
@@ -191,9 +223,9 @@ function MeasurementsTabPanel() {
     return GRAPH_H - PAD - ((v - dMin) / d) * (GRAPH_H - PAD * 2);
   }
 
-  /* ============================================================
+  /* ============================
      PATHS PER SERIES
-  ============================================================ */
+  ============================ */
   const paths = useMemo(() => {
     const out = {};
     Object.entries(grouped).forEach(([name, pts]) => {
@@ -209,13 +241,9 @@ function MeasurementsTabPanel() {
     return out;
   }, [grouped, minTs, maxTs, minVal, maxVal, yPad]);
 
-  /* ============================================================
-     CAMERA HELPERS (MATCH BODYWEIGHT BEHAVIOR)
-  ============================================================ */
-  function clamp(v, min, max) {
-    return Math.min(Math.max(v, min), max);
-  }
-
+  /* ============================
+     CAMERA ENGINE
+  ============================ */
   function applyCamera() {
     if (!cameraGroupRef.current) return;
 
@@ -263,13 +291,13 @@ function MeasurementsTabPanel() {
     const pt = svg.createSVGPoint();
     pt.x = x;
     pt.y = y;
-
-    return pt.matrixTransform(ctm.inverse());
+    const sp = pt.matrixTransform(ctm.inverse());
+    return { x: sp.x, y: sp.y };
   }
 
-  /* ============================================================
+  /* ============================
      TOUCH HANDLERS
-  ============================================================ */
+  ============================ */
   function onTouchStart(e) {
     if (!e.touches) return;
 
@@ -283,13 +311,7 @@ function MeasurementsTabPanel() {
       const midY = (a.clientY + b.clientY) / 2;
       const p = clientToSvg(midX, midY);
 
-      pinchRef.current = {
-        active: true,
-        lastDist: dist,
-        ax: p.x,
-        ay: p.y,
-      };
-
+      pinchRef.current = { active: true, lastDist: dist, ax: p.x, ay: p.y };
       panRef.current.active = false;
       return;
     }
@@ -315,11 +337,11 @@ function MeasurementsTabPanel() {
       const dy = a.clientY - b.clientY;
       const dist = Math.hypot(dx, dy);
 
-      let factor = dist / (pinchRef.current.lastDist || dist);
+      const prev = pinchRef.current.lastDist || dist;
+      let factor = dist / prev;
       factor = clamp(factor, 0.92, 1.08);
 
       const cam = camRef.current;
-
       cam.tx = pinchRef.current.ax - factor * (pinchRef.current.ax - cam.tx);
       cam.ty = pinchRef.current.ay - factor * (pinchRef.current.ay - cam.ty);
       cam.scale *= factor;
@@ -329,7 +351,7 @@ function MeasurementsTabPanel() {
       return;
     }
 
-    // PAN (ONLY WHEN ZOOMED)
+    // PAN (only when zoomed)
     if (
       e.touches.length === 1 &&
       panRef.current.active &&
@@ -353,18 +375,10 @@ function MeasurementsTabPanel() {
     panRef.current.active = false;
   }
 
-  /* ============================================================
-     RENDER HELPERS
-  ============================================================ */
-  function formatDate(d) {
-    try {
-      return d.toLocaleDateString();
-    } catch {
-      return "";
-    }
-  }
-
-  function onChipToggle(name) {
+  /* ============================
+     UI HELPERS
+  ============================ */
+  function toggleChip(name) {
     setSelected((prev) => {
       const on = prev.includes(name);
       if (on) return prev.filter((x) => x !== name);
@@ -374,9 +388,9 @@ function MeasurementsTabPanel() {
     requestAnimationFrame(() => resetCamera());
   }
 
-  /* ============================================================
-     UI
-  ============================================================ */
+  /* ============================
+     RENDER
+  ============================ */
   return (
     <div
       style={{
@@ -387,7 +401,6 @@ function MeasurementsTabPanel() {
         background: "#101014",
       }}
     >
-      {/* HEADER */}
       <div style={{ fontSize: 13, opacity: 0.75 }}>
         Measurements (multi-select)
       </div>
@@ -395,7 +408,7 @@ function MeasurementsTabPanel() {
       <div
         style={{
           marginTop: 6,
-          fontSize: 12,
+          fontSize: 11,
           color: "rgba(255,255,255,0.55)",
           fontWeight: 700,
         }}
@@ -403,7 +416,7 @@ function MeasurementsTabPanel() {
         Select measurements • Pinch to zoom • Drag to pan (when zoomed)
       </div>
 
-      {/* SELECTOR */}
+      {/* CHIPS */}
       <div
         style={{
           marginTop: 12,
@@ -417,7 +430,7 @@ function MeasurementsTabPanel() {
           return (
             <button
               key={n}
-              onClick={() => onChipToggle(n)}
+              onClick={() => toggleChip(n)}
               style={{
                 padding: "8px 12px",
                 borderRadius: 999,
@@ -504,7 +517,7 @@ function MeasurementsTabPanel() {
                 overflow: "visible",
               }}
             >
-              {/* BASIC LABELS */}
+              {/* SIMPLE Y LABELS */}
               <text x={6} y={PAD} fontSize="10" fill="#aaa">
                 {Math.round(maxVal)}
               </text>
@@ -514,7 +527,7 @@ function MeasurementsTabPanel() {
 
               <g ref={cameraGroupRef}>
                 {Object.entries(grouped).map(([name, pts], idx) => {
-                  const color = MEAS_LINE_COLORS[idx % MEAS_LINE_COLORS.length];
+                  const color = SERIES_COLORS[idx % SERIES_COLORS.length];
                   return (
                     <g key={name}>
                       {paths[name] && (
@@ -531,7 +544,6 @@ function MeasurementsTabPanel() {
                       {pts.map((p, i) => {
                         const cx = xByTime(p.ts);
                         const cy = yByValue(p.value);
-
                         return (
                           <g key={i}>
                             <circle
@@ -541,13 +553,13 @@ function MeasurementsTabPanel() {
                               fill="transparent"
                               onClick={() =>
                                 setActivePoint({
+                                  type: "measurement",
                                   name,
                                   value: p.value,
                                   unit: p.unit,
                                   date: p.date,
                                   cx,
                                   cy,
-                                  color,
                                 })
                               }
                             />
@@ -589,8 +601,7 @@ function MeasurementsTabPanel() {
                       fill="#fff"
                       fontWeight="900"
                     >
-                      {activePoint.value}{" "}
-                      {activePoint.unit ? activePoint.unit : ""}
+                      {activePoint.value} {activePoint.unit}
                     </text>
                     <text
                       x={activePoint.cx}
@@ -600,7 +611,7 @@ function MeasurementsTabPanel() {
                       fill="rgba(255,255,255,0.70)"
                       fontWeight="800"
                     >
-                      {formatDate(activePoint.date)}
+                      {formatDateMaybe(activePoint.date)}
                     </text>
                   </g>
                 )}
@@ -642,7 +653,7 @@ function MeasurementsTabPanel() {
                     {p.name}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.65 }}>
-                    {formatDate(p.date)}
+                    {formatDateMaybe(p.date)}
                   </div>
                 </div>
 
@@ -657,6 +668,645 @@ function MeasurementsTabPanel() {
   );
 }
 
+/* ============================================================
+   PRs TAB PANEL (EMBEDDED)
+   - Mirrors Measurements 1:1
+   - Source: public."PRs" (Supabase: from("PRs"))
+   - Series key: lift_name
+   - Value: weight
+============================================================ */
+function PRsTabPanel() {
+  /* ============================
+     STATE
+  ============================ */
+  const [loading, setLoading] = useState(true);
+  const [allRows, setAllRows] = useState([]);
+  const [names, setNames] = useState([]); // distinct lift_name
+  const [selected, setSelected] = useState([]); // selected lift_name
+  const [activePoint, setActivePoint] = useState(null);
+
+  /* ============================
+     GRAPH CONSTANTS
+  ============================ */
+  const GRAPH_W = 360;
+  const GRAPH_H = 220;
+  const PAD = 44;
+
+  /* ============================
+     SVG + CAMERA
+  ============================ */
+  const svgRef = useRef(null);
+  const cameraGroupRef = useRef(null);
+
+  const camRef = useRef({ scale: 1, tx: 0, ty: 0 });
+  const pinchRef = useRef({ active: false, lastDist: null, ax: 0, ay: 0 });
+  const panRef = useRef({ active: false, lastX: null, lastY: null });
+
+  /* ============================
+     LOAD PRs
+  ============================ */
+  useEffect(() => {
+    loadPRs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadPRs() {
+    setLoading(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setAllRows([]);
+      setNames([]);
+      setSelected([]);
+      setActivePoint(null);
+      setLoading(false);
+      return;
+    }
+
+    // IMPORTANT: table name is "PRs" (capital P R)
+    // Supabase is usually case-sensitive for quoted identifiers.
+    const { data } = await supabase
+      .from("PRs")
+      .select("id, lift_name, weight, unit, date, reps, notes, order_index")
+      .eq("user_id", user.id)
+      .order("date", { ascending: true });
+
+    const rows = data || [];
+    setAllRows(rows);
+
+    const distinct = [
+      ...new Set(rows.map((r) => r.lift_name).filter(Boolean)),
+    ];
+    setNames(distinct);
+
+    // Auto-select first lift so the tab doesn't feel empty
+    if (distinct.length && selected.length === 0) {
+      setSelected([distinct[0]]);
+    }
+
+    setLoading(false);
+
+    requestAnimationFrame(() => {
+      resetCamera();
+    });
+  }
+
+  /* ============================
+     GROUP BY lift_name (selected only)
+  ============================ */
+  const grouped = useMemo(() => {
+    const map = {};
+
+    for (const row of allRows) {
+      const nm = row?.lift_name;
+      if (!nm || !selected.includes(nm)) continue;
+
+      if (!map[nm]) map[nm] = [];
+
+      // date column is DATE (no time) — still safe to new Date(...)
+      const d = new Date(row.date);
+
+      map[nm].push({
+        ts: d.getTime(),
+        date: d,
+        value: safeNum(row.weight, 0),
+        unit: safeText(row.unit || "lb"),
+        name: nm,
+        reps: row.reps ?? null,
+        notes: safeText(row.notes || ""),
+      });
+    }
+
+    return map;
+  }, [allRows, selected]);
+
+  const allPoints = useMemo(() => {
+    return Object.values(grouped).flat();
+  }, [grouped]);
+
+  /* ============================
+     DOMAIN (all selected)
+  ============================ */
+  const minTs = useMemo(() => {
+    if (!allPoints.length) return Date.now();
+    return Math.min(...allPoints.map((p) => p.ts));
+  }, [allPoints]);
+
+  const maxTs = useMemo(() => {
+    if (!allPoints.length) return Date.now() + 1;
+    return Math.max(...allPoints.map((p) => p.ts));
+  }, [allPoints]);
+
+  const minVal = useMemo(() => {
+    if (!allPoints.length) return 0;
+    return Math.min(...allPoints.map((p) => p.value));
+  }, [allPoints]);
+
+  const maxVal = useMemo(() => {
+    if (!allPoints.length) return 1;
+    return Math.max(...allPoints.map((p) => p.value));
+  }, [allPoints]);
+
+  const yPad = useMemo(() => {
+    const span = maxVal - minVal;
+    return span * 0.15 || 5;
+  }, [minVal, maxVal]);
+
+  /* ============================
+     SCALE HELPERS
+  ============================ */
+  function xByTime(ts) {
+    const d = maxTs - minTs || 1;
+    return PAD + ((ts - minTs) / d) * (GRAPH_W - PAD * 2);
+  }
+
+  function yByValue(v) {
+    const dMin = minVal - yPad;
+    const dMax = maxVal + yPad;
+    const d = dMax - dMin || 1;
+    return GRAPH_H - PAD - ((v - dMin) / d) * (GRAPH_H - PAD * 2);
+  }
+
+  /* ============================
+     PATHS PER SERIES
+  ============================ */
+  const paths = useMemo(() => {
+    const out = {};
+
+    Object.entries(grouped).forEach(([name, pts]) => {
+      if (pts.length < 2) return;
+
+      let d = "";
+      pts.forEach((p, i) => {
+        const x = xByTime(p.ts);
+        const y = yByValue(p.value);
+        d += `${i === 0 ? "M" : "L"} ${x} ${y} `;
+      });
+
+      out[name] = d.trim();
+    });
+
+    return out;
+  }, [grouped, minTs, maxTs, minVal, maxVal, yPad]);
+
+  /* ============================
+     CAMERA ENGINE (same as measurements)
+  ============================ */
+  function applyCamera() {
+    if (!cameraGroupRef.current) return;
+
+    const cam = camRef.current;
+
+    cam.scale = clamp(cam.scale, 1, 8);
+
+    if (cam.scale <= 1.01) {
+      cam.scale = 1;
+      cam.tx = 0;
+      cam.ty = 0;
+    }
+
+    const vw = GRAPH_W;
+    const vh = GRAPH_H;
+    const cw = GRAPH_W * cam.scale;
+    const ch = GRAPH_H * cam.scale;
+
+    const minTx = vw - cw;
+    const maxTx = 0;
+    const minTy = vh - ch;
+    const maxTy = 0;
+
+    cam.tx = clamp(cam.tx, minTx, maxTx);
+    cam.ty = clamp(cam.ty, minTy, maxTy);
+
+    cameraGroupRef.current.setAttribute(
+      "transform",
+      `translate(${cam.tx}, ${cam.ty}) scale(${cam.scale})`
+    );
+  }
+
+  function resetCamera() {
+    camRef.current = { scale: 1, tx: 0, ty: 0 };
+    applyCamera();
+  }
+
+  function clientToSvg(x, y) {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+
+    const pt = svg.createSVGPoint();
+    pt.x = x;
+    pt.y = y;
+
+    const sp = pt.matrixTransform(ctm.inverse());
+    return { x: sp.x, y: sp.y };
+  }
+
+  /* ============================
+     TOUCH HANDLERS
+  ============================ */
+  function onTouchStart(e) {
+    if (!e.touches) return;
+
+    if (e.touches.length === 2) {
+      const [a, b] = e.touches;
+      const dx = a.clientX - b.clientX;
+      const dy = a.clientY - b.clientY;
+      const dist = Math.hypot(dx, dy);
+
+      const midX = (a.clientX + b.clientX) / 2;
+      const midY = (a.clientY + b.clientY) / 2;
+      const p = clientToSvg(midX, midY);
+
+      pinchRef.current = { active: true, lastDist: dist, ax: p.x, ay: p.y };
+      panRef.current.active = false;
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      panRef.current = {
+        active: true,
+        lastX: e.touches[0].clientX,
+        lastY: e.touches[0].clientY,
+      };
+      pinchRef.current.active = false;
+    }
+  }
+
+  function onTouchMove(e) {
+    if (!e.touches) return;
+    e.preventDefault();
+
+    // PINCH
+    if (e.touches.length === 2 && pinchRef.current.active) {
+      const [a, b] = e.touches;
+      const dx = a.clientX - b.clientX;
+      const dy = a.clientY - b.clientY;
+      const dist = Math.hypot(dx, dy);
+
+      const prev = pinchRef.current.lastDist || dist;
+      let factor = dist / prev;
+      factor = clamp(factor, 0.92, 1.08);
+
+      const cam = camRef.current;
+      cam.tx = pinchRef.current.ax - factor * (pinchRef.current.ax - cam.tx);
+      cam.ty = pinchRef.current.ay - factor * (pinchRef.current.ay - cam.ty);
+      cam.scale *= factor;
+
+      pinchRef.current.lastDist = dist;
+      applyCamera();
+      return;
+    }
+
+    // PAN (only when zoomed)
+    if (
+      e.touches.length === 1 &&
+      panRef.current.active &&
+      camRef.current.scale > 1.01
+    ) {
+      const curr = clientToSvg(e.touches[0].clientX, e.touches[0].clientY);
+      const prev = clientToSvg(panRef.current.lastX, panRef.current.lastY);
+
+      camRef.current.tx += curr.x - prev.x;
+      camRef.current.ty += curr.y - prev.y;
+
+      panRef.current.lastX = e.touches[0].clientX;
+      panRef.current.lastY = e.touches[0].clientY;
+
+      applyCamera();
+    }
+  }
+
+  function onTouchEnd() {
+    pinchRef.current.active = false;
+    panRef.current.active = false;
+  }
+
+  /* ============================
+     UI HELPERS
+  ============================ */
+  function toggleChip(name) {
+    setSelected((prev) => {
+      const on = prev.includes(name);
+      if (on) return prev.filter((x) => x !== name);
+      return [...prev, name];
+    });
+
+    setActivePoint(null);
+    requestAnimationFrame(() => resetCamera());
+  }
+
+  /* ============================
+     RENDER
+  ============================ */
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        padding: 16,
+        borderRadius: 18,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "#101014",
+      }}
+    >
+      <div style={{ fontSize: 13, opacity: 0.75 }}>PRs (multi-select)</div>
+
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 11,
+          color: "rgba(255,255,255,0.55)",
+          fontWeight: 700,
+        }}
+      >
+        Select lifts • Pinch to zoom • Drag to pan (when zoomed)
+      </div>
+
+      {/* CHIPS */}
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        {names.map((n) => {
+          const on = selected.includes(n);
+          return (
+            <button
+              key={n}
+              onClick={() => toggleChip(n)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.15)",
+                background: on ? "#ff2f2f" : "rgba(255,255,255,0.05)",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* GRAPH */}
+      <div
+        style={{
+          marginTop: 14,
+          padding: 12,
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.08)",
+          background: "rgba(255,255,255,0.02)",
+        }}
+      >
+        {loading ? (
+          <p style={{ opacity: 0.7 }}>Loading PRs…</p>
+        ) : selected.length === 0 ? (
+          <div style={{ opacity: 0.6, fontSize: 14 }}>Select lifts to display</div>
+        ) : (
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                marginBottom: 10,
+              }}
+            >
+              <button
+                onClick={() => {
+                  resetCamera();
+                  setActivePoint(null);
+                }}
+                style={{
+                  height: 36,
+                  padding: "0 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "#fff",
+                  fontWeight: 800,
+                }}
+              >
+                Reset
+              </button>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "rgba(255,255,255,0.55)",
+                  fontWeight: 700,
+                }}
+              >
+                {selected.length} selected
+              </div>
+            </div>
+
+            <svg
+              ref={svgRef}
+              width="100%"
+              viewBox={`0 0 ${GRAPH_W} ${GRAPH_H}`}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+              style={{
+                touchAction: "none",
+                userSelect: "none",
+                display: "block",
+                overflow: "visible",
+              }}
+            >
+              {/* Y LABELS */}
+              <text x={6} y={PAD} fontSize="10" fill="#aaa">
+                {Math.round(maxVal)}
+              </text>
+              <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="#aaa">
+                {Math.round(minVal)}
+              </text>
+
+              <g ref={cameraGroupRef}>
+                {Object.entries(grouped).map(([name, pts], idx) => {
+                  const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+
+                  return (
+                    <g key={name}>
+                      {paths[name] && (
+                        <path
+                          d={paths[name]}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      )}
+
+                      {pts.map((p, i) => {
+                        const cx = xByTime(p.ts);
+                        const cy = yByValue(p.value);
+
+                        return (
+                          <g key={i}>
+                            {/* tap target */}
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={12}
+                              fill="transparent"
+                              onClick={() =>
+                                setActivePoint({
+                                  type: "pr",
+                                  name,
+                                  value: p.value,
+                                  unit: p.unit,
+                                  date: p.date,
+                                  reps: p.reps,
+                                  notes: p.notes,
+                                  cx,
+                                  cy,
+                                })
+                              }
+                            />
+
+                            {/* dot */}
+                            <circle cx={cx} cy={cy} r={6} fill={color} />
+                          </g>
+                        );
+                      })}
+                    </g>
+                  );
+                })}
+
+                {/* TOOLTIP */}
+                {activePoint && (
+                  <g>
+                    <rect
+                      x={activePoint.cx - 88}
+                      y={activePoint.cy - 92}
+                      width={176}
+                      height={78}
+                      rx={18}
+                      fill="#141418"
+                      stroke="rgba(255,255,255,0.10)"
+                    />
+
+                    <text
+                      x={activePoint.cx}
+                      y={activePoint.cy - 68}
+                      textAnchor="middle"
+                      fontSize="12"
+                      fill="rgba(255,255,255,0.75)"
+                      fontWeight="800"
+                    >
+                      {activePoint.name}
+                    </text>
+
+                    <text
+                      x={activePoint.cx}
+                      y={activePoint.cy - 48}
+                      textAnchor="middle"
+                      fontSize="18"
+                      fill="#fff"
+                      fontWeight="900"
+                    >
+                      {activePoint.value} {activePoint.unit}
+                    </text>
+
+                    <text
+                      x={activePoint.cx}
+                      y={activePoint.cy - 30}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill="rgba(255,255,255,0.70)"
+                      fontWeight="800"
+                    >
+                      {formatDateMaybe(activePoint.date)}
+                      {activePoint.reps ? ` • ${activePoint.reps} reps` : ""}
+                    </text>
+
+                    {activePoint.notes ? (
+                      <text
+                        x={activePoint.cx}
+                        y={activePoint.cy - 16}
+                        textAnchor="middle"
+                        fontSize="10"
+                        fill="rgba(255,255,255,0.55)"
+                        fontWeight="700"
+                      >
+                        {activePoint.notes.length > 22
+                          ? activePoint.notes.slice(0, 22) + "…"
+                          : activePoint.notes}
+                      </text>
+                    ) : null}
+                  </g>
+                )}
+              </g>
+            </svg>
+          </>
+        )}
+      </div>
+
+      {/* LIST */}
+      {!loading && selected.length > 0 && (
+        <div
+          style={{
+            marginTop: 14,
+            borderRadius: 18,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.02)",
+            overflow: "hidden",
+          }}
+        >
+          {[...allPoints]
+            .sort((a, b) => b.ts - a.ts)
+            .map((p, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 14px",
+                  borderBottom:
+                    i === allPoints.length - 1
+                      ? "none"
+                      : "1px solid rgba(255,255,255,0.06)",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
+                    {p.name}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.65 }}>
+                    {formatDateMaybe(p.date)}
+                    {p.reps ? ` • ${p.reps} reps` : ""}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 18, fontWeight: 900 }}>
+                  {p.value} {p.unit}
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   MAIN ANALYTICS PAGE (BODYWEIGHT)
+============================================================ */
 export default function Analytics() {
   const navigate = useNavigate();
 
@@ -764,9 +1414,7 @@ export default function Analytics() {
     });
   }
 
-  const latestWeight = weights.length
-    ? weights[weights.length - 1].weight
-    : null;
+  const latestWeight = weights.length ? weights[weights.length - 1].weight : null;
 
   /* ============================================================
      NORMALIZE DATA
@@ -778,7 +1426,7 @@ export default function Analytics() {
         type: "weight",
         ts: d.getTime(),
         date: d,
-        value: Number(w.weight),
+        value: safeNum(w.weight, 0),
       };
     });
   }, [weights]);
@@ -786,13 +1434,12 @@ export default function Analytics() {
   const goalPoint = useMemo(() => {
     if (!goal || !goal.target_date) return null;
     const d = new Date(goal.target_date);
-    // Guard: invalid date
     if (Number.isNaN(d.getTime())) return null;
     return {
       type: "goal",
       ts: d.getTime(),
       date: d,
-      value: Number(goal.target_value),
+      value: safeNum(goal.target_value, 0),
     };
   }, [goal]);
 
@@ -892,17 +1539,6 @@ export default function Analytics() {
   }, [minTs, maxTs]);
 
   /* ============================================================
-     DATE HELPERS
-  ============================================================ */
-  function formatDate(d) {
-    try {
-      return d.toLocaleDateString();
-    } catch {
-      return "";
-    }
-  }
-
-  /* ============================================================
      CLIENT → SVG COORDINATES
   ============================================================ */
   function clientToSvg(clientX, clientY) {
@@ -923,45 +1559,31 @@ export default function Analytics() {
   /* ============================================================
      CAMERA: CLAMP + APPLY
   ============================================================ */
-  function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-  }
-
   function applyCamera() {
     if (!cameraGroupRef.current) return;
 
     const cam = camRef.current;
 
-    // Clamp scale
-    const MIN_SCALE = 1;
-    const MAX_SCALE = 8;
-    cam.scale = clamp(cam.scale, MIN_SCALE, MAX_SCALE);
+    cam.scale = clamp(cam.scale, 1, 8);
 
-    // If not zoomed, lock to default
     if (cam.scale <= 1.01) {
       cam.scale = 1;
       cam.tx = 0;
       cam.ty = 0;
     }
 
-    // VIEWPORT in SVG units
     const viewportW = GRAPH_W;
     const viewportH = GRAPH_H;
-
-    // CONTENT size after scaling
     const contentW = GRAPH_W * cam.scale;
     const contentH = GRAPH_H * cam.scale;
 
     const minTx = viewportW - contentW;
     const maxTx = 0;
-
     const minTy = viewportH - contentH;
     const maxTy = 0;
 
     cam.tx = clamp(cam.tx, minTx, maxTx);
     cam.ty = clamp(cam.ty, minTy, maxTy);
-
-    camRef.current = cam;
 
     cameraGroupRef.current.setAttribute(
       "transform",
@@ -970,11 +1592,7 @@ export default function Analytics() {
   }
 
   function resetCamera() {
-    camRef.current = {
-      scale: 1,
-      tx: 0,
-      ty: 0,
-    };
+    camRef.current = { scale: 1, tx: 0, ty: 0 };
     applyCamera();
   }
 
@@ -1004,7 +1622,6 @@ export default function Analytics() {
       panRef.current.active = false;
       panRef.current.lastClientX = null;
       panRef.current.lastClientY = null;
-
       return;
     }
 
@@ -1015,7 +1632,6 @@ export default function Analytics() {
 
       pinchRef.current.active = false;
       pinchRef.current.lastDist = null;
-
       return;
     }
   }
@@ -1035,7 +1651,6 @@ export default function Analytics() {
 
       const prev = pinchRef.current.lastDist || dist;
       let factor = dist / prev;
-
       factor = clamp(factor, 0.92, 1.08);
 
       const cam = camRef.current;
@@ -1046,14 +1661,12 @@ export default function Analytics() {
       cam.ty = ay - factor * (ay - cam.ty);
       cam.scale = cam.scale * factor;
 
-      camRef.current = cam;
       applyCamera();
-
       pinchRef.current.lastDist = dist;
       return;
     }
 
-    // PAN (ONLY WHEN ZOOMED)
+    // PAN (only when zoomed)
     if (e.touches.length === 1 && panRef.current.active) {
       const cam = camRef.current;
 
@@ -1072,13 +1685,9 @@ export default function Analytics() {
       const prevSvg = clientToSvg(prevClientX, prevClientY);
       const currSvg = clientToSvg(currClientX, currClientY);
 
-      const dxSvg = currSvg.x - prevSvg.x;
-      const dySvg = currSvg.y - prevSvg.y;
+      cam.tx += currSvg.x - prevSvg.x;
+      cam.ty += currSvg.y - prevSvg.y;
 
-      cam.tx += dxSvg;
-      cam.ty += dySvg;
-
-      camRef.current = cam;
       applyCamera();
 
       panRef.current.lastClientX = currClientX;
@@ -1096,7 +1705,7 @@ export default function Analytics() {
   }
 
   /* ============================================================
-     TAP HANDLERS (TOOLTIP)
+     TOOLTIP TAP
   ============================================================ */
   function onDotTap(payload) {
     setActivePoint(payload);
@@ -1164,9 +1773,7 @@ export default function Analytics() {
                 border: "1px solid rgba(255,255,255,0.12)",
                 color: "#fff",
                 fontWeight: 800,
-                background: isActive
-                  ? "#ff2f2f"
-                  : "rgba(255,255,255,0.05)",
+                background: isActive ? "#ff2f2f" : "rgba(255,255,255,0.05)",
               }}
             >
               {label}
@@ -1175,9 +1782,7 @@ export default function Analytics() {
         })}
       </div>
 
-      {/* ============================================================
-          BODYWEIGHT TAB
-      ============================================================ */}
+      {/* BODYWEIGHT */}
       {tab === "bodyweight" && (
         <div
           style={{
@@ -1193,9 +1798,7 @@ export default function Analytics() {
           ) : (
             <>
               {/* CURRENT */}
-              <div style={{ fontSize: 13, opacity: 0.75 }}>
-                Current Bodyweight
-              </div>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>Current Bodyweight</div>
 
               <div
                 style={{
@@ -1293,9 +1896,7 @@ export default function Analytics() {
                   {/* CAMERA GROUP */}
                   <g id="camera-layer" ref={cameraGroupRef}>
                     {/* AREA */}
-                    {areaPath && (
-                      <path d={areaPath} fill="rgba(255,47,47,0.18)" />
-                    )}
+                    {areaPath && <path d={areaPath} fill="rgba(255,47,47,0.18)" />}
 
                     {/* LINE */}
                     {linePath && (
@@ -1317,7 +1918,6 @@ export default function Analytics() {
 
                       return (
                         <g key={i}>
-                          {/* tap target */}
                           <circle
                             cx={cx}
                             cy={cy}
@@ -1334,7 +1934,6 @@ export default function Analytics() {
                             }
                           />
 
-                          {/* visible */}
                           <circle
                             cx={cx}
                             cy={cy}
@@ -1397,8 +1996,8 @@ export default function Analytics() {
                           fontWeight="800"
                         >
                           {activePoint.type === "goal"
-                            ? `Goal • ${formatDate(activePoint.date)}`
-                            : formatDate(activePoint.date)}
+                            ? `Goal • ${formatDateMaybe(activePoint.date)}`
+                            : formatDateMaybe(activePoint.date)}
                         </text>
                       </g>
                     )}
@@ -1437,7 +2036,7 @@ export default function Analytics() {
                         color: "rgba(255,255,255,0.90)",
                       }}
                     >
-                      {formatDate(p.date)}
+                      {formatDateMaybe(p.date)}
                     </div>
                     <div
                       style={{
@@ -1454,15 +2053,9 @@ export default function Analytics() {
 
               {/* GOAL NOTE */}
               {goalPoint && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    fontSize: 12,
-                    opacity: 0.7,
-                  }}
-                >
-                  Goal shown in gold ({formatDate(goalPoint.date)}). Zoom out to
-                  see future spacing.
+                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+                  Goal shown in gold ({formatDateMaybe(goalPoint.date)}). Zoom out
+                  to see future spacing.
                 </div>
               )}
             </>
@@ -1470,28 +2063,11 @@ export default function Analytics() {
         </div>
       )}
 
-      {/* ============================================================
-          MEASUREMENTS TAB (REAL)
-      ============================================================ */}
+      {/* MEASUREMENTS */}
       {tab === "measurements" && <MeasurementsTabPanel />}
 
-      {/* ============================================================
-          PRs TAB (placeholder for now)
-      ============================================================ */}
-      {tab === "prs" && (
-        <div
-          style={{
-            marginTop: 14,
-            padding: 16,
-            borderRadius: 18,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "#101014",
-            opacity: 0.7,
-          }}
-        >
-          PR analytics coming next
-        </div>
-      )}
+      {/* PRs */}
+      {tab === "prs" && <PRsTabPanel />}
 
       {/* SPACER */}
       <div style={{ height: 40 }} />
