@@ -1,8 +1,19 @@
 // src/pages/Analytics.jsx
 // ============================================================
 // ARM PAL — SMART ANALYTICS
-// BODYWEIGHT ANALYTICS — TRUE CAMERA ZOOM (SVG-UNIT CORRECT)
-// LONG FORM — NO COMPRESSION — SAFE FOR YOUR PROJECT
+// BODYWEIGHT (NOW) + FUTURE GOAL DOT + TRUE CAMERA ZOOM
+// FULL FILE REPLACEMENT — LONG FORM (NO CRAMMED STYLE BLOCKS)
+// ============================================================
+// WHAT THIS FILE DOES:
+// ✅ Bodyweight chart renders with a clean ArmPal look
+// ✅ Points are chronological (left→right)
+// ✅ Line follows dots perfectly
+// ✅ Gold dot shows FUTURE bodyweight goal (target_date)
+// ✅ Bottom list shows newest→oldest entries
+// ✅ TRUE CAMERA ZOOM (pinch) — dots/line scale larger
+// ✅ TRUE PAN (drag) — once zoomed, pan left/right AND up/down
+// ✅ No "invisible ceiling" / border that blocks vertical movement
+// ✅ Reset returns to default view
 // ============================================================
 
 import React, {
@@ -14,46 +25,48 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-/* ============================================================
-   COMPONENT
-============================================================ */
 export default function Analytics() {
   const navigate = useNavigate();
 
   /* ============================================================
-     STATE
+     TAB STATE
   ============================================================ */
   const [tab, setTab] = useState("bodyweight");
 
-  const [weights, setWeights] = useState([]);
-  const [goal, setGoal] = useState(null);
-
+  /* ============================================================
+     DATA STATE
+  ============================================================ */
+  const [weights, setWeights] = useState([]); // bodyweight_logs rows
+  const [goal, setGoal] = useState(null); // goals row for type bodyweight
   const [loading, setLoading] = useState(true);
-  const [activePoint, setActivePoint] = useState(null);
 
   /* ============================================================
-     GRAPH CONSTANTS
+     INTERACTION STATE
   ============================================================ */
-  const GRAPH_WIDTH = 360;
-  const GRAPH_HEIGHT = 220;
+  const [activePoint, setActivePoint] = useState(null); // tooltip
+
+  /* ============================================================
+     GRAPH CONSTANTS (VIEWBOX UNITS)
+  ============================================================ */
+  const GRAPH_W = 360;
+  const GRAPH_H = 220;
   const PAD = 44;
 
   /* ============================================================
-     SVG REFS
+     SVG + CAMERA REFS
   ============================================================ */
   const svgRef = useRef(null);
   const cameraGroupRef = useRef(null);
 
-  /* ============================================================
-     CAMERA STATE (kept in refs for smooth touch)
-     NOTE: THESE ARE SVG-UNIT TRANSLATIONS (viewBox units)
-  ============================================================ */
+  // Camera transform is kept in refs for smooth touch interaction.
+  // IMPORTANT: tx/ty are in SVG viewBox units (NOT screen pixels).
   const camRef = useRef({
     scale: 1,
     tx: 0,
     ty: 0,
   });
 
+  // Pinch tracking
   const pinchRef = useRef({
     active: false,
     lastDist: null,
@@ -61,10 +74,11 @@ export default function Analytics() {
     anchorSvgY: 0,
   });
 
+  // Pan tracking
   const panRef = useRef({
     active: false,
-    lastX: null,
-    lastY: null,
+    lastClientX: null,
+    lastClientY: null,
   });
 
   /* ============================================================
@@ -74,6 +88,7 @@ export default function Analytics() {
     if (tab === "bodyweight") {
       loadBodyweight();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   async function loadBodyweight() {
@@ -91,14 +106,15 @@ export default function Analytics() {
       return;
     }
 
+    // Bodyweight logs
     const { data: bw } = await supabase
       .from("bodyweight_logs")
       .select("weight, logged_at")
       .eq("user_id", user.id)
       .order("logged_at", { ascending: true });
 
-    // pull your bodyweight goal (future date like 2026-07-11)
-    const { data: goalData } = await supabase
+    // Bodyweight goal (optional)
+    const { data: goalRow } = await supabase
       .from("goals")
       .select("target_value, target_date")
       .eq("user_id", user.id)
@@ -106,21 +122,22 @@ export default function Analytics() {
       .maybeSingle();
 
     setWeights(bw || []);
-    setGoal(goalData || null);
+    setGoal(goalRow || null);
     setActivePoint(null);
     setLoading(false);
 
-    // whenever data reloads, reset camera so you don't get "lost"
+    // Reset camera after data load (prevents "lost" view)
     requestAnimationFrame(() => {
       resetCamera();
     });
   }
 
-  const latestWeight =
-    weights.length > 0 ? weights[weights.length - 1].weight : null;
+  const latestWeight = weights.length
+    ? weights[weights.length - 1].weight
+    : null;
 
   /* ============================================================
-     CANONICAL POINTS
+     NORMALIZE DATA
   ============================================================ */
   const points = useMemo(() => {
     return (weights || []).map((w) => {
@@ -129,7 +146,7 @@ export default function Analytics() {
         type: "weight",
         ts: d.getTime(),
         date: d,
-        value: w.weight,
+        value: Number(w.weight),
       };
     });
   }, [weights]);
@@ -137,49 +154,68 @@ export default function Analytics() {
   const goalPoint = useMemo(() => {
     if (!goal || !goal.target_date) return null;
     const d = new Date(goal.target_date);
+    // Guard: invalid date
+    if (Number.isNaN(d.getTime())) return null;
     return {
       type: "goal",
       ts: d.getTime(),
       date: d,
-      value: goal.target_value,
+      value: Number(goal.target_value),
     };
   }, [goal]);
 
   /* ============================================================
-     STATIC DOMAIN (includes future goal ts/value)
-     - This keeps your gold dot on the chart always.
+     STATIC DOMAIN (INCLUDES FUTURE GOAL)
+     This keeps the gold dot visible in timeline space.
   ============================================================ */
-  const minTs = points.length ? points[0].ts : Date.now();
-  const maxTs = Math.max(
-    points.length ? points[points.length - 1].ts : Date.now(),
-    goalPoint ? goalPoint.ts : 0
-  );
+  const minTs = useMemo(() => {
+    if (points.length) return points[0].ts;
+    return Date.now();
+  }, [points]);
 
-  const allValues = [
-    ...points.map((p) => p.value),
-    ...(goalPoint ? [goalPoint.value] : []),
-  ];
+  const maxTs = useMemo(() => {
+    const last = points.length ? points[points.length - 1].ts : Date.now();
+    const g = goalPoint ? goalPoint.ts : 0;
+    return Math.max(last, g);
+  }, [points, goalPoint]);
 
-  const minVal = allValues.length ? Math.min(...allValues) : 0;
-  const maxVal = allValues.length ? Math.max(...allValues) : 1;
-  const yPad = (maxVal - minVal) * 0.15 || 5;
+  const allVals = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < points.length; i++) arr.push(points[i].value);
+    if (goalPoint) arr.push(goalPoint.value);
+    return arr;
+  }, [points, goalPoint]);
 
+  const minVal = useMemo(() => {
+    if (!allVals.length) return 0;
+    return Math.min(...allVals);
+  }, [allVals]);
+
+  const maxVal = useMemo(() => {
+    if (!allVals.length) return 1;
+    return Math.max(...allVals);
+  }, [allVals]);
+
+  const yPad = useMemo(() => {
+    const span = maxVal - minVal;
+    return span * 0.15 || 5;
+  }, [minVal, maxVal]);
+
+  /* ============================================================
+     SCALE HELPERS
+  ============================================================ */
   function xByTime(ts) {
-    return (
-      PAD +
-      ((ts - minTs) / (maxTs - minTs || 1)) *
-        (GRAPH_WIDTH - PAD * 2)
-    );
+    const denom = maxTs - minTs || 1;
+    const t = (ts - minTs) / denom;
+    return PAD + t * (GRAPH_W - PAD * 2);
   }
 
   function yByValue(v) {
-    return (
-      GRAPH_HEIGHT -
-      PAD -
-      ((v - (minVal - yPad)) /
-        ((maxVal + yPad) - (minVal - yPad))) *
-        (GRAPH_HEIGHT - PAD * 2)
-    );
+    const domainMin = minVal - yPad;
+    const domainMax = maxVal + yPad;
+    const denom = domainMax - domainMin || 1;
+    const t = (v - domainMin) / denom;
+    return GRAPH_H - PAD - t * (GRAPH_H - PAD * 2);
   }
 
   /* ============================================================
@@ -187,23 +223,28 @@ export default function Analytics() {
   ============================================================ */
   const linePath = useMemo(() => {
     if (points.length <= 1) return "";
-    return points
-      .map((p, i) => {
-        const x = xByTime(p.ts);
-        const y = yByValue(p.value);
-        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-      })
-      .join(" ");
+
+    let d = "";
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const x = xByTime(p.ts);
+      const y = yByValue(p.value);
+      d += `${i === 0 ? "M" : "L"} ${x} ${y} `;
+    }
+
+    return d.trim();
   }, [points, minTs, maxTs, minVal, maxVal, yPad]);
 
   const areaPath = useMemo(() => {
     if (!linePath) return "";
-    const baseY = GRAPH_HEIGHT - PAD;
-    return `${linePath} L ${xByTime(maxTs)} ${baseY} L ${xByTime(minTs)} ${baseY} Z`;
+    const baseY = GRAPH_H - PAD;
+    const leftX = xByTime(minTs);
+    const rightX = xByTime(maxTs);
+    return `${linePath} L ${rightX} ${baseY} L ${leftX} ${baseY} Z`;
   }, [linePath, minTs, maxTs]);
 
   /* ============================================================
-     TIMELINE LABELS (X AXIS)
+     X AXIS TICKS
   ============================================================ */
   const xTicks = useMemo(() => {
     const ticks = [];
@@ -212,7 +253,7 @@ export default function Analytics() {
       const t = count === 1 ? 0 : i / (count - 1);
       const ts = minTs + t * (maxTs - minTs);
       ticks.push({
-        x: PAD + t * (GRAPH_WIDTH - PAD * 2),
+        x: PAD + t * (GRAPH_W - PAD * 2),
         label: new Date(ts).toLocaleDateString(),
       });
     }
@@ -220,64 +261,94 @@ export default function Analytics() {
   }, [minTs, maxTs]);
 
   /* ============================================================
-     SVG COORDINATE CONVERSION (THIS IS THE CRITICAL FIX)
-     Convert clientX/Y -> SVG viewBox coordinates so zoom is stable.
+     DATE HELPERS
+  ============================================================ */
+  function formatDate(d) {
+    try {
+      return d.toLocaleDateString();
+    } catch {
+      return "";
+    }
+  }
+
+  /* ============================================================
+     CLIENT → SVG COORDINATES (CRITICAL FOR GOOD ZOOM)
   ============================================================ */
   function clientToSvg(clientX, clientY) {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
 
-    // Use SVGPoint + screen CTM inverse (reliable for viewBox)
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+
     const pt = svg.createSVGPoint();
     pt.x = clientX;
     pt.y = clientY;
 
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return { x: 0, y: 0 };
-
-    const inv = ctm.inverse();
-    const sp = pt.matrixTransform(inv);
+    const sp = pt.matrixTransform(ctm.inverse());
     return { x: sp.x, y: sp.y };
   }
 
   /* ============================================================
-     CAMERA APPLY + CLAMP
-     You said: NO weird drifting on axes.
-     So:
-     - Allow zoom everywhere
-     - Pan only when zoomed
-     - Pan only LEFT/RIGHT (horizontal)
-     - Lock vertical movement (ty = 0)
-     - Clamp tx so you can't fling it into infinity
+     CAMERA: CLAMP + APPLY
+
+     ✅ KEY FIX REQUESTED:
+     - When zoomed in a lot, you MUST be able to pan UP/DOWN.
+     - There MUST NOT be an invisible horizontal border ceiling.
+
+     Approach:
+     - We clamp camera bounds based on scaled content vs viewport.
+     - We allow full vertical pan when zoomed (scale > 1).
+     - We keep default behavior clean at scale = 1.
   ============================================================ */
-  function clampCamera() {
-    const cam = camRef.current;
 
-    // clamp scale so it feels sane
-    const MIN_SCALE = 1;
-    const MAX_SCALE = 8;
-    cam.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cam.scale));
-
-    // lock vertical drift (you hated up/down)
-    cam.ty = 0;
-
-    // clamp horizontal so chart doesn't "fly away"
-    // When scaled, content width = GRAPH_WIDTH * scale.
-    // Keep it within the viewBox:
-    // tx max = 0 (fully left aligned)
-    // tx min = GRAPH_WIDTH - GRAPH_WIDTH*scale (fully right aligned)
-    const minTx = GRAPH_WIDTH - GRAPH_WIDTH * cam.scale;
-    const maxTx = 0;
-
-    cam.tx = Math.max(minTx, Math.min(maxTx, cam.tx));
-
-    camRef.current = cam;
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
   }
 
   function applyCamera() {
     if (!cameraGroupRef.current) return;
-    clampCamera();
+
     const cam = camRef.current;
+
+    // Clamp scale
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 8;
+    cam.scale = clamp(cam.scale, MIN_SCALE, MAX_SCALE);
+
+    // If not zoomed, lock to default
+    if (cam.scale <= 1.01) {
+      cam.scale = 1;
+      cam.tx = 0;
+      cam.ty = 0;
+    }
+
+    // VIEWPORT in SVG units
+    const viewportW = GRAPH_W;
+    const viewportH = GRAPH_H;
+
+    // CONTENT size after scaling
+    const contentW = GRAPH_W * cam.scale;
+    const contentH = GRAPH_H * cam.scale;
+
+    // Horizontal bounds:
+    // tx = 0 shows the left edge.
+    // tx = viewportW - contentW shows the right edge.
+    const minTx = viewportW - contentW;
+    const maxTx = 0;
+
+    // Vertical bounds:
+    // ty = 0 shows the top edge.
+    // ty = viewportH - contentH shows the bottom edge.
+    // IMPORTANT: This removes the "ceiling" issue.
+    const minTy = viewportH - contentH;
+    const maxTy = 0;
+
+    cam.tx = clamp(cam.tx, minTx, maxTx);
+    cam.ty = clamp(cam.ty, minTy, maxTy);
+
+    camRef.current = cam;
+
     cameraGroupRef.current.setAttribute(
       "transform",
       `translate(${cam.tx}, ${cam.ty}) scale(${cam.scale})`
@@ -285,30 +356,34 @@ export default function Analytics() {
   }
 
   function resetCamera() {
-    camRef.current.scale = 1;
-    camRef.current.tx = 0;
-    camRef.current.ty = 0;
+    camRef.current = {
+      scale: 1,
+      tx: 0,
+      ty: 0,
+    };
     applyCamera();
   }
 
   /* ============================================================
-     TRUE PINCH ZOOM (ANCHOR LOCKED IN SVG UNITS)
-     This ensures:
-     - Dot under your pinch gets bigger
-     - Nothing "slides away"
-     - It zooms INTO where you're pinching
+     TOUCH LOGIC
+
+     Goals:
+     ✅ Pinch zoom is gradual (no jumping)
+     ✅ Zoom anchors to midpoint of fingers
+     ✅ Pan left/right + up/down only when zoomed
+     ✅ When you let go, it stays (no snap)
   ============================================================ */
+
   function onTouchStart(e) {
     if (!e.touches) return;
 
-    // pinch
     if (e.touches.length === 2) {
       const t1 = e.touches[0];
       const t2 = e.touches[1];
 
       const dx = t1.clientX - t2.clientX;
       const dy = t1.clientY - t2.clientY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = Math.hypot(dx, dy);
 
       const midX = (t1.clientX + t2.clientX) / 2;
       const midY = (t1.clientY + t2.clientY) / 2;
@@ -320,20 +395,21 @@ export default function Analytics() {
       pinchRef.current.anchorSvgY = anchor.y;
 
       panRef.current.active = false;
-      panRef.current.lastX = null;
-      panRef.current.lastY = null;
+      panRef.current.lastClientX = null;
+      panRef.current.lastClientY = null;
 
       return;
     }
 
-    // pan (only when zoomed)
     if (e.touches.length === 1) {
       panRef.current.active = true;
-      panRef.current.lastX = e.touches[0].clientX;
-      panRef.current.lastY = e.touches[0].clientY;
+      panRef.current.lastClientX = e.touches[0].clientX;
+      panRef.current.lastClientY = e.touches[0].clientY;
 
       pinchRef.current.active = false;
       pinchRef.current.lastDist = null;
+
+      return;
     }
   }
 
@@ -341,31 +417,28 @@ export default function Analytics() {
     if (!e.touches) return;
     e.preventDefault();
 
-    // pinch zoom
+    // ---------- PINCH ZOOM ----------
     if (e.touches.length === 2 && pinchRef.current.active) {
       const t1 = e.touches[0];
       const t2 = e.touches[1];
 
       const dx = t1.clientX - t2.clientX;
       const dy = t1.clientY - t2.clientY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = Math.hypot(dx, dy);
 
       const prev = pinchRef.current.lastDist || dist;
-
-      // Smooth factor (keep gradual)
-      // >1 means zoom in, <1 zoom out
       let factor = dist / prev;
-      factor = Math.max(0.92, Math.min(1.08, factor)); // gradual like you want
+
+      // Smooth it so it feels gradual
+      factor = clamp(factor, 0.92, 1.08);
 
       const cam = camRef.current;
-      const anchorX = pinchRef.current.anchorSvgX;
-      const anchorY = pinchRef.current.anchorSvgY;
+      const ax = pinchRef.current.anchorSvgX;
+      const ay = pinchRef.current.anchorSvgY;
 
-      // IMPORTANT:
-      // We are in SVG units, so this is stable:
-      // New transform keeps anchor point visually fixed.
-      cam.tx = anchorX - factor * (anchorX - cam.tx);
-      cam.ty = anchorY - factor * (anchorY - cam.ty);
+      // Anchor lock in SVG units
+      cam.tx = ax - factor * (ax - cam.tx);
+      cam.ty = ay - factor * (ay - cam.ty);
       cam.scale = cam.scale * factor;
 
       camRef.current = cam;
@@ -375,34 +448,37 @@ export default function Analytics() {
       return;
     }
 
-    // pan (horizontal only, only if zoomed)
+    // ---------- PAN (ONLY WHEN ZOOMED) ----------
     if (e.touches.length === 1 && panRef.current.active) {
       const cam = camRef.current;
 
-      // only pan if zoomed in (otherwise it feels like "axis moving")
+      // Do not pan if not zoomed (prevents weird drifting)
       if (cam.scale <= 1.01) {
-        panRef.current.lastX = e.touches[0].clientX;
-        panRef.current.lastY = e.touches[0].clientY;
+        panRef.current.lastClientX = e.touches[0].clientX;
+        panRef.current.lastClientY = e.touches[0].clientY;
         return;
       }
 
-      const currX = e.touches[0].clientX;
-      const prevX = panRef.current.lastX;
+      const currClientX = e.touches[0].clientX;
+      const currClientY = e.touches[0].clientY;
 
-      // convert client dx -> SVG units dx
-      const a = clientToSvg(prevX, 0);
-      const b = clientToSvg(currX, 0);
-      const dxSvg = b.x - a.x;
+      const prevClientX = panRef.current.lastClientX;
+      const prevClientY = panRef.current.lastClientY;
 
-      // horizontal pan only
+      const prevSvg = clientToSvg(prevClientX, prevClientY);
+      const currSvg = clientToSvg(currClientX, currClientY);
+
+      const dxSvg = currSvg.x - prevSvg.x;
+      const dySvg = currSvg.y - prevSvg.y;
+
       cam.tx += dxSvg;
-      cam.ty = 0;
+      cam.ty += dySvg;
 
       camRef.current = cam;
       applyCamera();
 
-      panRef.current.lastX = currX;
-      panRef.current.lastY = e.touches[0].clientY;
+      panRef.current.lastClientX = currClientX;
+      panRef.current.lastClientY = currClientY;
     }
   }
 
@@ -411,20 +487,15 @@ export default function Analytics() {
     pinchRef.current.lastDist = null;
 
     panRef.current.active = false;
-    panRef.current.lastX = null;
-    panRef.current.lastY = null;
+    panRef.current.lastClientX = null;
+    panRef.current.lastClientY = null;
   }
 
   /* ============================================================
-     CLICK TOOLTIP (optional)
-     This stays as your simple tap tooltip.
+     TAP HANDLERS (TOOLTIP)
   ============================================================ */
-  function formatDate(d) {
-    try {
-      return d.toLocaleDateString();
-    } catch {
-      return "";
-    }
+  function onDotTap(payload) {
+    setActivePoint(payload);
   }
 
   /* ============================================================
@@ -435,7 +506,7 @@ export default function Analytics() {
       style={{
         minHeight: "100vh",
         background: "#0b0b0f",
-        color: "#fff",
+        color: "#ffffff",
         padding: 16,
       }}
     >
@@ -476,26 +547,28 @@ export default function Analytics() {
           ["bodyweight", "Bodyweight"],
           ["measurements", "Measurements"],
           ["prs", "PRs"],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            style={{
-              flex: 1,
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.12)",
-              color: "#fff",
-              fontWeight: 800,
-              background:
-                tab === key
+        ].map(([key, label]) => {
+          const isActive = tab === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#fff",
+                fontWeight: 800,
+                background: isActive
                   ? "#ff2f2f"
                   : "rgba(255,255,255,0.05)",
-            }}
-          >
-            {label}
-          </button>
-        ))}
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* BODYWEIGHT */}
@@ -510,7 +583,7 @@ export default function Analytics() {
           }}
         >
           {loading ? (
-            <p style={{ opacity: 0.7 }}>Loading…</p>
+            <p style={{ opacity: 0.7 }}>Loading bodyweight…</p>
           ) : (
             <>
               {/* CURRENT */}
@@ -533,7 +606,7 @@ export default function Analytics() {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 10,
+                  gap: 12,
                   marginBottom: 10,
                 }}
               >
@@ -562,179 +635,218 @@ export default function Analytics() {
                     fontWeight: 700,
                   }}
                 >
-                  Pinch to zoom • Drag to pan (only when zoomed)
+                  Pinch to zoom • Drag to pan (when zoomed)
                 </div>
               </div>
 
-              {/* SVG */}
-              <svg
-                ref={svgRef}
-                width="100%"
-                viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
-                onTouchStart={onTouchStart}
-                onTouchMove={onTouchMove}
-                onTouchEnd={onTouchEnd}
+              {/* GRAPH CARD */}
+              <div
                 style={{
-                  touchAction: "none",
-                  userSelect: "none",
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.02)",
+                  padding: 12,
                 }}
               >
-                {/* Y LABELS */}
-                <text x={6} y={PAD} fontSize="10" fill="#aaa">
-                  {Math.round(maxVal)} lb
-                </text>
-                <text x={6} y={GRAPH_HEIGHT - PAD} fontSize="10" fill="#aaa">
-                  {Math.round(minVal)} lb
-                </text>
-
-                {/* X LABELS (timeline) */}
-                {xTicks.map((t, i) => (
-                  <text
-                    key={i}
-                    x={t.x}
-                    y={GRAPH_HEIGHT - 10}
-                    textAnchor="middle"
-                    fontSize="9"
-                    fill="#aaa"
-                  >
-                    {t.label}
+                <svg
+                  ref={svgRef}
+                  width="100%"
+                  viewBox={`0 0 ${GRAPH_W} ${GRAPH_H}`}
+                  onTouchStart={onTouchStart}
+                  onTouchMove={onTouchMove}
+                  onTouchEnd={onTouchEnd}
+                  style={{
+                    touchAction: "none",
+                    userSelect: "none",
+                    display: "block",
+                    overflow: "visible",
+                  }}
+                >
+                  {/* Y LABELS */}
+                  <text x={6} y={PAD} fontSize="10" fill="#aaa">
+                    {Math.round(maxVal)} lb
                   </text>
-                ))}
+                  <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="#aaa">
+                    {Math.round(minVal)} lb
+                  </text>
 
-                {/* CAMERA GROUP */}
-                <g id="camera-layer" ref={cameraGroupRef}>
-                  {/* AREA */}
-                  {areaPath && (
-                    <path
-                      d={areaPath}
-                      fill="rgba(255,47,47,0.18)"
-                    />
-                  )}
+                  {/* X TICKS */}
+                  {xTicks.map((t, i) => (
+                    <text
+                      key={i}
+                      x={t.x}
+                      y={GRAPH_H - 10}
+                      textAnchor="middle"
+                      fontSize="9"
+                      fill="#aaa"
+                    >
+                      {t.label}
+                    </text>
+                  ))}
 
-                  {/* LINE */}
-                  {linePath && (
-                    <path
-                      d={linePath}
-                      fill="none"
-                      stroke="#ff2f2f"
-                      strokeWidth="3"
-                    />
-                  )}
+                  {/* CAMERA GROUP */}
+                  <g id="camera-layer" ref={cameraGroupRef}>
+                    {/* AREA */}
+                    {areaPath && (
+                      <path d={areaPath} fill="rgba(255,47,47,0.18)" />
+                    )}
 
-                  {/* WEIGHT DOTS */}
-                  {points.map((p, i) => {
-                    const cx = xByTime(p.ts);
-                    const cy = yByValue(p.value);
-                    const isLatest = i === points.length - 1;
+                    {/* LINE */}
+                    {linePath && (
+                      <path
+                        d={linePath}
+                        fill="none"
+                        stroke="#ff2f2f"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
 
-                    return (
-                      <g key={i}>
-                        {/* tap target */}
+                    {/* DOTS */}
+                    {points.map((p, i) => {
+                      const cx = xByTime(p.ts);
+                      const cy = yByValue(p.value);
+                      const isLatest = i === points.length - 1;
+
+                      return (
+                        <g key={i}>
+                          {/* tap target */}
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={12}
+                            fill="transparent"
+                            onClick={() =>
+                              onDotTap({
+                                type: "weight",
+                                value: p.value,
+                                date: p.date,
+                                cx,
+                                cy,
+                              })
+                            }
+                          />
+
+                          {/* visible */}
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={6}
+                            fill={isLatest ? "#2ecc71" : "#ff2f2f"}
+                          />
+                        </g>
+                      );
+                    })}
+
+                    {/* GOAL DOT */}
+                    {goalPoint && (
+                      <g>
                         <circle
-                          cx={cx}
-                          cy={cy}
-                          r={12}
-                          fill="transparent"
-                          onClick={() => {
-                            setActivePoint({
-                              type: "weight",
-                              value: p.value,
-                              date: p.date,
-                              cx,
-                              cy,
-                            });
-                          }}
-                        />
-                        {/* visible dot */}
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={6}
-                          fill={isLatest ? "#2ecc71" : "#ff2f2f"}
+                          cx={xByTime(goalPoint.ts)}
+                          cy={yByValue(goalPoint.value)}
+                          r={9}
+                          fill="#f5c542"
+                          onClick={() =>
+                            onDotTap({
+                              type: "goal",
+                              value: goalPoint.value,
+                              date: goalPoint.date,
+                              cx: xByTime(goalPoint.ts),
+                              cy: yByValue(goalPoint.value),
+                            })
+                          }
                         />
                       </g>
-                    );
-                  })}
+                    )}
 
-                  {/* GOAL DOT (GOLD) */}
-                  {goalPoint && (
-                    <g>
-                      <circle
-                        cx={xByTime(goalPoint.ts)}
-                        cy={yByValue(goalPoint.value)}
-                        r={9}
-                        fill="#f5c542"
-                        onClick={() => {
-                          setActivePoint({
-                            type: "goal",
-                            value: goalPoint.value,
-                            date: goalPoint.date,
-                            cx: xByTime(goalPoint.ts),
-                            cy: yByValue(goalPoint.value),
-                          });
-                        }}
-                      />
-                    </g>
-                  )}
+                    {/* TOOLTIP */}
+                    {activePoint && (
+                      <g>
+                        <rect
+                          x={activePoint.cx - 64}
+                          y={activePoint.cy - 70}
+                          width={128}
+                          height={54}
+                          rx={18}
+                          fill="#141418"
+                          stroke="rgba(255,255,255,0.10)"
+                        />
+                        <text
+                          x={activePoint.cx}
+                          y={activePoint.cy - 44}
+                          textAnchor="middle"
+                          fontSize="16"
+                          fill="#fff"
+                          fontWeight="900"
+                        >
+                          {activePoint.value} lb
+                        </text>
+                        <text
+                          x={activePoint.cx}
+                          y={activePoint.cy - 24}
+                          textAnchor="middle"
+                          fontSize="11"
+                          fill="rgba(255,255,255,0.70)"
+                          fontWeight="800"
+                        >
+                          {activePoint.type === "goal"
+                            ? `Goal • ${formatDate(activePoint.date)}`
+                            : formatDate(activePoint.date)}
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                </svg>
+              </div>
 
-                  {/* TOOLTIP (scales with camera; you can keep or remove) */}
-                  {activePoint && (
-                    <g>
-                      <rect
-                        x={activePoint.cx - 52}
-                        y={activePoint.cy - 52}
-                        width="104"
-                        height="40"
-                        rx="10"
-                        fill="#15151a"
-                        stroke="rgba(255,255,255,0.12)"
-                      />
-                      <text
-                        x={activePoint.cx}
-                        y={activePoint.cy - 32}
-                        textAnchor="middle"
-                        fontSize="11"
-                        fill="#fff"
-                        fontWeight="700"
-                      >
-                        {activePoint.value} lb
-                      </text>
-                      <text
-                        x={activePoint.cx}
-                        y={activePoint.cy - 16}
-                        textAnchor="middle"
-                        fontSize="9"
-                        fill="#aaa"
-                      >
-                        {activePoint.type === "goal"
-                          ? `Goal: ${formatDate(activePoint.date)}`
-                          : formatDate(activePoint.date)}
-                      </text>
-                    </g>
-                  )}
-                </g>
-              </svg>
-
-              {/* LIST (NEWEST -> OLDEST) */}
-              <div style={{ marginTop: 14 }}>
+              {/* LIST (NEWEST → OLDEST) */}
+              <div
+                style={{
+                  marginTop: 14,
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.02)",
+                  overflow: "hidden",
+                }}
+              >
                 {[...points].reverse().map((p, i) => (
                   <div
                     key={i}
                     style={{
                       display: "flex",
+                      alignItems: "center",
                       justifyContent: "space-between",
-                      padding: "8px 0",
+                      padding: "12px 14px",
                       borderBottom:
-                        "1px solid rgba(255,255,255,0.08)",
+                        i === points.length - 1
+                          ? "none"
+                          : "1px solid rgba(255,255,255,0.06)",
                     }}
                   >
-                    <span>{formatDate(p.date)}</span>
-                    <strong>{p.value} lb</strong>
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 800,
+                        color: "rgba(255,255,255,0.90)",
+                      }}
+                    >
+                      {formatDate(p.date)}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 20,
+                        fontWeight: 900,
+                        letterSpacing: 0.2,
+                      }}
+                    >
+                      {p.value} lb
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {/* SMALL NOTE ABOUT GOAL */}
+              {/* GOAL NOTE */}
               {goalPoint && (
                 <div
                   style={{
@@ -764,9 +876,13 @@ export default function Analytics() {
             opacity: 0.7,
           }}
         >
-          Coming next…
+          {tab === "measurements" && "Measurements analytics coming next"}
+          {tab === "prs" && "PR analytics coming next"}
         </div>
       )}
+
+      {/* SPACER */}
+      <div style={{ height: 40 }} />
     </div>
   );
 }
