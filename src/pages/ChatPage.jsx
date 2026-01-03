@@ -602,42 +602,37 @@ export default function ChatPage() {
     try {
       const normalized = normalizeSharedWorkout(share);
       const workoutName = normalized.name || "Workout";
-      const exercises = Array.isArray(normalized.exercises)
-        ? normalized.exercises
-        : [];
 
-      // 1) Create a workout row
+      // IMPORTANT:
+      // Your database currently HAS: `workouts`
+      // Your database currently DOES NOT HAVE: `workout_exercises`
+      // (confirmed by your SQL error: relation "workout_exercises" does not exist)
+      //
+      // So this save action MUST:
+      // ✅ create the workout row
+      // ❌ NOT attempt to insert workout exercises (until you add that table)
+      //
+      // This makes the Save button actually work and show up in Workouts immediately.
+
+      // 1) Create a workout row (THIS TABLE EXISTS)
       const { data: createdWorkout, error: wErr } = await supabase
         .from("workouts")
         .insert({
           user_id: user.id,
           name: workoutName,
-          source: "chat",
+          // your table includes these columns from screenshot:
+          // id, user_id, name, created_at, scheduled_for, position
+          // so we only insert what definitely exists.
         })
-        .select("*")
+        .select("id")
         .single();
 
       if (wErr || !createdWorkout?.id) {
-        // If your schema uses a different table name, this will fail silently
-        // but won't break the chat.
         setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
         return;
       }
 
-      // 2) Insert exercises (if table exists)
-      if (exercises.length) {
-        const rows = exercises.map((ex, idx) => ({
-          user_id: user.id,
-          workout_id: createdWorkout.id,
-          name: ex.name,
-          order_index: idx,
-          // Optional: preserve sets if your table supports json
-          sets: ex.sets || null,
-        }));
-
-        await supabase.from("workout_exercises").insert(rows);
-      }
-
+      // 2) Mark saved in UI
       setSavedWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
       setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
     } catch {
