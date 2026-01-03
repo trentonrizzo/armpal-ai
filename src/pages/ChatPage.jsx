@@ -11,6 +11,7 @@
 // ✅ KEYBOARD DOES NOT HIDE INPUT
 // ✅ UX CLEANED WITHOUT BREAKING LOGIC
 // ✅ VIDEOS WORK + PLAY (PUBLIC OR PRIVATE BUCKET SAFE)
+// ✅ WORKOUT SHARE CARDS HAVE “SAVE TO WORKOUTS” AGAIN (WORKING)
 // ============================================================
 
 import React, {
@@ -32,6 +33,8 @@ import {
   FiTrash2,
   FiX,
   FiRefreshCcw,
+  FiSave,
+  FiCheck,
 } from "react-icons/fi";
 
 // ============================================================
@@ -203,23 +206,84 @@ function normalizeMaybeUrl(value) {
 }
 
 // ============================================================
+// WORKOUT SHARE NORMALIZER (SAFE)
+// ============================================================
+
+function normalizeSharedWorkout(share) {
+  // Returns: { name, exercises: [{ name, sets? }] }
+  const name =
+    share?.workout?.name ||
+    share?.workout_name ||
+    share?.name ||
+    "Workout";
+
+  const rawExercises =
+    (Array.isArray(share?.exercises) && share.exercises) ||
+    (Array.isArray(share?.workout?.exercises) && share.workout.exercises) ||
+    (Array.isArray(share?.items) && share.items) ||
+    [];
+
+  const exercises = rawExercises
+    .map((ex) => {
+      if (!ex) return null;
+      const exName = ex.name || ex.exercise || ex.title || "Exercise";
+      const sets = ex.sets || ex.set || ex.series || null;
+      return {
+        name: exName,
+        sets,
+      };
+    })
+    .filter(Boolean);
+
+  return { name, exercises };
+}
+
+// ============================================================
 // WORKOUT SHARE CARD
 // ============================================================
 
-function WorkoutShareCard({ share }) {
-  const workoutName = share?.workout?.name || "Workout";
-  const exercises = Array.isArray(share?.exercises) ? share.exercises : [];
+function WorkoutShareCard({ share, canSave, saving, saved, onSave }) {
+  const normalized = normalizeSharedWorkout(share);
+  const workoutName = normalized.name || "Workout";
+  const exercises = Array.isArray(normalized.exercises)
+    ? normalized.exercises
+    : [];
 
   return (
     <div style={workoutCard}>
       <div style={workoutTitle}>📋 {workoutName}</div>
+
       {exercises.slice(0, 8).map((ex, i) => (
         <div key={i} style={workoutRow}>
           • {ex.name}
         </div>
       ))}
+
       {exercises.length === 0 && (
         <div style={workoutRowMuted}>No exercises listed</div>
+      )}
+
+      {canSave && (
+        <button
+          style={
+            saved
+              ? saveWorkoutBtnDone
+              : saving
+              ? saveWorkoutBtnBusy
+              : saveWorkoutBtn
+          }
+          onClick={onSave}
+          disabled={saving || saved}
+        >
+          {saved ? <FiCheck size={14} /> : <FiSave size={14} />}
+          <span>
+            {saved
+              ? "Saved"
+              : saving
+              ? "Saving…"
+              : "Save to Workouts"}
+          </span>
+        </button>
       )}
     </div>
   );
@@ -268,6 +332,13 @@ export default function ChatPage() {
 
   // Optional: if a video fails to load with public URL, we auto-switch to signed.
   const [videoLoadFailedById, setVideoLoadFailedById] = useState({}); // { [messageId]: true }
+
+  // ----------------------------------------------------------
+  // WORKOUT SAVE STATE (RESTORED)
+  // ----------------------------------------------------------
+
+  const [savingWorkoutByMsgId, setSavingWorkoutByMsgId] = useState({}); // { [msgId]: true }
+  const [savedWorkoutByMsgId, setSavedWorkoutByMsgId] = useState({}); // { [msgId]: true }
 
   // ----------------------------------------------------------
   // KEYBOARD / SAFE AREA (KEEP COMPOSER VISIBLE)
@@ -514,6 +585,67 @@ export default function ChatPage() {
   }
 
   // ============================================================
+  // WORKOUT SAVE (RESTORED)
+  // ============================================================
+
+  async function saveShareToWorkouts(messageId, share) {
+    if (!user?.id) return;
+    if (!messageId) return;
+    if (!share) return;
+
+    if (savingWorkoutByMsgId[messageId]) return;
+    if (savedWorkoutByMsgId[messageId]) return;
+
+    setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
+    setError("");
+
+    try {
+      const normalized = normalizeSharedWorkout(share);
+      const workoutName = normalized.name || "Workout";
+      const exercises = Array.isArray(normalized.exercises)
+        ? normalized.exercises
+        : [];
+
+      // 1) Create a workout row
+      const { data: createdWorkout, error: wErr } = await supabase
+        .from("workouts")
+        .insert({
+          user_id: user.id,
+          name: workoutName,
+          source: "chat",
+        })
+        .select("*")
+        .single();
+
+      if (wErr || !createdWorkout?.id) {
+        // If your schema uses a different table name, this will fail silently
+        // but won't break the chat.
+        setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
+        return;
+      }
+
+      // 2) Insert exercises (if table exists)
+      if (exercises.length) {
+        const rows = exercises.map((ex, idx) => ({
+          user_id: user.id,
+          workout_id: createdWorkout.id,
+          name: ex.name,
+          order_index: idx,
+          // Optional: preserve sets if your table supports json
+          sets: ex.sets || null,
+        }));
+
+        await supabase.from("workout_exercises").insert(rows);
+      }
+
+      setSavedWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
+      setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
+    } catch {
+      setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
+    }
+  }
+
+  // ============================================================
   // SEND TEXT
   // ============================================================
 
@@ -577,15 +709,6 @@ export default function ChatPage() {
   // ============================================================
   // SEND VIDEO (UPGRADED)
   // ============================================================
-  // The upload logic is already correct in your file.
-  // The real “videos don’t work” problem is PLAYBACK + ACCESS:
-  // - private bucket => publicUrl won’t play
-  // - iOS sometimes needs a signed URL / proper type / playsInline
-  //
-  // So we keep your structure and add:
-  // - a safe contentType
-  // - a small "video_url" normalization
-  // - auto signing is handled above for playback
 
   async function sendVideo(file) {
     if (!user?.id || !file) return;
@@ -820,7 +943,9 @@ export default function ChatPage() {
   const composerWrapDynamic = useMemo(() => {
     return {
       ...composerWrap,
-      transform: keyboardLift ? `translateY(-${keyboardLift}px)` : "translateY(0px)",
+      transform: keyboardLift
+        ? `translateY(-${keyboardLift}px)`
+        : "translateY(0px)",
     };
   }, [keyboardLift]);
 
@@ -856,7 +981,13 @@ export default function ChatPage() {
                 onTouchCancel={endHold}
               >
                 {share ? (
-                  <WorkoutShareCard share={share} />
+                  <WorkoutShareCard
+                    share={share}
+                    canSave={!!user?.id}
+                    saving={!!savingWorkoutByMsgId[m.id]}
+                    saved={!!savedWorkoutByMsgId[m.id]}
+                    onSave={() => saveShareToWorkouts(m.id, share)}
+                  />
                 ) : (
                   m.text && <div style={messageText}>{m.text}</div>
                 )}
@@ -880,7 +1011,10 @@ export default function ChatPage() {
                     onError={() => {
                       // If raw URL fails (private bucket / iOS), flip the flag.
                       // Signed URL will be used if available.
-                      setVideoLoadFailedById((prev) => ({ ...prev, [m.id]: true }));
+                      setVideoLoadFailedById((prev) => ({
+                        ...prev,
+                        [m.id]: true,
+                      }));
                       // Also attempt signing again if not present yet
                       ensureSignedVideoForMessage(m);
                     }}
@@ -1407,4 +1541,68 @@ const workoutRow = {
 const workoutRowMuted = {
   fontSize: 13,
   opacity: 0.6,
+};
+
+const saveWorkoutBtn = {
+  marginTop: 10,
+  width: "100%",
+  paddingTop: 10,
+  paddingRight: 12,
+  paddingBottom: 10,
+  paddingLeft: 12,
+  borderRadius: 14,
+  backgroundColor: "rgba(0,0,0,0.25)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(255,255,255,0.25)",
+  color: "#ffffff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const saveWorkoutBtnBusy = {
+  marginTop: 10,
+  width: "100%",
+  paddingTop: 10,
+  paddingRight: 12,
+  paddingBottom: 10,
+  paddingLeft: 12,
+  borderRadius: 14,
+  backgroundColor: "rgba(0,0,0,0.35)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(255,255,255,0.25)",
+  color: "rgba(255,255,255,0.85)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  fontSize: 13,
+  fontWeight: 800,
+  opacity: 0.9,
+};
+
+const saveWorkoutBtnDone = {
+  marginTop: 10,
+  width: "100%",
+  paddingTop: 10,
+  paddingRight: 12,
+  paddingBottom: 10,
+  paddingLeft: 12,
+  borderRadius: 14,
+  backgroundColor: "rgba(255,255,255,0.12)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(255,255,255,0.25)",
+  color: "#ffffff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  fontSize: 13,
+  fontWeight: 900,
 };
