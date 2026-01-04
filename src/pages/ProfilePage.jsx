@@ -278,21 +278,21 @@ function ReactionPill({ emoji, count }) {
     <div
       style={{
         flex: 1,
-        height: 86,
+        height: 92,
         borderRadius: RADII.pill,
         background: COLORS.surface,
         border: `1px solid ${COLORS.border2}`,
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 12,
+        gap: 6,
         color: COLORS.text,
         fontWeight: 900,
-        fontSize: 22,
       }}
     >
-      <span style={{ fontSize: 32 }}>{emoji}</span>
-      <span>{count}</span>
+      <div style={{ fontSize: 34, lineHeight: 1 }}>{emoji}</div>
+      <div style={{ fontSize: 20 }}>{count}</div>
     </div>
   );
 }
@@ -616,6 +616,9 @@ export default function ProfilePage() {
 
   const [loadingReactions, setLoadingReactions] = useState(true);
 
+  // QUICK ACTION COUNTS
+  const [counts, setCounts] = useState({ workouts: 0, prs: 0, measurements: 0 });
+
   // -----------------------------------------------------------------------------------------------
   // AVATAR MENU / CROPPER
   // -----------------------------------------------------------------------------------------------
@@ -674,6 +677,19 @@ export default function ProfilePage() {
     const rx = await fetchReactions(auth.user.id);
     setReactions(rx);
     setLoadingReactions(false);
+
+    // load counts for quick actions
+    const [workoutsRes, prsRes, measRes] = await Promise.all([
+      supabase.from("workouts").select("id", { count: "exact", head: true }),
+      supabase.from("prs").select("id", { count: "exact", head: true }),
+      supabase.from("measurements").select("id", { count: "exact", head: true }),
+    ]);
+
+    setCounts({
+      workouts: workoutsRes.count || 0,
+      prs: prsRes.count || 0,
+      measurements: measRes.count || 0,
+    });
 
     setLoading(false);
   }
@@ -1148,21 +1164,9 @@ export default function ProfilePage() {
 
           <div style={{ display: "grid", gap: 14 }}>
             <PillButton
-              icon={<span style={{ fontSize: 22 }}>🏋️</span>}
-              label="Workouts"
-              onClick={() => navigate("/workouts")}
-            />
-
-            <PillButton
-              icon={<span style={{ fontSize: 22 }}>📈</span>}
-              label="Personal Records"
-              onClick={() => navigate("/prs")}
-            />
-
-            <PillButton
               icon={<span style={{ fontSize: 22 }}>📏</span>}
-              label="Measurements"
-              onClick={() => navigate("/measurements")}
+              label={`Measurements · ${counts.measurements}`}
+              onClick={() => navigate("/measure")}
             />
           </div>
         </BigCard>
@@ -1172,29 +1176,11 @@ export default function ProfilePage() {
             These do not break anything, but provide the FULL profile structure again.
         ========================================================================================= */}
 
-        <BigCard>
-          <SectionTitle>Highlights</SectionTitle>
-          <div style={{ opacity: 0.70, lineHeight: 1.6 }}>
-            This section is reserved for: PR highlights, streaks, recent activity, achievements.
-            It is intentionally present (structure restored) even if some data sources are
-            not wired yet.
-          </div>
-        </BigCard>
+        
 
-        <BigCard>
-          <SectionTitle>Progress</SectionTitle>
-          <div style={{ opacity: 0.70, lineHeight: 1.6 }}>
-            This section is reserved for: bodyweight trend, recent PR changes, measurement deltas.
-            (We can wire this to Analytics once your data tables are confirmed.)
-          </div>
-        </BigCard>
+        
 
-        <BigCard>
-          <SectionTitle>About</SectionTitle>
-          <div style={{ opacity: 0.70, lineHeight: 1.6 }}>
-            Future: gym, division/level, favorite lifts, goals, socials.
-          </div>
-        </BigCard>
+        
 
       </PageWrap>
 
