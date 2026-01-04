@@ -1164,6 +1164,18 @@ export default function ProfilePage() {
 
           <div style={{ display: "grid", gap: 14 }}>
             <PillButton
+              icon={<span style={{ fontSize: 22 }}>🏋️</span>}
+              label={`Workouts · ${counts.workouts}`}
+              onClick={() => navigate("/workouts")}
+            />
+
+            <PillButton
+              icon={<span style={{ fontSize: 22 }}>📈</span>}
+              label={`Personal Records · ${counts.prs}`}
+              onClick={() => navigate("/prs")}
+            />
+
+            <PillButton
               icon={<span style={{ fontSize: 22 }}>📏</span>}
               label={`Measurements · ${counts.measurements}`}
               onClick={() => navigate("/measure")}
