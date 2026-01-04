@@ -129,8 +129,85 @@ async function safeQuery(fn, fallback) {
   }
 }
 
+// Try several select strings because PostgREST will error if any selected column doesn't exist.
+async function safeSelectOwned({
+  table,
+  ownerId,
+  ownerColumns = ["user_id", "profile_id", "owner_id"],
+  selectOptions = ["id"],
+  limit = 5000,
+}) {
+  // We attempt (ownerColumn x selectString). If all fail, return []
+  for (const ownerCol of ownerColumns) {
+    for (const sel of selectOptions) {
+      const out = await safeQuery(async () => {
+        const q = supabase.from(table).select(sel).limit(limit);
+        // if table doesn't have owner column, this will error; safeQuery catches.
+        const { data, error } = await q.eq(ownerCol, ownerId);
+        if (error) throw error;
+        return Array.isArray(data) ? data : [];
+      }, null);
+      if (out) return out;
+    }
+  }
+
+  // Last resort: no owner filter (still safer than crashing). Use very small select.
+  const out2 = await safeQuery(async () => {
+    const { data, error } = await supabase.from(table).select("id").limit(limit);
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  }, []);
+  return out2;
+}
+
+function pickDateValue(row) {
+  if (!row || typeof row !== "object") return null;
+  return (
+    row.date ||
+    row.logged_at ||
+    row.performed_at ||
+    row.created_at ||
+    row.target_date ||
+    row.scheduled_for ||
+    row.planned_for ||
+    null
+  );
+}
+
+function isFutureScheduledRow(row) {
+  const raw = pickDateValue(row);
+  if (!raw) return false;
+  const t = new Date(raw).getTime();
+  if (!Number.isFinite(t)) return false;
+  if (t <= Date.now()) return false;
+
+  // Only exclude if it LOOKS like a planned/scheduled item.
+  const flag =
+    row?.is_scheduled === true ||
+    row?.scheduled === true ||
+    row?.planned === true ||
+    row?.is_future === true ||
+    String(row?.status || "").toLowerCase() === "scheduled" ||
+    String(row?.status || "").toLowerCase() === "planned";
+
+  return !!flag;
+}
+
+function dayKeyFromRow(row) {
+  const raw = pickDateValue(row);
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return null;
+  // local day key
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
 // =================================================================================================
 // 4) STYLE TOKENS (ARMPAL)
+// ================================================================================================= (ARMPAL)
 // =================================================================================================
 
 const COLORS = {
@@ -566,6 +643,93 @@ function getCroppedImg(src, pixelCrop) {
 // 10) MAIN COMPONENT
 // =================================================================================================
 
+async function loadQuickActionCounts(userId) {
+  // 1) Workouts: number of workout cards / sessions
+  const workoutsRows = await safeSelectOwned({
+    table: "workouts",
+    ownerId: userId,
+    selectOptions: ["id, created_at", "id"],
+  });
+
+  // 2) PRs: number of PR cards you see (usually distinct lifts)
+  // We don't assume column names; we try a few.
+  const prsRows = await safeSelectOwned({
+    table: "prs",
+    ownerId: userId,
+    selectOptions: [
+      "id, lift, exercise, exercise_name, movement, name, title, created_at, date, performed_at, target_date, is_scheduled, scheduled, planned, status",
+      "id, lift, exercise, exercise_name, movement, name, title, created_at",
+      "id, lift, created_at",
+      "id, exercise, created_at",
+      "id, exercise_name, created_at",
+      "id, name, created_at",
+      "id, title, created_at",
+      "id, created_at",
+      "id",
+    ],
+  });
+
+  const prKeySet = new Set();
+  for (const r of prsRows) {
+    if (isFutureScheduledRow(r)) continue;
+
+    const key =
+      safeString(r?.lift) ||
+      safeString(r?.exercise) ||
+      safeString(r?.exercise_name) ||
+      safeString(r?.movement) ||
+      safeString(r?.name) ||
+      safeString(r?.title) ||
+      safeString(r?.id);
+
+    if (key) prKeySet.add(key.toLowerCase());
+  }
+
+  // 3) Measurements: count "sessions/cards" not individual body-part rows.
+  // Prefer a session-like id if it exists; otherwise group by day.
+  const measRows = await safeSelectOwned({
+    table: "measurements",
+    ownerId: userId,
+    selectOptions: [
+      "id, session_id, entry_id, group_id, created_at, date, logged_at, is_scheduled, scheduled, planned, status",
+      "id, session_id, created_at",
+      "id, entry_id, created_at",
+      "id, group_id, created_at",
+      "id, created_at",
+      "id, date",
+      "id",
+    ],
+  });
+
+  const measKeySet = new Set();
+  for (const r of measRows) {
+    if (isFutureScheduledRow(r)) continue;
+
+    const key =
+      safeString(r?.session_id) ||
+      safeString(r?.entry_id) ||
+      safeString(r?.group_id) ||
+      dayKeyFromRow(r) ||
+      safeString(r?.id);
+
+    if (key) measKeySet.add(key);
+  }
+
+  // 4) Goals: number of goal cards
+  const goalsRows = await safeSelectOwned({
+    table: "goals",
+    ownerId: userId,
+    selectOptions: ["id, created_at", "id"],
+  });
+
+  return {
+    workouts: workoutsRows.length || 0,
+    prs: prKeySet.size || 0,
+    measurements: measKeySet.size || 0,
+    goals: goalsRows.length || 0,
+  };
+}
+
 export default function ProfilePage() {
   const navigate = useNavigate();
 
@@ -678,29 +842,9 @@ export default function ProfilePage() {
     setReactions(rx);
     setLoadingReactions(false);
 
-    // load counts for quick actions
-    const [workoutsRes, prsRes, measRes, goalsRes] = await Promise.all([
-      // workouts = number of workout cards / sessions
-      supabase.from("workouts").select("id", { count: "exact", head: true }),
-
-      // PRs = DISTINCT lifts (not individual log rows)
-      supabase.from("prs").select("lift", { count: "exact", head: true }).neq("lift", null),
-
-      // measurements = DISTINCT measurement sessions (grouped by created_at day)
-      supabase
-        .from("measurements")
-        .select("created_at", { count: "exact", head: true }),
-
-      // goals = number of goal cards
-      supabase.from("goals").select("id", { count: "exact", head: true }),
-    ]);
-
-    setCounts({
-      workouts: workoutsRes.count || 0,
-      prs: prsRes.count || 0,
-      measurements: measRes.count || 0,
-      goals: goalsRes.count || 0,
-    });
+    // load counts for quick actions ("card counts" — not raw rows)
+    const nextCounts = await loadQuickActionCounts(auth.user.id);
+    setCounts(nextCounts);
 
     setLoading(false);
   }
