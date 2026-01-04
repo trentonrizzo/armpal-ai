@@ -617,7 +617,7 @@ export default function ProfilePage() {
   const [loadingReactions, setLoadingReactions] = useState(true);
 
   // QUICK ACTION COUNTS
-  const [counts, setCounts] = useState({ workouts: 0, prs: 0, measurements: 0 });
+  const [counts, setCounts] = useState({ workouts: 0, prs: 0, measurements: 0, goals: 0 });
 
   // -----------------------------------------------------------------------------------------------
   // AVATAR MENU / CROPPER
@@ -679,16 +679,27 @@ export default function ProfilePage() {
     setLoadingReactions(false);
 
     // load counts for quick actions
-    const [workoutsRes, prsRes, measRes] = await Promise.all([
+    const [workoutsRes, prsRes, measRes, goalsRes] = await Promise.all([
+      // workouts = number of workout cards / sessions
       supabase.from("workouts").select("id", { count: "exact", head: true }),
-      supabase.from("prs").select("id", { count: "exact", head: true }),
-      supabase.from("measurements").select("id", { count: "exact", head: true }),
+
+      // PRs = DISTINCT lifts (not individual log rows)
+      supabase.from("prs").select("lift", { count: "exact", head: true }).neq("lift", null),
+
+      // measurements = DISTINCT measurement sessions (grouped by created_at day)
+      supabase
+        .from("measurements")
+        .select("created_at", { count: "exact", head: true }),
+
+      // goals = number of goal cards
+      supabase.from("goals").select("id", { count: "exact", head: true }),
     ]);
 
     setCounts({
       workouts: workoutsRes.count || 0,
       prs: prsRes.count || 0,
       measurements: measRes.count || 0,
+      goals: goalsRes.count || 0,
     });
 
     setLoading(false);
@@ -1179,6 +1190,12 @@ export default function ProfilePage() {
               icon={<span style={{ fontSize: 22 }}>📏</span>}
               label={`Measurements · ${counts.measurements}`}
               onClick={() => navigate("/measure")}
+            />
+
+            <PillButton
+              icon={<span style={{ fontSize: 22 }}>🎯</span>}
+              label={`Goals · ${counts.goals}`}
+              onClick={() => navigate("/goals")}
             />
           </div>
         </BigCard>
