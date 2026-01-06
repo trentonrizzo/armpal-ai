@@ -48,7 +48,6 @@ import {
   FaCheck,
   FaTimes,
 } from "react-icons/fa";
-import { achievementBus } from "../utils/achievementBus";
 
 // ============================================================
 // DRAGGABLE WRAPPER — LEFT drag handle only; RIGHT side scrolls
