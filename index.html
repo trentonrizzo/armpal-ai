@@ -11,145 +11,61 @@
     <title>ArmPal</title>
     <meta name="theme-color" content="#000000" />
 
-    <!-- FORCE BLACK -->
     <style>
       html, body {
         margin: 0;
         background: #000;
       }
 
-      /* ===== SPLASH ===== */
+      /* CLEAN ONE-TIME SPLASH */
       #ap-splash {
         position: fixed;
         inset: 0;
-        z-index: 9999999;
-        background: radial-gradient(circle at center, #111 0%, #000 70%);
+        z-index: 999999;
+        background: #000;
         display: flex;
         align-items: center;
         justify-content: center;
-        overflow: hidden;
       }
 
-      #barbell {
-        position: absolute;
-        top: -40%;
-        left: 50%;
-        transform: translateX(-50%);
-        animation: drop 520ms cubic-bezier(.15,.8,.25,1) forwards;
+      #ap-splash img {
+        width: min(70vw, 280px);
       }
 
-      .bar {
-        width: 260px;
-        height: 6px;
-        background: #ccc;
-        border-radius: 3px;
-      }
-
-      .plate {
-        position: absolute;
-        top: -18px;
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: #111;
-        border: 4px solid #e11d48;
-        box-shadow: 0 0 18px rgba(255,0,0,.35);
-      }
-
-      .plate.left { left: -44px; }
-      .plate.right { right: -44px; }
-
-      @keyframes drop {
-        0%   { transform: translate(-50%, -140%) scale(.9); }
-        70%  { transform: translate(-50%, 12%) scale(1.05); }
-        100% { transform: translate(-50%, 0) scale(1); }
-      }
-
-      #impact {
-        position: absolute;
-        top: 52%;
-        left: 50%;
-        width: 240px;
-        height: 4px;
-        background: radial-gradient(circle, #fff, transparent 70%);
-        transform: translateX(-50%) scaleX(.2);
-        opacity: 0;
-        animation: impact 240ms ease-out forwards;
-        animation-delay: 620ms;
-      }
-
-      @keyframes impact {
-        0% { opacity:0; transform:translateX(-50%) scaleX(.2); }
-        50% { opacity:1; transform:translateX(-50%) scaleX(1.4); }
-        100% { opacity:0; transform:translateX(-50%) scaleX(2); }
-      }
-
-      #logo {
-        position: absolute;
-        top: 58%;
-        left: 50%;
-        transform: translate(-50%, 30px) scale(.9);
-        opacity: 0;
-        animation: logoIn 360ms cubic-bezier(.2,.9,.25,1) forwards;
-        animation-delay: 760ms;
-        width: min(70vw, 300px);
-        filter: drop-shadow(0 0 22px rgba(255,0,0,.35));
-      }
-
-      @keyframes logoIn {
-        to {
-          opacity:1;
-          transform:translate(-50%,0) scale(1);
-        }
-      }
-
-      #ap-splash.exit {
-        animation: exit 220ms ease-out forwards;
-      }
-
-      @keyframes exit {
-        to {
-          opacity:0;
-          transform:scale(1.08);
-        }
+      #ap-splash.hide {
+        display: none;
       }
     </style>
   </head>
 
   <body>
-    <!-- SPLASH DOM -->
+    <!-- SIMPLE SPLASH -->
     <div id="ap-splash">
-      <div id="barbell">
-        <div class="plate left"></div>
-        <div class="bar"></div>
-        <div class="plate right"></div>
-      </div>
-      <div id="impact"></div>
-      <img id="logo" src="/pwa-512x512.png" />
+      <img src="/pwa-512x512.png" alt="ArmPal" />
     </div>
 
     <div id="root"></div>
 
-    <!-- SPLASH CONTROL -->
     <script>
-      const splash = document.getElementById("ap-splash");
-      const root = document.getElementById("root");
+      // SHOW SPLASH ONCE PER COLD LAUNCH
+      (function () {
+        const splash = document.getElementById("ap-splash");
 
-      const remove = () => {
-        splash.classList.add("exit");
-        setTimeout(() => splash.remove(), 240);
-      };
+        // hide splash as soon as React mounts
+        const root = document.getElementById("root");
+        if (root) {
+          const obs = new MutationObserver(() => {
+            obs.disconnect();
+            splash.classList.add("hide");
+          });
+          obs.observe(root, { childList: true });
+        }
 
-      const obs = new MutationObserver(() => {
-        obs.disconnect();
-        remove();
-      });
-      obs.observe(root, { childList: true });
-
-      setTimeout(remove, 2600);
+        // hard safety: never block app
+        setTimeout(() => splash.classList.add("hide"), 1500);
+      })();
     </script>
 
-    <!-- APP -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
