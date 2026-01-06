@@ -1,34 +1,36 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <meta charset="UTF-8" />
 
-    <!-- App Branding -->
-    <meta name="description" content="ArmPal — Train harder, track faster, grow stronger." />
-
-    <!-- iOS App Icon -->
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-
-    <!-- FontAwesome Icons (required for NavBar icons) -->
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
-      integrity="sha512-wJ7f3yb8kZ2uqbPqV+ZtaKuqSg7oPtmz8M2e+EfA8fmWc3jsn1qfSgk5RlQkGZCc6X5K9Y5Z3E4wLvqN3rYw4g=="
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
+    <!-- iOS safe area -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
 
     <title>ArmPal</title>
+
+    <!-- Force black behind everything -->
+    <meta name="theme-color" content="#000000" />
+    <script>
+      document.documentElement.style.background = "#000";
+      document.body && (document.body.style.background = "#000");
+    </script>
+
+    <!-- ✅ ONESIGNAL SDK -->
+    <script
+      src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+      defer
+    ></script>
+
+    <!-- ✅ THIS IS THE ONLY SPLASH SOURCE -->
+    <!-- Must match: /public/armPalSplash.js -->
+    <script src="/armPalSplash.js" defer></script>
   </head>
 
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+  <body style="margin: 0; padding: 0; background: #000;">
     <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
