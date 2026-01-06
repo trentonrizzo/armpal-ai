@@ -18,7 +18,6 @@ export default function ProgramsOverlay({ open, onClose }) {
     <div
       style={styles.backdrop}
       onMouseDown={(e) => {
-        // click outside closes
         if (e.target === e.currentTarget) onClose?.();
       }}
     >
@@ -151,8 +150,8 @@ const styles = {
     fontWeight: 800,
   },
   lockTag: {
-    background: "rgba(225,29,72,0.14)",
-    border: "1px solid rgba(225,29,72,0.35)",
+    background: "rgba(255,47,47,0.16)",
+    border: "1px solid rgba(255,47,47,0.45)",
     color: "#fff",
     borderRadius: 999,
     padding: "4px 10px",
@@ -179,13 +178,13 @@ const styles = {
     justifyContent: "flex-end",
   },
   primaryBtn: {
-    background: "#e11d48",
+    background: "linear-gradient(135deg, #ff2f2f, #d81e1e)",
     border: "none",
     color: "#fff",
     fontWeight: 900,
     padding: "10px 14px",
     borderRadius: 12,
     cursor: "pointer",
-    boxShadow: "0 10px 24px rgba(225,29,72,0.28)",
+    boxShadow: "0 10px 24px rgba(255,47,47,0.35)",
   },
 };
