@@ -1,8 +1,6 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script>alert("SPLASH TEST");</script>
-    <script src="/pwaSplashRuntime.js"></script>
     <meta charset="UTF-8" />
 
     <!-- iOS safe area -->
@@ -13,13 +11,13 @@
 
     <title>ArmPal</title>
 
-    <!-- ✅ ONESIGNAL SDK (REQUIRED) -->
+    <!-- Onesignal -->
     <script
       src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
       defer
     ></script>
 
-    <!-- 🔥 ARMPAL SPLASH (INLINE — CANNOT FAIL) -->
+    <!-- INLINE SPLASH (CANNOT FAIL) -->
     <style>
       #ap-splash {
         position: fixed;
@@ -56,31 +54,13 @@
     </style>
 
     <script>
+      document.documentElement.style.background = "#000";
+
       (function () {
         const splash = document.createElement("div");
         splash.id = "ap-splash";
-        splash.innerHTML =
-          '<img src="/pwa-512x512.png" alt="ArmPal" />';
+        splash.innerHTML = '<img src="/pwa-512x512.png" alt="ArmPal" />';
         document.documentElement.appendChild(splash);
-
-        // 🔊 Metal clank sound
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const play = async () => {
-            if (ctx.state === "suspended") await ctx.resume();
-            const o = ctx.createOscillator();
-            const g = ctx.createGain();
-            o.type = "triangle";
-            o.frequency.value = 420;
-            g.gain.setValueAtTime(0.001, ctx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.35, ctx.currentTime + 0.01);
-            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
-            o.connect(g).connect(ctx.destination);
-            o.start();
-            o.stop(ctx.currentTime + 0.3);
-          };
-          play();
-        } catch {}
 
         const start = performance.now();
         const MIN_MS = 1200;
@@ -108,9 +88,8 @@
     </script>
   </head>
 
-  <body style="margin: 0; padding: 0; background: #000;">
+  <body style="margin:0;background:#000">
     <div id="root"></div>
-
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
