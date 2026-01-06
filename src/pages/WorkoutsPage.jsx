@@ -306,7 +306,7 @@ if (!editingWorkout && workouts.length === 0) {
 const alreadyFired = localStorage.getItem("ach_first_workout");
 
 if (!editingWorkout && !alreadyFired) {
-  achievementBus.emit("first_workout");
+  achievementBus.emit({ type: "FIRST_WORKOUT" });
   localStorage.setItem("ach_first_workout", "1");
 }
 
