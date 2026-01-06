@@ -32,6 +32,49 @@ import { initOneSignal } from "./onesignal";
 import usePresence from "./hooks/usePresence";
 
 /* ============================
+   GUARANTEED RUNTIME SPLASH
+============================ */
+function RuntimeSplash() {
+  const [show, setShow] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShow(false), 1200);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999999,
+        background: "#000",
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
+      <img
+        src="/pwa-512x512.png"
+        alt="ArmPal"
+        style={{
+          width: 220,
+          opacity: 0,
+          transform: "scale(0.9)",
+          animation: "apFade 0.6s ease forwards",
+        }}
+      />
+      <style>{`
+        @keyframes apFade {
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ============================
    CLIENT-ONLY OVERLAY (SAFE)
 ============================ */
 const AchievementOverlay = lazy(() =>
@@ -49,7 +92,6 @@ function AppContent() {
 
   useEffect(() => {
     setMounted(true);
-
     const savedTheme = localStorage.getItem("theme") || "dark";
     document.body.setAttribute("data-theme", savedTheme);
   }, []);
@@ -109,7 +151,6 @@ function AppContent() {
         onClose={() => setOpenShare(false)}
       />
 
-      {/* CLIENT-ONLY GLOBAL OVERLAY */}
       {mounted && (
         <Suspense fallback={null}>
           <AchievementOverlay />
@@ -170,6 +211,7 @@ export default function App() {
 
   return (
     <AppProvider>
+      <RuntimeSplash />
       <AppContent />
     </AppProvider>
   );
