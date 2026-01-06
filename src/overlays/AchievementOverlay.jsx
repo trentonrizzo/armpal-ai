@@ -44,12 +44,16 @@ export default function AchievementOverlay() {
   const processingRef = useRef(false);
 
   /* ============================================================
-     SUBSCRIBE TO EVENTS
+     SUBSCRIBE TO ACHIEVEMENT BUS
   ============================================================ */
   useEffect(() => {
-    const unsub = achievementBus.subscribe(event => {
-      setQueue(q => [...q, event]);
+    const unsub = achievementBus.subscribe((event) => {
+      // Expect event to be an OBJECT: { type: "FIRST_WORKOUT", ... }
+      if (event && event.type) {
+        setQueue((q) => [...q, event]);
+      }
     });
+
     return unsub;
   }, []);
 
@@ -66,15 +70,21 @@ export default function AchievementOverlay() {
     processingRef.current = true;
 
     const config = ACHIEVEMENTS[event.type];
-    if (!config) return popQueue();
-
-    // Check if already earned (for one-time achievements)
-    if (config.once) {
-      const already = await hasAchievement(event.type);
-      if (already) return popQueue();
+    if (!config) {
+      popQueue();
+      return;
     }
 
-    // Save achievement
+    // Check if already earned (PER USER)
+    if (config.once) {
+      const already = await hasAchievement(event.type);
+      if (already) {
+        popQueue();
+        return;
+      }
+    }
+
+    // Save achievement (PER USER)
     await saveAchievement(event);
 
     // Show overlay
@@ -83,32 +93,47 @@ export default function AchievementOverlay() {
       title: config.title,
       message:
         config.message ||
-        `${event.exercise} — ${event.value} lbs (+${event.diff})`,
+        `${event.exercise ?? ""} ${event.value ?? ""}`.trim(),
     });
 
     processingRef.current = false;
   }
 
   function popQueue() {
-    setQueue(q => q.slice(1));
+    setQueue((q) => q.slice(1));
     processingRef.current = false;
   }
 
   /* ============================================================
-     DATABASE HELPERS
+     DATABASE HELPERS (FIXED — USER SCOPED)
   ============================================================ */
 
   async function hasAchievement(type) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return false;
+
     const { data } = await supabase
       .from("user_achievements")
       .select("id")
       .eq("type", type)
+      .eq("user_id", user.id)
       .limit(1);
-    return data && data.length > 0;
+
+    return Array.isArray(data) && data.length > 0;
   }
 
   async function saveAchievement(event) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
     await supabase.from("user_achievements").insert({
+      user_id: user.id,
       type: event.type,
       metadata: event,
     });
@@ -136,7 +161,7 @@ export default function AchievementOverlay() {
         {active.exercise && (
           <div className="achievement-meta">
             <strong>{active.exercise}</strong>
-            <span>{active.value} lbs</span>
+            <span>{active.value}</span>
           </div>
         )}
 
