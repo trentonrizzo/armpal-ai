@@ -47,6 +47,7 @@ import {
   FaCheck,
   FaTimes,
 } from "react-icons/fa";
+import { achievementBus } from "../utils/achievementBus";
 
 // ============================================================
 // DRAGGABLE WRAPPER — LEFT drag handle only; RIGHT side scrolls
@@ -258,6 +259,7 @@ export default function WorkoutsPage() {
     const oldIndex = list.findIndex((e) => e.id === active.id);
     const newIndex = list.findIndex((e) => e.id === over.id);
     const reordered = arrayMove(list, oldIndex, newIndex);
+achievementBus.emit({ type: "FIRST_WORKOUT" });
 
     for (let i = 0; i < reordered.length; i++) {
       await supabase
