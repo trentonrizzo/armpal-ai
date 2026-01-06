@@ -1,76 +1,111 @@
 /* public/armPalSplash.js
-   ArmPal Power-On Splash — iOS/PWA SAFE
+   ArmPal Power-On Splash — CLEAN / IOS SAFE / SINGLE RUN
 */
 
 (() => {
   if (typeof window === "undefined") return;
 
-  // Run once per session (but DOES run on warm resume)
-  if (sessionStorage.getItem("AP_SPLASH_SHOWN")) return;
-  sessionStorage.setItem("AP_SPLASH_SHOWN", "1");
+  // HARD STOP: never show twice per cold launch
+  if (window.__AP_SPLASH_ACTIVE__) return;
+  window.__AP_SPLASH_ACTIVE__ = true;
 
   const LOGO = "/pwa-512x512.png";
-  const MIN_SHOW_MS = 1200; // FORCE visibility
-  const MAX_SHOW_MS = 3000;
+  const MIN_SHOW_MS = 900;
+  const MAX_SHOW_MS = 2200;
 
-  // ---------- Styles ----------
+  // ==============================
+  // STYLES (INLINE, ZERO DEPENDENCIES)
+  // ==============================
   const style = document.createElement("style");
   style.textContent = `
     #ap-splash {
       position: fixed;
       inset: 0;
       z-index: 2147483647;
-      background: #000;
+      background: radial-gradient(circle at center, #111 0%, #000 65%);
       display: grid;
       place-items: center;
       pointer-events: none;
     }
-    #ap-splash img {
-      width: min(44vw, 220px);
+
+    #ap-splash-inner {
+      display: grid;
+      place-items: center;
+      gap: 16px;
       opacity: 0;
-      transform: scale(0.9);
-      filter: blur(8px);
-      animation: ap-in 900ms cubic-bezier(.2,.9,.25,1) forwards;
+      transform: translateY(8px) scale(0.94);
+      animation: ap-enter 720ms cubic-bezier(.2,.9,.25,1) forwards;
     }
-    @keyframes ap-in {
-      to { opacity: 1; transform: scale(1); filter: blur(0); }
+
+    #ap-logo {
+      width: min(72vw, 340px);
+      filter:
+        drop-shadow(0 0 18px rgba(255,0,0,.25))
+        drop-shadow(0 0 42px rgba(255,0,0,.15));
     }
+
+    #ap-tagline {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.55);
+    }
+
+    @keyframes ap-enter {
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
     #ap-splash.ap-out {
-      animation: ap-out 250ms ease-out forwards;
+      animation: ap-exit 260ms ease-out forwards;
     }
-    @keyframes ap-out {
+
+    @keyframes ap-exit {
       to { opacity: 0; }
     }
   `;
   document.head.appendChild(style);
 
-  // ---------- DOM ----------
+  // ==============================
+  // DOM
+  // ==============================
   const splash = document.createElement("div");
   splash.id = "ap-splash";
-  splash.innerHTML = `<img src="${LOGO}" alt="ArmPal" />`;
+  splash.innerHTML = `
+    <div id="ap-splash-inner">
+      <img id="ap-logo" src="${LOGO}" alt="ArmPal" />
+      <div id="ap-tagline">Strength · Precision · Progress</div>
+    </div>
+  `;
   document.body.appendChild(splash);
 
-  // ---------- Sound (metal clank, lightweight) ----------
+  // ==============================
+  // OPTIONAL SOUND (WILL AUTO-FAIL ON IOS UNTIL TAP)
+  // ==============================
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const play = async () => {
-      if (ctx.state === "suspended") await ctx.resume();
+    if (ctx.state === "running") {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = "triangle";
-      o.frequency.value = 420;
+      o.frequency.value = 360;
       g.gain.setValueAtTime(0.001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      g.gain.exponentialRampToValueAtTime(0.28, ctx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
       o.connect(g).connect(ctx.destination);
       o.start();
-      o.stop(ctx.currentTime + 0.26);
-    };
-    play();
+      o.stop(ctx.currentTime + 0.24);
+    }
   } catch {}
 
-  // ---------- Removal ----------
+  // ==============================
+  // REMOVAL LOGIC (REACT OR TIMEOUT)
+  // ==============================
   const start = performance.now();
+
   const remove = () => {
     const elapsed = performance.now() - start;
     const wait = Math.max(0, MIN_SHOW_MS - elapsed);
@@ -79,11 +114,11 @@
       setTimeout(() => {
         splash.remove();
         style.remove();
-      }, 260);
+      }, 280);
     }, wait);
   };
 
-  // Remove after React mounts OR max timeout
+  // Remove when React mounts
   const root = document.getElementById("root");
   if (root) {
     const obs = new MutationObserver(() => {
@@ -93,5 +128,6 @@
     obs.observe(root, { childList: true });
   }
 
+  // Absolute fallback
   setTimeout(remove, MAX_SHOW_MS);
 })();
