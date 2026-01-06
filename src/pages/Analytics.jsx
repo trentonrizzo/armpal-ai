@@ -730,7 +730,7 @@ function PRsTabPanel() {
     // Supabase is usually case-sensitive for quoted identifiers.
     const { data } = await supabase
       .from("PRs")
-      .select("id, lift_name, weight, unit, date, reps, notes, order_index")
+      .select("id, lift_name, weight, unit, date, created_at, reps, notes, order_index")
       .eq("user_id", user.id)
       .order("date", { ascending: true });
 
@@ -767,9 +767,9 @@ function PRsTabPanel() {
       if (!map[nm]) map[nm] = [];
 
       // date column is DATE (no time) — still safe to new Date(...)
-      const rawDate = row.date || row.created_at;
-const d = rawDate ? new Date(rawDate) : null;
-if (!d || Number.isNaN(d.getTime())) continue;
+      const rawDate = row.date ?? row.created_at;
+const d = rawDate ? new Date(rawDate) : new Date();
+
 
 
       map[nm].push({
