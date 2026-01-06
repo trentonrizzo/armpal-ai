@@ -142,6 +142,7 @@ function MeasurementsTabPanel() {
 
     const distinct = [...new Set(rows.map((r) => r.name).filter(Boolean))];
     setNames(distinct);
+setSelected(distinct);
 
     // Keep UX from feeling empty on first open
     if (distinct.length && selected.length === 0) {
