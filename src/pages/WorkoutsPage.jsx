@@ -16,6 +16,7 @@
 // ============================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { emitAchievement } from "../utils/achievementBus";
 import { supabase } from "../supabaseClient";
 import {
   DndContext,
@@ -300,6 +301,10 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
       payload.position = workouts.length;
       await supabase.from("workouts").insert(payload);
     }
+// FIRST WORKOUT ACHIEVEMENT
+if (!editingWorkout && workouts.length === 0) {
+  emitAchievement("first_workout");
+}
 
     setWorkoutModalOpen(false);
     setEditingWorkout(null);
