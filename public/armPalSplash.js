@@ -1,53 +1,74 @@
 /* public/armPalSplash.js
-   ArmPal Power-On Splash — CLEAN / IOS SAFE / SINGLE RUN
+   ArmPal Power-On Splash — POLISHED / IOS SAFE / SINGLE RUN
 */
 
 (() => {
   if (typeof window === "undefined") return;
 
-  // HARD STOP: never show twice per cold launch
-  if (window.__AP_SPLASH_ACTIVE__) return;
-  window.__AP_SPLASH_ACTIVE__ = true;
+  // Run once per cold launch
+  if (window.__AP_SPLASH_DONE__) return;
+  window.__AP_SPLASH_DONE__ = true;
 
   const LOGO = "/pwa-512x512.png";
-  const MIN_SHOW_MS = 900;
-  const MAX_SHOW_MS = 2200;
+  const MIN_SHOW_MS = 1000;
+  const MAX_SHOW_MS = 2600;
 
   // ==============================
-  // STYLES (INLINE, ZERO DEPENDENCIES)
+  // STYLES
   // ==============================
   const style = document.createElement("style");
   style.textContent = `
+    html, body {
+      background: #000 !important;
+    }
+
     #ap-splash {
       position: fixed;
       inset: 0;
       z-index: 2147483647;
-      background: radial-gradient(circle at center, #111 0%, #000 65%);
-      display: grid;
-      place-items: center;
-      pointer-events: none;
+      background: radial-gradient(circle at center, #111 0%, #000 70%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
     }
 
-    #ap-splash-inner {
-      display: grid;
-      place-items: center;
-      gap: 16px;
+    #ap-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
       opacity: 0;
-      transform: translateY(8px) scale(0.94);
-      animation: ap-enter 720ms cubic-bezier(.2,.9,.25,1) forwards;
+      transform: translateY(12px) scale(0.92);
+      animation: ap-enter 700ms cubic-bezier(.2,.9,.25,1) forwards;
     }
 
     #ap-logo {
-      width: min(72vw, 340px);
+      width: min(78vw, 360px);
       filter:
-        drop-shadow(0 0 18px rgba(255,0,0,.25))
-        drop-shadow(0 0 42px rgba(255,0,0,.15));
+        drop-shadow(0 0 22px rgba(255,0,0,.35))
+        drop-shadow(0 0 60px rgba(255,0,0,.18));
     }
 
-    #ap-tagline {
+    #ap-line {
+      width: 140px;
+      height: 2px;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255,255,255,.7),
+        transparent
+      );
+      opacity: 0;
+      animation: ap-line-in 600ms ease forwards;
+      animation-delay: 420ms;
+    }
+
+    #ap-tag {
       font-family: system-ui, -apple-system, BlinkMacSystemFont;
       font-size: 12px;
-      letter-spacing: 0.18em;
+      letter-spacing: .22em;
       text-transform: uppercase;
       color: rgba(255,255,255,.55);
     }
@@ -57,6 +78,10 @@
         opacity: 1;
         transform: translateY(0) scale(1);
       }
+    }
+
+    @keyframes ap-line-in {
+      to { opacity: 1; }
     }
 
     #ap-splash.ap-out {
@@ -75,34 +100,16 @@
   const splash = document.createElement("div");
   splash.id = "ap-splash";
   splash.innerHTML = `
-    <div id="ap-splash-inner">
+    <div id="ap-inner">
       <img id="ap-logo" src="${LOGO}" alt="ArmPal" />
-      <div id="ap-tagline">Strength · Precision · Progress</div>
+      <div id="ap-line"></div>
+      <div id="ap-tag">Strength · Precision · Progress</div>
     </div>
   `;
   document.body.appendChild(splash);
 
   // ==============================
-  // OPTIONAL SOUND (WILL AUTO-FAIL ON IOS UNTIL TAP)
-  // ==============================
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === "running") {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "triangle";
-      o.frequency.value = 360;
-      g.gain.setValueAtTime(0.001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.28, ctx.currentTime + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
-      o.connect(g).connect(ctx.destination);
-      o.start();
-      o.stop(ctx.currentTime + 0.24);
-    }
-  } catch {}
-
-  // ==============================
-  // REMOVAL LOGIC (REACT OR TIMEOUT)
+  // REMOVAL LOGIC
   // ==============================
   const start = performance.now();
 
@@ -114,7 +121,7 @@
       setTimeout(() => {
         splash.remove();
         style.remove();
-      }, 280);
+      }, 300);
     }, wait);
   };
 
