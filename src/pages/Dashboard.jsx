@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { Link, useNavigate } from "react-router-dom";
+import ProgramsLauncher from "../components/programs/ProgramsLauncher";
+<ProgramsLauncher pillStyle={{ marginTop: 6 }} />
 
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
