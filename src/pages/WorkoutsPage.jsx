@@ -302,7 +302,14 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
     }
 // FIRST WORKOUT ACHIEVEMENT
 if (!editingWorkout && workouts.length === 0) {
+  // FIRST WORKOUT ACHIEVEMENT (fire once)
+const alreadyFired = localStorage.getItem("ach_first_workout");
+
+if (!editingWorkout && !alreadyFired) {
   achievementBus.emit("first_workout");
+  localStorage.setItem("ach_first_workout", "1");
+}
+
 }
 
     setWorkoutModalOpen(false);
