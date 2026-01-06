@@ -1,5 +1,5 @@
 /* public/armPalSplash.js
-   ArmPal Cinematic Power-On Splash
+   ArmPal Cinematic Barbell Slam Splash
    iOS / PWA SAFE — SINGLE RUN
 */
 
@@ -8,13 +8,12 @@
   if (window.__AP_SPLASH_DONE__) return;
   window.__AP_SPLASH_DONE__ = true;
 
-  const BARBELL = "/pwa-512x512.png"; // barbell logo image
-  const MIN_SHOW_MS = 900;
-  const MAX_SHOW_MS = 2600;
+  const BARBELL_IMG = "/pwa-512x512.png"; // barbell graphic
+  const LOGO_TEXT = "ARMPAL";
 
-  /* ===========================
+  /* =========================
      STYLES
-  =========================== */
+  ========================= */
   const style = document.createElement("style");
   style.textContent = `
     html, body {
@@ -26,149 +25,168 @@
       inset: 0;
       z-index: 2147483647;
       background: radial-gradient(circle at center, #111 0%, #000 70%);
-      display: grid;
-      place-items: center;
       overflow: hidden;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
     }
 
     #ap-stage {
-      position: relative;
-      width: 100%;
-      height: 100%;
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
+    /* BARBELL DROP */
     #ap-barbell {
       position: absolute;
-      top: -40%;
+      top: -60%;
       left: 50%;
-      transform: translateX(-50%) scale(0.9);
-      width: min(80vw, 380px);
-      animation: ap-drop 520ms cubic-bezier(.2,.7,.25,1) forwards;
-      animation-delay: 120ms;
+      transform: translateX(-50%);
+      width: min(82vw, 380px);
       filter:
-        drop-shadow(0 0 18px rgba(255,0,0,.35))
-        drop-shadow(0 0 60px rgba(255,0,0,.2));
+        drop-shadow(0 0 20px rgba(255,0,0,.35))
+        drop-shadow(0 0 70px rgba(255,0,0,.25));
+      animation: barbell-drop 520ms cubic-bezier(.15,.8,.25,1) forwards;
+      animation-delay: 120ms;
     }
 
-    @keyframes ap-drop {
+    @keyframes barbell-drop {
       0% {
-        transform: translate(-50%, -120%) scale(0.9);
+        transform: translate(-50%, -140%) scale(0.9);
       }
       70% {
-        transform: translate(-50%, 8%) scale(1.02);
+        transform: translate(-50%, 10%) scale(1.05);
       }
       100% {
         transform: translate(-50%, 0) scale(1);
       }
     }
 
+    /* IMPACT FLASH / CRACK */
     #ap-impact {
-      position: absolute;
-      bottom: 50%;
-      left: 50%;
-      width: 220px;
-      height: 4px;
-      background: radial-gradient(circle, rgba(255,255,255,.9), transparent 70%);
-      transform: translateX(-50%);
-      opacity: 0;
-      animation: ap-impact 220ms ease-out forwards;
-      animation-delay: 620ms;
-    }
-
-    @keyframes ap-impact {
-      0% { opacity: 0; transform: translateX(-50%) scaleX(.2); }
-      60% { opacity: 1; transform: translateX(-50%) scaleX(1.4); }
-      100% { opacity: 0; transform: translateX(-50%) scaleX(2); }
-    }
-
-    #ap-title {
       position: absolute;
       top: 52%;
       left: 50%;
-      transform: translate(-50%, 24px) scale(0.92);
+      width: 220px;
+      height: 4px;
+      background: radial-gradient(circle, rgba(255,255,255,.95), transparent 70%);
+      transform: translateX(-50%) scaleX(.2);
+      opacity: 0;
+      animation: impact-flash 260ms ease-out forwards;
+      animation-delay: 620ms;
+    }
+
+    @keyframes impact-flash {
+      0% { opacity: 0; transform: translateX(-50%) scaleX(.2); }
+      50% { opacity: 1; transform: translateX(-50%) scaleX(1.4); }
+      100% { opacity: 0; transform: translateX(-50%) scaleX(2); }
+    }
+
+    /* SCREEN SHAKE */
+    #ap-stage.shake {
+      animation: shake 180ms ease-out;
+    }
+
+    @keyframes shake {
+      0% { transform: translate(0,0); }
+      25% { transform: translate(-4px,2px); }
+      50% { transform: translate(4px,-2px); }
+      75% { transform: translate(-2px,1px); }
+      100% { transform: translate(0,0); }
+    }
+
+    /* LOGO FOLLOW */
+    #ap-logo {
+      position: absolute;
+      top: 58%;
+      left: 50%;
+      transform: translate(-50%, 30px) scale(0.9);
       opacity: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont;
       font-size: 44px;
       font-weight: 900;
       letter-spacing: .04em;
       color: #fff;
-      animation: ap-title-in 420ms cubic-bezier(.2,.9,.25,1) forwards;
-      animation-delay: 680ms;
+      animation: logo-in 360ms cubic-bezier(.2,.9,.25,1) forwards;
+      animation-delay: 720ms;
     }
 
-    #ap-title span {
+    #ap-logo span {
       color: #e11d48;
     }
 
-    @keyframes ap-title-in {
+    @keyframes logo-in {
       to {
         opacity: 1;
         transform: translate(-50%, 0) scale(1);
       }
     }
 
-    #ap-splash.ap-out {
-      animation: ap-exit 220ms ease-out forwards;
+    /* EXIT */
+    #ap-splash.exit {
+      animation: splash-out 220ms ease-out forwards;
     }
 
-    @keyframes ap-exit {
+    @keyframes splash-out {
       to {
         opacity: 0;
-        transform: scale(1.06);
+        transform: scale(1.08);
       }
     }
   `;
   document.head.appendChild(style);
 
-  /* ===========================
+  /* =========================
      DOM
-  =========================== */
+  ========================= */
   const splash = document.createElement("div");
   splash.id = "ap-splash";
   splash.innerHTML = `
     <div id="ap-stage">
-      <img id="ap-barbell" src="${BARBELL}" alt="Barbell" />
+      <img id="ap-barbell" src="${BARBELL_IMG}" alt="Barbell" />
       <div id="ap-impact"></div>
-      <div id="ap-title"><span>ARM</span>PAL</div>
+      <div id="ap-logo"><span>ARM</span>PAL</div>
     </div>
   `;
   document.body.appendChild(splash);
 
-  /* ===========================
-     IMPACT SOUND (IOS SAFE)
-  =========================== */
+  const stage = splash.querySelector("#ap-stage");
+
+  /* =========================
+     IMPACT SOUND (FAST)
+  ========================= */
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (ctx.state === "running") {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
-      o.type = "triangle";
-      o.frequency.value = 140;
+      o.type = "square";
+      o.frequency.value = 120;
       g.gain.setValueAtTime(0.001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      g.gain.exponentialRampToValueAtTime(0.45, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
       o.connect(g).connect(ctx.destination);
       o.start();
-      o.stop(ctx.currentTime + 0.26);
+      o.stop(ctx.currentTime + 0.24);
     }
   } catch {}
 
-  /* ===========================
+  /* =========================
+     SHAKE ON IMPACT
+  ========================= */
+  setTimeout(() => {
+    stage.classList.add("shake");
+  }, 620);
+
+  /* =========================
      REMOVAL
-  =========================== */
-  const start = performance.now();
+  ========================= */
   const remove = () => {
-    const elapsed = performance.now() - start;
-    const wait = Math.max(0, MIN_SHOW_MS - elapsed);
+    splash.classList.add("exit");
     setTimeout(() => {
-      splash.classList.add("ap-out");
-      setTimeout(() => {
-        splash.remove();
-        style.remove();
-      }, 240);
-    }, wait);
+      splash.remove();
+      style.remove();
+    }, 240);
   };
 
   const root = document.getElementById("root");
@@ -180,5 +198,5 @@
     obs.observe(root, { childList: true });
   }
 
-  setTimeout(remove, MAX_SHOW_MS);
+  setTimeout(remove, 2600);
 })();
