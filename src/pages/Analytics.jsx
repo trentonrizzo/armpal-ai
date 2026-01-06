@@ -767,7 +767,10 @@ function PRsTabPanel() {
       if (!map[nm]) map[nm] = [];
 
       // date column is DATE (no time) — still safe to new Date(...)
-      const d = new Date(row.date);
+      const rawDate = row.date || row.created_at;
+const d = rawDate ? new Date(rawDate) : null;
+if (!d || Number.isNaN(d.getTime())) continue;
+
 
       map[nm].push({
         ts: d.getTime(),
