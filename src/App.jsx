@@ -31,12 +31,9 @@ import { FaShare } from "react-icons/fa";
 import { initOneSignal } from "./onesignal";
 import ResetPassword from "./pages/ResetPassword";
 
-// Achievement overlay
+// OVERLAYS
 import AchievementOverlay from "./overlays/AchievementOverlay";
 
-/* ============================================================
-   APP CONTENT (ROUTER + OVERLAYS)
-============================================================ */
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
@@ -108,24 +105,18 @@ function AppContent() {
         onClose={() => setOpenShare(false)}
       />
 
-      {/* GLOBAL OVERLAY (IN-APP ONLY, NOT NOTIFICATIONS) */}
+      {/* GLOBAL OVERLAYS */}
       <AchievementOverlay />
     </div>
   );
 }
 
-/* ============================================================
-   ROOT APP (AUTH + PRESENCE + SERVICES)
-============================================================ */
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
 
   usePresence(session?.user);
 
-  /* ============================
-     AUTH SESSION
-  ============================ */
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -139,9 +130,6 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  /* ============================
-     PRESENCE PING
-  ============================ */
   useEffect(() => {
     if (!session?.user?.id) return;
 
@@ -159,22 +147,18 @@ export default function App() {
   }, [session?.user?.id]);
 
   /* ============================
-     SAFE ONESIGNAL INIT
-     (PREVENTS DOMAIN CRASH)
+     FORCE SERVICE WORKER RESET
   ============================ */
   useEffect(() => {
     if (!session) return;
 
-    try {
-      if (
-        typeof window !== "undefined" &&
-        window.location.hostname === "armpalapp.vercel.app"
-      ) {
-        initOneSignal();
-      }
-    } catch (err) {
-      console.warn("OneSignal init skipped:", err?.message);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => reg.unregister());
+      });
     }
+
+    initOneSignal();
   }, [session]);
 
   if (!ready) return null;
