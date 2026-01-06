@@ -31,6 +31,9 @@ import { FaShare } from "react-icons/fa";
 import { initOneSignal } from "./onesignal";
 import ResetPassword from "./pages/ResetPassword";
 
+// ✅ ADD THIS
+import AchievementOverlay from "./overlays/AchievementOverlay";
+
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
@@ -101,6 +104,9 @@ function AppContent() {
         open={openShare}
         onClose={() => setOpenShare(false)}
       />
+
+      {/* ✅ THIS IS THE MISSING PIECE */}
+      <AchievementOverlay />
     </div>
   );
 }
