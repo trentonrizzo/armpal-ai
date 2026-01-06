@@ -32,16 +32,9 @@ import { initOneSignal } from "./onesignal";
 import usePresence from "./hooks/usePresence";
 
 /* ============================
-   GUARANTEED RUNTIME SPLASH
+   RUNTIME SPLASH (SAFE)
 ============================ */
-function RuntimeSplash() {
-  const [show, setShow] = useState(true);
-
-  useEffect(() => {
-    const t = setTimeout(() => setShow(false), 1200);
-    return () => clearTimeout(t);
-  }, []);
-
+function RuntimeSplash({ show }) {
   if (!show) return null;
 
   return (
@@ -75,7 +68,7 @@ function RuntimeSplash() {
 }
 
 /* ============================
-   CLIENT-ONLY OVERLAY (SAFE)
+   CLIENT-ONLY OVERLAY
 ============================ */
 const AchievementOverlay = lazy(() =>
   typeof window !== "undefined"
@@ -163,6 +156,7 @@ function AppContent() {
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   usePresence(session?.user);
 
@@ -170,6 +164,7 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
+      setTimeout(() => setShowSplash(false), 1200);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_e, s) =>
@@ -178,21 +173,6 @@ export default function App() {
 
     return () => listener.subscription.unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (!session?.user?.id) return;
-
-    const ping = async () => {
-      await supabase
-        .from("profiles")
-        .update({ last_seen: new Date().toISOString() })
-        .eq("id", session.user.id);
-    };
-
-    ping();
-    const interval = setInterval(ping, 30000);
-    return () => clearInterval(interval);
-  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!session) return;
@@ -206,13 +186,17 @@ export default function App() {
     initOneSignal();
   }, [session]);
 
-  if (!ready) return null;
-  if (!session) return <AuthPage />;
-
+  // 🔑 CRITICAL FIX: NEVER RETURN NULL
   return (
-    <AppProvider>
-      <RuntimeSplash />
-      <AppContent />
-    </AppProvider>
+    <>
+      <RuntimeSplash show={showSplash} />
+      {!ready ? null : !session ? (
+        <AuthPage />
+      ) : (
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      )}
+    </>
   );
 }
