@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
@@ -19,40 +19,46 @@ import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
-import usePresence from "./hooks/usePresence";
+import ResetPassword from "./pages/ResetPassword";
 
-// Analytics pages
 import Analytics from "./pages/Analytics";
 import MeasurementAnalytics from "./pages/MeasurementAnalytics";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
-import { initOneSignal } from "./onesignal";
-import ResetPassword from "./pages/ResetPassword";
 
-// OVERLAYS
-import AchievementOverlay from "./overlays/AchievementOverlay";
+import { initOneSignal } from "./onesignal";
+import usePresence from "./hooks/usePresence";
+
+/* ============================
+   CLIENT-ONLY OVERLAY (SAFE)
+============================ */
+const AchievementOverlay = lazy(() =>
+  typeof window !== "undefined"
+    ? import("./overlays/AchievementOverlay")
+    : Promise.resolve({ default: () => null })
+);
 
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
   const isWorkouts = location.pathname === "/workouts";
   const [openShare, setOpenShare] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  /* ============================
-     APPLY SAVED THEME
-  ============================ */
   useEffect(() => {
+    setMounted(true);
+
     const savedTheme = localStorage.getItem("theme") || "dark";
     document.body.setAttribute("data-theme", savedTheme);
   }, []);
 
   return (
     <div
-      className={`${
+      className={
         isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
-      }`}
+      }
     >
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -69,8 +75,6 @@ function AppContent() {
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-
-        {/* ANALYTICS */}
         <Route path="/analytics" element={<Analytics />} />
         <Route
           path="/analytics/measurements"
@@ -105,8 +109,12 @@ function AppContent() {
         onClose={() => setOpenShare(false)}
       />
 
-      {/* GLOBAL OVERLAYS */}
-      <AchievementOverlay />
+      {/* CLIENT-ONLY GLOBAL OVERLAY */}
+      {mounted && (
+        <Suspense fallback={null}>
+          <AchievementOverlay />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -142,17 +150,13 @@ export default function App() {
 
     ping();
     const interval = setInterval(ping, 30000);
-
     return () => clearInterval(interval);
   }, [session?.user?.id]);
 
-  /* ============================
-     FORCE SERVICE WORKER RESET
-  ============================ */
   useEffect(() => {
     if (!session) return;
 
-    if ("serviceWorker" in navigator) {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then((regs) => {
         regs.forEach((reg) => reg.unregister());
       });
