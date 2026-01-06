@@ -707,9 +707,14 @@ function PRsTabPanel() {
      LOAD PRs
   ============================ */
   useEffect(() => {
-    loadPRs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  loadPRs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+useEffect(() => {
+  loadPRs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [allRows.length]);
+
 
   async function loadPRs() {
     setLoading(true);
