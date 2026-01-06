@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
 
-    <!-- iOS safe area -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
@@ -11,81 +10,21 @@
 
     <title>ArmPal</title>
 
-    <!-- Onesignal -->
+    <meta name="theme-color" content="#000000" />
+
+    <!-- FORCE BLACK BACKGROUND -->
+    <script>
+      document.documentElement.style.background = "#000";
+    </script>
+
+    <!-- ONESIGNAL -->
     <script
       src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
       defer
     ></script>
 
-    <!-- INLINE SPLASH (CANNOT FAIL) -->
-    <style>
-      #ap-splash {
-        position: fixed;
-        inset: 0;
-        background: #000;
-        z-index: 2147483647;
-        display: grid;
-        place-items: center;
-      }
-
-      #ap-splash img {
-        width: min(46vw, 220px);
-        opacity: 0;
-        transform: scale(0.9);
-        filter: blur(10px);
-        animation: ap-in 900ms cubic-bezier(.2,.9,.25,1) forwards;
-      }
-
-      @keyframes ap-in {
-        to {
-          opacity: 1;
-          transform: scale(1);
-          filter: blur(0);
-        }
-      }
-
-      #ap-splash.ap-out {
-        animation: ap-out 260ms ease-out forwards;
-      }
-
-      @keyframes ap-out {
-        to { opacity: 0; }
-      }
-    </style>
-
-    <script>
-      document.documentElement.style.background = "#000";
-
-      (function () {
-        const splash = document.createElement("div");
-        splash.id = "ap-splash";
-        splash.innerHTML = '<img src="/pwa-512x512.png" alt="ArmPal" />';
-        document.documentElement.appendChild(splash);
-
-        const start = performance.now();
-        const MIN_MS = 1200;
-
-        const remove = () => {
-          const elapsed = performance.now() - start;
-          const wait = Math.max(0, MIN_MS - elapsed);
-          setTimeout(() => {
-            splash.classList.add("ap-out");
-            setTimeout(() => splash.remove(), 280);
-          }, wait);
-        };
-
-        const root = document.getElementById("root");
-        if (root) {
-          const obs = new MutationObserver(() => {
-            obs.disconnect();
-            remove();
-          });
-          obs.observe(root, { childList: true });
-        }
-
-        setTimeout(remove, 3000);
-      })();
-    </script>
+    <!-- ✅ THIS ACTUALLY LOADS -->
+    <script src="/armPalSplash.js"></script>
   </head>
 
   <body style="margin:0;background:#000">
