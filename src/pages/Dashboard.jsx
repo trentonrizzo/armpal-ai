@@ -2,8 +2,9 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { Link, useNavigate } from "react-router-dom";
+
+// Programs
 import ProgramsLauncher from "../components/programs/ProgramsLauncher";
-<ProgramsLauncher pillStyle={{ marginTop: 6 }} />
 
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
@@ -260,6 +261,7 @@ export default function Dashboard() {
       </section>
 
       {/* SMART ANALYTICS (READ-ONLY) — CLICKABLE TO FULL PAGE */}
+      <ProgramsLauncher pillStyle={{ marginBottom: 12 }} />
       <div
         role="button"
         tabIndex={0}
