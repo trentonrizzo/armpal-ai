@@ -8,15 +8,21 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+
+      // ✅ REQUIRED FOR IOS
+      injectRegister: "auto",
+
       includeAssets: [
         "favicon.ico",
         "pwa-192x192.png",
-        "pwa-512x512.png"
+        "pwa-512x512.png",
       ],
+
       manifest: {
         name: "ArmPal",
         short_name: "ArmPal",
         start_url: "/",
+        scope: "/",
         display: "standalone",
         background_color: "#000000",
         theme_color: "#ff0000",
@@ -32,7 +38,27 @@ export default defineConfig({
             src: "pwa-512x512.png",
             sizes: "512x512",
             type: "image/png",
-          }
+          },
+        ],
+      },
+
+      // 🔥 THIS IS THE CRITICAL PART YOU WERE MISSING
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+
+        // 🚨 iOS WILL WHITE SCREEN WITHOUT THIS
+        navigateFallback: "/index.html",
+
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === "navigate",
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "html-cache",
+            },
+          },
         ],
       },
     }),

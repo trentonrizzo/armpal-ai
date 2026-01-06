@@ -4,11 +4,32 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 
-// PWA Registration
+// ======================================================
+// ✅ SERVICE WORKER — IOS SAFE UPDATE HANDLING
+// ======================================================
 import { registerSW } from "virtual:pwa-register";
-registerSW({ immediate: true });
 
-/* ===== RUNTIME SPLASH (iOS / PWA SAFE) ===== */
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    // force reload when a new SW takes control
+    window.location.reload();
+  },
+  onOfflineReady() {
+    // optional: offline ready hook
+  },
+});
+
+// 🔥 CRITICAL: prevent iOS white screen on SW swap
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    window.location.reload();
+  });
+}
+
+// ======================================================
+// ✅ RUNTIME SPLASH (IOS / PWA SAFE)
+// ======================================================
 function runtimeSplash() {
   // show once per app resume
   if (sessionStorage.getItem("AP_RUNTIME_SPLASH")) return;
@@ -37,7 +58,7 @@ function runtimeSplash() {
     img.style.transform = "scale(1)";
   });
 
-  // subtle metal thunk
+  // subtle metal thunk (safe on iOS)
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     ctx.resume().then(() => {
@@ -62,7 +83,7 @@ function runtimeSplash() {
   }, 1200);
 }
 
-// show on load
+// show on initial load
 runtimeSplash();
 
 // show again when app resumes
@@ -72,8 +93,10 @@ document.addEventListener("visibilitychange", () => {
     runtimeSplash();
   }
 });
-/* ========================================= */
 
+// ======================================================
+// ✅ REACT BOOTSTRAP
+// ======================================================
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
