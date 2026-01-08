@@ -1295,7 +1295,7 @@ useEffect(() => {
             <PillButton
               icon={<span style={{ fontSize: 22 }}>📏</span>}
               label={`Measurements · ${counts.measurements}`}
-              onClick={() => navigate("/measure")}
+              onClick={() => navigate("/measurements")}
             />
 
             <PillButton
