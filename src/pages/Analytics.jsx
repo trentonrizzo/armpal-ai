@@ -744,10 +744,8 @@ function PRsTabPanel() {
     ];
     setNames(distinct);
 
-    // Auto-select first lift so the tab doesn't feel empty
-    if (distinct.length && selected.length === 0) {
-      setSelected([distinct[0]]);
-    }
+    // Auto-select ALL lifts so the chart renders immediately
+    setSelected(distinct);
 
     setLoading(false);
 
@@ -769,14 +767,11 @@ function PRsTabPanel() {
       if (!map[nm]) map[nm] = [];
 
       // date column is DATE (no time) — still safe to new Date(...)
-// Prefer created_at if present; otherwise use date (no time)
-let d = null;
-if (row.created_at) {
-  d = new Date(row.created_at);
-} else if (row.date) {
-  d = new Date(row.date + "T12:00:00");
-}
-if (!d || Number.isNaN(d.getTime())) continue;
+      let d = null;
+      if (row?.created_at) d = new Date(row.created_at);
+      else if (row?.date) d = new Date(row.date + "T12:00:00");
+
+      if (!d || Number.isNaN(d.getTime())) continue;
 
       map[nm].push({
         ts: d.getTime(),
