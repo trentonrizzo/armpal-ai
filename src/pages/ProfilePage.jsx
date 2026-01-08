@@ -644,89 +644,28 @@ function getCroppedImg(src, pixelCrop) {
 // =================================================================================================
 
 async function loadQuickActionCounts(userId) {
-  // 1) Workouts: number of workout cards / sessions
-  const workoutsRows = await safeSelectOwned({
-    table: "workouts",
-    ownerId: userId,
-    selectOptions: ["id, created_at", "id"],
-  });
+  // AUTHORITATIVE COUNTS — DB TRUTH (NO INFERENCE)
+  // Uses Supabase count: "exact" and excludes scheduled / planned rows
 
-  // 2) PRs: number of PR cards you see (usually distinct lifts)
-  // We don't assume column names; we try a few.
-  const prsRows = await safeSelectOwned({
-    table: "prs",
-    ownerId: userId,
-    selectOptions: [
-      "id, lift, exercise, exercise_name, movement, name, title, created_at, date, performed_at, target_date, is_scheduled, scheduled, planned, status",
-      "id, lift, exercise, exercise_name, movement, name, title, created_at",
-      "id, lift, created_at",
-      "id, exercise, created_at",
-      "id, exercise_name, created_at",
-      "id, name, created_at",
-      "id, title, created_at",
-      "id, created_at",
-      "id",
-    ],
-  });
+  async function countTable(table, excludeScheduled = false) {
+    let q = supabase
+      .from(table)
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
 
-  const prKeySet = new Set();
-  for (const r of prsRows) {
-    if (isFutureScheduledRow(r)) continue;
+    if (excludeScheduled) {
+      q = q.not("status", "in", '("scheduled","planned")');
+    }
 
-    const key =
-      safeString(r?.lift) ||
-      safeString(r?.exercise) ||
-      safeString(r?.exercise_name) ||
-      safeString(r?.movement) ||
-      safeString(r?.name) ||
-      safeString(r?.title) ||
-      safeString(r?.id);
-
-    if (key) prKeySet.add(key.toLowerCase());
+    const { count } = await safeQuery(() => q, { count: 0 });
+    return count || 0;
   }
-
-  // 3) Measurements: count "sessions/cards" not individual body-part rows.
-  // Prefer a session-like id if it exists; otherwise group by day.
-  const measRows = await safeSelectOwned({
-    table: "measurements",
-    ownerId: userId,
-    selectOptions: [
-      "id, session_id, entry_id, group_id, created_at, date, logged_at, is_scheduled, scheduled, planned, status",
-      "id, session_id, created_at",
-      "id, entry_id, created_at",
-      "id, group_id, created_at",
-      "id, created_at",
-      "id, date",
-      "id",
-    ],
-  });
-
-  const measKeySet = new Set();
-  for (const r of measRows) {
-    if (isFutureScheduledRow(r)) continue;
-
-    const key =
-      safeString(r?.session_id) ||
-      safeString(r?.entry_id) ||
-      safeString(r?.group_id) ||
-      dayKeyFromRow(r) ||
-      safeString(r?.id);
-
-    if (key) measKeySet.add(key);
-  }
-
-  // 4) Goals: number of goal cards
-  const goalsRows = await safeSelectOwned({
-    table: "goals",
-    ownerId: userId,
-    selectOptions: ["id, created_at", "id"],
-  });
 
   return {
-    workouts: workoutsRows.length || 0,
-    prs: prKeySet.size || 0,
-    measurements: measKeySet.size || 0,
-    goals: goalsRows.length || 0,
+    workouts: await countTable("workouts"),
+    prs: await countTable("prs", true),
+    measurements: await countTable("measurements", true),
+    goals: await countTable("goals"),
   };
 }
 
@@ -1348,12 +1287,6 @@ export default function ProfilePage() {
             OPTIONAL SECTION STUBS (KEPT FOR "ADD EVERYTHING")
             These do not break anything, but provide the FULL profile structure again.
         ========================================================================================= */}
-
-        
-
-        
-
-        
 
       </PageWrap>
 
