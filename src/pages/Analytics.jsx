@@ -1,3 +1,4 @@
+// 🔥 FORCED DIFF: PR analytics fix applied
 // src/pages/Analytics.jsx
 // ============================================================
 // ARM PAL — SMART ANALYTICS
