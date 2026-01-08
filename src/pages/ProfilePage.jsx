@@ -1,5 +1,4 @@
 // src/pages/ProfilePage.jsx
-// PROFILEPAGE_FIX_BUILD_2026-01-08_202316Z
 // =================================================================================================
 // ARM PAL — PROFILE PAGE (MASTER)
 // FULL FILE REPLACEMENT — LONG FORM (NO TRUNCATION / NO MINIMIZING)
@@ -1296,7 +1295,7 @@ useEffect(() => {
             <PillButton
               icon={<span style={{ fontSize: 22 }}>📏</span>}
               label={`Measurements · ${counts.measurements}`}
-              onClick={() => navigate("/measurements")}
+              onClick={() => navigate("/measure")}
             />
 
             <PillButton
