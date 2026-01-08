@@ -63,10 +63,16 @@ async function removeSubscription(userId, endpoint) {
 ============================ */
 
 function getCurrentTheme() {
-  return document.body.getAttribute("data-theme") || "dark";
+  return (
+    document.documentElement.getAttribute("data-theme") ||
+    document.body.getAttribute("data-theme") ||
+    "dark"
+  );
 }
 
 function setTheme(next) {
+  // Set on BOTH <html> and <body> so the whole app + CSS vars always respond.
+  document.documentElement.setAttribute("data-theme", next);
   document.body.setAttribute("data-theme", next);
   localStorage.setItem("theme", next);
 }

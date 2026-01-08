@@ -83,12 +83,11 @@ function AppContent() {
   const [openShare, setOpenShare] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // 🔑 GLOBAL THEME HANDLING (FOUNDATION ONLY)
   useEffect(() => {
     setMounted(true);
-
     const savedTheme = localStorage.getItem("theme") || "dark";
     document.documentElement.setAttribute("data-theme", savedTheme);
+    document.body.setAttribute("data-theme", savedTheme);
   }, []);
 
   return (
@@ -96,10 +95,6 @@ function AppContent() {
       className={
         isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
       }
-      style={{
-        background: "var(--bg)",
-        color: "var(--text)",
-      }}
     >
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -137,7 +132,7 @@ function AppContent() {
             height: 44,
             borderRadius: 999,
             background: "var(--card)",
-            border: "1px solid var(--border)",
+            border: "1px solid rgba(255,255,255,0.15)",
             color: "var(--text)",
           }}
         >
@@ -192,6 +187,7 @@ export default function App() {
     initOneSignal();
   }, [session]);
 
+  // 🔑 CRITICAL FIX: NEVER RETURN NULL
   return (
     <>
       <RuntimeSplash show={showSplash} />
