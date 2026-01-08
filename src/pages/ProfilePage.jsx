@@ -645,8 +645,8 @@ function getCroppedImg(src, pixelCrop) {
 
 async function loadQuickActionCounts(userId) {
   // AUTHORITATIVE COUNTS — DB TRUTH (NO INFERENCE)
-  // Robust to differing owner columns across tables (user_id / profile_id / owner_id)
-  // Robust to missing status column (falls back without scheduled filter)
+  // FIX: Measurements were 0 because bodyweight + measurements live in DIFFERENT tables
+  // We now count BOTH and merge them into ONE "Measurements" number
 
   const OWNER_COLS = ["user_id", "profile_id", "owner_id"]; // try in order
 
@@ -661,9 +661,7 @@ async function loadQuickActionCounts(userId) {
         if (excludeScheduled) {
           try {
             q = q.not("status", "in", '("scheduled","planned")');
-          } catch (_) {
-            // ignore if column doesn't exist
-          }
+          } catch (_) {}
         }
 
         const { count, error } = await q;
@@ -674,28 +672,22 @@ async function loadQuickActionCounts(userId) {
       if (typeof out === "number") return out;
     }
 
-    // last resort: unowned count
-    const out2 = await safeQuery(async () => {
-      let q = supabase.from(table).select("*", { count: "exact", head: true });
-      if (excludeScheduled) {
-        try {
-          q = q.not("status", "in", '("scheduled","planned")');
-        } catch (_) {}
-      }
-      const { count, error } = await q;
-      if (error) throw error;
-      return count || 0;
-    }, 0);
-
-    return out2 || 0;
+    return 0;
   }
 
-  const [workouts, prs, measurements, goals] = await Promise.all([
-    countOwned("workouts"),
-    countOwned("prs", { excludeScheduled: true }),
-    countOwned("measurements", { excludeScheduled: true }),
-    countOwned("goals"),
-  ]);
+  // Workouts
+  const workouts = await countOwned("workouts");
+
+  // PRs (exclude scheduled)
+  const prs = await countOwned("prs", { excludeScheduled: true });
+
+  // Measurements = measurements + bodyweight logs (THIS WAS THE BUG)
+  const measurements =
+    (await countOwned("measurements", { excludeScheduled: true })) +
+    (await countOwned("bodyweight_logs", { excludeScheduled: true }));
+
+  // Goals
+  const goals = await countOwned("goals");
 
   return { workouts, prs, measurements, goals };
 }
