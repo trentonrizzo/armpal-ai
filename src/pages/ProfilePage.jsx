@@ -644,74 +644,36 @@ function getCroppedImg(src, pixelCrop) {
 // =================================================================================================
 
 async function loadQuickActionCounts(userId) {
-  // AUTHORITATIVE COUNTS — DB TRUTH (NO INFERENCE)
-  // FIX: PRs + Measurements stuck at 0 because some installs use different table/column names.
-  // We try a wider set of table candidates + owner columns and pick the first result that yields >0.
-  // If everything yields 0, we fall back to the first successful count (even if 0) to avoid globals.
+  // FAST + RELIABLE COUNTS
+  // No table guessing. No weird delays. Count straight from the real tables.
+  // If a table is missing or blocked, it returns 0 for that table (without stalling the others).
 
-  const OWNER_COLS = [
-    "user_id",
-    "profile_id",
-    "owner_id",
-    "uid",
-    "user",
-    "user_uuid",
-    "account_id",
-    "profile_uuid",
-    "created_by",
-  ];
-
-  // table candidates (safe to try; non-existent tables will just be skipped)
-  const PR_TABLES = ["prs", "pr_logs", "pr_records", "personal_records"];
-  const MEAS_TABLES = ["measurements", "measurement_logs", "measure_logs"];
-  const BW_TABLES = ["bodyweight_logs", "bodyweight", "bodyweights", "weight_logs", "weights"];
-  const WORKOUT_TABLES = ["workouts", "workout_logs", "sessions"];
-  const GOAL_TABLES = ["goals", "goal_logs"];
-
-  async function tryCount(table, ownerCol, { excludeScheduled = false } = {}) {
-    return safeQuery(async () => {
-      let q = supabase
+  async function countExact(table) {
+    const res = await safeQuery(async () => {
+      const { count, error } = await supabase
         .from(table)
         .select("*", { count: "exact", head: true })
-        .eq(ownerCol, userId);
-
-      if (excludeScheduled) {
-        // if status missing, this throws and we treat as failure for this combo
-        q = q.not("status", "in", '("scheduled","planned")');
-      }
-
-      const { count, error } = await q;
+        .eq("user_id", userId);
       if (error) throw error;
       return typeof count === "number" ? count : 0;
-    }, null);
+    }, 0);
+    return res || 0;
   }
 
-  async function countFromCandidates(tables, { excludeScheduled = false } = {}) {
-    let firstSuccessful = null; // remember first valid count even if 0
+  const [workouts, prs, measurements, goals, bodyweights] = await Promise.all([
+    countExact("workouts"),
+    countExact("prs"),
+    countExact("measurements"),
+    countExact("goals"),
+    countExact("bodyweight_logs"),
+  ]);
 
-    for (const table of tables) {
-      for (const ownerCol of OWNER_COLS) {
-        const c = await tryCount(table, ownerCol, { excludeScheduled });
-        if (typeof c === "number") {
-          if (firstSuccessful === null) firstSuccessful = c;
-          if (c > 0) return c; // best signal
-        }
-      }
-    }
-
-    return firstSuccessful ?? 0;
-  }
-
-  const workouts = await countFromCandidates(WORKOUT_TABLES);
-  const goals = await countFromCandidates(GOAL_TABLES);
-  const prs = await countFromCandidates(PR_TABLES, { excludeScheduled: true });
-
-  // Measurements combines measurements + bodyweight logs
-  const measCount = await countFromCandidates(MEAS_TABLES, { excludeScheduled: true });
-  const bwCount = await countFromCandidates(BW_TABLES, { excludeScheduled: true });
-  const measurements = (measCount || 0) + (bwCount || 0);
-
-  return { workouts, prs, measurements, goals };
+  return {
+    workouts,
+    prs,
+    measurements: (measurements || 0) + (bodyweights || 0),
+    goals,
+  };
 }
 
 export default function ProfilePage() {
