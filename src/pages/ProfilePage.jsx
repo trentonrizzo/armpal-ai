@@ -645,28 +645,59 @@ function getCroppedImg(src, pixelCrop) {
 
 async function loadQuickActionCounts(userId) {
   // AUTHORITATIVE COUNTS — DB TRUTH (NO INFERENCE)
-  // Uses Supabase count: "exact" and excludes scheduled / planned rows
+  // Robust to differing owner columns across tables (user_id / profile_id / owner_id)
+  // Robust to missing status column (falls back without scheduled filter)
 
-  async function countTable(table, excludeScheduled = false) {
-    let q = supabase
-      .from(table)
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId);
+  const OWNER_COLS = ["user_id", "profile_id", "owner_id"]; // try in order
 
-    if (excludeScheduled) {
-      q = q.not("status", "in", '("scheduled","planned")');
+  async function countOwned(table, { excludeScheduled = false } = {}) {
+    for (const ownerCol of OWNER_COLS) {
+      const out = await safeQuery(async () => {
+        let q = supabase
+          .from(table)
+          .select("*", { count: "exact", head: true })
+          .eq(ownerCol, userId);
+
+        if (excludeScheduled) {
+          try {
+            q = q.not("status", "in", '("scheduled","planned")');
+          } catch (_) {
+            // ignore if column doesn't exist
+          }
+        }
+
+        const { count, error } = await q;
+        if (error) throw error;
+        return count || 0;
+      }, null);
+
+      if (typeof out === "number") return out;
     }
 
-    const { count } = await safeQuery(() => q, { count: 0 });
-    return count || 0;
+    // last resort: unowned count
+    const out2 = await safeQuery(async () => {
+      let q = supabase.from(table).select("*", { count: "exact", head: true });
+      if (excludeScheduled) {
+        try {
+          q = q.not("status", "in", '("scheduled","planned")');
+        } catch (_) {}
+      }
+      const { count, error } = await q;
+      if (error) throw error;
+      return count || 0;
+    }, 0);
+
+    return out2 || 0;
   }
 
-  return {
-    workouts: await countTable("workouts"),
-    prs: await countTable("prs", true),
-    measurements: await countTable("measurements", true),
-    goals: await countTable("goals"),
-  };
+  const [workouts, prs, measurements, goals] = await Promise.all([
+    countOwned("workouts"),
+    countOwned("prs", { excludeScheduled: true }),
+    countOwned("measurements", { excludeScheduled: true }),
+    countOwned("goals"),
+  ]);
+
+  return { workouts, prs, measurements, goals };
 }
 
 export default function ProfilePage() {
@@ -743,50 +774,66 @@ export default function ProfilePage() {
   // LOAD PROFILE
   // -----------------------------------------------------------------------------------------------
 
-  useEffect(() => {
-    boot();
-  }, []);
+  // Boot once; allow fast first paint and avoid setting state after unmount
+const mountedRef = useRef(true);
+useEffect(() => {
+  mountedRef.current = true;
+  boot();
+  return () => {
+    mountedRef.current = false;
+  };
+}, []);
 
   async function boot() {
-    setLoading(true);
+  setLoading(true);
 
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) {
-      setLoading(false);
-      return;
-    }
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) {
+    setLoading(false);
+    return;
+  }
 
-    setUser(auth.user);
+  const uid = auth.user.id;
+  setUser(auth.user);
 
-    const row = await fetchProfileRow(auth.user.id);
+  // Critical path: profile row only (fast first paint)
+  const row = await fetchProfileRow(uid);
+  if (!mountedRef.current) return;
 
-    setDisplayName(row.display_name || "");
-    setHandle(row.handle || "");
-    setBio(row.bio || "");
-    setAvatarUrl(row.avatar_url || "");
+  setDisplayName(row.display_name || "");
+  setHandle(row.handle || "");
+  setBio(row.bio || "");
+  setAvatarUrl(row.avatar_url || "");
 
-    setOrig({
-      display_name: row.display_name || "",
-      handle: row.handle || "",
-      bio: row.bio || "",
-      avatar_url: row.avatar_url || "",
-    });
+  setOrig({
+    display_name: row.display_name || "",
+    handle: row.handle || "",
+    bio: row.bio || "",
+    avatar_url: row.avatar_url || "",
+  });
 
-    setEditMode(false);
-    setDirty(false);
+  setEditMode(false);
+  setDirty(false);
 
-    // reactions
+  // ✅ Fast paint
+  setLoading(false);
+
+  // Non-blocking: reactions
+  (async () => {
     setLoadingReactions(true);
-    const rx = await fetchReactions(auth.user.id);
+    const rx = await fetchReactions(uid);
+    if (!mountedRef.current) return;
     setReactions(rx);
     setLoadingReactions(false);
+  })();
 
-    // load counts for quick actions ("card counts" — not raw rows)
-    const nextCounts = await loadQuickActionCounts(auth.user.id);
+  // Non-blocking: counts
+  (async () => {
+    const nextCounts = await loadQuickActionCounts(uid);
+    if (!mountedRef.current) return;
     setCounts(nextCounts);
-
-    setLoading(false);
-  }
+  })();
+}
 
   // -----------------------------------------------------------------------------------------------
   // ONLINE PRESENCE
