@@ -1,4 +1,3 @@
-// 🔥 FORCED DIFF: PR analytics fix applied
 // src/pages/Analytics.jsx
 // ============================================================
 // ARM PAL — SMART ANALYTICS
@@ -732,8 +731,8 @@ function PRsTabPanel() {
     // IMPORTANT: table name is "PRs" (capital P R)
     // Supabase is usually case-sensitive for quoted identifiers.
     const { data } = await supabase
-      .from("PRs")
-      .select("id, lift_name, weight, unit, date, created_at, reps, notes, order_index")
+      .from("prs")
+      .select("id, lift_name, weight, unit, date, created_at, reps, notes")
       .eq("user_id", user.id)
       .order("date", { ascending: true });
 
@@ -745,7 +744,7 @@ function PRsTabPanel() {
     ];
     setNames(distinct);
 
-    // Auto-select ALL lifts so the chart renders immediately
+    // Auto-select all lifts so the tab doesn’t feel empty
     setSelected(distinct);
 
     setLoading(false);
@@ -769,11 +768,10 @@ function PRsTabPanel() {
 
       // date column is DATE (no time) — still safe to new Date(...)
       let d = null;
-      if (row?.created_at) d = new Date(row.created_at);
-      else if (row?.date) d = new Date(row.date + "T12:00:00");
+      if (row?.date) d = new Date(`${row.date}T12:00:00`);
+      else if (row?.created_at) d = new Date(row.created_at);
 
       if (!d || Number.isNaN(d.getTime())) continue;
-
       map[nm].push({
         ts: d.getTime(),
         date: d,
@@ -1075,6 +1073,8 @@ function PRsTabPanel() {
       >
         {loading ? (
           <p style={{ opacity: 0.7 }}>Loading PRs…</p>
+        ) : names.length === 0 ? (
+          <div style={{ opacity: 0.6, fontSize: 14 }}>No PRs logged yet</div>
         ) : selected.length === 0 ? (
           <div style={{ opacity: 0.6, fontSize: 14 }}>Select lifts to display</div>
         ) : (
