@@ -710,10 +710,6 @@ function PRsTabPanel() {
   loadPRs();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
-useEffect(() => {
-  loadPRs();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [allRows.length]);
 
 
   async function loadPRs() {
@@ -773,10 +769,14 @@ useEffect(() => {
       if (!map[nm]) map[nm] = [];
 
       // date column is DATE (no time) — still safe to new Date(...)
-      const rawDate = row.date ?? row.created_at;
-const d = rawDate ? new Date(rawDate) : new Date();
-
-
+// Prefer created_at if present; otherwise use date (no time)
+let d = null;
+if (row.created_at) {
+  d = new Date(row.created_at);
+} else if (row.date) {
+  d = new Date(row.date + "T12:00:00");
+}
+if (!d || Number.isNaN(d.getTime())) continue;
 
       map[nm].push({
         ts: d.getTime(),
