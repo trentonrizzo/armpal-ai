@@ -645,49 +645,71 @@ function getCroppedImg(src, pixelCrop) {
 
 async function loadQuickActionCounts(userId) {
   // AUTHORITATIVE COUNTS — DB TRUTH (NO INFERENCE)
-  // FIX: Measurements were 0 because bodyweight + measurements live in DIFFERENT tables
-  // We now count BOTH and merge them into ONE "Measurements" number
+  // FIX: PRs + Measurements stuck at 0 because some installs use different table/column names.
+  // We try a wider set of table candidates + owner columns and pick the first result that yields >0.
+  // If everything yields 0, we fall back to the first successful count (even if 0) to avoid globals.
 
-  const OWNER_COLS = ["user_id", "profile_id", "owner_id"]; // try in order
+  const OWNER_COLS = [
+    "user_id",
+    "profile_id",
+    "owner_id",
+    "uid",
+    "user",
+    "user_uuid",
+    "account_id",
+    "profile_uuid",
+    "created_by",
+  ];
 
-  async function countOwned(table, { excludeScheduled = false } = {}) {
-    for (const ownerCol of OWNER_COLS) {
-      const out = await safeQuery(async () => {
-        let q = supabase
-          .from(table)
-          .select("*", { count: "exact", head: true })
-          .eq(ownerCol, userId);
+  // table candidates (safe to try; non-existent tables will just be skipped)
+  const PR_TABLES = ["prs", "pr_logs", "pr_records", "personal_records"];
+  const MEAS_TABLES = ["measurements", "measurement_logs", "measure_logs"];
+  const BW_TABLES = ["bodyweight_logs", "bodyweight", "bodyweights", "weight_logs", "weights"];
+  const WORKOUT_TABLES = ["workouts", "workout_logs", "sessions"];
+  const GOAL_TABLES = ["goals", "goal_logs"];
 
-        if (excludeScheduled) {
-          try {
-            q = q.not("status", "in", '("scheduled","planned")');
-          } catch (_) {}
-        }
+  async function tryCount(table, ownerCol, { excludeScheduled = false } = {}) {
+    return safeQuery(async () => {
+      let q = supabase
+        .from(table)
+        .select("*", { count: "exact", head: true })
+        .eq(ownerCol, userId);
 
-        const { count, error } = await q;
-        if (error) throw error;
-        return count || 0;
-      }, null);
+      if (excludeScheduled) {
+        // if status missing, this throws and we treat as failure for this combo
+        q = q.not("status", "in", '("scheduled","planned")');
+      }
 
-      if (typeof out === "number") return out;
-    }
-
-    return 0;
+      const { count, error } = await q;
+      if (error) throw error;
+      return typeof count === "number" ? count : 0;
+    }, null);
   }
 
-  // Workouts
-  const workouts = await countOwned("workouts");
+  async function countFromCandidates(tables, { excludeScheduled = false } = {}) {
+    let firstSuccessful = null; // remember first valid count even if 0
 
-  // PRs (exclude scheduled)
-  const prs = await countOwned("prs", { excludeScheduled: true });
+    for (const table of tables) {
+      for (const ownerCol of OWNER_COLS) {
+        const c = await tryCount(table, ownerCol, { excludeScheduled });
+        if (typeof c === "number") {
+          if (firstSuccessful === null) firstSuccessful = c;
+          if (c > 0) return c; // best signal
+        }
+      }
+    }
 
-  // Measurements = measurements + bodyweight logs (THIS WAS THE BUG)
-  const measurements =
-    (await countOwned("measurements", { excludeScheduled: true })) +
-    (await countOwned("bodyweight_logs", { excludeScheduled: true }));
+    return firstSuccessful ?? 0;
+  }
 
-  // Goals
-  const goals = await countOwned("goals");
+  const workouts = await countFromCandidates(WORKOUT_TABLES);
+  const goals = await countFromCandidates(GOAL_TABLES);
+  const prs = await countFromCandidates(PR_TABLES, { excludeScheduled: true });
+
+  // Measurements combines measurements + bodyweight logs
+  const measCount = await countFromCandidates(MEAS_TABLES, { excludeScheduled: true });
+  const bwCount = await countFromCandidates(BW_TABLES, { excludeScheduled: true });
+  const measurements = (measCount || 0) + (bwCount || 0);
 
   return { workouts, prs, measurements, goals };
 }
