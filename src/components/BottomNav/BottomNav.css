@@ -5,8 +5,8 @@
   width: 100%;
   height: 64px;
 
-  background: #000000;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 
   display: flex;
   justify-content: space-around;
@@ -21,7 +21,7 @@
 /* Nav link styles */
 .nav-item {
   text-decoration: none;
-  color: white;
+  color: var(--text);
   flex: 1;
   text-align: center;
 }
@@ -44,11 +44,11 @@
 .nav-label {
   font-size: 10px;
   margin-top: 3px;
-  color: rgba(255, 255, 255, 0.5);
+  color: color-mix(in srgb, var(--text) 50%, transparent);
 }
 
 .active-label {
-  color: #ff2f2f;
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -59,8 +59,8 @@
   height: 32px;
   border-radius: 50%;
 
-  background: rgba(255, 0, 0, 0.45);
-  box-shadow: 0 0 12px 6px rgba(255, 0, 0, 0.45);
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 12px 6px color-mix(in srgb, var(--accent) 45%, transparent);
 
   top: -1px;
   z-index: 1;
