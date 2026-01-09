@@ -649,7 +649,8 @@ const pageWrap = {
   padding: "16px 16px 90px",
   maxWidth: 900,
   margin: "0 auto",
-  color: "white",
+  background: "var(--bg)",
+  color: "var(--text)",
 };
 
 const title = {
@@ -660,10 +661,10 @@ const title = {
 };
 
 const card = {
-  background: "#101010",
+  background: "var(--card)",
   borderRadius: 18,
   padding: 16,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--border)",
   marginBottom: 20,
   boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
 };
@@ -671,14 +672,14 @@ const card = {
 const bigAddButton = {
   width: "100%",
   padding: "14px 16px",
-  background: "#ff2f2f",
+  background: "var(--accent)",
   borderRadius: 14,
   border: "none",
-  color: "white",
+  color: "var(--text)",
   fontSize: 17,
   fontWeight: 800,
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(255,47,47,0.14)",
+  boxShadow: "0 12px 28px color-mix(in srgb, var(--accent) 35%, transparent)",
 };
 
 const sectionTitle = {
@@ -697,17 +698,17 @@ const addRow = {
 const inputBox = {
   flex: 1,
   padding: "10px",
-  background: "#050505",
+  background: "var(--card-2)",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.18)",
-  color: "white",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
   outline: "none",
 };
 
 const sendBtn = {
   padding: "10px 14px",
-  background: "#ff2f2f",
-  color: "white",
+  background: "var(--accent)",
+  color: "var(--text)",
   borderRadius: 12,
   fontWeight: 800,
   cursor: "pointer",
@@ -717,9 +718,9 @@ const sendBtn = {
 const cancelBtn = {
   padding: "10px 14px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.25)",
+  border: "1px solid var(--border)",
   background: "transparent",
-  color: "white",
+  color: "var(--text)",
   cursor: "pointer",
 };
 
@@ -740,7 +741,7 @@ const rowBase = {
   alignItems: "center",
   justifyContent: "space-between",
   padding: "10px 0",
-  borderBottom: "1px solid rgba(255,255,255,0.06)",
+  borderBottom: "1px solid var(--border)",
 };
 
 const rowClickable = {
@@ -750,8 +751,8 @@ const rowClickable = {
   gap: 12,
   padding: "14px 14px",
   borderRadius: 14,
-  background: "rgba(0,0,0,0.35)",
-  border: "1px solid rgba(255,255,255,0.07)",
+  background: "color-mix(in srgb, var(--text) 6%, transparent)",
+  border: "1px solid var(--border)",
   marginBottom: 12,
   cursor: "pointer",
   touchAction: "pan-y",
@@ -759,9 +760,9 @@ const rowClickable = {
 };
 
 const rowUnreadGlow = {
-  border: "1px solid rgba(255,47,47,0.35)",
+  border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)",
   boxShadow:
-    "0 0 0 1px rgba(255,47,47,0.18), 0 10px 30px rgba(255,47,47,0.10)",
+    "0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent)",
 };
 
 const rowLeft = {
@@ -783,8 +784,8 @@ const avatarCircle = {
   width: 44,
   height: 44,
   borderRadius: "50%",
-  background: "#000",
-  border: "1px solid rgba(255,255,255,0.14)",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -810,7 +811,7 @@ const onlineDot = {
 const nameText = {
   fontSize: 16,
   fontWeight: 800,
-  color: "white",
+  color: "var(--text)",
   margin: 0,
   lineHeight: "18px",
 };
@@ -835,7 +836,7 @@ const statusText = {
 const acceptBtn = {
   padding: "8px 12px",
   background: "#1fbf61",
-  color: "white",
+  color: "var(--text)",
   borderRadius: 12,
   border: "none",
   fontWeight: 900,
@@ -844,8 +845,8 @@ const acceptBtn = {
 
 const declineBtn = {
   padding: "8px 12px",
-  background: "#ff4444",
-  color: "white",
+  background: "var(--accent)",
+  color: "var(--text)",
   borderRadius: 12,
   border: "none",
   fontWeight: 900,

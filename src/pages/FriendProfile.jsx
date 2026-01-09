@@ -226,8 +226,8 @@ export default function FriendProfile() {
 const wrap = {
   minHeight: "100vh",
   padding: "18px 16px 90px",
-  background: "black",
-  color: "white",
+  background: "var(--bg)",
+  color: "var(--text)",
 };
 
 const topRow = {
@@ -243,18 +243,18 @@ const backBtn = {
   width: 44,
   height: 44,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.04)",
-  color: "white",
+  border: "1px solid var(--border)",
+  background: "var(--border)",
+  color: "var(--text)",
   fontSize: 18,
   fontWeight: 900,
 };
 
 const card = {
-  background: "#101010",
+  background: "var(--card)",
   borderRadius: 20,
   padding: 18,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--border)",
 };
 
 const row = { display: "flex", alignItems: "center", gap: 18 };
@@ -263,8 +263,8 @@ const avatar = {
   width: 76,
   height: 76,
   borderRadius: "50%",
-  background: "#000",
-  border: "1px solid rgba(255,255,255,0.14)",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -283,10 +283,10 @@ const bio = { marginTop: 18, fontSize: 15, opacity: 0.85 };
 
 const reactionCard = {
   marginTop: 18,
-  background: "#101010",
+  background: "var(--card)",
   borderRadius: 20,
   padding: 16,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--border)",
 };
 
 const reactionTitle = {
@@ -306,15 +306,15 @@ const reactionBtn = {
   margin: "0 4px",
   padding: "10px 0",
   borderRadius: 14,
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.12)",
-  color: "white",
+  background: "var(--border)",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
   fontWeight: 900,
 };
 
 const reactionActive = {
-  background: "rgba(255,47,47,0.20)",
-  border: "1px solid rgba(255,47,47,0.55)",
+  background: "color-mix(in srgb, var(--accent) 20%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--accent) 55%, transparent)",
 };
 
 const reactionCount = {
@@ -329,16 +329,16 @@ const unaddBtn = {
   marginTop: 22,
   padding: "16px",
   borderRadius: 18,
-  background: "rgba(255,47,47,0.12)",
-  border: "1px solid rgba(255,47,47,0.35)",
-  color: "white",
+  background: "color-mix(in srgb, var(--accent) 35%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)",
+  color: "var(--text)",
   fontWeight: 900,
 };
 
 const overlay = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.75)",
+  background: "color-mix(in srgb, var(--bg) 75%, transparent)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -354,10 +354,10 @@ const previewImg = {
 const confirmCard = {
   width: "90%",
   maxWidth: 340,
-  background: "#0f0f0f",
+  background: "var(--card)",
   borderRadius: 18,
   padding: 18,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--border)",
 };
 
 const confirmTitle = { fontSize: 18, fontWeight: 900 };
@@ -368,9 +368,9 @@ const cancelBtn = {
   flex: 1,
   padding: "14px",
   borderRadius: 14,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.15)",
-  color: "white",
+  background: "var(--border)",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
   fontWeight: 800,
 };
 
@@ -378,7 +378,7 @@ const confirmBtn = {
   flex: 1,
   padding: "14px",
   borderRadius: 14,
-  background: "#ff2f2f",
-  color: "white",
+  background: "var(--accent)",
+  color: "var(--text)",
   fontWeight: 900,
 };
