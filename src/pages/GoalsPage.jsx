@@ -344,14 +344,14 @@ export default function GoalsPage() {
         style={{
           padding: "14px 12px",
           width: "100%",
-          background: "#ff2f2f",
+          background: "var(--accent)",
           borderRadius: 14,
           border: "none",
           color: "white",
           fontSize: 15,
           fontWeight: 800,
           marginBottom: 18,
-          boxShadow: "0 10px 30px rgba(255,47,47,0.18)",
+          boxShadow: "0 10px 30px color-mix(in srgb, var(--accent) 90%, transparent)",
         }}
       >
         + Add New Goal
@@ -376,10 +376,10 @@ export default function GoalsPage() {
               <SortableItem key={goal.id} id={goal.id}>
                 <div
                   style={{
-                    background: "#101010",
+                    background: "var(--card)",
                     borderRadius: 14,
                     padding: 16,
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    border: "1px solid var(--border)",
                     marginBottom: 14,
                     position: "relative",
                     overflow: "hidden",
@@ -427,8 +427,8 @@ export default function GoalsPage() {
                               fontWeight: 800,
                               padding: "4px 8px",
                               borderRadius: 999,
-                              background: "rgba(255,47,47,0.16)",
-                              border: "1px solid rgba(255,47,47,0.28)",
+                              background: "color-mix(in srgb, var(--accent) 90%, transparent)",
+                              border: "1px solid color-mix(in srgb, var(--accent) 90%, transparent)",
                               color: "#fff",
                             }}
                           >
@@ -443,9 +443,9 @@ export default function GoalsPage() {
                               fontWeight: 800,
                               padding: "4px 8px",
                               borderRadius: 999,
-                              background: "rgba(255,255,255,0.08)",
-                              border: "1px solid rgba(255,255,255,0.12)",
-                              color: "#fff",
+                              background: "color-mix(in srgb, var(--accent) 18%, transparent)",
+                              border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)",
+                              color: "var(--text)",
                             }}
                           >
                             Strength
@@ -463,9 +463,9 @@ export default function GoalsPage() {
                               fontWeight: 800,
                               padding: "4px 8px",
                               borderRadius: 999,
-                              background: "rgba(255,255,255,0.08)",
-                              border: "1px solid rgba(255,255,255,0.12)",
-                              color: "#fff",
+                              background: "color-mix(in srgb, var(--accent) 14%, transparent)",
+                              border: "1px solid color-mix(in srgb, var(--accent) 28%, transparent)",
+                              color: "var(--text)",
                             }}
                           >
                             Target:{" "}
@@ -507,7 +507,7 @@ export default function GoalsPage() {
                       <FaTrash
                         style={{
                           cursor: "pointer",
-                          color: "#ff4d4d",
+                          color: "var(--accent)",
                           fontSize: 16,
                         }}
                         onClick={() => {
@@ -524,7 +524,7 @@ export default function GoalsPage() {
                       style={{
                         height: 7,
                         width: "100%",
-                        background: "rgba(255,255,255,0.06)",
+                        background: "var(--border)",
                         borderRadius: 999,
                         overflow: "hidden",
                       }}
@@ -533,10 +533,10 @@ export default function GoalsPage() {
                         style={{
                           width: `${progress}%`,
                           height: "100%",
-                          background: "#ff2f2f",
+                          background: "var(--accent)",
                           borderRadius: 999,
                           transition: "width 0.25s ease",
-                          boxShadow: "0 0 18px rgba(255,47,47,0.20)",
+                          boxShadow: "0 0 18px color-mix(in srgb, var(--accent) 90%, transparent)",
                         }}
                       />
                     </div>
@@ -572,8 +572,8 @@ export default function GoalsPage() {
             {formError ? (
               <div
                 style={{
-                  background: "rgba(255,47,47,0.12)",
-                  border: "1px solid rgba(255,47,47,0.25)",
+                  background: "color-mix(in srgb, var(--accent) 90%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 90%, transparent)",
                   color: "#fff",
                   padding: 10,
                   borderRadius: 12,
@@ -650,8 +650,8 @@ export default function GoalsPage() {
                 marginBottom: 12,
                 padding: 12,
                 borderRadius: 12,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.10)",
+                background: "var(--border)",
+                border: "1px solid var(--border)",
               }}
             >
               <div
@@ -711,7 +711,7 @@ export default function GoalsPage() {
             <button
               style={{
                 ...saveBtn,
-                background: saving ? "#444" : "#ff2f2f",
+                background: saving ? "color-mix(in srgb, var(--text) 20%, transparent)" : "var(--accent)",
                 cursor: saving ? "not-allowed" : "pointer",
               }}
               onClick={saveGoal}
@@ -742,7 +742,7 @@ export default function GoalsPage() {
           onClick={() => (deleting ? null : setDeleteId(null))}
         >
           <div style={card} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d", fontWeight: 900 }}>
+            <h2 style={{ marginTop: 0, color: "var(--accent)", fontWeight: 900 }}>
               Confirm Delete?
             </h2>
             <p style={{ opacity: 0.75, marginTop: 6 }}>
@@ -752,8 +752,8 @@ export default function GoalsPage() {
             {formError ? (
               <div
                 style={{
-                  background: "rgba(255,47,47,0.12)",
-                  border: "1px solid rgba(255,47,47,0.25)",
+                  background: "color-mix(in srgb, var(--accent) 90%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 90%, transparent)",
                   color: "#fff",
                   padding: 10,
                   borderRadius: 12,
@@ -780,7 +780,7 @@ export default function GoalsPage() {
             <button
               style={{
                 ...deleteBtn,
-                background: deleting ? "#444" : "#ff2f2f",
+                background: deleting ? "color-mix(in srgb, var(--text) 20%, transparent)" : "var(--accent)",
                 cursor: deleting ? "not-allowed" : "pointer",
               }}
               onClick={confirmDelete}
@@ -810,9 +810,9 @@ const backdrop = {
 };
 
 const card = {
-  background: "#111",
+  background: "var(--card)",
   borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid var(--border)",
   padding: 18,
   width: "100%",
   maxWidth: 440,
@@ -822,9 +822,9 @@ const input = {
   width: "100%",
   padding: 12,
   borderRadius: 12,
-  background: "#000",
-  border: "1px solid rgba(255,255,255,0.15)",
-  color: "white",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
   marginBottom: 12,
   fontSize: 14,
 };
@@ -841,7 +841,7 @@ const saveBtn = {
   width: "100%",
   padding: 12,
   borderRadius: 14,
-  background: "#ff2f2f",
+  background: "var(--accent)",
   color: "white",
   border: "none",
   fontWeight: 900,
@@ -852,7 +852,7 @@ const cancelBtn = {
   width: "100%",
   padding: 12,
   borderRadius: 14,
-  background: "#333",
+  background: "color-mix(in srgb, var(--text) 22%, transparent)",
   color: "white",
   border: "none",
   marginBottom: 10,
@@ -863,7 +863,7 @@ const deleteBtn = {
   width: "100%",
   padding: 12,
   borderRadius: 14,
-  background: "#ff2f2f",
+  background: "var(--accent)",
   color: "white",
   border: "none",
   fontWeight: 900,

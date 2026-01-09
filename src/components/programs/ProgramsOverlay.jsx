@@ -78,113 +78,129 @@ const styles = {
     justifyContent: "center",
     padding: 16,
   },
+
   panel: {
     width: "100%",
     maxWidth: 560,
     borderRadius: 18,
-    background: "#0b0b0b",
-    border: "1px solid rgba(255,255,255,0.10)",
+    background: "var(--card)",
+    border: "1px solid var(--border)",
     boxShadow: "0 24px 80px rgba(0,0,0,0.65)",
     padding: 16,
   },
+
   header: {
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
   },
+
   headerLeft: {
     display: "flex",
     flexDirection: "column",
     gap: 4,
   },
+
   kicker: {
-    color: "rgba(255,255,255,0.55)",
+    color: "var(--text-dim)",
     letterSpacing: "0.22em",
     fontSize: 11,
     fontWeight: 700,
   },
+
   title: {
-    color: "#fff",
+    color: "var(--text)",
     fontSize: 22,
     fontWeight: 900,
     lineHeight: 1.1,
   },
+
   closeBtn: {
     background: "transparent",
-    border: "1px solid rgba(255,255,255,0.14)",
-    color: "#fff",
+    border: "1px solid var(--border)",
+    color: "var(--text)",
     borderRadius: 12,
     width: 40,
     height: 40,
     cursor: "pointer",
     fontSize: 18,
   },
+
   sub: {
     marginTop: 10,
-    color: "rgba(255,255,255,0.62)",
+    color: "var(--text-dim)",
     fontSize: 13,
     lineHeight: 1.35,
   },
+
   grid: {
     marginTop: 14,
     display: "grid",
     gridTemplateColumns: "1fr",
     gap: 12,
   },
+
   card: {
-    background: "#111",
+    background: "var(--card-2)",
     borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.10)",
+    border: "1px solid var(--border)",
     padding: 14,
   },
+
   cardTop: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+
   cardTitle: {
-    color: "#fff",
+    color: "var(--text)",
     fontSize: 15,
     fontWeight: 800,
   },
+
   lockTag: {
-    background: "rgba(255,47,47,0.16)",
-    border: "1px solid rgba(255,47,47,0.45)",
-    color: "#fff",
+    background: "color-mix(in srgb, var(--accent) 18%, transparent)",
+    border: "1px solid color-mix(in srgb, var(--accent) 45%, transparent)",
+    color: "var(--text)",
     borderRadius: 999,
     padding: "4px 10px",
     fontSize: 12,
     fontWeight: 800,
   },
+
   cardDesc: {
     marginTop: 6,
-    color: "rgba(255,255,255,0.62)",
+    color: "var(--text-dim)",
     fontSize: 13,
     lineHeight: 1.35,
   },
+
   coming: {
     marginTop: 10,
-    color: "rgba(255,255,255,0.45)",
+    color: "color-mix(in srgb, var(--text) 45%, transparent)",
     fontSize: 12,
     letterSpacing: "0.10em",
     textTransform: "uppercase",
     fontWeight: 700,
   },
+
   footer: {
     marginTop: 14,
     display: "flex",
     justifyContent: "flex-end",
   },
+
   primaryBtn: {
-    background: "linear-gradient(135deg, #ff2f2f, #d81e1e)",
+    background: "linear-gradient(135deg, var(--accent), var(--accent-soft))",
     border: "none",
     color: "#fff",
     fontWeight: 900,
     padding: "10px 14px",
     borderRadius: 12,
     cursor: "pointer",
-    boxShadow: "0 10px 24px rgba(255,47,47,0.35)",
+    boxShadow: "0 10px 24px color-mix(in srgb, var(--accent) 35%, transparent)",
   },
 };

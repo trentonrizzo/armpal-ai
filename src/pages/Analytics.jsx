@@ -41,7 +41,7 @@ import { supabase } from "../supabaseClient";
    COLOR PALETTES
 ============================================================ */
 const SERIES_COLORS = [
-  "#ff2f2f", // ArmPal red
+  "var(--accent)", // theme accent
   "#3b82f6", // blue
   "#22c55e", // green
   "#a855f7", // purple
@@ -398,8 +398,8 @@ setSelected(distinct);
         marginTop: 14,
         padding: 16,
         borderRadius: 18,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "#101014",
+        border: "1px solid var(--border)",
+        background: "var(--card)",
       }}
     >
       <div style={{ fontSize: 13, opacity: 0.75 }}>
@@ -410,7 +410,7 @@ setSelected(distinct);
         style={{
           marginTop: 6,
           fontSize: 11,
-          color: "rgba(255,255,255,0.55)",
+          color: "color-mix(in srgb, var(--text) 55%, transparent)",
           fontWeight: 700,
         }}
       >
@@ -435,9 +435,9 @@ setSelected(distinct);
               style={{
                 padding: "8px 12px",
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.15)",
-                background: on ? "#ff2f2f" : "rgba(255,255,255,0.05)",
-                color: "#fff",
+                border: "1px solid var(--border)",
+                background: on ? "var(--accent)" : "color-mix(in srgb, var(--text) 6%, transparent)",
+                color: "var(--text)",
                 fontWeight: 800,
                 fontSize: 12,
               }}
@@ -454,8 +454,8 @@ setSelected(distinct);
           marginTop: 14,
           padding: 12,
           borderRadius: 18,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(255,255,255,0.02)",
+          border: "1px solid var(--border)",
+          background: "color-mix(in srgb, var(--text) 4%, transparent)",
         }}
       >
         {loading ? (
@@ -484,9 +484,9 @@ setSelected(distinct);
                   height: 36,
                   padding: "0 14px",
                   borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
+                  border: "1px solid var(--border)",
+                  background: "color-mix(in srgb, var(--text) 8%, transparent)",
+                  color: "var(--text)",
                   fontWeight: 800,
                 }}
               >
@@ -496,7 +496,7 @@ setSelected(distinct);
               <div
                 style={{
                   fontSize: 11,
-                  color: "rgba(255,255,255,0.55)",
+                  color: "color-mix(in srgb, var(--text) 55%, transparent)",
                   fontWeight: 700,
                 }}
               >
@@ -519,10 +519,10 @@ setSelected(distinct);
               }}
             >
               {/* SIMPLE Y LABELS */}
-              <text x={6} y={PAD} fontSize="10" fill="#aaa">
+              <text x={6} y={PAD} fontSize="10" fill="var(--text-dim)">
                 {Math.round(maxVal)}
               </text>
-              <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="#aaa">
+              <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="var(--text-dim)">
                 {Math.round(minVal)}
               </text>
 
@@ -582,14 +582,14 @@ setSelected(distinct);
                       height={62}
                       rx={18}
                       fill="#141418"
-                      stroke="rgba(255,255,255,0.10)"
+                      stroke="var(--border)"
                     />
                     <text
                       x={activePoint.cx}
                       y={activePoint.cy - 52}
                       textAnchor="middle"
                       fontSize="12"
-                      fill="rgba(255,255,255,0.75)"
+                      fill="color-mix(in srgb, var(--text) 75%, transparent)"
                       fontWeight="800"
                     >
                       {activePoint.name}
@@ -599,7 +599,7 @@ setSelected(distinct);
                       y={activePoint.cy - 32}
                       textAnchor="middle"
                       fontSize="16"
-                      fill="#fff"
+                      fill="var(--text)"
                       fontWeight="900"
                     >
                       {activePoint.value} {activePoint.unit}
@@ -609,7 +609,7 @@ setSelected(distinct);
                       y={activePoint.cy - 16}
                       textAnchor="middle"
                       fontSize="11"
-                      fill="rgba(255,255,255,0.70)"
+                      fill="color-mix(in srgb, var(--text) 70%, transparent)"
                       fontWeight="800"
                     >
                       {formatDateMaybe(activePoint.date)}
@@ -628,8 +628,8 @@ setSelected(distinct);
           style={{
             marginTop: 14,
             borderRadius: 18,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.02)",
+            border: "1px solid var(--border)",
+            background: "color-mix(in srgb, var(--text) 4%, transparent)",
             overflow: "hidden",
           }}
         >
@@ -1013,8 +1013,8 @@ function PRsTabPanel() {
         marginTop: 14,
         padding: 16,
         borderRadius: 18,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "#101014",
+        border: "1px solid var(--border)",
+        background: "var(--card)",
       }}
     >
       <div style={{ fontSize: 13, opacity: 0.75 }}>PRs (multi-select)</div>
@@ -1023,7 +1023,7 @@ function PRsTabPanel() {
         style={{
           marginTop: 6,
           fontSize: 11,
-          color: "rgba(255,255,255,0.55)",
+          color: "color-mix(in srgb, var(--text) 55%, transparent)",
           fontWeight: 700,
         }}
       >
@@ -1048,9 +1048,9 @@ function PRsTabPanel() {
               style={{
                 padding: "8px 12px",
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.15)",
-                background: on ? "#ff2f2f" : "rgba(255,255,255,0.05)",
-                color: "#fff",
+                border: "1px solid var(--border)",
+                background: on ? "var(--accent)" : "color-mix(in srgb, var(--text) 6%, transparent)",
+                color: "var(--text)",
                 fontWeight: 800,
                 fontSize: 12,
               }}
@@ -1067,8 +1067,8 @@ function PRsTabPanel() {
           marginTop: 14,
           padding: 12,
           borderRadius: 18,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(255,255,255,0.02)",
+          border: "1px solid var(--border)",
+          background: "color-mix(in srgb, var(--text) 4%, transparent)",
         }}
       >
         {loading ? (
@@ -1097,9 +1097,9 @@ function PRsTabPanel() {
                   height: 36,
                   padding: "0 14px",
                   borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
+                  border: "1px solid var(--border)",
+                  background: "color-mix(in srgb, var(--text) 8%, transparent)",
+                  color: "var(--text)",
                   fontWeight: 800,
                 }}
               >
@@ -1109,7 +1109,7 @@ function PRsTabPanel() {
               <div
                 style={{
                   fontSize: 11,
-                  color: "rgba(255,255,255,0.55)",
+                  color: "color-mix(in srgb, var(--text) 55%, transparent)",
                   fontWeight: 700,
                 }}
               >
@@ -1132,10 +1132,10 @@ function PRsTabPanel() {
               }}
             >
               {/* Y LABELS */}
-              <text x={6} y={PAD} fontSize="10" fill="#aaa">
+              <text x={6} y={PAD} fontSize="10" fill="var(--text-dim)">
                 {Math.round(maxVal)}
               </text>
-              <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="#aaa">
+              <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="var(--text-dim)">
                 {Math.round(minVal)}
               </text>
 
@@ -1202,7 +1202,7 @@ function PRsTabPanel() {
                       height={78}
                       rx={18}
                       fill="#141418"
-                      stroke="rgba(255,255,255,0.10)"
+                      stroke="var(--border)"
                     />
 
                     <text
@@ -1210,7 +1210,7 @@ function PRsTabPanel() {
                       y={activePoint.cy - 68}
                       textAnchor="middle"
                       fontSize="12"
-                      fill="rgba(255,255,255,0.75)"
+                      fill="color-mix(in srgb, var(--text) 75%, transparent)"
                       fontWeight="800"
                     >
                       {activePoint.name}
@@ -1221,7 +1221,7 @@ function PRsTabPanel() {
                       y={activePoint.cy - 48}
                       textAnchor="middle"
                       fontSize="18"
-                      fill="#fff"
+                      fill="var(--text)"
                       fontWeight="900"
                     >
                       {activePoint.value} {activePoint.unit}
@@ -1232,7 +1232,7 @@ function PRsTabPanel() {
                       y={activePoint.cy - 30}
                       textAnchor="middle"
                       fontSize="11"
-                      fill="rgba(255,255,255,0.70)"
+                      fill="color-mix(in srgb, var(--text) 70%, transparent)"
                       fontWeight="800"
                     >
                       {formatDateMaybe(activePoint.date)}
@@ -1245,7 +1245,7 @@ function PRsTabPanel() {
                         y={activePoint.cy - 16}
                         textAnchor="middle"
                         fontSize="10"
-                        fill="rgba(255,255,255,0.55)"
+                        fill="color-mix(in srgb, var(--text) 55%, transparent)"
                         fontWeight="700"
                       >
                         {activePoint.notes.length > 22
@@ -1267,8 +1267,8 @@ function PRsTabPanel() {
           style={{
             marginTop: 14,
             borderRadius: 18,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.02)",
+            border: "1px solid var(--border)",
+            background: "color-mix(in srgb, var(--text) 4%, transparent)",
             overflow: "hidden",
           }}
         >
@@ -1723,8 +1723,8 @@ export default function Analytics() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#0b0b0f",
-        color: "#ffffff",
+        background: "var(--bg)",
+        color: "var(--text)",
         padding: 16,
       }}
     >
@@ -1733,8 +1733,8 @@ export default function Analytics() {
         onClick={() => navigate(-1)}
         style={{
           background: "transparent",
-          border: "1px solid rgba(255,255,255,0.15)",
-          color: "#fff",
+          border: "1px solid var(--border)",
+          color: "var(--text)",
           padding: "10px 12px",
           borderRadius: 12,
         }}
@@ -1775,10 +1775,10 @@ export default function Analytics() {
                 flex: 1,
                 padding: "10px 12px",
                 borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "#fff",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
                 fontWeight: 800,
-                background: isActive ? "#ff2f2f" : "rgba(255,255,255,0.05)",
+                background: isActive ? "var(--accent)" : "color-mix(in srgb, var(--text) 6%, transparent)",
               }}
             >
               {label}
@@ -1794,8 +1794,8 @@ export default function Analytics() {
             marginTop: 14,
             padding: 16,
             borderRadius: 18,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "#101014",
+            border: "1px solid var(--border)",
+            background: "var(--card)",
           }}
         >
           {loading ? (
@@ -1833,9 +1833,9 @@ export default function Analytics() {
                     height: 36,
                     padding: "0 14px",
                     borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.06)",
-                    color: "#fff",
+                    border: "1px solid var(--border)",
+                    background: "color-mix(in srgb, var(--text) 8%, transparent)",
+                    color: "var(--text)",
                     fontWeight: 800,
                   }}
                 >
@@ -1845,7 +1845,7 @@ export default function Analytics() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "rgba(255,255,255,0.55)",
+                    color: "color-mix(in srgb, var(--text) 55%, transparent)",
                     fontWeight: 700,
                   }}
                 >
@@ -1857,8 +1857,8 @@ export default function Analytics() {
               <div
                 style={{
                   borderRadius: 18,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid var(--border)",
+                  background: "color-mix(in srgb, var(--text) 4%, transparent)",
                   padding: 12,
                 }}
               >
@@ -1877,10 +1877,10 @@ export default function Analytics() {
                   }}
                 >
                   {/* Y LABELS */}
-                  <text x={6} y={PAD} fontSize="10" fill="#aaa">
+                  <text x={6} y={PAD} fontSize="10" fill="var(--text-dim)">
                     {Math.round(maxVal)} lb
                   </text>
-                  <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="#aaa">
+                  <text x={6} y={GRAPH_H - PAD} fontSize="10" fill="var(--text-dim)">
                     {Math.round(minVal)} lb
                   </text>
 
@@ -1892,7 +1892,7 @@ export default function Analytics() {
                       y={GRAPH_H - 10}
                       textAnchor="middle"
                       fontSize="9"
-                      fill="#aaa"
+                      fill="var(--text-dim)"
                     >
                       {t.label}
                     </text>
@@ -1901,14 +1901,14 @@ export default function Analytics() {
                   {/* CAMERA GROUP */}
                   <g id="camera-layer" ref={cameraGroupRef}>
                     {/* AREA */}
-                    {areaPath && <path d={areaPath} fill="rgba(255,47,47,0.18)" />}
+                    {areaPath && <path d={areaPath} fill="color-mix(in srgb, var(--accent) 18%, transparent)" />}
 
                     {/* LINE */}
                     {linePath && (
                       <path
                         d={linePath}
                         fill="none"
-                        stroke="#ff2f2f"
+                        stroke="var(--accent)"
                         strokeWidth="3"
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -1980,14 +1980,14 @@ export default function Analytics() {
                           height={54}
                           rx={18}
                           fill="#141418"
-                          stroke="rgba(255,255,255,0.10)"
+                          stroke="var(--border)"
                         />
                         <text
                           x={activePoint.cx}
                           y={activePoint.cy - 44}
                           textAnchor="middle"
                           fontSize="16"
-                          fill="#fff"
+                          fill="var(--text)"
                           fontWeight="900"
                         >
                           {activePoint.value} lb
@@ -1997,7 +1997,7 @@ export default function Analytics() {
                           y={activePoint.cy - 24}
                           textAnchor="middle"
                           fontSize="11"
-                          fill="rgba(255,255,255,0.70)"
+                          fill="color-mix(in srgb, var(--text) 70%, transparent)"
                           fontWeight="800"
                         >
                           {activePoint.type === "goal"
@@ -2015,8 +2015,8 @@ export default function Analytics() {
                 style={{
                   marginTop: 14,
                   borderRadius: 18,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid var(--border)",
+                  background: "color-mix(in srgb, var(--text) 4%, transparent)",
                   overflow: "hidden",
                 }}
               >
@@ -2038,7 +2038,7 @@ export default function Analytics() {
                       style={{
                         fontSize: 16,
                         fontWeight: 800,
-                        color: "rgba(255,255,255,0.90)",
+                        color: "color-mix(in srgb, var(--text) 90%, transparent)",
                       }}
                     >
                       {formatDateMaybe(p.date)}

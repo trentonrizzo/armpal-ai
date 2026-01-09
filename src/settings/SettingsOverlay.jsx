@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { useTheme } from "../context/ThemeContext";
 
 /* ============================
    PUSH HELPERS
@@ -59,25 +60,6 @@ async function removeSubscription(userId, endpoint) {
 }
 
 /* ============================
-   THEME HELPERS (SAFE)
-============================ */
-
-function getCurrentTheme() {
-  return (
-    document.documentElement.getAttribute("data-theme") ||
-    document.body.getAttribute("data-theme") ||
-    "dark"
-  );
-}
-
-function setTheme(next) {
-  // Set on BOTH <html> and <body> so the whole app + CSS vars always respond.
-  document.documentElement.setAttribute("data-theme", next);
-  document.body.setAttribute("data-theme", next);
-  localStorage.setItem("theme", next);
-}
-
-/* ============================
    TOGGLE PILL
 ============================ */
 
@@ -90,11 +72,11 @@ function TogglePill({ on, disabled, onClick }) {
         width: 54,
         height: 30,
         borderRadius: 999,
-        border: "1px solid rgba(255,255,255,0.14)",
+        border: "1px solid var(--border)",
         background: disabled
           ? "#222"
           : on
-          ? "rgba(255,47,47,0.95)"
+          ? "var(--accent)"
           : "#1a1a1a",
         padding: 2,
         cursor: disabled ? "not-allowed" : "pointer",
@@ -120,6 +102,8 @@ function TogglePill({ on, disabled, onClick }) {
 ============================ */
 
 export default function SettingsOverlay({ open, onClose }) {
+  const { theme, setTheme, accent, setAccent } = useTheme();
+
   const [user, setUser] = useState(null);
   const [section, setSection] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -127,8 +111,6 @@ export default function SettingsOverlay({ open, onClose }) {
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
-
-  const [theme, setThemeState] = useState(getCurrentTheme());
 
   useEffect(() => {
     if (!open) return;
@@ -150,9 +132,7 @@ export default function SettingsOverlay({ open, onClose }) {
   }, [open]);
 
   function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    setThemeState(next);
+    setTheme(theme === "dark" ? "light" : "dark");
   }
 
   async function toggleNotifications() {
@@ -228,7 +208,7 @@ export default function SettingsOverlay({ open, onClose }) {
           style={{
             width: "74%",
             maxWidth: 380,
-            background: "#0f0f10",
+            background: "var(--card)",
             padding: 16,
             display: "flex",
             flexDirection: "column",
@@ -245,8 +225,8 @@ export default function SettingsOverlay({ open, onClose }) {
               marginTop: 18,
               padding: 14,
               borderRadius: 14,
-              background: "#111",
-              border: "1px solid rgba(255,255,255,0.1)",
+              background: "var(--card-2)",
+              border: "1px solid var(--border)",
               cursor: "pointer",
             }}
           >
@@ -265,6 +245,32 @@ export default function SettingsOverlay({ open, onClose }) {
                     toggleTheme();
                   }}
                 />
+
+                {/* ACCENT COLORS */}
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  {["red", "blue", "purple", "green"].map((c) => (
+                    <button
+                      key={c}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAccent(c);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: 8,
+                        borderRadius: 10,
+                        border:
+                          accent === c
+                            ? "2px solid var(--accent)"
+                            : "1px solid var(--border)",
+                        background: "var(--card)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -278,8 +284,8 @@ export default function SettingsOverlay({ open, onClose }) {
               marginTop: 14,
               padding: 14,
               borderRadius: 14,
-              background: "#111",
-              border: "1px solid rgba(255,255,255,0.1)",
+              background: "var(--card-2)",
+              border: "1px solid var(--border)",
               cursor: "pointer",
             }}
           >
@@ -313,8 +319,8 @@ export default function SettingsOverlay({ open, onClose }) {
               marginTop: 14,
               padding: 14,
               borderRadius: 14,
-              background: "#111",
-              border: "1px solid rgba(255,255,255,0.1)",
+              background: "var(--card-2)",
+              border: "1px solid var(--border)",
               cursor: "pointer",
             }}
           >
@@ -341,9 +347,8 @@ export default function SettingsOverlay({ open, onClose }) {
                     padding: 10,
                     width: "100%",
                     borderRadius: 12,
-                    background: "#1a1a1a",
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    color: "white",
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
                     fontWeight: 700,
                   }}
                 >
@@ -360,7 +365,7 @@ export default function SettingsOverlay({ open, onClose }) {
             style={{
               padding: 14,
               borderRadius: 14,
-              background: "#ff2f2f",
+              background: "var(--accent)",
               border: "none",
               color: "white",
               fontWeight: 900,
@@ -388,10 +393,10 @@ export default function SettingsOverlay({ open, onClose }) {
             style={{
               width: "86%",
               maxWidth: 340,
-              background: "#111",
+              background: "var(--card)",
               borderRadius: 16,
               padding: 18,
-              border: "1px solid rgba(255,255,255,0.12)",
+              border: "1px solid var(--border)",
               textAlign: "center",
             }}
           >
@@ -407,9 +412,8 @@ export default function SettingsOverlay({ open, onClose }) {
                   flex: 1,
                   padding: 12,
                   borderRadius: 12,
-                  background: "#1a1a1a",
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  color: "white",
+                  background: "var(--card-2)",
+                  border: "1px solid var(--border)",
                   fontWeight: 700,
                 }}
               >
@@ -421,7 +425,7 @@ export default function SettingsOverlay({ open, onClose }) {
                   flex: 1,
                   padding: 12,
                   borderRadius: 12,
-                  background: "#ff2f2f",
+                  background: "var(--accent)",
                   border: "none",
                   color: "white",
                   fontWeight: 900,

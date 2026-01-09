@@ -227,10 +227,10 @@ export default function Dashboard() {
         <Link
           to="/friends"
           style={{
-            background: "#111",
+            background: "var(--card-2)",
             borderRadius: "10px",
             padding: "8px",
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid var(--border)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -238,7 +238,7 @@ export default function Dashboard() {
             width: 36,
           }}
         >
-          <FiUsers size={18} color="white" />
+          <FiUsers size={18} color="var(--text)" />
         </Link>
       </header>
 
@@ -249,10 +249,10 @@ export default function Dashboard() {
         </h2>
         <div
           style={{
-            background: "#111",
+            background: "var(--card-2)",
             borderRadius: 12,
             padding: 12,
-            border: "1px solid rgba(255,255,255,0.08)",
+            border: "1px solid var(--border)",
             fontSize: 14,
           }}
         >
@@ -285,10 +285,10 @@ export default function Dashboard() {
 
         <div
           style={{
-            background: "#101010",
+            background: "var(--card)",
             borderRadius: 12,
             padding: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
+            border: "1px solid var(--border)",
           }}
         >
           {/* Exercise input */}
@@ -341,9 +341,9 @@ export default function Dashboard() {
                 flex: 1,
                 minWidth: "160px",
                 padding: 10,
-                background: "#0c0c0c",
+                background: "var(--card-2)",
                 borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.12)",
+                border: "1px solid var(--border)",
               }}
             >
               <p style={{ fontSize: 12, opacity: 0.8, margin: 0 }}>
@@ -390,8 +390,8 @@ export default function Dashboard() {
                   borderRadius: 8,
                   border: "none",
                   background:
-                    !exerciseName || !calculated1RM ? "#444" : "#ff2f2f",
-                  color: "white",
+                    !exerciseName || !calculated1RM ? "color-mix(in srgb, var(--text) 20%, transparent)" : "var(--accent)",
+                  color: "var(--text)",
                   fontWeight: 600,
                   fontSize: 13,
                   cursor:
@@ -419,7 +419,7 @@ export default function Dashboard() {
               <div
                 style={{
                   borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  border: "1px solid var(--border)",
                   overflow: "hidden",
                 }}
               >
@@ -428,7 +428,7 @@ export default function Dashboard() {
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
                     padding: "6px 8px",
-                    background: "#141414",
+                    background: "var(--card-2)",
                     fontWeight: 600,
                     fontSize: 11,
                     borderBottom: "1px solid rgba(255,255,255,0.08)",
@@ -459,7 +459,7 @@ export default function Dashboard() {
               <div
                 style={{
                   borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  border: "1px solid var(--border)",
                   overflow: "hidden",
                 }}
               >
@@ -468,7 +468,7 @@ export default function Dashboard() {
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
                     padding: "6px 8px",
-                    background: "#141414",
+                    background: "var(--card-2)",
                     fontWeight: 600,
                     fontSize: 11,
                     borderBottom: "1px solid rgba(255,255,255,0.08)",
@@ -522,10 +522,10 @@ export default function Dashboard() {
 
         <div
           style={{
-            background: "#101010",
+            background: "var(--card)",
             borderRadius: 12,
             padding: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
+            border: "1px solid var(--border)",
           }}
         >
           {upcomingWorkout ? (
@@ -557,10 +557,10 @@ export default function Dashboard() {
 const input = {
   width: "100%",
   padding: "8px 10px",
-  background: "#080808",
-  color: "white",
+  background: "var(--card-2)",
+  color: "var(--text)",
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.15)",
+  border: "1px solid var(--border)",
   marginBottom: 8,
   fontSize: 13,
 };

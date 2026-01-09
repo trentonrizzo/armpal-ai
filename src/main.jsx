@@ -4,6 +4,9 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 
+// 🔥 THEME PROVIDER (GLOBAL)
+import { ThemeProvider } from "./context/ThemeContext";
+
 // ======================================================
 // ✅ SERVICE WORKER — IOS SAFE UPDATE HANDLING (KEEP)
 // ======================================================
@@ -24,17 +27,14 @@ if ("serviceWorker" in navigator) {
 }
 
 // ======================================================
-// ❌ REMOVE RUNTIME SPLASH COMPLETELY
-// (Handled ONLY by index.html now)
-// ======================================================
-
-// ======================================================
-// ✅ REACT BOOTSTRAP
+// ✅ REACT BOOTSTRAP (THEME WRAPPED)
 // ======================================================
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </ThemeProvider>
   </React.StrictMode>
 );

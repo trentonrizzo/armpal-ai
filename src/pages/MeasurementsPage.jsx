@@ -332,10 +332,10 @@ export default function MeasurementsPage() {
       {/* BODYWEIGHT */}
       <div
         style={{
-          background: "#0f0f0f",
+          background: "var(--card)",
           borderRadius: 14,
           padding: 16,
-          border: "1px solid rgba(255,255,255,0.08)",
+          border: "1px solid var(--border)",
           marginBottom: 20,
         }}
       >
@@ -372,8 +372,8 @@ export default function MeasurementsPage() {
               padding: "0 16px",
               borderRadius: 10,
               border: "none",
-              background: "#ff2f2f",
-              color: "white",
+              background: "var(--accent)",
+              color: "var(--text)",
               fontWeight: 700,
               minWidth: 80,
               flexShrink: 0,
@@ -398,7 +398,7 @@ export default function MeasurementsPage() {
                 <span style={{ display: "flex", gap: 12 }}>
                   <FaEdit onClick={() => openBodyweightEdit(b)} />
                   <FaTrash
-                    style={{ color: "#ff4d4d" }}
+                    style={{ color: "var(--accent)" }}
                     onClick={() => setBwDeleteId(b.id)}
                   />
                 </span>
@@ -449,7 +449,7 @@ export default function MeasurementsPage() {
                     <div style={{ display: "flex", gap: 12 }}>
                       <FaEdit onClick={() => openEdit(latest)} />
                       <FaTrash
-                        style={{ color: "#ff4d4d" }}
+                        style={{ color: "var(--accent)" }}
                         onClick={() => setDeleteId(latest.id)}
                       />
                       {isOpen ? <FaChevronUp /> : <FaChevronDown />}
@@ -472,7 +472,7 @@ export default function MeasurementsPage() {
                             <div style={{ display: "flex", gap: 12 }}>
                               <FaEdit onClick={() => openEdit(entry)} />
                               <FaTrash
-                                style={{ color: "#ff4d4d" }}
+                                style={{ color: "var(--accent)" }}
                                 onClick={() => setDeleteId(entry.id)}
                               />
                             </div>
@@ -513,7 +513,7 @@ export default function MeasurementsPage() {
       {deleteId && (
         <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ color: "#ff4d4d" }}>Confirm Delete?</h2>
+            <h2 style={{ color: "var(--accent)" }}>Confirm Delete?</h2>
             <button style={primaryBtn} onClick={confirmDeleteMeasurement}>Delete</button>
           </div>
         </div>
@@ -535,7 +535,7 @@ export default function MeasurementsPage() {
       {bwDeleteId && (
         <div style={modalBackdrop} onClick={() => setBwDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ color: "#ff4d4d" }}>Delete bodyweight entry?</h2>
+            <h2 style={{ color: "var(--accent)" }}>Delete bodyweight entry?</h2>
             <button style={primaryBtn} onClick={confirmDeleteBodyweight}>Delete</button>
           </div>
         </div>
@@ -559,9 +559,9 @@ const modalBackdrop = {
 };
 
 const modalCard = {
-  background: "#111",
+  background: "var(--card)",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid var(--border)",
   padding: 18,
   width: "100%",
   maxWidth: 420,
@@ -571,9 +571,9 @@ const inputStyle = {
   width: "100%",
   padding: 8,
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.15)",
-  background: "#000",
-  color: "white",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   marginBottom: 10,
 };
 
@@ -588,14 +588,14 @@ const primaryBtn = {
   padding: 10,
   borderRadius: 10,
   border: "none",
-  background: "#ff2f2f",
+  background: "var(--accent)",
   color: "white",
   fontWeight: 700,
 };
 
 const addBtn = {
   padding: "10px 20px",
-  background: "#ff2f2f",
+  background: "var(--accent)",
   borderRadius: 999,
   border: "none",
   fontSize: 14,
@@ -605,19 +605,19 @@ const addBtn = {
 };
 
 const cardStyle = {
-  background: "#0f0f0f",
+  background: "var(--card)",
   borderRadius: 12,
   padding: 14,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--border)",
   marginBottom: 10,
 };
 
 const historyCard = {
-  background: "#151515",
+  background: "var(--card-2)",
   borderRadius: 10,
   padding: 10,
   marginBottom: 8,
-  border: "1px solid rgba(255,255,255,0.06)",
+  border: "1px solid var(--border)",
 };
 
 const rowStyle = {

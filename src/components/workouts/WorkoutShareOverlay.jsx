@@ -84,8 +84,8 @@ function useInjectStyles() {
         width: 44px;
         height: 44px;
         border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(10,10,10,0.92);
+        border: 1px solid var(--border);
+        background: var(--card);
         backdrop-filter: blur(8px);
         display: flex;
         align-items: center;
@@ -94,7 +94,7 @@ function useInjectStyles() {
         box-shadow: 0 10px 30px rgba(0,0,0,0.4);
       }
       .aw-share-fab:hover {
-        border-color: rgba(255,47,47,0.55);
+        border-color: color-mix(in srgb, var(--accent) 35%, transparent);
       }
 
       /* ====== Share Mode Bar ====== */
@@ -106,8 +106,8 @@ function useInjectStyles() {
         z-index: 9999;
         padding: 10px 12px;
         border-radius: 14px;
-        border: 1px solid rgba(255,255,255,0.10);
-        background: rgba(12,12,12,0.92);
+        border: 1px solid var(--border);
+        background: var(--card);
         backdrop-filter: blur(10px);
         display: flex;
         align-items: center;
@@ -127,16 +127,16 @@ function useInjectStyles() {
       .aw-share-pill {
         padding: 8px 12px;
         border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.04);
-        color: white;
+        border: 1px solid var(--border);
+        background: var(--border);
+        color: var(--text);
         font-weight: 700;
         cursor: pointer;
       }
       .aw-share-pill.aw-primary {
         border: none;
-        background: #ff2f2f;
-        box-shadow: 0 0 14px rgba(255,47,47,0.32);
+        background: "var(--accent)";
+        box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent);
       }
       .aw-share-pill:disabled {
         opacity: 0.45;
@@ -149,8 +149,8 @@ function useInjectStyles() {
         cursor: pointer;
       }
       .aw-share-selected {
-        outline: 2px solid rgba(255,47,47,0.72);
-        box-shadow: 0 0 0 2px rgba(255,47,47,0.18), 0 0 18px rgba(255,47,47,0.28);
+        outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
         border-radius: 12px;
       }
       .aw-share-selected::before {
@@ -161,14 +161,14 @@ function useInjectStyles() {
         width: 22px;
         height: 22px;
         border-radius: 999px;
-        background: #ff2f2f;
-        color: white;
+        background: "var(--accent)";
+        color: var(--text);
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 900;
         font-size: 13px;
-        box-shadow: 0 0 12px rgba(255,47,47,0.55);
+        box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
         z-index: 3;
       }
 
@@ -437,7 +437,7 @@ export default function WorkoutShareOverlay() {
           onClick={enterShareMode}
           title="Share Workouts"
         >
-          <FaShare color="white" />
+          <FaShare color="var(--text)" />
         </div>
       )}
 
@@ -601,7 +601,7 @@ function toggleFriend(id) {
       width: "86%",
       maxWidth: 360,
       background: "#0b0b0b",
-      borderLeft: "1px solid rgba(255,255,255,0.12)",
+      borderLeft: "1px solid var(--border)",
       zIndex: 10000,
       padding: "16px 12px",
       boxShadow: "-20px 0 40px rgba(0,0,0,0.6)",
@@ -664,13 +664,13 @@ function toggleFriend(id) {
               marginBottom: 8,
               cursor: "pointer",
               background: selected
-                ? "rgba(255,47,47,0.18)"
-                : "rgba(255,255,255,0.04)",
+                ? "color-mix(in srgb, var(--accent) 35%, transparent)"
+                : "var(--border)",
               border: selected
-                ? "1px solid rgba(255,47,47,0.7)"
-                : "1px solid rgba(255,255,255,0.08)",
+                ? "1px solid color-mix(in srgb, var(--accent) 35%, transparent)"
+                : "1px solid var(--border)",
               boxShadow: selected
-                ? "0 0 18px rgba(255,47,47,0.25)"
+                ? "0 0 18px color-mix(in srgb, var(--accent) 35%, transparent)"
                 : "none",
             }}
           >
@@ -680,7 +680,7 @@ function toggleFriend(id) {
                 height: 38,
                 borderRadius: "50%",
                 background: "#000",
-                border: "1px solid rgba(255,255,255,0.15)",
+                border: "1px solid var(--border)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -702,7 +702,7 @@ function toggleFriend(id) {
                   width: 22,
                   height: 22,
                   borderRadius: 999,
-                  background: "#ff2f2f",
+                  background: "var(--accent)",
                   color: "white",
                   fontWeight: 900,
                   display: "flex",
@@ -728,7 +728,7 @@ function toggleFriend(id) {
         background:
           selectedFriendIds.size === 0
             ? "#444"
-            : "#ff2f2f",
+            : "var(--accent)",
         color: "white",
         fontWeight: 800,
         cursor:

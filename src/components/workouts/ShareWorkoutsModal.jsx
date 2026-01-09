@@ -446,10 +446,10 @@ const backdrop = {
 const card = {
   width: "100%",
   maxWidth: 520,
-  background: "rgba(17,17,17,0.96)",
+  background: "color-mix(in srgb, var(--card) 92%, transparent)",
   borderRadius: 18,
   padding: 16,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid var(--border)",
   boxShadow: "0 18px 60px rgba(0,0,0,0.7)",
 };
 
@@ -467,8 +467,8 @@ const errorBox = {
   marginBottom: 10,
   padding: 10,
   borderRadius: 12,
-  background: "rgba(255,47,47,0.14)",
-  border: "1px solid rgba(255,47,47,0.35)",
+  background: "color-mix(in srgb, var(--accent) 20%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
   fontSize: 13,
   lineHeight: 1.3,
 };
@@ -484,19 +484,19 @@ const selectCard = (selected) => ({
   borderRadius: 16,
   marginBottom: 10,
   cursor: "pointer",
-  background: "rgba(255,255,255,0.03)",
+  background: "color-mix(in srgb, var(--text) 4%, transparent)",
   border: selected
-    ? "1px solid rgba(255,47,47,0.9)"
-    : "1px solid rgba(255,255,255,0.10)",
-  boxShadow: selected ? "0 0 18px rgba(255,47,47,0.28)" : "none",
+    ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)"
+    : "1px solid var(--border)",
+  boxShadow: selected ? "0 0 18px color-mix(in srgb, var(--accent) 20%, transparent)" : "none",
 });
 
 const checkPill = (selected) => ({
   width: 26,
   height: 26,
   borderRadius: 999,
-  background: selected ? "#ff2f2f" : "rgba(255,255,255,0.06)",
-  border: selected ? "none" : "1px solid rgba(255,255,255,0.10)",
+  background: selected ? "var(--accent)" : "var(--border)",
+  border: selected ? "none" : "1px solid var(--border)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -507,8 +507,8 @@ const rightCheck = (selected) => ({
   width: 28,
   height: 28,
   borderRadius: 999,
-  background: selected ? "#ff2f2f" : "rgba(255,255,255,0.04)",
-  border: selected ? "none" : "1px solid rgba(255,255,255,0.08)",
+  background: selected ? "var(--accent)" : "var(--border)",
+  border: selected ? "none" : "1px solid var(--border)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -520,8 +520,8 @@ const avatarCircle = {
   height: 44,
   borderRadius: 999,
   overflow: "hidden",
-  background: "#000",
-  border: "1px solid rgba(255,255,255,0.14)",
+  background: "var(--bg)",
+  border: "1px solid var(--border)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -537,9 +537,9 @@ const btnGhost = {
   flex: 1,
   padding: 12,
   borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.20)",
+  border: "1px solid var(--border)",
   background: "transparent",
-  color: "white",
+  color: "var(--text)",
   fontWeight: 900,
 };
 
@@ -548,8 +548,8 @@ const btnPrimary = (enabled) => ({
   padding: 12,
   borderRadius: 16,
   border: "none",
-  background: enabled ? "#ff2f2f" : "#3a3a3a",
-  color: "white",
+  background: enabled ? "var(--accent)" : "color-mix(in srgb, var(--text) 20%, transparent)",
+  color: "var(--text)",
   fontWeight: 950,
-  boxShadow: enabled ? "0 0 16px rgba(255,47,47,0.35)" : "none",
+  boxShadow: enabled ? "0 0 16px color-mix(in srgb, var(--accent) 20%, transparent)" : "none",
 });

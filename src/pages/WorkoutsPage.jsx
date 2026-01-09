@@ -642,14 +642,14 @@ if (!editingWorkout && !alreadyFired) {
         onClick={() => openWorkoutModal(null)}
         style={{
           padding: "10px 20px",
-          background: "#ff2f2f",
+          background: "var(--accent)",
           borderRadius: "999px",
           border: "none",
           fontSize: 14,
           fontWeight: 600,
-          color: "white",
+          color: "var(--text)",
           marginBottom: 18,
-          boxShadow: "0 0 14px rgba(255,47,47,0.35)",
+          boxShadow: "0 0 14px color-mix(in srgb, var(--accent) 90%, transparent)",
         }}
       >
         + Add Workout
@@ -676,10 +676,10 @@ if (!editingWorkout && !alreadyFired) {
                 <SortableItem key={workout.id} id={workout.id}>
                   <div
                     style={{
-                      background: "#0f0f0f",
+                      background: "var(--card)",
                       borderRadius: 12,
                       padding: 14,
-                      border: "1px solid rgba(255,255,255,0.08)",
+                      border: "1px solid var(--border)",
                       marginBottom: 10,
                     }}
                   >
@@ -723,7 +723,7 @@ if (!editingWorkout && !alreadyFired) {
                         }}
                       />
                       <FaTrash
-                        style={{ fontSize: 14, cursor: "pointer", color: "#ff4d4d" }}
+                        style={{ fontSize: 14, cursor: "pointer", color: "var(--accent)" }}
                         onClick={(e) => {
                           e.stopPropagation();
                           askDeleteWorkout(workout.id);
@@ -751,11 +751,11 @@ if (!editingWorkout && !alreadyFired) {
                               <SortableItem key={ex.id} id={ex.id}>
                                 <div
                                   style={{
-                                    background: "#151515",
+                                    background: "var(--card-2)",
                                     borderRadius: 10,
                                     padding: 10,
                                     marginBottom: 8,
-                                    border: "1px solid rgba(255,255,255,0.06)",
+                                    border: "1px solid var(--border)",
                                   }}
                                 >
                                   <div
@@ -787,7 +787,7 @@ if (!editingWorkout && !alreadyFired) {
                                       style={{
                                         fontSize: 13,
                                         cursor: "pointer",
-                                        color: "#ff4d4d",
+                                        color: "var(--accent)",
                                       }}
                                       onClick={() => askDeleteExercise(ex.id, workout.id)}
                                     />
@@ -806,8 +806,8 @@ if (!editingWorkout && !alreadyFired) {
                             fontSize: 12,
                             background: "transparent",
                             borderRadius: 999,
-                            border: "1px solid rgba(255,255,255,0.14)",
-                            color: "#ccc",
+                            border: "1px solid var(--border)",
+                            color: "var(--text-dim)",
                             marginTop: 4,
                           }}
                         >
@@ -913,7 +913,7 @@ if (!editingWorkout && !alreadyFired) {
       {deleteModalOpen && (
         <div style={modalBackdrop} onClick={() => setDeleteModalOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>Confirm Delete?</h2>
+            <h2 style={{ marginTop: 0, color: "var(--accent)" }}>Confirm Delete?</h2>
             <p style={{ opacity: 0.7, marginBottom: 18 }}>
               This action cannot be undone.
             </p>
@@ -1247,9 +1247,9 @@ const modalBackdrop = {
 };
 
 const modalCard = {
-  background: "#111",
+  background: "var(--card-2)",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid var(--border)",
   padding: 18,
   width: "100%",
   maxWidth: 420,
@@ -1259,9 +1259,9 @@ const inputStyle = {
   width: "100%",
   padding: 8,
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.15)",
-  background: "#000",
-  color: "white",
+  border: "1px solid var(--border)",
+  background: "var(--bg)",
+  color: "var(--text)",
   marginBottom: 10,
 };
 
@@ -1276,8 +1276,8 @@ const primaryBtn = {
   padding: 10,
   borderRadius: 10,
   border: "none",
-  background: "#ff2f2f",
-  color: "white",
+  background: "var(--accent)",
+  color: "var(--text)",
   fontWeight: 600,
   marginTop: 8,
 };
@@ -1286,9 +1286,9 @@ const secondaryBtn = {
   width: "100%",
   padding: 10,
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.25)",
+  border: "1px solid var(--border)",
   background: "transparent",
-  color: "white",
+  color: "var(--text)",
   fontWeight: 600,
   marginTop: 8,
 };
@@ -1301,9 +1301,9 @@ const focusBtn = {
   width: 34,
   height: 34,
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "#0b0b0b",
-  color: "#ffffff",
+  border: "1px solid var(--border)",
+  background: "var(--card)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1316,7 +1316,7 @@ const focusOverlay = {
   left: 0,
   right: 0,
   bottom: 0,
-  background: "#000000",
+  background: "var(--bg)",
   zIndex: 99999,
   display: "flex",
   flexDirection: "column",
@@ -1326,8 +1326,8 @@ const focusHeader = {
   height: 64,
   paddingLeft: 12,
   paddingRight: 12,
-  background: "#e00000",
-  color: "#ffffff",
+  background: "var(--accent)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -1340,9 +1340,9 @@ const focusBackBtn = {
   paddingLeft: 12,
   paddingRight: 12,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.25)",
+  border: "1px solid var(--border)",
   background: "rgba(0,0,0,0.22)",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1388,9 +1388,9 @@ const focusStartBtn = {
   paddingLeft: 14,
   paddingRight: 14,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.25)",
+  border: "1px solid var(--border)",
   background: "rgba(0,0,0,0.22)",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1404,14 +1404,14 @@ const focusEndBtn = {
   paddingRight: 14,
   borderRadius: 14,
   border: "none",
-  background: "#ff2f2f",
-  color: "#ffffff",
+  background: "var(--accent)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   gap: 10,
   fontWeight: 900,
-  boxShadow: "0 0 16px rgba(255,47,47,0.35)",
+  boxShadow: "0 0 16px color-mix(in srgb, var(--accent) 90%, transparent)",
 };
 
 const focusBody = {
@@ -1432,8 +1432,8 @@ const focusTopStats = {
 };
 
 const statCard = {
-  background: "#0f0f0f",
-  border: "1px solid rgba(255,255,255,0.08)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 14,
   paddingTop: 10,
   paddingRight: 10,
@@ -1460,8 +1460,8 @@ const focusExercisesWrap = {
 };
 
 const focusEmpty = {
-  background: "#0f0f0f",
-  border: "1px solid rgba(255,255,255,0.08)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 14,
   paddingTop: 14,
   paddingRight: 14,
@@ -1471,8 +1471,8 @@ const focusEmpty = {
 };
 
 const focusExerciseCard = {
-  background: "#0f0f0f",
-  border: "1px solid rgba(255,255,255,0.08)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 14,
   paddingTop: 12,
   paddingRight: 12,
@@ -1505,8 +1505,8 @@ const focusExerciseSetsPill = {
   paddingBottom: 6,
   paddingLeft: 10,
   borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
+  border: "1px solid var(--border)",
+  background: "var(--border)",
   fontSize: 12,
   fontWeight: 800,
   whiteSpace: "nowrap",
@@ -1523,9 +1523,9 @@ const setBox = {
   width: 42,
   height: 42,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "#111111",
-  color: "#ffffff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1537,15 +1537,15 @@ const setBoxChecked = {
   width: 42,
   height: 42,
   borderRadius: 12,
-  border: "1px solid rgba(255,47,47,0.55)",
-  background: "rgba(255,47,47,0.20)",
-  color: "#ffffff",
+  border: "1px solid color-mix(in srgb, var(--accent) 90%, transparent)",
+  background: "color-mix(in srgb, var(--accent) 90%, transparent)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   fontWeight: 900,
   cursor: "pointer",
-  boxShadow: "0 0 10px rgba(255,47,47,0.25)",
+  boxShadow: "0 0 10px color-mix(in srgb, var(--accent) 90%, transparent)",
 };
 
 const focusExerciseHint = {
@@ -1555,8 +1555,8 @@ const focusExerciseHint = {
 };
 
 const restPanel = {
-  background: "#0f0f0f",
-  border: "1px solid rgba(255,255,255,0.08)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 14,
   paddingTop: 12,
   paddingRight: 12,
@@ -1596,9 +1596,9 @@ const restModeBtn = {
   paddingLeft: 10,
   paddingRight: 10,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.16)",
+  border: "1px solid var(--border)",
   background: "transparent",
-  color: "rgba(255,255,255,0.9)",
+  color: "var(--border)",
   fontSize: 12,
   fontWeight: 900,
   display: "flex",
@@ -1612,9 +1612,9 @@ const restModeBtnActive = {
   paddingLeft: 10,
   paddingRight: 10,
   borderRadius: 12,
-  border: "1px solid rgba(255,47,47,0.55)",
-  background: "rgba(255,47,47,0.12)",
-  color: "#ffffff",
+  border: "1px solid color-mix(in srgb, var(--accent) 90%, transparent)",
+  background: "color-mix(in srgb, var(--accent) 90%, transparent)",
+  color: "var(--text)",
   fontSize: 12,
   fontWeight: 900,
   display: "flex",
@@ -1647,9 +1647,9 @@ const restActionBtn = {
   paddingLeft: 12,
   paddingRight: 12,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "#111111",
-  color: "#ffffff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontWeight: 900,
   display: "flex",
   alignItems: "center",
@@ -1663,14 +1663,14 @@ const restActionBtnHot = {
   paddingRight: 12,
   borderRadius: 14,
   border: "none",
-  background: "#ff2f2f",
-  color: "#ffffff",
+  background: "var(--accent)",
+  color: "var(--text)",
   fontWeight: 900,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   gap: 8,
-  boxShadow: "0 0 14px rgba(255,47,47,0.35)",
+  boxShadow: "0 0 14px color-mix(in srgb, var(--accent) 90%, transparent)",
 };
 
 const restGhostBtn = {
@@ -1678,9 +1678,9 @@ const restGhostBtn = {
   paddingLeft: 12,
   paddingRight: 12,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.14)",
+  border: "1px solid var(--border)",
   background: "transparent",
-  color: "rgba(255,255,255,0.9)",
+  color: "var(--border)",
   fontWeight: 900,
 };
 
@@ -1696,9 +1696,9 @@ const restAdjustBtn = {
   paddingLeft: 10,
   paddingRight: 10,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "#111111",
-  color: "#ffffff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontWeight: 900,
   display: "flex",
   alignItems: "center",
@@ -1711,9 +1711,9 @@ const restPresetBtn = {
   paddingLeft: 12,
   paddingRight: 12,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.16)",
+  border: "1px solid var(--border)",
   background: "transparent",
-  color: "rgba(255,255,255,0.9)",
+  color: "var(--border)",
   fontWeight: 900,
 };
 
@@ -1730,8 +1730,8 @@ const restMetaPill = {
   paddingBottom: 6,
   paddingLeft: 10,
   borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
+  border: "1px solid var(--border)",
+  background: "var(--border)",
   fontSize: 12,
   opacity: 0.95,
 };
@@ -1755,14 +1755,14 @@ const summaryCard = {
   position: "relative",
   width: "100%",
   maxWidth: 420,
-  background: "#111111",
+  background: "var(--card-2)",
   borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid var(--border)",
   paddingTop: 18,
   paddingRight: 18,
   paddingBottom: 18,
   paddingLeft: 18,
-  color: "#ffffff",
+  color: "var(--text)",
 };
 
 const summaryTitle = {
@@ -1778,8 +1778,8 @@ const summaryGrid = {
 };
 
 const summaryItem = {
-  background: "#0b0b0b",
-  border: "1px solid rgba(255,255,255,0.08)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 14,
   paddingTop: 10,
   paddingRight: 10,
@@ -1808,9 +1808,9 @@ const summaryGhostBtn = {
   flex: 1,
   height: 42,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.18)",
+  border: "1px solid var(--border)",
   background: "transparent",
-  color: "#ffffff",
+  color: "var(--text)",
   fontWeight: 900,
 };
 
@@ -1819,10 +1819,10 @@ const summaryHotBtn = {
   height: 42,
   borderRadius: 14,
   border: "none",
-  background: "#ff2f2f",
-  color: "#ffffff",
+  background: "var(--accent)",
+  color: "var(--text)",
   fontWeight: 900,
-  boxShadow: "0 0 14px rgba(255,47,47,0.35)",
+  boxShadow: "0 0 14px color-mix(in srgb, var(--accent) 90%, transparent)",
 };
 
 const summaryX = {
@@ -1832,9 +1832,9 @@ const summaryX = {
   width: 34,
   height: 34,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
+  border: "1px solid var(--border)",
   background: "rgba(0,0,0,0.25)",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

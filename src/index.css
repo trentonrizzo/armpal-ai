@@ -7,17 +7,43 @@
 /* =============================== */
 
 :root {
+  /* CORE */
   --bg: #000000;
   --card: #0a0a0a;
   --card-2: #111111;
-
-  --accent: #e00000;
-  --accent-soft: #ff1a1a;
 
   --text: #ffffff;
   --text-dim: #c8c8c8;
 
   --border: rgba(255, 255, 255, 0.12);
+
+  /* ACCENT (DEFAULT = RED) */
+  --accent: #e00000;
+  --accent-soft: #ff1a1a;
+}
+
+/* =============================== */
+/*         COLOR MODES             */
+/* =============================== */
+
+html[data-accent="red"] {
+  --accent: #e00000;
+  --accent-soft: #ff1a1a;
+}
+
+html[data-accent="blue"] {
+  --accent: #1a7cff;
+  --accent-soft: #4da3ff;
+}
+
+html[data-accent="purple"] {
+  --accent: #8b5cf6;
+  --accent-soft: #a78bfa;
+}
+
+html[data-accent="green"] {
+  --accent: #10b981;
+  --accent-soft: #34d399;
 }
 
 /* =============================== */
@@ -248,21 +274,16 @@ html {
 }
 
 /* =============================== */
-/*        LIGHT MODE (FIXED)        */
+/*            LIGHT MODE            */
 /* =============================== */
 
-html[data-theme="light"],
-body[data-theme="light"] {
+html[data-theme="light"] {
   --bg: #ffffff;
   --card: #f4f5f7;
   --card-2: #ededf1;
 
   --text: #111111;
   --text-dim: #555555;
-
-  /* 🔒 RED NEVER CHANGES */
-  --accent: #e00000;
-  --accent-soft: #ff1a1a;
 
   --border: rgba(0, 0, 0, 0.12);
 }

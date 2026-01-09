@@ -265,14 +265,14 @@ export default function PRTracker() {
         onClick={openAddModal}
         style={{
           padding: "10px 20px",
-          background: "#ff2f2f",
+          background: "var(--accent)",
           borderRadius: 999,
           border: "none",
           fontSize: 14,
           fontWeight: 600,
-          color: "white",
+          color: "var(--text)",
           marginBottom: 18,
-          boxShadow: "0 0 14px rgba(255,47,47,0.35)",
+          boxShadow: "0 0 14px color-mix(in srgb, var(--accent) 20%, transparent)",
         }}
       >
         + Add PR
@@ -302,10 +302,10 @@ export default function PRTracker() {
                 <SortableItem key={lift} id={lift}>
                   <div
                     style={{
-                      background: "#0f0f0f",
+                      background: "var(--card)",
                       borderRadius: 12,
                       padding: 14,
-                      border: "1px solid rgba(255,255,255,0.08)",
+                      border: "1px solid var(--border)",
                       marginBottom: 10,
                     }}
                   >
@@ -347,7 +347,7 @@ export default function PRTracker() {
                         style={{
                           fontSize: 14,
                           cursor: "pointer",
-                          color: "#ff4d4d",
+                          color: "var(--accent)",
                           marginLeft: 10,
                         }}
                         onClick={() => setDeleteId(latest.id)}
@@ -366,11 +366,11 @@ export default function PRTracker() {
                           <div
                             key={entry.id}
                             style={{
-                              background: "#151515",
+                              background: "var(--card-2)",
                               borderRadius: 10,
                               padding: 10,
                               marginBottom: 8,
-                              border: "1px solid rgba(255,255,255,0.06)",
+                              border: "1px solid var(--border)",
                             }}
                           >
                             <div
@@ -411,7 +411,7 @@ export default function PRTracker() {
                                   style={{
                                     fontSize: 13,
                                     cursor: "pointer",
-                                    color: "#ff4d4d",
+                                    color: "var(--accent)",
                                   }}
                                   onClick={() => setDeleteId(entry.id)}
                                 />
@@ -463,8 +463,8 @@ export default function PRTracker() {
                 padding: 10,
                 borderRadius: 10,
                 border: "none",
-                background: "#ff2f2f",
-                color: "white",
+                background: "var(--accent)",
+                color: "var(--text)",
                 fontWeight: 600,
               }}
               onClick={savePR}
@@ -478,7 +478,7 @@ export default function PRTracker() {
       {deleteId && (
         <div style={modalBackdrop} onClick={() => setDeleteId(null)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0, color: "#ff4d4d" }}>Confirm Delete?</h2>
+            <h2 style={{ marginTop: 0, color: "var(--accent)" }}>Confirm Delete?</h2>
 
             <button
               onClick={confirmDelete}
@@ -486,9 +486,9 @@ export default function PRTracker() {
                 width: "100%",
                 padding: 10,
                 borderRadius: 10,
-                background: "#ff2f2f",
+                background: "var(--accent)",
                 border: "none",
-                color: "white",
+                color: "var(--text)",
                 fontWeight: 600,
               }}
             >
@@ -516,9 +516,9 @@ const modalBackdrop = {
 };
 
 const modalCard = {
-  background: "#111",
+  background: "var(--card)",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid var(--border)",
   padding: 18,
   width: "100%",
   maxWidth: 420,
@@ -528,9 +528,9 @@ const inputStyle = {
   width: "100%",
   padding: 8,
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.15)",
-  background: "#000",
-  color: "white",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   marginBottom: 10,
 };
 
