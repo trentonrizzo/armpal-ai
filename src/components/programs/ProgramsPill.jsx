@@ -21,10 +21,10 @@ const styles = {
     gap: 8,
 
     /* ARMPAL RED */
-    background: "linear-gradient(135deg, #ff2f2f, #d81e1e)",
-    color: "#fff",
+    background: "linear-gradient(135deg, var(--accent), var(--accent-soft))",
+    color: "var(--text)",
 
-    border: "1px solid rgba(255,255,255,0.14)",
+    border: "1px solid var(--border)",
     borderRadius: 999,
     padding: "7px 12px",
 
@@ -38,7 +38,7 @@ const styles = {
     whiteSpace: "nowrap",
 
     /* RED GLOW — NOT PINK */
-    boxShadow: "0 8px 20px rgba(255,47,47,0.35)",
+    boxShadow: "0 8px 20px color-mix(in srgb, var(--accent) 35%, transparent)",
   },
 
   left: { opacity: 0.95 },

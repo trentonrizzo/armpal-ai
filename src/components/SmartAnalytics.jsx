@@ -41,7 +41,7 @@ export default function SmartAnalytics() {
       <h2 style={{ marginTop: 0 }}>📊 Progress Overview</h2>
 
       {loading ? (
-        <p style={{ opacity: 0.6 }}>Loading bodyweight…</p>
+        <p style={{ opacity: 0.75 }}>Loading bodyweight…</p>
       ) : (
         <div>
           <p style={label}>Bodyweight</p>
@@ -63,10 +63,11 @@ export default function SmartAnalytics() {
 /* ================= STYLES ================= */
 
 const cardStyle = {
-  background: "#0f0f0f",
+  background: "var(--card)",
+  color: "var(--text)",
   borderRadius: 16,
   padding: 18,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--border)",
   marginBottom: 16,
 };
 
