@@ -1106,7 +1106,7 @@ export default function ChatPage() {
       {deleteTarget && (
         <div style={deleteOverlay}>
           <div style={deleteModal}>
-            <FiTrash2 size={28} color="#ff2f2f" />
+            <FiTrash2 size={28} color="var(--accent)" />
             <div style={deleteTitle}>Delete message?</div>
             <div style={deleteSub}>This can’t be undone.</div>
             <div style={deleteActions}>
@@ -1136,7 +1136,7 @@ export default function ChatPage() {
 // ============================================================
 
 const loadingWrap = {
-  color: "#ffffff",
+  color: "var(--text)",
   padding: 20,
 };
 
@@ -1146,7 +1146,7 @@ const shell = {
   right: 0,
   bottom: 0,
   left: 0,
-  background: "#000000",
+  background: "var(--bg)",
   overflow: "hidden",
 };
 
@@ -1156,8 +1156,8 @@ const header = {
   left: 0,
   right: 0,
   height: 56,
-  background: "#e00000",
-  color: "#ffffff",
+  background: "var(--accent)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "flex-start",
@@ -1194,7 +1194,7 @@ const backBtn = {
   background: "rgba(255,255,255,0.2)",
   borderStyle: "none",
   borderWidth: 0,
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1232,8 +1232,8 @@ const messageRowMine = {
 };
 
 const bubble = {
-  background: "#1a1a1a",
-  color: "#ffffff",
+  background: "var(--card-2)",
+  color: "var(--text)",
   paddingTop: 12,
   paddingRight: 12,
   paddingBottom: 12,
@@ -1243,8 +1243,8 @@ const bubble = {
 };
 
 const bubbleMine = {
-  background: "#ff2f2f",
-  color: "#ffffff",
+  background: "var(--accent)",
+  color: "var(--text)",
   paddingTop: 12,
   paddingRight: 12,
   paddingBottom: 12,
@@ -1276,7 +1276,7 @@ const videoPlayer = {
   marginTop: 6,
   borderRadius: 12,
   maxWidth: "100%",
-  backgroundColor: "#000000",
+  backgroundColor: "var(--bg)",
 };
 
 const audioWrap = {
@@ -1299,10 +1299,10 @@ const composerWrap = {
   left: 0,
   right: 0,
   bottom: 0,
-  backgroundColor: "#000000",
+  backgroundColor: "var(--bg)",
   borderTopWidth: 1,
   borderTopStyle: "solid",
-  borderTopColor: "#222222",
+  borderTopColor: "var(--border)",
   paddingTop: 10,
   paddingRight: 10,
   paddingBottom: 10,
@@ -1321,11 +1321,11 @@ const iconBtn = {
   width: 44,
   height: 44,
   borderRadius: 14,
-  backgroundColor: "#0f0f0f",
+  backgroundColor: "var(--card-2)",
   borderWidth: 1,
   borderStyle: "solid",
-  borderColor: "#222222",
-  color: "#ffffff",
+  borderColor: "var(--border)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1335,10 +1335,10 @@ const iconBtnHot = {
   width: 44,
   height: 44,
   borderRadius: 14,
-  backgroundColor: "#ff2f2f",
+  backgroundColor: "var(--accent)",
   borderWidth: 0,
   borderStyle: "none",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1350,9 +1350,9 @@ const input = {
   borderRadius: 16,
   borderWidth: 1,
   borderStyle: "solid",
-  borderColor: "#333333",
-  backgroundColor: "#111111",
-  color: "#ffffff",
+  borderColor: "var(--border)",
+  backgroundColor: "var(--card)",
+  color: "var(--text)",
   paddingTop: 0,
   paddingRight: 14,
   paddingBottom: 0,
@@ -1364,10 +1364,10 @@ const sendBtnIcon = {
   width: 46,
   height: 46,
   borderRadius: 16,
-  backgroundColor: "#ff2f2f",
+  backgroundColor: "var(--accent)",
   borderWidth: 0,
   borderStyle: "none",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1389,10 +1389,10 @@ const tinyHotBtn = {
   width: 40,
   height: 40,
   borderRadius: 14,
-  backgroundColor: "#ff2f2f",
+  backgroundColor: "var(--accent)",
   borderWidth: 0,
   borderStyle: "none",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1402,18 +1402,18 @@ const tinyGhostBtn = {
   width: 40,
   height: 40,
   borderRadius: 14,
-  backgroundColor: "#111111",
+  backgroundColor: "var(--card)",
   borderWidth: 1,
   borderStyle: "solid",
-  borderColor: "#333333",
-  color: "#ffffff",
+  borderColor: "var(--border)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
 };
 
 const errBox = {
-  backgroundColor: "rgba(255,47,47,0.25)",
+  backgroundColor: "color-mix(in srgb, var(--accent) 25%, transparent)",
   paddingTop: 10,
   paddingRight: 10,
   paddingBottom: 10,
@@ -1436,7 +1436,7 @@ const deleteOverlay = {
 };
 
 const deleteModal = {
-  backgroundColor: "#111111",
+  backgroundColor: "var(--card)",
   borderRadius: 16,
   paddingTop: 20,
   paddingRight: 20,
@@ -1448,7 +1448,7 @@ const deleteModal = {
   flexDirection: "column",
   alignItems: "center",
   gap: 12,
-  color: "#ffffff",
+  color: "var(--text)",
 };
 
 const deleteTitle = {
@@ -1474,8 +1474,8 @@ const cancelBtn = {
   paddingBottom: 14,
   paddingLeft: 14,
   borderRadius: 14,
-  backgroundColor: "#222222",
-  color: "#ffffff",
+  backgroundColor: "var(--border)",
+  color: "var(--text)",
   borderWidth: 0,
   borderStyle: "none",
 };
@@ -1487,8 +1487,8 @@ const deleteBtn = {
   paddingBottom: 14,
   paddingLeft: 14,
   borderRadius: 14,
-  backgroundColor: "#ff2f2f",
-  color: "#ffffff",
+  backgroundColor: "var(--accent)",
+  color: "var(--text)",
   borderWidth: 0,
   borderStyle: "none",
 };
@@ -1515,7 +1515,7 @@ const closeIcon = {
   position: "absolute",
   top: 20,
   right: 20,
-  color: "#ffffff",
+  color: "var(--text)",
 };
 
 const workoutCard = {
@@ -1550,7 +1550,7 @@ const saveWorkoutBtn = {
   borderWidth: 1,
   borderStyle: "solid",
   borderColor: "rgba(255,255,255,0.25)",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1593,7 +1593,7 @@ const saveWorkoutBtnDone = {
   borderWidth: 1,
   borderStyle: "solid",
   borderColor: "rgba(255,255,255,0.25)",
-  color: "#ffffff",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
