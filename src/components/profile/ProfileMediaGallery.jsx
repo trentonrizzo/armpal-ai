@@ -1,27 +1,33 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../../supabaseClient";
+import { useAppContext } from "../../context/AppContext";
 
 const MAX_PHOTOS = 12;
 const BUCKET = "profile-media";
 
-// subtle haptics helper (safe on non-iOS)
-const haptic = (type = "light") => {
+// subtle haptics (safe)
+const haptic = (ms = 10) => {
   try {
-    if (window?.navigator?.vibrate) {
-      window.navigator.vibrate(type === "medium" ? 20 : 10);
-    }
+    navigator?.vibrate?.(ms);
   } catch {}
 };
 
-export default function ProfileMediaGallery({
-  userId,
-  isOwnProfile = false,
-}) {
+export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
+  const { theme, accentColor } = useAppContext();
+
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const touchStartX = useRef(null);
+
+  const isDark = theme === "dark";
+  const bg = isDark ? "#0b0b0b" : "#f6f7f8";
+  const cardBg = isDark ? "#111" : "#fff";
+  const text = isDark ? "#fff" : "#111";
+  const soft = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
 
   useEffect(() => {
     if (!userId) return;
@@ -51,11 +57,7 @@ export default function ProfileMediaGallery({
       const name = `${Date.now()}.${ext}`;
       const path = `${userId}/${name}`;
 
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file);
-
-      if (error) throw error;
+      await supabase.storage.from(BUCKET).upload(path, file);
 
       const { data: urlData } = supabase.storage
         .from(BUCKET)
@@ -70,48 +72,67 @@ export default function ProfileMediaGallery({
         .select()
         .single();
 
-      setPhotos((prev) => [...prev, row]);
-      haptic("light");
-    } catch (e) {
-      console.error(e);
+      setPhotos((p) => [...p, row]);
+      haptic(10);
+    } catch {
       alert("Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
-  const deletePhoto = async (photo) => {
+  const deleteCurrent = async () => {
+    const photo = photos[viewerIndex];
+    if (!photo) return;
+
     try {
       const path = photo.image_url.split(`${BUCKET}/`)[1];
-
       await supabase.from("profile_media").delete().eq("id", photo.id);
       if (path) {
         await supabase.storage.from(BUCKET).remove([path]);
       }
 
-      setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
-      haptic("medium");
-    } catch (e) {
-      console.error(e);
+      setPhotos((p) => p.filter((x) => x.id !== photo.id));
+      setViewerIndex(null);
+      setConfirmDelete(false);
+      haptic(20);
+    } catch {
       alert("Delete failed");
-    } finally {
-      setConfirmDelete(null);
     }
+  };
+
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const onTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 50) {
+      setViewerIndex((i) =>
+        dx < 0
+          ? Math.min(i + 1, photos.length - 1)
+          : Math.max(i - 1, 0)
+      );
+    }
+    touchStartX.current = null;
   };
 
   const emptySlots = Math.max(0, MAX_PHOTOS - photos.length);
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div
-        style={{
-          fontWeight: 800,
-          marginBottom: 10,
-          display: "flex",
-          justifyContent: "space-between",
-        }}
-      >
-        <span>Photos · {photos.length} / {MAX_PHOTOS}</span>
+    <div
+      style={{
+        marginTop: 20,
+        padding: 16,
+        borderRadius: 18,
+        border: `1.5px solid ${accentColor}55`,
+        background: cardBg,
+        color: text,
+      }}
+    >
+      <div style={{ fontWeight: 800, marginBottom: 12 }}>
+        Photos · {photos.length} / {MAX_PHOTOS}
       </div>
 
       {loading ? (
@@ -124,62 +145,37 @@ export default function ProfileMediaGallery({
             gap: 10,
           }}
         >
-          {photos.map((photo, idx) => (
+          {photos.map((p, i) => (
             <div
-              key={photo.id}
+              key={p.id}
+              onClick={() => setViewerIndex(i)}
               style={{
-                position: "relative",
-                aspectRatio: "1 / 1",
+                aspectRatio: "1/1",
                 borderRadius: 14,
                 overflow: "hidden",
                 cursor: "pointer",
               }}
-              onClick={() => setViewerIndex(idx)}
             >
               <img
-                src={photo.image_url}
-                alt="profile"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                }}
+                src={p.image_url}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
-
-              {isOwnProfile && (
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConfirmDelete(photo);
-                  }}
-                  style={{
-                    position: "absolute",
-                    top: 6,
-                    right: 6,
-                    background: "rgba(0,0,0,0.6)",
-                    borderRadius: "50%",
-                    padding: 6,
-                    fontSize: 12,
-                  }}
-                >
-                  🗑️
-                </div>
-              )}
             </div>
           ))}
 
           {isOwnProfile && emptySlots > 0 && (
             <label
               style={{
-                aspectRatio: "1 / 1",
+                aspectRatio: "1/1",
                 borderRadius: 14,
-                border: "2px dashed rgba(255,255,255,0.2)",
+                border: `2px dashed ${accentColor}88`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontWeight: 700,
                 cursor: "pointer",
-                opacity: uploading ? 0.5 : 1,
+                color: accentColor,
               }}
             >
               <input
@@ -197,11 +193,11 @@ export default function ProfileMediaGallery({
 
           {Array.from({ length: emptySlots - 1 }).map((_, i) => (
             <div
-              key={`empty-${i}`}
+              key={i}
               style={{
-                aspectRatio: "1 / 1",
+                aspectRatio: "1/1",
                 borderRadius: 14,
-                background: "rgba(255,255,255,0.04)",
+                background: soft,
               }}
             />
           ))}
@@ -222,15 +218,36 @@ export default function ProfileMediaGallery({
             justifyContent: "center",
           }}
         >
-          <img
-            src={photos[viewerIndex]?.image_url}
-            alt="full"
-            style={{
-              maxWidth: "90%",
-              maxHeight: "90%",
-              borderRadius: 20,
-            }}
-          />
+          <div
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={photos[viewerIndex]?.image_url}
+              alt=""
+              style={{
+                maxWidth: "90vw",
+                maxHeight: "80vh",
+                borderRadius: 20,
+              }}
+            />
+
+            {isOwnProfile && (
+              <div
+                onClick={() => setConfirmDelete(true)}
+                style={{
+                  marginTop: 16,
+                  textAlign: "center",
+                  fontSize: 14,
+                  color: accentColor,
+                  cursor: "pointer",
+                }}
+              >
+                Delete photo
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -249,26 +266,31 @@ export default function ProfileMediaGallery({
         >
           <div
             style={{
-              background: "#111",
-              padding: 20,
-              borderRadius: 16,
+              background: cardBg,
+              padding: 22,
+              borderRadius: 18,
               width: 280,
+              color: text,
               textAlign: "center",
             }}
           >
-            <div style={{ marginBottom: 12, fontWeight: 700 }}>
+            <div style={{ fontWeight: 700, marginBottom: 14 }}>
               Delete this photo?
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button
-                onClick={() => setConfirmDelete(null)}
+                onClick={() => setConfirmDelete(false)}
                 style={{ flex: 1 }}
               >
                 Cancel
               </button>
               <button
-                onClick={() => deletePhoto(confirmDelete)}
-                style={{ flex: 1, color: "red" }}
+                onClick={deleteCurrent}
+                style={{
+                  flex: 1,
+                  color: accentColor,
+                  fontWeight: 700,
+                }}
               >
                 Delete
               </button>
