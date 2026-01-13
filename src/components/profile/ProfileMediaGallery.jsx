@@ -1,11 +1,9 @@
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../../supabaseClient";
-import { useAppContext } from "../../context/AppContext";
 
 const MAX_PHOTOS = 12;
 const BUCKET = "profile-media";
 
-// subtle haptics (safe)
 const haptic = (ms = 10) => {
   try {
     navigator?.vibrate?.(ms);
@@ -13,8 +11,6 @@ const haptic = (ms = 10) => {
 };
 
 export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
-  const { theme, accentColor } = useAppContext();
-
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -23,11 +19,20 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
 
   const touchStartX = useRef(null);
 
-  const isDark = theme === "dark";
-  const bg = isDark ? "#0b0b0b" : "#f6f7f8";
-  const cardBg = isDark ? "#111" : "#fff";
-  const text = isDark ? "#fff" : "#111";
-  const soft = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  // Pull theme + accent from CSS variables (SAFE)
+  const rootStyles = typeof window !== "undefined"
+    ? getComputedStyle(document.documentElement)
+    : null;
+
+  const accent =
+    rootStyles?.getPropertyValue("--accent")?.trim() || "#ff3b3b";
+  const cardBg =
+    rootStyles?.getPropertyValue("--card-bg")?.trim() || "#111";
+  const text =
+    rootStyles?.getPropertyValue("--text-primary")?.trim() || "#fff";
+  const soft =
+    rootStyles?.getPropertyValue("--soft-bg")?.trim() ||
+    "rgba(255,255,255,0.08)";
 
   useEffect(() => {
     if (!userId) return;
@@ -126,7 +131,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
         marginTop: 20,
         padding: 16,
         borderRadius: 18,
-        border: `1.5px solid ${accentColor}55`,
+        border: `1.5px solid ${accent}55`,
         background: cardBg,
         color: text,
       }}
@@ -169,13 +174,13 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
               style={{
                 aspectRatio: "1/1",
                 borderRadius: 14,
-                border: `2px dashed ${accentColor}88`,
+                border: `2px dashed ${accent}88`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontWeight: 700,
                 cursor: "pointer",
-                color: accentColor,
+                color: accent,
               }}
             >
               <input
@@ -204,7 +209,6 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
         </div>
       )}
 
-      {/* Fullscreen viewer */}
       {viewerIndex !== null && (
         <div
           onClick={() => setViewerIndex(null)}
@@ -240,7 +244,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
                   marginTop: 16,
                   textAlign: "center",
                   fontSize: 14,
-                  color: accentColor,
+                  color: accent,
                   cursor: "pointer",
                 }}
               >
@@ -251,7 +255,6 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
         </div>
       )}
 
-      {/* Delete confirmation */}
       {confirmDelete && (
         <div
           style={{
@@ -288,7 +291,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
                 onClick={deleteCurrent}
                 style={{
                   flex: 1,
-                  color: accentColor,
+                  color: accent,
                   fontWeight: 700,
                 }}
               >
