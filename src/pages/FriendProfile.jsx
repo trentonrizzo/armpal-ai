@@ -103,15 +103,16 @@ export default function FriendProfile() {
     setBusy(true);
 
     try {
+      // DELETE FROM SOURCE OF TRUTH
       await supabase
-        .from("friend_requests")
+        .from("friends")
         .delete()
-        .eq("status", "accepted")
         .or(
-          `and(sender_id.eq.${me.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${me.id})`
+          `and(user_id.eq.${me.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${me.id})`
         );
 
-      navigate("/friends");
+      navigate("/friends", { replace: true });
+      window.location.reload();
     } finally {
       setBusy(false);
       setShowConfirm(false);
