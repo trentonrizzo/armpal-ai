@@ -49,6 +49,7 @@ import React, {
 
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
 
 import Cropper from "react-easy-crop";
 
@@ -1271,6 +1272,12 @@ useEffect(() => {
             <ReactionPill emoji="❤️" count={reactions.heart} />
             <ReactionPill emoji="👊" count={reactions.fist} />
           </div>
+          <SoftDivider />
+
+<ProfileMediaGallery
+  userId={user.id}
+  isOwnProfile={true}
+/>
         </BigCard>
 
         {/* =========================================================================================
