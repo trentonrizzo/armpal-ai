@@ -94,6 +94,34 @@ export default function FriendProfilePage() {
     };
   }, [id]);
 
+  async function unaddFriend() {
+    if (!me?.id || !profile?.id) return;
+    if (!window.confirm("Remove this friend?")) return;
+
+    setBusy(true);
+    try {
+      await supabase
+        .from("friends")
+        .delete()
+        .or(
+          `and(user_id.eq.${me.id},friend_id.eq.${profile.id}),and(user_id.eq.${profile.id},friend_id.eq.${me.id})`
+        );
+
+      await supabase
+        .from("friend_requests")
+        .delete()
+        .eq("status", "accepted")
+        .or(
+          `and(sender_id.eq.${me.id},receiver_id.eq.${profile.id}),and(sender_id.eq.${profile.id},receiver_id.eq.${me.id})`
+        );
+
+      navigate("/friends", { replace: true });
+      window.location.reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <div style={wrap}>
@@ -165,6 +193,12 @@ export default function FriendProfilePage() {
         <Stat label="Measures" value={counts.measures} />
       </div>
 
+
+      {me?.id && profile?.id && me.id !== profile.id && (
+        <button style={dangerBtn} disabled={busy} onClick={unaddFriend}>
+          Un-add Friend
+        </button>
+      )}
       <button style={dangerBtn} disabled={busy} onClick={() => navigate("/friends")}>
         Back to Friends
       </button>
