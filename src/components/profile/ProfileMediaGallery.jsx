@@ -4,35 +4,51 @@ import { supabase } from "../../supabaseClient";
 const MAX_PHOTOS = 12;
 const BUCKET = "profile-media";
 
+// subtle haptics
 const haptic = (ms = 10) => {
   try {
     navigator?.vibrate?.(ms);
   } catch {}
 };
 
+// detect light / dark safely
+const detectLightMode = () => {
+  const root = document.documentElement;
+  if (root.dataset?.theme) return root.dataset.theme === "light";
+  if (document.body.classList.contains("light")) return true;
+  if (document.body.classList.contains("dark")) return false;
+  return window.matchMedia("(prefers-color-scheme: light)").matches;
+};
+
 export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+
   const [viewerIndex, setViewerIndex] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const [isLight, setIsLight] = useState(false);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+
   const touchStartX = useRef(null);
 
-  // Pull theme + accent from CSS variables (SAFE)
-  const rootStyles = typeof window !== "undefined"
-    ? getComputedStyle(document.documentElement)
-    : null;
+  // pull accent color from CSS var
+  const rootStyles =
+    typeof window !== "undefined"
+      ? getComputedStyle(document.documentElement)
+      : null;
 
   const accent =
-    rootStyles?.getPropertyValue("--accent")?.trim() || "#ff3b3b";
-  const cardBg =
-    rootStyles?.getPropertyValue("--card-bg")?.trim() || "#111";
-  const text =
-    rootStyles?.getPropertyValue("--text-primary")?.trim() || "#fff";
-  const soft =
-    rootStyles?.getPropertyValue("--soft-bg")?.trim() ||
-    "rgba(255,255,255,0.08)";
+    rootStyles?.getPropertyValue("--accent")?.trim() || "#7c5cff";
+
+  useEffect(() => {
+    setIsLight(detectLightMode());
+  }, []);
+
+  const cardBg = isLight ? "#ffffff" : "#111111";
+  const softBg = isLight ? "#f1f1f1" : "rgba(255,255,255,0.08)";
+  const text = isLight ? "#111" : "#fff";
 
   useEffect(() => {
     if (!userId) return;
@@ -57,7 +73,6 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
 
     try {
       setUploading(true);
-
       const ext = file.name.split(".").pop();
       const name = `${Date.now()}.${ext}`;
       const path = `${userId}/${name}`;
@@ -93,13 +108,11 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
     try {
       const path = photo.image_url.split(`${BUCKET}/`)[1];
       await supabase.from("profile_media").delete().eq("id", photo.id);
-      if (path) {
-        await supabase.storage.from(BUCKET).remove([path]);
-      }
+      if (path) await supabase.storage.from(BUCKET).remove([path]);
 
       setPhotos((p) => p.filter((x) => x.id !== photo.id));
-      setViewerIndex(null);
       setConfirmDelete(false);
+      setViewerIndex(null);
       haptic(20);
     } catch {
       alert("Delete failed");
@@ -110,16 +123,20 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
     touchStartX.current = e.touches[0].clientX;
   };
 
-  const onTouchEnd = (e) => {
+  const onTouchMove = (e) => {
     if (touchStartX.current === null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(dx) > 50) {
+    setSwipeOffset(e.touches[0].clientX - touchStartX.current);
+  };
+
+  const onTouchEnd = () => {
+    if (Math.abs(swipeOffset) > 60) {
       setViewerIndex((i) =>
-        dx < 0
+        swipeOffset < 0
           ? Math.min(i + 1, photos.length - 1)
           : Math.max(i - 1, 0)
       );
     }
+    setSwipeOffset(0);
     touchStartX.current = null;
   };
 
@@ -130,9 +147,9 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
       style={{
         marginTop: 20,
         padding: 16,
-        borderRadius: 18,
-        border: `1.5px solid ${accent}55`,
+        borderRadius: 20,
         background: cardBg,
+        border: `1.5px solid ${accent}55`,
         color: text,
       }}
     >
@@ -174,7 +191,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
               style={{
                 aspectRatio: "1/1",
                 borderRadius: 14,
-                border: `2px dashed ${accent}88`,
+                border: `2px dashed ${accent}`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -202,7 +219,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
               style={{
                 aspectRatio: "1/1",
                 borderRadius: 14,
-                background: soft,
+                background: softBg,
               }}
             />
           ))}
@@ -223,9 +240,14 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
           }}
         >
           <div
-            onTouchStart={onTouchStart}
-            onTouchEnd={onTouchEnd}
             onClick={(e) => e.stopPropagation()}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            style={{
+              transform: `translateX(${swipeOffset}px)`,
+              transition: swipeOffset === 0 ? "transform 0.25s ease" : "none",
+            }}
           >
             <img
               src={photos[viewerIndex]?.image_url}
@@ -260,7 +282,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.6)",
+            background: "rgba(0,0,0,0.5)",
             zIndex: 10000,
             display: "flex",
             alignItems: "center",
@@ -270,16 +292,20 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
           <div
             style={{
               background: cardBg,
-              padding: 22,
-              borderRadius: 18,
-              width: 280,
-              color: text,
+              padding: 24,
+              borderRadius: 20,
+              width: 300,
               textAlign: "center",
+              color: text,
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 14 }}>
-              Delete this photo?
+            <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>
+              Confirm delete
             </div>
+            <div style={{ opacity: 0.7, marginBottom: 16 }}>
+              This photo will be permanently removed.
+            </div>
+
             <div style={{ display: "flex", gap: 10 }}>
               <button
                 onClick={() => setConfirmDelete(false)}
@@ -291,8 +317,10 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
                 onClick={deleteCurrent}
                 style={{
                   flex: 1,
-                  color: accent,
+                  background: accent,
+                  color: "#fff",
                   fontWeight: 700,
+                  borderRadius: 12,
                 }}
               >
                 Delete
