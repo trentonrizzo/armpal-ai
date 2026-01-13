@@ -1,3 +1,4 @@
+// DEPLOY FIX: redirect after unadd without reload
 // src/pages/FriendProfile.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
@@ -103,23 +104,22 @@ export default function FriendProfile() {
     setBusy(true);
 
     try {
-      // DELETE FROM SOURCE OF TRUTH
       await supabase
         .from("friends")
         .delete()
         .or(
-          `and(user_id.eq.${me.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${me.id})`
+          `and(user_id.eq.${me.id},friend_id.eq.${friendId}),
+           and(user_id.eq.${friendId},friend_id.eq.${me.id})`
         );
 
       navigate("/friends", { replace: true });
-      window.location.reload();
     } finally {
       setBusy(false);
       setShowConfirm(false);
     }
   }
 
-if (loading) return <div style={wrap} />;
+  if (loading) return <div style={wrap} />;
   const displayName =
     p?.display_name || p?.username || p?.handle || "Profile";
   const online = isOnline(p?.last_active);
@@ -128,7 +128,7 @@ if (loading) return <div style={wrap} />;
   return (
     <div style={wrap}>
       <div style={topRow}>
-        <button style={backBtn} onClick={() => navigate(-1)}>←</button>
+        <button style={backBtn} onClick={() => navigate("/friends", { replace: true })}>←</button>
         <div style={topTitle}>Profile</div>
         <div style={{ width: 44 }} />
       </div>
