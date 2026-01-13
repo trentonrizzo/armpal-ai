@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAppTheme } from "../../context/ThemeContext";
+
+/*
+DEPLOY-SAFE VERSION
+- NO ThemeContext import
+- Uses CSS variables directly
+*/
 
 export default function ProfileVisibilityOverlay({ userId }) {
-  const { accent, mode } = useAppTheme();
   const [visibility, setVisibility] = useState("private");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -37,7 +41,10 @@ export default function ProfileVisibilityOverlay({ userId }) {
         : "Only friends can view your profile."
     );
 
-    await supabase.from("profiles").update({ profile_visibility: next }).eq("id", userId);
+    await supabase
+      .from("profiles")
+      .update({ profile_visibility: next })
+      .eq("id", userId);
 
     setTimeout(() => setToast(null), 2000);
     setLoading(false);
@@ -46,11 +53,9 @@ export default function ProfileVisibilityOverlay({ userId }) {
   };
 
   const isPublic = visibility === "public";
-  const bg = mode === "dark" ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)";
 
   return (
     <>
-      {/* TOGGLE */}
       <div
         style={{
           position: "absolute",
@@ -68,9 +73,9 @@ export default function ProfileVisibilityOverlay({ userId }) {
             gap: 10,
             padding: "8px 14px",
             borderRadius: 999,
-            border: `1.5px solid ${accent}`,
-            background: bg,
-            color: accent,
+            border: "1.5px solid var(--accent)",
+            background: "var(--card)",
+            color: "var(--accent)",
             fontWeight: 600,
             fontSize: 13,
             backdropFilter: "blur(12px)",
@@ -85,7 +90,7 @@ export default function ProfileVisibilityOverlay({ userId }) {
               width: 36,
               height: 18,
               borderRadius: 999,
-              background: isPublic ? accent : "#999",
+              background: isPublic ? "var(--accent)" : "#999",
               position: "relative",
             }}
           >
@@ -105,7 +110,6 @@ export default function ProfileVisibilityOverlay({ userId }) {
         </button>
       </div>
 
-      {/* TOAST */}
       <AnimatePresence>
         {toast && (
           <motion.div
@@ -117,13 +121,13 @@ export default function ProfileVisibilityOverlay({ userId }) {
               top: 90,
               left: "50%",
               transform: "translateX(-50%)",
-              background: bg,
-              color: accent,
+              background: "var(--card)",
+              color: "var(--accent)",
               padding: "10px 18px",
               borderRadius: 999,
               fontSize: 13,
               fontWeight: 600,
-              border: `1.5px solid ${accent}`,
+              border: "1.5px solid var(--accent)",
               zIndex: 100,
               backdropFilter: "blur(14px)",
               pointerEvents: "none",
