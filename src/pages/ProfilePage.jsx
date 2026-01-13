@@ -50,6 +50,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
+import ProfileVisibilityOverlay from "@/components/profile/ProfileVisibilityOverlay";
 
 import Cropper from "react-easy-crop";
 
@@ -1441,6 +1442,9 @@ useEffect(() => {
           </div>
         </div>
       )}
+
+{/* PROFILE VISIBILITY TOGGLE */}
+<ProfileVisibilityOverlay userId={user?.id} />
 
       {/* SETTINGS OVERLAY */}
       <SettingsOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} />
