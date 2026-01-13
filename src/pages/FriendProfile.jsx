@@ -104,11 +104,11 @@ export default function FriendProfile() {
 
     try {
       await supabase
-        .from("friends")
+        .from("friend_requests")
         .delete()
+        .eq("status", "accepted")
         .or(
-          `and(user_id.eq.${me.id},friend_id.eq.${friendId}),
-           and(user_id.eq.${friendId},friend_id.eq.${me.id})`
+          `and(sender_id.eq.${me.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${me.id})`
         );
 
       navigate("/friends");
@@ -118,7 +118,7 @@ export default function FriendProfile() {
     }
   }
 
-  if (loading) return <div style={wrap} />;
+if (loading) return <div style={wrap} />;
   const displayName =
     p?.display_name || p?.username || p?.handle || "Profile";
   const online = isOnline(p?.last_active);
