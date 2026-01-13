@@ -1,4 +1,3 @@
-// DEPLOY FIX: redirect after unadd without reload
 // src/pages/FriendProfile.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
@@ -112,7 +111,7 @@ export default function FriendProfile() {
            and(user_id.eq.${friendId},friend_id.eq.${me.id})`
         );
 
-      navigate("/friends", { replace: true });
+      navigate("/friends");
     } finally {
       setBusy(false);
       setShowConfirm(false);
@@ -128,7 +127,7 @@ export default function FriendProfile() {
   return (
     <div style={wrap}>
       <div style={topRow}>
-        <button style={backBtn} onClick={() => navigate("/friends", { replace: true })}>←</button>
+        <button style={backBtn} onClick={() => navigate(-1)}>←</button>
         <div style={topTitle}>Profile</div>
         <div style={{ width: 44 }} />
       </div>
