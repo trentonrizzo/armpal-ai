@@ -103,26 +103,19 @@ export default function FriendProfile() {
     setBusy(true);
 
     try {
-      const { error } = await supabase
-        .from("friend_requests")
+      await supabase
+        .from("friends")
         .delete()
-        .eq("status", "accepted")
         .or(
-          `and(sender_id.eq.${me.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${me.id})`
+          `and(user_id.eq.${me.id},friend_id.eq.${friendId}),
+           and(user_id.eq.${friendId},friend_id.eq.${me.id})`
         );
-
-      if (error) {
-        console.error("unadd failed:", error);
-        alert(error.message || "Could not unadd. Try again.");
-        return;
-      }
 
       navigate("/friends");
     } finally {
       setBusy(false);
       setShowConfirm(false);
     }
-  }
   }
 
   if (loading) return <div style={wrap} />;
@@ -226,6 +219,7 @@ export default function FriendProfile() {
       )}
     </div>
   );
+}
 
 /* ---------------- STYLES ---------------- */
 
