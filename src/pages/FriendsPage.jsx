@@ -1,10 +1,11 @@
 // src/pages/FriendsPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [user, setUser] = useState(null);
 
@@ -36,7 +37,7 @@ export default function FriendsPage() {
         await loadAllFriends(current.id);
       }
     })();
-  }, []);
+  }, [location.key]);
 
   // ✅ Realtime presence subscription once user + friends exist
   useEffect(() => {
