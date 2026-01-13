@@ -700,6 +700,8 @@ export default function ProfilePage() {
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
 
+  const [isPublic, setIsPublic] = useState(true);
+
   // snapshot for cancel
   const [orig, setOrig] = useState({
     display_name: "",
@@ -783,6 +785,8 @@ useEffect(() => {
   setHandle(row.handle || "");
   setBio(row.bio || "");
   setAvatarUrl(row.avatar_url || "");
+
+  setIsPublic(row.is_public !== false);
 
   setOrig({
     display_name: row.display_name || "",
@@ -880,6 +884,7 @@ useEffect(() => {
         handle: safeString(cleanedHandle),
         bio: safeString(bio),
         avatar_url: avatarUrl || "",
+        is_public: isPublic,
       };
 
       const { error } = await supabase.from("profiles").upsert(updates);
@@ -1442,8 +1447,33 @@ useEffect(() => {
         </div>
       )}
 
+
       {/* SETTINGS OVERLAY */}
-      <SettingsOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+        <div style={{ padding: 16 }}>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Profile Visibility</div>
+          <button
+            onClick={async () => {
+              const next = !isPublic;
+              setIsPublic(next);
+              await supabase.from("profiles").upsert({ id: user.id, is_public: next });
+            }}
+            style={{
+              width: "100%",
+              padding: "14px 16px",
+              borderRadius: 14,
+              border: "1px solid var(--border)",
+              background: "var(--card-2)",
+              color: "var(--text)",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            {isPublic ? "Public Profile" : "Private Profile"}
+          </button>
+        </div>
+      </SettingsOverlay>
+
     </>
   );
 }
