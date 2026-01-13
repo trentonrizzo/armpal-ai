@@ -66,6 +66,7 @@ import {
 } from "react-icons/fi";
 
 import SettingsOverlay from "../settings/SettingsOverlay";
+import ProfileVisibilityOverlay from "../components/profile/ProfileVisibilityOverlay";
 
 // =================================================================================================
 // 2) CONSTANTS
@@ -1035,6 +1036,7 @@ useEffect(() => {
 
         <div
           style={{
+            position: "relative",
             display: "flex",
             alignItems: "flex-start",
             justifyContent: "space-between",
@@ -1075,6 +1077,8 @@ useEffect(() => {
           >
             <FiSettings size={20} />
           </button>
+
+          <ProfileVisibilityOverlay userId={user?.id} />
         </div>
 
         {/* =========================================================================================
