@@ -50,7 +50,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
-import ProfileVisibilityOverlay from "@/components/profile/ProfileVisibilityOverlay";
+import ProfileVisibilityOverlay from "../components/profile/ProfileVisibilityOverlay";
 
 import Cropper from "react-easy-crop";
 
