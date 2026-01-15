@@ -17,6 +17,7 @@ export default function FriendsPage() {
 
   const [user, setUser] = useState(null);
 
+  // QR / Scan modal
   const [showQR, setShowQR] = useState(false);
 
   // Data
@@ -430,31 +431,17 @@ export default function FriendsPage() {
   // -------------------------------------------------------------------
   return (
     <div style={pageWrap}>
-      <h1 style={title}>Friends</h1>
-
-        <button
-          aria-label="QR / Scan"
-          onClick={() => setShowQR(true)}
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            border: "1px solid var(--border)",
-            background: "var(--card-2)",
-            color: "var(--text)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-          }}
-        >
-          ▦
-        </button>
-
+      <div style={topHeaderRow}>
+  <h1 style={title}>Friends</h1>
+  <button
+    type="button"
+    aria-label="Open QR"
+    onClick={() => setShowQR(true)}
+    style={qrIconBtn}
+  >
+    <span style={{ fontSize: 18, lineHeight: 1 }}>▦</span>
+  </button>
+</div>
 
       {/* ADD FRIEND */}
       <section style={card}>
@@ -606,6 +593,10 @@ export default function FriendsPage() {
           ))
         )}
       </section>
+{showQR && (
+  <FriendQRModal onClose={() => setShowQR(false)} />
+)}
+
     </div>
   );
 }
@@ -686,7 +677,30 @@ const pageWrap = {
   color: "var(--text)",
 };
 
+const topHeaderRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  position: "relative",
+};
+
+const qrIconBtn = {
+  width: 44,
+  height: 44,
+  borderRadius: 14,
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+  boxShadow: "0 10px 20px rgba(0,0,0,0.35)",
+};
+
 const title = {
+
   fontSize: 32,
   fontWeight: 800,
   marginBottom: 16,
