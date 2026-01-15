@@ -9,12 +9,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate, useLocation } from "react-router-dom";
+import FriendQRModal from "../components/friends/FriendQRModal";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
   const [user, setUser] = useState(null);
+
+  const [showQR, setShowQR] = useState(false);
 
   // Data
   const [friends, setFriends] = useState([]);
@@ -428,6 +431,30 @@ export default function FriendsPage() {
   return (
     <div style={pageWrap}>
       <h1 style={title}>Friends</h1>
+
+        <button
+          aria-label="QR / Scan"
+          onClick={() => setShowQR(true)}
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            border: "1px solid var(--border)",
+            background: "var(--card-2)",
+            color: "var(--text)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 18,
+          }}
+        >
+          ▦
+        </button>
+
 
       {/* ADD FRIEND */}
       <section style={card}>
