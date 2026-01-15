@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 
 export default function FriendQRModal({ onClose }) {
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
+
+  const cameraInputRef = useRef(null);
+  const uploadInputRef = useRef(null);
 
   const [uid, setUid] = useState(null);
   const [error, setError] = useState("");
@@ -28,6 +30,8 @@ export default function FriendQRModal({ onClose }) {
 
   const scanFromImage = async (file) => {
     setError("");
+    if (!file) return;
+
     if (!("BarcodeDetector" in window)) {
       setError("QR scanning not supported on this device.");
       return;
@@ -75,7 +79,11 @@ export default function FriendQRModal({ onClose }) {
 
         <div style={content}>
           <div style={qrWrap}>
-            {qrImg ? <img src={qrImg} alt="QR" width={260} height={260} /> : <p>Loading…</p>}
+            {qrImg ? (
+              <img src={qrImg} alt="QR" width={260} height={260} />
+            ) : (
+              <p>Loading…</p>
+            )}
           </div>
 
           <p style={hint}>Scan to add you as a friend</p>
@@ -85,19 +93,40 @@ export default function FriendQRModal({ onClose }) {
           <div style={actions}>
             <button
               style={actionBtn}
-              onClick={() => fileInputRef.current.click()}
+              onClick={() => cameraInputRef.current.click()}
             >
               Scan QR Code
             </button>
+
+            <button
+              style={secondaryBtn}
+              onClick={() => uploadInputRef.current.click()}
+            >
+              Upload QR Image
+            </button>
           </div>
 
+          {/* Camera capture */}
           <input
-            ref={fileInputRef}
+            ref={cameraInputRef}
             type="file"
             accept="image/*"
             capture="environment"
             hidden
-            onChange={(e) => e.target.files && scanFromImage(e.target.files[0])}
+            onChange={(e) =>
+              e.target.files && scanFromImage(e.target.files[0])
+            }
+          />
+
+          {/* Photo library / files */}
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) =>
+              e.target.files && scanFromImage(e.target.files[0])
+            }
           />
         </div>
       </div>
@@ -140,7 +169,10 @@ const closeBtn = {
   cursor: "pointer",
 };
 
-const content = { padding: 16, textAlign: "center" };
+const content = {
+  padding: 16,
+  textAlign: "center",
+};
 
 const qrWrap = {
   background: "#fff",
@@ -149,11 +181,15 @@ const qrWrap = {
   display: "inline-block",
 };
 
-const hint = { marginTop: 12, opacity: 0.8 };
+const hint = {
+  marginTop: 12,
+  opacity: 0.8,
+};
 
 const actions = {
   display: "flex",
-  justifyContent: "center",
+  flexDirection: "column",
+  gap: 10,
   marginTop: 16,
 };
 
@@ -164,5 +200,15 @@ const actionBtn = {
   background: "var(--card-2)",
   color: "var(--text)",
   fontSize: 16,
+  cursor: "pointer",
+};
+
+const secondaryBtn = {
+  padding: "12px 18px",
+  borderRadius: 12,
+  border: "1px solid var(--border)",
+  background: "transparent",
+  color: "var(--text)",
+  fontSize: 15,
   cursor: "pointer",
 };
