@@ -4,12 +4,14 @@ import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
   base: "/",
+
   plugins: [
     react(),
+
     VitePWA({
-      // 🔥 AUTO-UPDATE SERVICE WORKER (NO MORE STALE BUILDS)
-      registerType: "autoUpdate",
-      injectRegister: "auto",
+      // 🚫 DO NOT AUTO REGISTER (iOS BUG SOURCE)
+      registerType: "prompt",
+      injectRegister: false,
 
       includeAssets: [
         "favicon.ico",
@@ -41,40 +43,41 @@ export default defineConfig({
         ],
       },
 
-      // 🔒 HARD CACHE FIX (iOS / Safari / PWA SAFE)
+      // ✅ iOS-SAFE WORKBOX CONFIG
       workbox: {
         cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
 
-        // Ensures SPA routing never white-screens
+        // 🔥 FORCE NEW BUILDS TO TAKE OVER
+        skipWaiting: true,
+        clientsClaim: true,
+
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
 
-        // Prevents oversized bundle cache issues
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
 
         runtimeCaching: [
-          // HTML / navigation
+          // HTML / SPA navigation
           {
             urlPattern: ({ request }) => request.mode === "navigate",
             handler: "NetworkFirst",
             options: {
               cacheName: "html-cache",
-              networkTimeoutSeconds: 3,
+              networkTimeoutSeconds: 2,
             },
           },
-          // JS / CSS / workers
+
+          // JS / CSS
           {
             urlPattern: ({ request }) =>
               request.destination === "script" ||
-              request.destination === "style" ||
-              request.destination === "worker",
-            handler: "StaleWhileRevalidate",
+              request.destination === "style",
+            handler: "NetworkFirst",
             options: {
               cacheName: "asset-cache",
             },
           },
+
           // Images
           {
             urlPattern: ({ request }) => request.destination === "image",
@@ -88,6 +91,11 @@ export default defineConfig({
             },
           },
         ],
+      },
+
+      // ✅ DEV MODE: NO SW AT ALL
+      devOptions: {
+        enabled: false,
       },
     }),
   ],
