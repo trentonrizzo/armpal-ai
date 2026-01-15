@@ -1,214 +1,219 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+
+// src/components/friends/FriendQRModal.jsx
+// ============================================================================
+// ARM PAL — FRIEND QR MODAL (FULL VERSION)
+// PURPOSE:
+// - Display user's permanent QR code
+// - Allow scanning via IMAGE UPLOAD (iOS PWA safe)
+// - Decode QR payload using jsQR
+// - Send friend request (pending)
+// - NO camera API usage (Apple PWA limitation)
+// - NO App.jsx changes required
+// ============================================================================
+
+import React, { useRef, useState, useEffect } from "react";
+import jsQR from "jsqr";
 import { supabase } from "../../supabaseClient";
-import { useNavigate } from "react-router-dom";
 
-export default function FriendQRModal({ onClose }) {
-  const navigate = useNavigate();
-
-  const cameraInputRef = useRef(null);
-  const uploadInputRef = useRef(null);
-
-  const [uid, setUid] = useState(null);
+export default function FriendQRModal({
+  currentUserId,
+  currentUserHandle,
+  onClose,
+}) {
+  // --------------------------------------------------------------------------
+  // STATE
+  // --------------------------------------------------------------------------
+  const fileInputRef = useRef(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [qrValue, setQrValue] = useState("");
 
+  // --------------------------------------------------------------------------
+  // BUILD QR VALUE (PERMANENT, USER-SPECIFIC)
+  // --------------------------------------------------------------------------
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setUid(data?.user?.id || null);
-    })();
-  }, []);
+    if (!currentUserId) return;
 
-  const qrValue = useMemo(() => {
-    if (!uid) return "";
-    return `https://armpal.app/add-friend?uid=${uid}`;
-  }, [uid]);
+    // Permanent payload — do NOT randomize
+    // This ensures QR works forever
+    setQrValue(`armpal://add-friend?uid=${currentUserId}`);
+  }, [currentUserId]);
 
-  const qrImg = useMemo(() => {
-    if (!qrValue) return "";
-    return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrValue)}`;
-  }, [qrValue]);
-
-  const scanFromImage = async (file) => {
-    setError("");
+  // --------------------------------------------------------------------------
+  // IMAGE UPLOAD → QR DECODE
+  // --------------------------------------------------------------------------
+  const handleImageUpload = (file) => {
     if (!file) return;
 
-    if (!("BarcodeDetector" in window)) {
-      setError("QR scanning not supported on this device.");
-      return;
-    }
+    setError("");
+    setSuccess("");
+    setLoading(true);
 
-    try {
+    const reader = new FileReader();
+
+    reader.onload = () => {
       const img = new Image();
-      img.src = URL.createObjectURL(file);
-      await img.decode();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
 
-      const detector = new BarcodeDetector({ formats: ["qr_code"] });
-      const barcodes = await detector.detect(img);
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
 
-      if (barcodes.length > 0) {
-        handleQR(barcodes[0].rawValue);
-      } else {
-        setError("No QR code found.");
-      }
-    } catch {
-      setError("Failed to scan QR code.");
-    }
+          const imageData = ctx.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          );
+
+          const decoded = jsQR(
+            imageData.data,
+            canvas.width,
+            canvas.height
+          );
+
+          if (!decoded || !decoded.data) {
+            throw new Error("No QR code detected in image.");
+          }
+
+          processQRPayload(decoded.data);
+        } catch (err) {
+          setError(err.message || "Failed to read QR code.");
+          setLoading(false);
+        }
+      };
+
+      img.src = reader.result;
+    };
+
+    reader.readAsDataURL(file);
   };
 
-  const handleQR = (value) => {
+  // --------------------------------------------------------------------------
+  // HANDLE QR PAYLOAD
+  // --------------------------------------------------------------------------
+  const processQRPayload = async (payload) => {
     try {
-      const url = new URL(value);
-      if (url.pathname === "/add-friend" && url.searchParams.get("uid")) {
-        onClose();
-        navigate(`/add-friend?uid=${url.searchParams.get("uid")}`);
+      let targetUserId = null;
+
+      // Accept deep link OR raw UUID
+      if (payload.includes("uid=")) {
+        targetUserId = payload.split("uid=")[1];
       } else {
-        setError("Invalid QR code.");
+        targetUserId = payload;
       }
-    } catch {
-      setError("Invalid QR code.");
+
+      if (!targetUserId) {
+        throw new Error("Invalid QR code.");
+      }
+
+      if (targetUserId === currentUserId) {
+        throw new Error("You cannot add yourself.");
+      }
+
+      // Prevent duplicates
+      const { data: existing } = await supabase
+        .from("friends")
+        .select("id")
+        .or(
+          `and(user_id.eq.${currentUserId},friend_id.eq.${targetUserId}),and(user_id.eq.${targetUserId},friend_id.eq.${currentUserId})`
+        )
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error("Friend request already exists.");
+      }
+
+      const { error } = await supabase.from("friends").insert({
+        user_id: currentUserId,
+        friend_id: targetUserId,
+        status: "pending",
+      });
+
+      if (error) throw error;
+
+      setSuccess("Friend request sent!");
+      setLoading(false);
+    } catch (err) {
+      setError(err.message || "Failed to process QR code.");
+      setLoading(false);
     }
   };
 
+  // --------------------------------------------------------------------------
+  // RENDER
+  // --------------------------------------------------------------------------
   return (
-    <div style={backdrop} onClick={onClose}>
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
-        <div style={header}>
-          <h2 style={{ margin: 0 }}>Your QR Code</h2>
-          <button onClick={onClose} style={closeBtn}>✕</button>
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
+      <div className="relative w-[92%] max-w-md bg-zinc-900 rounded-2xl shadow-xl p-6 text-white">
+        {/* CLOSE */}
+        <button
+          className="absolute top-4 right-4 text-zinc-400 hover:text-white"
+          onClick={onClose}
+        >
+          ✕
+        </button>
+
+        {/* TITLE */}
+        <h2 className="text-xl font-semibold mb-4">Your QR Code</h2>
+
+        {/* QR DISPLAY */}
+        <div className="bg-white rounded-xl p-4 flex items-center justify-center mb-4">
+          {/* QR rendered elsewhere (existing logic) */}
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(
+              qrValue
+            )}`}
+            alt="Your QR Code"
+            className="rounded-lg"
+          />
         </div>
 
-        <div style={content}>
-          <div style={qrWrap}>
-            {qrImg ? (
-              <img src={qrImg} alt="QR" width={260} height={260} />
-            ) : (
-              <p>Loading…</p>
-            )}
-          </div>
+        <p className="text-sm text-center text-zinc-400 mb-4">
+          Scan to add you as a friend
+        </p>
 
-          <p style={hint}>Scan to add you as a friend</p>
+        {/* ACTIONS */}
+        <div className="space-y-3">
+          <button
+            onClick={() => fileInputRef.current.click()}
+            className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 font-semibold"
+          >
+            Upload QR Image
+          </button>
 
-          {error && <p style={{ color: "red" }}>{error}</p>}
-
-          <div style={actions}>
-            <button
-              style={actionBtn}
-              onClick={() => cameraInputRef.current.click()}
-            >
-              Scan QR Code
-            </button>
-
-            <button
-              style={secondaryBtn}
-              onClick={() => uploadInputRef.current.click()}
-            >
-              Upload QR Image
-            </button>
-          </div>
-
-          {/* Camera capture */}
           <input
-            ref={cameraInputRef}
+            ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
-            hidden
+            className="hidden"
             onChange={(e) =>
-              e.target.files && scanFromImage(e.target.files[0])
-            }
-          />
-
-          {/* Photo library / files */}
-          <input
-            ref={uploadInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) =>
-              e.target.files && scanFromImage(e.target.files[0])
+              e.target.files && handleImageUpload(e.target.files[0])
             }
           />
         </div>
+
+        {/* STATUS */}
+        {loading && (
+          <p className="text-sm text-zinc-400 text-center mt-4">
+            Scanning QR code…
+          </p>
+        )}
+
+        {error && (
+          <p className="text-sm text-red-400 text-center mt-4">{error}</p>
+        )}
+
+        {success && (
+          <p className="text-sm text-green-400 text-center mt-4">
+            {success}
+          </p>
+        )}
       </div>
     </div>
   );
 }
-
-// ---------- styles ----------
-const backdrop = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.6)",
-  zIndex: 1000,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const modal = {
-  width: "90%",
-  maxWidth: 420,
-  background: "var(--card)",
-  borderRadius: 16,
-  border: "1px solid var(--border)",
-  boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
-};
-
-const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  padding: "14px 16px",
-  borderBottom: "1px solid var(--border)",
-};
-
-const closeBtn = {
-  background: "transparent",
-  border: "none",
-  color: "var(--text)",
-  fontSize: 20,
-  cursor: "pointer",
-};
-
-const content = {
-  padding: 16,
-  textAlign: "center",
-};
-
-const qrWrap = {
-  background: "#fff",
-  padding: 16,
-  borderRadius: 12,
-  display: "inline-block",
-};
-
-const hint = {
-  marginTop: 12,
-  opacity: 0.8,
-};
-
-const actions = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 10,
-  marginTop: 16,
-};
-
-const actionBtn = {
-  padding: "12px 18px",
-  borderRadius: 12,
-  border: "1px solid var(--border)",
-  background: "var(--card-2)",
-  color: "var(--text)",
-  fontSize: 16,
-  cursor: "pointer",
-};
-
-const secondaryBtn = {
-  padding: "12px 18px",
-  borderRadius: 12,
-  border: "1px solid var(--border)",
-  background: "transparent",
-  color: "var(--text)",
-  fontSize: 15,
-  cursor: "pointer",
-};
