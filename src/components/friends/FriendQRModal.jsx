@@ -4,11 +4,9 @@ import { useNavigate } from "react-router-dom";
 
 export default function FriendQRModal({ onClose }) {
   const navigate = useNavigate();
-  const videoRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const [uid, setUid] = useState(null);
-  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -28,58 +26,10 @@ export default function FriendQRModal({ onClose }) {
     return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrValue)}`;
   }, [qrValue]);
 
-  // ---------- CAMERA SCAN ----------
-  const startCameraScan = async () => {
-    setError("");
-    if (!("BarcodeDetector" in window)) {
-      setError("Camera scanning not supported on this device.");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-      setScanning(true);
-
-      const detector = new BarcodeDetector({ formats: ["qr_code"] });
-
-      const scanLoop = async () => {
-        if (!videoRef.current || !scanning) return;
-
-        try {
-          const barcodes = await detector.detect(videoRef.current);
-          if (barcodes.length > 0) {
-            stopCamera();
-            handleQR(barcodes[0].rawValue);
-            return;
-          }
-        } catch (e) {}
-
-        requestAnimationFrame(scanLoop);
-      };
-
-      scanLoop();
-    } catch (e) {
-      setError("Camera permission denied.");
-    }
-  };
-
-  const stopCamera = () => {
-    setScanning(false);
-    if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  // ---------- IMAGE SCAN ----------
   const scanFromImage = async (file) => {
     setError("");
     if (!("BarcodeDetector" in window)) {
-      setError("Image scanning not supported on this device.");
+      setError("QR scanning not supported on this device.");
       return;
     }
 
@@ -94,14 +44,13 @@ export default function FriendQRModal({ onClose }) {
       if (barcodes.length > 0) {
         handleQR(barcodes[0].rawValue);
       } else {
-        setError("No QR code found in image.");
+        setError("No QR code found.");
       }
     } catch {
-      setError("Failed to scan image.");
+      setError("Failed to scan QR code.");
     }
   };
 
-  // ---------- HANDLE QR ----------
   const handleQR = (value) => {
     try {
       const url = new URL(value);
@@ -125,41 +74,31 @@ export default function FriendQRModal({ onClose }) {
         </div>
 
         <div style={content}>
-          {!scanning ? (
-            <>
-              <div style={qrWrap}>
-                {qrImg ? <img src={qrImg} alt="QR" width={260} height={260} /> : <p>Loading…</p>}
-              </div>
+          <div style={qrWrap}>
+            {qrImg ? <img src={qrImg} alt="QR" width={260} height={260} /> : <p>Loading…</p>}
+          </div>
 
-              <p style={hint}>Scan to add you as a friend</p>
+          <p style={hint}>Scan to add you as a friend</p>
 
-              {error && <p style={{ color: "red" }}>{error}</p>}
+          {error && <p style={{ color: "red" }}>{error}</p>}
 
-              <div style={actions}>
-                <button style={actionBtn} onClick={() => fileInputRef.current.click()}>
-                  Scan from image
-                </button>
-                <button style={actionBtn} onClick={startCameraScan}>
-                  Scan with camera
-                </button>
-              </div>
+          <div style={actions}>
+            <button
+              style={actionBtn}
+              onClick={() => fileInputRef.current.click()}
+            >
+              Scan QR Code
+            </button>
+          </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(e) => e.target.files && scanFromImage(e.target.files[0])}
-              />
-            </>
-          ) : (
-            <>
-              <video ref={videoRef} style={video} />
-              <button style={stopBtn} onClick={stopCamera}>
-                Stop scanning
-              </button>
-            </>
-          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => e.target.files && scanFromImage(e.target.files[0])}
+          />
         </div>
       </div>
     </div>
@@ -214,31 +153,16 @@ const hint = { marginTop: 12, opacity: 0.8 };
 
 const actions = {
   display: "flex",
-  gap: 10,
   justifyContent: "center",
   marginTop: 16,
 };
 
 const actionBtn = {
-  padding: "10px 14px",
-  borderRadius: 10,
+  padding: "12px 18px",
+  borderRadius: 12,
   border: "1px solid var(--border)",
   background: "var(--card-2)",
   color: "var(--text)",
-  cursor: "pointer",
-};
-
-const video = {
-  width: "100%",
-  borderRadius: 12,
-};
-
-const stopBtn = {
-  marginTop: 12,
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "none",
-  background: "red",
-  color: "#fff",
+  fontSize: 16,
   cursor: "pointer",
 };
