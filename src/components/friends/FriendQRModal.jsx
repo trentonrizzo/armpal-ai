@@ -1,201 +1,313 @@
-
-// src/components/friends/FriendQRModal.jsx
-// ============================================================================
-// ARM PAL — FRIEND QR MODAL (FINAL / HANDLE-BASED)
-// ----------------------------------------------------------------------------
-// WHAT THIS DOES:
-// • Generates a PERMANENT QR code from the user's HANDLE (not random, not UUID)
-// • QR payload is a UNIVERSAL LINK that works:
-//     - camera scan
-//     - photo upload
-//     - Safari
-//     - iOS PWA
-//     - desktop
-// • Scanning / opening the link ALWAYS resolves to a real user
-// • Automatically sends a friend request
-//
-// NO external dependencies
-// NO App.jsx changes
-// NO cache hacks
-// ============================================================================
-
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabaseClient";
+import { useNavigate } from "react-router-dom";
 
-export default function FriendQRModal({
-  currentUserId,
-  currentUserHandle,
-  onClose,
-}) {
-  // --------------------------------------------------------------------------
-  // STATE
-  // --------------------------------------------------------------------------
+// =================================================================================================
+// ARM PAL — FRIEND QR MODAL (RESTORED UI + WORKING SCAN FLOW, NO DEPS)
+// - Shows YOUR QR immediately (big, centered modal)
+// - QR payload is handle-based + uid fallback via /add-friend route
+// - Two buttons:
+//    1) Scan QR (Camera) -> opens camera capture sheet (Take Photo)
+//    2) Upload QR Image  -> opens photo library/files
+// - Decodes selected image using BarcodeDetector (image-based, no external libs)
+// - Navigates to /add-friend?uid=... OR /add-friend?handle=...
+// - No App.jsx changes
+// =================================================================================================
+
+export default function FriendQRModal({ onClose }) {
+  const navigate = useNavigate();
+
+  const cameraInputRef = useRef(null);
   const uploadInputRef = useRef(null);
-  const [qrUrl, setQrUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
-  // --------------------------------------------------------------------------
-  // BUILD PERMANENT QR LINK (HANDLE-BASED, NEVER CHANGES)
-  // --------------------------------------------------------------------------
+  const [meId, setMeId] = useState(null);
+  const [myHandle, setMyHandle] = useState(null);
+
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
   useEffect(() => {
-    if (!currentUserHandle) return;
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id || null;
+      setMeId(uid);
 
-    // This link is VALID ANYWHERE (camera, photos, Safari, PWA)
-    // Handle is the source of truth
-    const link = `https://armpal.app/u/${currentUserHandle}`;
-    setQrUrl(link);
-  }, [currentUserHandle]);
+      if (uid) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("handle")
+          .eq("id", uid)
+          .maybeSingle();
+        setMyHandle(prof?.handle || null);
+      }
+    })();
+  }, []);
 
-  // --------------------------------------------------------------------------
-  // IMAGE UPLOAD → QR PAYLOAD EXTRACTION
-  // NOTE: iOS photo picker already extracts the URL automatically
-  // --------------------------------------------------------------------------
-  const handleUpload = async (file) => {
+  // Permanent, shareable QR payload (handle-based URL, universally recognizable)
+  const qrLink = useMemo(() => {
+    if (!myHandle) return "";
+    // Use your real domain in production. This is what people will open when scanning.
+    // You can also change this to https://armpal.app/u/<handle> later if you add that route.
+    return `https://armpal.app/add-friend?handle=${encodeURIComponent(myHandle)}`;
+  }, [myHandle]);
+
+  const qrImg = useMemo(() => {
+    if (!qrLink) return "";
+    return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(
+      qrLink
+    )}`;
+  }, [qrLink]);
+
+  function extractTarget(raw) {
+    if (!raw) return { uid: null, handle: null };
+
+    // If it's a URL, parse it.
+    try {
+      const u = new URL(raw);
+
+      // /add-friend?uid=... or /add-friend?handle=...
+      if (u.pathname === "/add-friend") {
+        const uid = u.searchParams.get("uid");
+        const handle = u.searchParams.get("handle");
+        return { uid: uid || null, handle: handle || null };
+      }
+
+      // /u/<handle> (future-proof if you add this route later)
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts[0] === "u" && parts[1]) {
+        return { uid: null, handle: parts[1] };
+      }
+    } catch {
+      // Not a URL, fall through
+    }
+
+    // Raw formats
+    let s = String(raw).trim();
+    if (s.startsWith("ARMPAL:")) s = s.slice("ARMPAL:".length).trim();
+    if (s.startsWith("@")) s = s.slice(1);
+
+    // If looks like UUID, treat as uid
+    const uuidish = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidish.test(s)) return { uid: s, handle: null };
+
+    return { uid: null, handle: s || null };
+  }
+
+  async function decodeImageFile(file) {
     if (!file) return;
 
-    setError("");
-    setSuccess("");
-    setLoading(true);
+    setErr("");
+    setBusy(true);
 
     try {
-      // Create object URL so iOS can detect embedded link
-      const url = URL.createObjectURL(file);
+      if (!("BarcodeDetector" in window)) {
+        throw new Error(
+          "QR decoding isn't supported on this device/browser. Try opening the QR in Photos and tapping the link."
+        );
+      }
 
-      // iOS / browser will auto-detect QR URLs inside images
-      // We simply ask the user to tap the detected link
-      window.open(url, "_blank");
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await img.decode();
 
-      setSuccess("QR detected. Follow the link to add friend.");
-      setLoading(false);
-    } catch (err) {
-      setError("Unable to read QR image.");
-      setLoading(false);
+      const detector = new BarcodeDetector({ formats: ["qr_code"] });
+      const codes = await detector.detect(img);
+
+      if (!codes || codes.length === 0) {
+        throw new Error("No QR code found in that image. Try zooming the QR and retaking the photo.");
+      }
+
+      const raw = codes[0].rawValue || "";
+      const { uid, handle } = extractTarget(raw);
+
+      if (uid && meId && uid === meId) throw new Error("That's your own QR code.");
+      if (handle && myHandle && handle.toLowerCase() === myHandle.toLowerCase()) {
+        throw new Error("That's your own QR code.");
+      }
+
+      onClose?.();
+      if (uid) navigate(`/add-friend?uid=${encodeURIComponent(uid)}`);
+      else if (handle) navigate(`/add-friend?handle=${encodeURIComponent(handle)}`);
+      else throw new Error("Invalid QR code.");
+    } catch (e) {
+      setErr(e?.message || "Failed to scan QR.");
+    } finally {
+      setBusy(false);
     }
-  };
+  }
 
-  // --------------------------------------------------------------------------
-  // HANDLE DIRECT LINK OPEN (WHEN USER OPENS armpal.app/u/:handle)
-  // THIS LOGIC IS SHARED WITH DEEP LINK PAGE
-  // --------------------------------------------------------------------------
-  const sendFriendRequestByHandle = async (handle) => {
-    try {
-      setLoading(true);
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("handle", handle)
-        .single();
-
-      if (profileError || !profile) {
-        throw new Error("User not found.");
-      }
-
-      if (profile.id === currentUserId) {
-        throw new Error("You cannot add yourself.");
-      }
-
-      const { data: existing } = await supabase
-        .from("friends")
-        .select("id")
-        .or(
-          `and(user_id.eq.${currentUserId},friend_id.eq.${profile.id}),and(user_id.eq.${profile.id},friend_id.eq.${currentUserId})`
-        )
-        .maybeSingle();
-
-      if (existing) {
-        throw new Error("Friend request already exists.");
-      }
-
-      const { error } = await supabase.from("friends").insert({
-        user_id: currentUserId,
-        friend_id: profile.id,
-        status: "pending",
-      });
-
-      if (error) throw error;
-
-      setSuccess(`Friend request sent to @${handle}`);
-      setLoading(false);
-    } catch (err) {
-      setError(err.message || "Failed to add friend.");
-      setLoading(false);
-    }
-  };
-
-  // --------------------------------------------------------------------------
-  // RENDER
-  // --------------------------------------------------------------------------
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
-      <div className="relative w-[92%] max-w-md bg-zinc-900 rounded-2xl p-6 text-white shadow-2xl">
-        {/* CLOSE */}
-        <button
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white"
-          onClick={onClose}
-        >
-          ✕
-        </button>
-
-        {/* TITLE */}
-        <h2 className="text-xl font-semibold mb-4">Your QR Code</h2>
-
-        {/* QR DISPLAY */}
-        <div className="bg-white rounded-xl p-4 flex justify-center mb-4">
-          {qrUrl && (
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                qrUrl
-              )}`}
-              alt="ArmPal QR Code"
-              className="rounded-lg"
-            />
-          )}
+    <div style={backdrop} onClick={onClose}>
+      <div style={modal} onClick={(e) => e.stopPropagation()}>
+        <div style={header}>
+          <div style={title}>Your QR Code</div>
+          <button style={closeBtn} onClick={onClose} aria-label="Close">
+            ✕
+          </button>
         </div>
 
-        <p className="text-sm text-center text-zinc-400 mb-4">
-          Scan to add you as a friend
-        </p>
+        <div style={body}>
+          <div style={qrWrap}>
+            {qrImg ? (
+              <img src={qrImg} alt="Your QR" style={qrImage} />
+            ) : (
+              <div style={{ padding: 12, color: "var(--text)", opacity: 0.7 }}>
+                Loading…
+              </div>
+            )}
+          </div>
 
-        {/* ACTIONS */}
-        <div className="space-y-3">
-          <button
-            onClick={() => uploadInputRef.current.click()}
-            className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 font-semibold"
-          >
-            Upload QR Image
-          </button>
+          <div style={hint}>Scan to add you as a friend</div>
+
+          {err && <div style={errText}>{err}</div>}
+
+          <div style={btnRow}>
+            <button
+              style={{ ...btn, opacity: busy ? 0.6 : 1 }}
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={busy}
+            >
+              Scan QR (Camera)
+            </button>
+
+            <button
+              style={{ ...btn, opacity: busy ? 0.6 : 1 }}
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={busy}
+            >
+              Upload QR Image
+            </button>
+          </div>
+
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => decodeImageFile(e.target.files?.[0])}
+          />
 
           <input
             ref={uploadInputRef}
             type="file"
             accept="image/*"
             hidden
-            onChange={(e) =>
-              e.target.files && handleUpload(e.target.files[0])
-            }
+            onChange={(e) => decodeImageFile(e.target.files?.[0])}
           />
+
+          {busy && <div style={busyText}>Scanning…</div>}
         </div>
-
-        {/* STATUS */}
-        {loading && (
-          <p className="text-sm text-zinc-400 text-center mt-4">
-            Processing…
-          </p>
-        )}
-
-        {error && (
-          <p className="text-sm text-red-400 text-center mt-4">{error}</p>
-        )}
-
-        {success && (
-          <p className="text-sm text-green-400 text-center mt-4">
-            {success}
-          </p>
-        )}
       </div>
     </div>
   );
 }
+
+// ----- styles (matches your current modal vibe) -----
+const backdrop = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.6)",
+  zIndex: 10000,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 12,
+};
+
+const modal = {
+  width: "100%",
+  maxWidth: 460,
+  background: "var(--card)",
+  borderRadius: 18,
+  border: "1px solid var(--border)",
+  boxShadow: "0 20px 70px rgba(0,0,0,0.7)",
+  overflow: "hidden",
+};
+
+const header = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "14px 16px",
+  borderBottom: "1px solid var(--border)",
+};
+
+const title = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "var(--text)",
+};
+
+const closeBtn = {
+  width: 40,
+  height: 40,
+  borderRadius: 12,
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
+  cursor: "pointer",
+  fontSize: 18,
+  fontWeight: 900,
+};
+
+const body = {
+  padding: 16,
+  textAlign: "center",
+};
+
+const qrWrap = {
+  background: "#fff",
+  borderRadius: 18,
+  padding: 14,
+  display: "inline-block",
+};
+
+const qrImage = {
+  width: 320,
+  height: 320,
+  maxWidth: "78vw",
+  maxHeight: "78vw",
+  objectFit: "contain",
+  borderRadius: 12,
+};
+
+const hint = {
+  marginTop: 14,
+  fontSize: 14,
+  opacity: 0.75,
+  color: "var(--text)",
+};
+
+const errText = {
+  marginTop: 10,
+  fontSize: 13,
+  color: "#ff6b6b",
+  lineHeight: "18px",
+};
+
+const btnRow = {
+  marginTop: 16,
+  display: "flex",
+  gap: 10,
+  justifyContent: "center",
+  flexWrap: "wrap",
+};
+
+const btn = {
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
+  fontWeight: 900,
+  cursor: "pointer",
+  minWidth: 150,
+};
+
+const busyText = {
+  marginTop: 10,
+  fontSize: 12,
+  opacity: 0.7,
+  color: "var(--text)",
+};
