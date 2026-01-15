@@ -29,14 +29,15 @@ export default function FriendProfilePage() {
 
   const [me, setMe] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [counts, setCounts] = useState({ prs: 0, workouts: 0, measures: 0 });
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const online = useMemo(
-    () => isOnline(profile?.last_active),
-    [profile?.last_active]
-  );
+  // Access control
+  const [isFriend, setIsFriend] = useState(false);
+  const [visibility, setVisibility] = useState("public"); // public | friends_only | private
+
+  const online = useMemo(() => isOnline(profile?.last_active), [profile?.last_active]);
 
   const lastText = online
     ? "Online"
@@ -52,18 +53,18 @@ export default function FriendProfilePage() {
 
       const { data: u } = await supabase.auth.getUser();
       if (!alive) return;
-      setMe(u?.user || null);
+      const meUser = u?.user || null;
+      setMe(meUser);
 
       if (!id) {
         setLoading(false);
         return;
       }
 
+      // Load profile (best-effort; will not crash if schema changes)
       const { data: p } = await supabase
         .from("profiles")
-        .select(
-          "id, username, handle, display_name, avatar_url, bio, last_active, profile_visibility"
-        )
+        .select("id, username, handle, display_name, avatar_url, bio, last_active, profile_visibility, visibility, is_private")
         .eq("id", id)
         .maybeSingle();
 
@@ -71,19 +72,37 @@ export default function FriendProfilePage() {
 
       setProfile(p || null);
 
-      const [prsRes, wRes, mRes] = await Promise.all([
-        supabase.from("prs").select("id", { count: "exact", head: true }).eq("user_id", id),
-        supabase.from("workouts").select("id", { count: "exact", head: true }).eq("user_id", id),
-        supabase.from("measurements").select("id", { count: "exact", head: true }).eq("user_id", id),
-      ]);
+      // Determine visibility (best-effort)
+      const v = normalizeVisibility(p);
+      setVisibility(v);
 
-      if (!alive) return;
+      // Determine friendship (accepted) — supports 1-row or 2-row schemas
+      const owner = meUser?.id && meUser.id === id;
+      if (owner) {
+        setIsFriend(true);
+      } else if (meUser?.id && id) {
+        let friendOk = false;
+        try {
+          const { data: frRows, error: frErr } = await supabase
+            .from("friends")
+            .select("id, status, user_id, friend_id")
+            .or(
+              `and(user_id.eq.${meUser.id},friend_id.eq.${id}),and(user_id.eq.${id},friend_id.eq.${meUser.id})`
+            );
 
-      setCounts({
-        prs: prsRes.count || 0,
-        workouts: wRes.count || 0,
-        measures: mRes.count || 0,
-      });
+          if (!frErr && Array.isArray(frRows)) {
+            friendOk = frRows.some(
+              (r) => String(r?.status || "").toLowerCase() === "accepted"
+            );
+          }
+        } catch {
+          friendOk = false;
+        }
+        if (!alive) return;
+        setIsFriend(friendOk);
+      } else {
+        setIsFriend(false);
+      }
 
       setLoading(false);
     }
@@ -93,6 +112,27 @@ export default function FriendProfilePage() {
       alive = false;
     };
   }, [id]);
+
+  function normalizeVisibility(p) {
+    if (!p) return "public";
+
+    // Prefer string fields if present
+    const raw =
+      String(p.profile_visibility || p.visibility || "")
+        .toLowerCase()
+        .trim();
+
+    if (raw === "private") return "private";
+    if (raw === "friends" || raw === "friends_only" || raw === "friends-only")
+      return "friends_only";
+    if (raw === "public") return "public";
+
+    // Boolean fallback
+    if (typeof p.is_private === "boolean") return p.is_private ? "private" : "public";
+
+    // Default
+    return "public";
+  }
 
   async function unaddFriend() {
     if (!me?.id || !profile?.id) return;
@@ -116,7 +156,7 @@ export default function FriendProfilePage() {
         );
 
       navigate("/friends", { replace: true });
-      window.location.reload();
+      // (No reload; let routing handle it)
     } finally {
       setBusy(false);
     }
@@ -140,23 +180,15 @@ export default function FriendProfilePage() {
     );
   }
 
-  if (profile.profile_visibility === "private" && me?.id !== profile.id) {
-    return (
-      <div style={wrap}>
-        <Header navigate={navigate} />
-        <div style={card}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>Private Profile</div>
-          <div style={{ opacity: 0.7 }}>
-            Only friends can view this profile.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const label =
-    profile.display_name || profile.handle || profile.username || "User";
+  const label = profile.display_name || profile.handle || profile.username || "User";
   const handle = profile.handle || profile.username || "";
+  const owner = me?.id && me.id === profile.id;
+
+  // RULES:
+  // - Public: anyone sees full (bio + images if you add them later)
+  // - Private/Friends-only: friends (or owner) see full; non-friends see limited (name+avatar+handle only)
+  const canSeeFull =
+    owner || visibility === "public" || (isFriend && (visibility === "friends_only" || visibility === "private"));
 
   return (
     <div style={wrap}>
@@ -181,24 +213,46 @@ export default function FriendProfilePage() {
             <div style={name}>{label}</div>
             <div style={handleStyle}>@{handle}</div>
             <div style={last}>{lastText}</div>
+
+            {!owner && (
+              <div style={{ marginTop: 10 }}>
+                <span style={visPill}>
+                  {visibility === "public"
+                    ? "Public"
+                    : visibility === "friends_only"
+                    ? "Friends Only"
+                    : "Private"}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
-        <div style={bio}>{profile.bio || "No bio yet."}</div>
+        {/* Bio (GATED) */}
+        <div style={bio}>
+          {canSeeFull ? profile.bio || "No bio yet." : "This profile is private."}
+        </div>
       </div>
 
-      <div style={statsRow}>
-        <Stat label="PRs" value={counts.prs} />
-        <Stat label="Workouts" value={counts.workouts} />
-        <Stat label="Measures" value={counts.measures} />
-      </div>
+      {/* 🔒 Private notice (GATED) */}
+      {!canSeeFull && !owner && (
+        <div style={cardSmall}>
+          <div style={{ fontWeight: 900, marginBottom: 6 }}>🔒 Private Profile</div>
+          <div style={{ opacity: 0.7, lineHeight: "18px" }}>
+            Only friends can view their full profile.
+          </div>
+        </div>
+      )}
 
+      {/* ✅ IMPORTANT: NO PR/WORKOUT/MEASUREMENT COUNTS HERE (numbers hidden) */}
+      {/* If you want a non-numeric section later, we can add a “Highlights” card. */}
 
-      {me?.id && profile?.id && me.id !== profile.id && (
+      {me?.id && profile?.id && me.id !== profile.id && isFriend && (
         <button style={dangerBtn} disabled={busy} onClick={unaddFriend}>
           Un-add Friend
         </button>
       )}
+
       <button style={dangerBtn} disabled={busy} onClick={() => navigate("/friends")}>
         Back to Friends
       </button>
@@ -211,18 +265,11 @@ export default function FriendProfilePage() {
 function Header({ navigate }) {
   return (
     <div style={headerRow}>
-      <button style={backBtn} onClick={() => navigate(-1)}>←</button>
+      <button style={backBtn} onClick={() => navigate(-1)}>
+        ←
+      </button>
       <div style={{ fontWeight: 900, fontSize: 18 }}>Profile</div>
       <div style={{ width: 40 }} />
-    </div>
-  );
-}
-
-function Stat({ label, value }) {
-  return (
-    <div style={statCard}>
-      <div style={statNum}>{value}</div>
-      <div style={statLbl}>{label}</div>
     </div>
   );
 }
@@ -261,6 +308,14 @@ const card = {
   border: "1px solid var(--border)",
 };
 
+const cardSmall = {
+  marginTop: 14,
+  background: "var(--card)",
+  borderRadius: 20,
+  padding: 16,
+  border: "1px solid var(--border)",
+};
+
 const topRow = { display: "flex", alignItems: "center", gap: 18 };
 
 const avatar = {
@@ -293,23 +348,16 @@ const handleStyle = { fontSize: 14, opacity: 0.65 };
 const last = { fontSize: 13, marginTop: 4, opacity: 0.7 };
 const bio = { marginTop: 18, fontSize: 15, opacity: 0.85 };
 
-const statsRow = {
-  display: "flex",
-  gap: 12,
-  marginTop: 18,
-};
-
-const statCard = {
-  flex: 1,
-  background: "var(--card)",
-  borderRadius: 18,
-  padding: 16,
+const visPill = {
+  display: "inline-block",
+  fontSize: 12,
+  fontWeight: 900,
+  opacity: 0.8,
+  padding: "6px 10px",
+  borderRadius: 999,
   border: "1px solid var(--border)",
-  textAlign: "center",
+  background: "color-mix(in srgb, var(--text) 6%, transparent)",
 };
-
-const statNum = { fontSize: 22, fontWeight: 900 };
-const statLbl = { fontSize: 12, opacity: 0.65, marginTop: 4 };
 
 const dangerBtn = {
   width: "100%",
