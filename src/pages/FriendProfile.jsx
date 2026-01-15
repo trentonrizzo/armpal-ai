@@ -6,10 +6,17 @@ import { useNavigate, useParams } from "react-router-dom";
 const REACTIONS = ["💪", "👊", "❤️", "🔥"];
 
 /**
- * FriendProfile (Fixed)
- * - Enforces relationship + visibility BEFORE loading gated data (reactions + any future private sections)
- * - Unadd is idempotent and safe for either 1-row or 2-row "friends" schemas
- * - Prevents post-unadd crashes by re-checking access and redirecting/locking cleanly
+ * FriendProfile (Privacy + Friends View)
+ * RULES (as requested):
+ *  - PUBLIC: anyone can see avatar + name/handle + bio + extra images
+ *  - PRIVATE / FRIENDS_ONLY: only friends (or owner) can see bio + extra images
+ *  - NOT FRIEND + PRIVATE/FRIENDS_ONLY: show avatar + name/handle only (no bio, no extra images)
+ *  - ALWAYS HIDE: measurements + PR counts/numbers on this viewer page (no numbers leak)
+ *
+ * Notes:
+ *  - Extra images are loaded "best-effort" from a table named `profile_photos`
+ *    with columns: id, user_id, url, created_at
+ *    If that table doesn't exist, this page will NOT crash (it just won't show extra images).
  */
 export default function FriendProfile() {
   const { friendId } = useParams();
@@ -24,7 +31,7 @@ export default function FriendProfile() {
   // Access control
   const [relLoading, setRelLoading] = useState(true);
   const [isFriend, setIsFriend] = useState(false);
-  const [visibility, setVisibility] = useState("public"); // public | friends_only | private (best-effort)
+  const [visibility, setVisibility] = useState("public"); // public | friends_only | private
   const [accessLost, setAccessLost] = useState(false);
 
   // UI
@@ -36,6 +43,12 @@ export default function FriendProfile() {
   const [reactionCounts, setReactionCounts] = useState({});
   const [myReaction, setMyReaction] = useState(null);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  // Extra images (gated)
+  const [photos, setPhotos] = useState([]);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -57,6 +70,8 @@ export default function FriendProfile() {
       setAccessLost(false);
       setReactionCounts({});
       setMyReaction(null);
+      setPhotos([]);
+      setPhotoPreview(null);
 
       // 1) Current user
       const { data: auth } = await supabase.auth.getUser();
@@ -98,10 +113,9 @@ export default function FriendProfile() {
       const meId = me.id;
       const otherId = friendId;
 
-      // Owner shortcut
       const owner = meId === otherId;
 
-      // 1) Determine friendship (accepted) — supports both 1-row and 2-row schemas
+      // 1) Determine friendship (accepted) — supports 1-row or 2-row schemas
       let friendOk = false;
       if (owner) {
         friendOk = true;
@@ -119,7 +133,6 @@ export default function FriendProfile() {
               (r) => String(r?.status || "").toLowerCase() === "accepted"
             );
           } else {
-            // If schema differs, fail-safe: not friends
             friendOk = false;
           }
         } catch {
@@ -127,7 +140,7 @@ export default function FriendProfile() {
         }
       }
 
-      // 2) Determine visibility (best-effort, never crashes if columns missing)
+      // 2) Determine visibility (best-effort)
       const vis = await fetchProfileVisibility(otherId);
 
       if (cancelled) return;
@@ -136,31 +149,27 @@ export default function FriendProfile() {
       setVisibility(vis);
       setRelLoading(false);
 
-      // 3) Compute access
-      const canView = owner || friendOk || vis === "public";
+      // 3) Compute “base access”:
+      // - You can ALWAYS see the header card (name/handle/avatar)
+      // - You can see FULL profile if:
+      //    owner OR vis === public OR (friend + friends_only/private)
+      const canSeeFull =
+        owner || vis === "public" || (friendOk && (vis === "friends_only" || vis === "private"));
 
-      // If you got here from friends list but you are no longer friends, lock + bounce safely
-      if (!owner && !canView) {
-        setAccessLost(true);
+      // If they are not allowed to see full, we DON'T kick them out.
+      // We show the limited view (this is what you asked for).
+      setAccessLost(false);
 
-        // If it’s private/friends-only and you don't have access, push back to friends (safe)
-        // This prevents any future sections from ever rendering incorrectly.
-        // (We still render a locked view momentarily in case navigation fails on some devices.)
-        try {
-          navigate("/friends", { replace: true });
-        } catch {
-          // ignore
-        }
-
-        return;
-      }
-
-      // If access is OK, load reactions (only when permitted)
-      if (canView) {
-        await loadReactions(meId, otherId);
+      // 4) Load gated sections ONLY if allowed
+      if (canSeeFull) {
+        await Promise.all([
+          loadReactions(meId, otherId),
+          loadExtraPhotos(otherId),
+        ]);
       } else {
         setReactionCounts({});
         setMyReaction(null);
+        setPhotos([]);
       }
     })();
 
@@ -172,16 +181,15 @@ export default function FriendProfile() {
 
   // ------------------------------------------------------------
   // Visibility fetcher (best-effort)
-  // Tries a few common schema variants without crashing.
   // Returns: "public" | "friends_only" | "private"
   // ------------------------------------------------------------
   async function fetchProfileVisibility(profileId) {
-    // default safest behavior for a social app:
-    // if we cannot detect visibility, treat as public (so you don't accidentally lock everyone out)
-    // BUT: gating of private sections will still be handled by future additions.
+    // If we cannot detect visibility, default to public to avoid accidental lockouts.
+    // (Your new rules are enforced in rendering and relationship checks.)
+    // You can tighten this later once you confirm the column name.
     let v = "public";
 
-    // Try 1: profile_visibility (string)
+    // Try 1: profile_visibility
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -196,11 +204,9 @@ export default function FriendProfile() {
           return "friends_only";
         if (raw === "public") return "public";
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
-    // Try 2: visibility (string)
+    // Try 2: visibility
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -215,11 +221,9 @@ export default function FriendProfile() {
           return "friends_only";
         if (raw === "public") return "public";
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
-    // Try 3: is_private (boolean)
+    // Try 3: is_private boolean
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -230,11 +234,46 @@ export default function FriendProfile() {
       if (!error && data && typeof data.is_private === "boolean") {
         return data.is_private ? "private" : "public";
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     return v;
+  }
+
+  // ------------------------------------------------------------
+  // Extra photos (GATED)
+  // Best-effort: tries profile_photos table; if missing, silently ignores.
+  // ------------------------------------------------------------
+  async function loadExtraPhotos(userId) {
+    if (!userId) return;
+
+    setPhotosLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("profile_photos")
+        .select("id, user_id, url, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(24);
+
+      if (error) {
+        if (!mountedRef.current) return;
+        setPhotos([]);
+        return;
+      }
+
+      const list = (data || [])
+        .map((r) => r?.url)
+        .filter(Boolean);
+
+      if (!mountedRef.current) return;
+      setPhotos(list);
+    } catch {
+      if (!mountedRef.current) return;
+      setPhotos([]);
+    } finally {
+      if (!mountedRef.current) return;
+      setPhotosLoading(false);
+    }
   }
 
   // ------------------------------------------------------------
@@ -271,11 +310,15 @@ export default function FriendProfile() {
   async function sendReaction(emoji) {
     if (!me?.id || !friendId) return;
 
-    // Don’t allow reactions if access is lost
     const owner = me.id === friendId;
-    const canView = owner || isFriend || visibility === "public";
 
-    if (!canView || accessLost) return;
+    // Only allow reactions if they can see the full profile
+    const canSeeFull =
+      owner ||
+      visibility === "public" ||
+      (isFriend && (visibility === "friends_only" || visibility === "private"));
+
+    if (!canSeeFull || accessLost) return;
 
     setMyReaction(emoji);
 
@@ -290,25 +333,20 @@ export default function FriendProfile() {
         { onConflict: "from_user_id,to_user_id,reaction_date" }
       );
     } catch {
-      // ignore; we still refresh counts below
+      // ignore
     }
 
     await loadReactions(me.id, friendId);
   }
 
   // ------------------------------------------------------------
-  // Online helpers (supports multiple schemas)
+  // Online helpers
   // ------------------------------------------------------------
   function isOnline(profile) {
     if (!profile) return false;
-
-    // schema A: is_online boolean
     if (profile.is_online === true) return true;
-
-    // schema B: last_seen / last_active freshness
     const ts = profile.last_seen || profile.last_active;
     if (!ts) return false;
-
     return Date.now() - new Date(ts).getTime() < 90 * 1000;
   }
 
@@ -327,10 +365,7 @@ export default function FriendProfile() {
   }
 
   // ------------------------------------------------------------
-  // Unadd (SAFE + INSTANT)
-  // - deletes any rows connecting the two users (works for 1-row or 2-row schemas)
-  // - updates UI immediately by redirecting
-  // - prevents crashes by setting accessLost
+  // Unadd (SAFE)
   // ------------------------------------------------------------
   async function confirmUnadd() {
     if (!me?.id || !friendId) return;
@@ -339,7 +374,6 @@ export default function FriendProfile() {
     const meId = me.id;
     const otherId = friendId;
 
-    // Optimistically lock the page so nothing else tries to load
     setAccessLost(true);
 
     try {
@@ -350,12 +384,10 @@ export default function FriendProfile() {
           `and(user_id.eq.${meId},friend_id.eq.${otherId}),and(user_id.eq.${otherId},friend_id.eq.${meId})`
         );
     } catch {
-      // ignore — idempotent behavior; even if it fails, we still redirect to avoid crashes
+      // ignore
     } finally {
       setBusy(false);
       setShowConfirm(false);
-
-      // Always leave this page after unadd (prevents any state mismatch crash)
       navigate("/friends", { replace: true });
     }
   }
@@ -371,9 +403,13 @@ export default function FriendProfile() {
   const lastAgo = formatAgoNoMonths(lastTs);
 
   const isOwner = me?.id && friendId && me.id === friendId;
-  const canViewProfile = isOwner || isFriend || visibility === "public";
 
-  const showUnadd = !isOwner && isFriend && canViewProfile && !accessLost;
+  const canSeeFull =
+    isOwner ||
+    visibility === "public" ||
+    (isFriend && (visibility === "friends_only" || visibility === "private"));
+
+  const showUnadd = !isOwner && isFriend && !accessLost;
 
   // If profile not found
   if (!p && !loading) {
@@ -405,7 +441,7 @@ export default function FriendProfile() {
         <div style={{ width: 44 }} />
       </div>
 
-      {/* PROFILE CARD */}
+      {/* PROFILE CARD (Always visible header) */}
       <div style={card}>
         <div style={row}>
           <div style={avatar} onClick={() => setShowImage(true)}>
@@ -424,7 +460,6 @@ export default function FriendProfile() {
               {online ? "Online" : `Offline${lastAgo ? ` · ${lastAgo}` : ""}`}
             </div>
 
-            {/* Visibility badge (small, doesn’t change your style system) */}
             {!isOwner && (
               <div style={visPillWrap}>
                 <span style={visPill}>
@@ -439,24 +474,54 @@ export default function FriendProfile() {
           </div>
         </div>
 
-        {/* Bio is shown only if profile is viewable */}
+        {/* Bio (gated) */}
         <div style={bio}>
-          {canViewProfile ? p?.bio?.trim() || "No bio yet." : "This profile is private."}
+          {canSeeFull ? p?.bio?.trim() || "No bio yet." : "This profile is private."}
         </div>
       </div>
 
-      {/* 🔒 LOCKED NOTICE (if access is lost / not allowed) */}
-      {!canViewProfile && !isOwner && (
+      {/* 🔒 LOCKED NOTICE (when not allowed full view) */}
+      {!canSeeFull && !isOwner && (
         <div style={lockedCard}>
-          <div style={lockedTitle}>🔒 Profile locked</div>
+          <div style={lockedTitle}>🔒 Private Profile</div>
           <div style={lockedText}>
-            You can’t view this profile due to their privacy settings.
+            You can only see their full profile if you’re friends.
           </div>
         </div>
       )}
 
-      {/* 🔥 REACTIONS CARD (GATED) */}
-      {canViewProfile && !accessLost && (
+      {/* 📸 EXTRA PHOTOS (gated) */}
+      {canSeeFull && !accessLost && (
+        <div style={sectionCard}>
+          <div style={sectionTitle}>Photos</div>
+
+          {photosLoading ? (
+            <div style={muted}>Loading photos…</div>
+          ) : photos.length === 0 ? (
+            <div style={muted}>No photos yet.</div>
+          ) : (
+            <div style={grid}>
+              {photos.map((url, idx) => (
+                <button
+                  key={`${url}-${idx}`}
+                  style={gridItem}
+                  onClick={() => setPhotoPreview(url)}
+                >
+                  <img src={url} alt="" style={gridImg} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={tinyNote}>
+            {/* Always hide measurements/PR numbers on this page */}
+            Numbers like PRs / measurements are hidden on viewer profiles.
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 REACTIONS (gated) */}
+      {canSeeFull && !accessLost && (
         <div style={reactionCard}>
           <div style={reactionTitle}>Profile Reactions</div>
 
@@ -479,17 +544,24 @@ export default function FriendProfile() {
         </div>
       )}
 
-      {/* UNADD (ONLY if still friends) */}
+      {/* UNADD (only if still friends) */}
       {showUnadd && (
         <button style={unaddBtn} onClick={() => setShowConfirm(true)}>
           Unadd Friend
         </button>
       )}
 
-      {/* IMAGE PREVIEW */}
+      {/* AVATAR PREVIEW */}
       {showImage && p?.avatar_url && (
         <div style={overlay} onClick={() => setShowImage(false)}>
           <img src={p.avatar_url} alt="" style={previewImg} />
+        </div>
+      )}
+
+      {/* PHOTO PREVIEW */}
+      {photoPreview && (
+        <div style={overlay} onClick={() => setPhotoPreview(null)}>
+          <img src={photoPreview} alt="" style={previewImg} />
         </div>
       )}
 
@@ -609,6 +681,42 @@ const lockedCard = {
 const lockedTitle = { fontSize: 15, fontWeight: 900 };
 const lockedText = { fontSize: 13, opacity: 0.75, marginTop: 6, lineHeight: "18px" };
 
+const sectionCard = {
+  marginTop: 18,
+  background: "var(--card)",
+  borderRadius: 20,
+  padding: 16,
+  border: "1px solid var(--border)",
+};
+
+const sectionTitle = {
+  fontSize: 15,
+  fontWeight: 900,
+  marginBottom: 12,
+  opacity: 0.85,
+};
+
+const muted = { fontSize: 13, opacity: 0.7 };
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 10,
+};
+
+const gridItem = {
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  borderRadius: 14,
+  overflow: "hidden",
+  padding: 0,
+  cursor: "pointer",
+};
+
+const gridImg = { width: "100%", height: 92, objectFit: "cover", display: "block" };
+
+const tinyNote = { marginTop: 10, fontSize: 12, opacity: 0.6 };
+
 const reactionCard = {
   marginTop: 18,
   background: "var(--card)",
@@ -674,8 +782,8 @@ const overlay = {
 };
 
 const previewImg = {
-  width: "90%",
-  maxWidth: 360,
+  width: "92%",
+  maxWidth: 420,
   borderRadius: 18,
 };
 
