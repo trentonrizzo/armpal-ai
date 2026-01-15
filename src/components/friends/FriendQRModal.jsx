@@ -3,15 +3,10 @@ import { supabase } from "../../supabaseClient";
 import { useNavigate } from "react-router-dom";
 
 // =================================================================================================
-// ARM PAL — FRIEND QR MODAL (RESTORED UI + WORKING SCAN FLOW, NO DEPS)
-// - Shows YOUR QR immediately (big, centered modal)
-// - QR payload is handle-based + uid fallback via /add-friend route
-// - Two buttons:
-//    1) Scan QR (Camera) -> opens camera capture sheet (Take Photo)
-//    2) Upload QR Image  -> opens photo library/files
-// - Decodes selected image using BarcodeDetector (image-based, no external libs)
-// - Navigates to /add-friend?uid=... OR /add-friend?handle=...
-// - No App.jsx changes
+// ARM PAL — FRIEND QR MODAL (iOS PWA SAFE)
+// - Option B PRIMARY: internal routing via react-router
+// - Option A FALLBACK: anchor-click escape hatch (iOS WebKit safe)
+// - ZERO deps, ZERO App.jsx changes
 // =================================================================================================
 
 export default function FriendQRModal({ onClose }) {
@@ -26,6 +21,9 @@ export default function FriendQRModal({ onClose }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  // -----------------------------------------------------------------------------------------------
+  // Auth + profile
+  // -----------------------------------------------------------------------------------------------
   useEffect(() => {
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
@@ -43,11 +41,11 @@ export default function FriendQRModal({ onClose }) {
     })();
   }, []);
 
-  // Permanent, shareable QR payload (handle-based URL, universally recognizable)
+  // -----------------------------------------------------------------------------------------------
+  // QR payload
+  // -----------------------------------------------------------------------------------------------
   const qrLink = useMemo(() => {
     if (!myHandle) return "";
-    // Use your real domain in production. This is what people will open when scanning.
-    // You can also change this to https://armpal.app/u/<handle> later if you add that route.
     return `https://armpal.app/add-friend?handle=${encodeURIComponent(myHandle)}`;
   }, [myHandle]);
 
@@ -58,41 +56,59 @@ export default function FriendQRModal({ onClose }) {
     )}`;
   }, [qrLink]);
 
+  // -----------------------------------------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------------------------------------
+  function isStandalonePWA() {
+    return (
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true
+    );
+  }
+
+  function hardNavigate(url) {
+    // OPTION A FALLBACK — iOS SAFE
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener noreferrer";
+    a.target = "_self";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   function extractTarget(raw) {
     if (!raw) return { uid: null, handle: null };
 
-    // If it's a URL, parse it.
     try {
       const u = new URL(raw);
-
-      // /add-friend?uid=... or /add-friend?handle=...
       if (u.pathname === "/add-friend") {
-        const uid = u.searchParams.get("uid");
-        const handle = u.searchParams.get("handle");
-        return { uid: uid || null, handle: handle || null };
+        return {
+          uid: u.searchParams.get("uid"),
+          handle: u.searchParams.get("handle"),
+        };
       }
 
-      // /u/<handle> (future-proof if you add this route later)
       const parts = u.pathname.split("/").filter(Boolean);
       if (parts[0] === "u" && parts[1]) {
         return { uid: null, handle: parts[1] };
       }
-    } catch {
-      // Not a URL, fall through
-    }
+    } catch {}
 
-    // Raw formats
     let s = String(raw).trim();
-    if (s.startsWith("ARMPAL:")) s = s.slice("ARMPAL:".length).trim();
+    if (s.startsWith("ARMPAL:")) s = s.slice(7).trim();
     if (s.startsWith("@")) s = s.slice(1);
 
-    // If looks like UUID, treat as uid
-    const uuidish = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidish =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (uuidish.test(s)) return { uid: s, handle: null };
 
     return { uid: null, handle: s || null };
   }
 
+  // -----------------------------------------------------------------------------------------------
+  // QR decode flow (Option B primary, Option A fallback)
+  // -----------------------------------------------------------------------------------------------
   async function decodeImageFile(file) {
     if (!file) return;
 
@@ -102,7 +118,7 @@ export default function FriendQRModal({ onClose }) {
     try {
       if (!("BarcodeDetector" in window)) {
         throw new Error(
-          "QR decoding isn't supported on this device/browser. Try opening the QR in Photos and tapping the link."
+          "QR scanning isn't supported here. Open the QR in Photos and tap the link."
         );
       }
 
@@ -113,22 +129,44 @@ export default function FriendQRModal({ onClose }) {
       const detector = new BarcodeDetector({ formats: ["qr_code"] });
       const codes = await detector.detect(img);
 
-      if (!codes || codes.length === 0) {
-        throw new Error("No QR code found in that image. Try zooming the QR and retaking the photo.");
+      if (!codes?.length) {
+        throw new Error("No QR code found.");
       }
 
       const raw = codes[0].rawValue || "";
       const { uid, handle } = extractTarget(raw);
 
-      if (uid && meId && uid === meId) throw new Error("That's your own QR code.");
-      if (handle && myHandle && handle.toLowerCase() === myHandle.toLowerCase()) {
-        throw new Error("That's your own QR code.");
+      if (uid && uid === meId) throw new Error("That's your own QR.");
+      if (
+        handle &&
+        myHandle &&
+        handle.toLowerCase() === myHandle.toLowerCase()
+      ) {
+        throw new Error("That's your own QR.");
       }
 
       onClose?.();
-      if (uid) navigate(`/add-friend?uid=${encodeURIComponent(uid)}`);
-      else if (handle) navigate(`/add-friend?handle=${encodeURIComponent(handle)}`);
-      else throw new Error("Invalid QR code.");
+
+      // ---------------------------------
+      // OPTION B — internal routing FIRST
+      // ---------------------------------
+      const target =
+        uid
+          ? `/add-friend?uid=${encodeURIComponent(uid)}`
+          : handle
+          ? `/add-friend?handle=${encodeURIComponent(handle)}`
+          : null;
+
+      if (!target) throw new Error("Invalid QR.");
+
+      try {
+        navigate(target);
+      } catch {
+        // ---------------------------------
+        // OPTION A — HARD FALLBACK
+        // ---------------------------------
+        hardNavigate(`https://armpal.app${target}`);
+      }
     } catch (e) {
       setErr(e?.message || "Failed to scan QR.");
     } finally {
@@ -136,14 +174,15 @@ export default function FriendQRModal({ onClose }) {
     }
   }
 
+  // -----------------------------------------------------------------------------------------------
+  // UI
+  // -----------------------------------------------------------------------------------------------
   return (
     <div style={backdrop} onClick={onClose}>
       <div style={modal} onClick={(e) => e.stopPropagation()}>
         <div style={header}>
           <div style={title}>Your QR Code</div>
-          <button style={closeBtn} onClick={onClose} aria-label="Close">
-            ✕
-          </button>
+          <button style={closeBtn} onClick={onClose}>✕</button>
         </div>
 
         <div style={body}>
@@ -151,29 +190,26 @@ export default function FriendQRModal({ onClose }) {
             {qrImg ? (
               <img src={qrImg} alt="Your QR" style={qrImage} />
             ) : (
-              <div style={{ padding: 12, color: "var(--text)", opacity: 0.7 }}>
-                Loading…
-              </div>
+              <div style={{ opacity: 0.7 }}>Loading…</div>
             )}
           </div>
 
           <div style={hint}>Scan to add you as a friend</div>
-
           {err && <div style={errText}>{err}</div>}
 
           <div style={btnRow}>
             <button
               style={{ ...btn, opacity: busy ? 0.6 : 1 }}
-              onClick={() => cameraInputRef.current?.click()}
               disabled={busy}
+              onClick={() => cameraInputRef.current?.click()}
             >
               Scan QR (Camera)
             </button>
 
             <button
               style={{ ...btn, opacity: busy ? 0.6 : 1 }}
-              onClick={() => uploadInputRef.current?.click()}
               disabled={busy}
+              onClick={() => uploadInputRef.current?.click()}
             >
               Upload QR Image
             </button>
@@ -203,7 +239,9 @@ export default function FriendQRModal({ onClose }) {
   );
 }
 
-// ----- styles (matches your current modal vibe) -----
+// -----------------------------------------------------------------------------------------------
+// Styles
+// -----------------------------------------------------------------------------------------------
 const backdrop = {
   position: "fixed",
   inset: 0,
@@ -227,7 +265,6 @@ const modal = {
 
 const header = {
   display: "flex",
-  alignItems: "center",
   justifyContent: "space-between",
   padding: "14px 16px",
   borderBottom: "1px solid var(--border)",
@@ -246,15 +283,11 @@ const closeBtn = {
   border: "1px solid var(--border)",
   background: "var(--card-2)",
   color: "var(--text)",
-  cursor: "pointer",
   fontSize: 18,
   fontWeight: 900,
 };
 
-const body = {
-  padding: 16,
-  textAlign: "center",
-};
+const body = { padding: 16, textAlign: "center" };
 
 const qrWrap = {
   background: "#fff",
@@ -268,23 +301,11 @@ const qrImage = {
   height: 320,
   maxWidth: "78vw",
   maxHeight: "78vw",
-  objectFit: "contain",
   borderRadius: 12,
 };
 
-const hint = {
-  marginTop: 14,
-  fontSize: 14,
-  opacity: 0.75,
-  color: "var(--text)",
-};
-
-const errText = {
-  marginTop: 10,
-  fontSize: 13,
-  color: "#ff6b6b",
-  lineHeight: "18px",
-};
+const hint = { marginTop: 14, fontSize: 14, opacity: 0.75 };
+const errText = { marginTop: 10, fontSize: 13, color: "#ff6b6b" };
 
 const btnRow = {
   marginTop: 16,
@@ -299,15 +320,8 @@ const btn = {
   borderRadius: 14,
   border: "1px solid var(--border)",
   background: "var(--card-2)",
-  color: "var(--text)",
   fontWeight: 900,
-  cursor: "pointer",
   minWidth: 150,
 };
 
-const busyText = {
-  marginTop: 10,
-  fontSize: 12,
-  opacity: 0.7,
-  color: "var(--text)",
-};
+const busyText = { marginTop: 10, fontSize: 12, opacity: 0.7 };
