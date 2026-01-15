@@ -1,0 +1,14 @@
+﻿{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "web.armpal.app",
+        "paths": [
+          "/add-friend",
+          "/add-friend/*"
+        ]
+      }
+    ]
+  }
+}
