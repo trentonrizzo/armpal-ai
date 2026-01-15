@@ -15,6 +15,7 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 import FriendsPage from "./pages/FriendsPage";
+import AddFriendFromQR from "./pages/AddFriendFromQR";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
