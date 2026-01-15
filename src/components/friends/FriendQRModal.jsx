@@ -1,10 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode.react";
 import { supabase } from "../../supabaseClient";
 
 export default function FriendQRModal({ onClose }) {
   const [uid, setUid] = useState(null);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -18,6 +16,13 @@ export default function FriendQRModal({ onClose }) {
     return `https://armpal.app/add-friend?uid=${uid}`;
   }, [uid]);
 
+  const qrImg = useMemo(() => {
+    if (!qrValue) return "";
+    const encoded = encodeURIComponent(qrValue);
+    // Google Charts QR — no JS deps, build-safe
+    return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encoded}`;
+  }, [qrValue]);
+
   return (
     <div style={backdrop} onClick={onClose}>
       <div style={modal} onClick={(e) => e.stopPropagation()}>
@@ -28,8 +33,8 @@ export default function FriendQRModal({ onClose }) {
 
         <div style={content}>
           <div style={qrWrap}>
-            {qrValue ? (
-              <QRCode value={qrValue} size={260} bgColor="#ffffff" fgColor="#000000" />
+            {qrImg ? (
+              <img src={qrImg} alt="Your QR code" width={260} height={260} />
             ) : (
               <p>Loading…</p>
             )}
@@ -38,16 +43,13 @@ export default function FriendQRModal({ onClose }) {
           <p style={hint}>Scan to add you as a friend</p>
 
           <div style={actions}>
-            <label style={actionBtn}>
-              Scan from image
-              <input type="file" accept="image/*" hidden onChange={() => setError("Image scan wired in next step")} />
-            </label>
-            <button style={actionBtn} onClick={() => setError("Camera scan wired in next step")}>
-              Scan with camera
+            <button style={actionBtn} disabled>
+              Scan from image (next)
+            </button>
+            <button style={actionBtn} disabled>
+              Scan with camera (next)
             </button>
           </div>
-
-          {error && <p style={errorText}>{error}</p>}
         </div>
       </div>
     </div>
@@ -120,11 +122,5 @@ const actionBtn = {
   border: "1px solid var(--border)",
   background: "var(--card-2)",
   color: "var(--text)",
-  cursor: "pointer",
-};
-
-const errorText = {
-  marginTop: 10,
-  color: "#ff6b6b",
-  fontSize: 12,
+  cursor: "not-allowed",
 };
