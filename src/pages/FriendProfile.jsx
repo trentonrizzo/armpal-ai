@@ -137,8 +137,7 @@ export default function FriendProfile() {
       setRelLoading(false);
 
       // 3) Compute access
-      const canView =
-        owner || vis === "public" || (vis === "friends_only" && friendOk);
+      const canView = owner || friendOk || vis === "public";
 
       // If you got here from friends list but you are no longer friends, lock + bounce safely
       if (!owner && !canView) {
@@ -274,10 +273,7 @@ export default function FriendProfile() {
 
     // Don’t allow reactions if access is lost
     const owner = me.id === friendId;
-    const canView =
-      owner ||
-      visibility === "public" ||
-      (visibility === "friends_only" && isFriend);
+    const canView = owner || isFriend || visibility === "public";
 
     if (!canView || accessLost) return;
 
@@ -375,10 +371,7 @@ export default function FriendProfile() {
   const lastAgo = formatAgoNoMonths(lastTs);
 
   const isOwner = me?.id && friendId && me.id === friendId;
-  const canViewProfile =
-    isOwner ||
-    visibility === "public" ||
-    (visibility === "friends_only" && isFriend);
+  const canViewProfile = isOwner || isFriend || visibility === "public";
 
   const showUnadd = !isOwner && isFriend && canViewProfile && !accessLost;
 
