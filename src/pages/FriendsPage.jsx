@@ -1,4 +1,11 @@
 // src/pages/FriendsPage.jsx
+// =================================================================================================
+// ARM PAL — FRIENDS PAGE (FIXED VERSION)
+// FIX: Friends list refreshes reliably after Unadd / navigation back (no ghost friends)
+// - Refresh trigger: location.state?.refresh (when other pages navigate back with state)
+// - Also refresh on window focus + visibilitychange (covers iOS/PWA + back navigation cases)
+// =================================================================================================
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -27,6 +34,9 @@ export default function FriendsPage() {
   // ✅ Presence realtime channel ref (prevents duplicates)
   const presenceChannelRef = useRef(null);
 
+  // ✅ Refresh signal (when other pages navigate back with state)
+  const refreshSignal = location.state?.refresh;
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -37,7 +47,37 @@ export default function FriendsPage() {
         await loadAllFriends(current.id);
       }
     })();
-  }, [location.key]);
+  }, [location.key, refreshSignal]); // ✅ FIX: include refreshSignal
+
+  // ✅ Extra reliability: refresh list when user returns to this screen (back nav / iOS PWA)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let alive = true;
+
+    const refreshNow = async () => {
+      if (!alive) return;
+      try {
+        await loadAllFriends(user.id);
+      } catch (e) {
+        // never crash
+      }
+    };
+
+    const onFocus = () => refreshNow();
+    const onVis = () => {
+      if (document.visibilityState === "visible") refreshNow();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [user?.id]);
 
   // ✅ Realtime presence subscription once user + friends exist
   useEffect(() => {
@@ -144,6 +184,7 @@ export default function FriendsPage() {
     const cleaned = String(str).replace(/\s+/g, " ").trim();
     return cleaned.length > 60 ? cleaned.slice(0, 60) + "…" : cleaned;
   }
+
   // -------------------------------------------------------------------
   // LOAD EVERYTHING (friends + profiles) — stable
   // -------------------------------------------------------------------
@@ -365,6 +406,7 @@ export default function FriendsPage() {
       setErrorMsg("Error sending request.");
     }
   }
+
   // -------------------------------------------------------------------
   // ACCEPT / DECLINE
   // -------------------------------------------------------------------
@@ -378,39 +420,6 @@ export default function FriendsPage() {
     if (!user?.id) return;
     await supabase.from("friends").delete().eq("id", rowId);
     await loadAllFriends(user.id);
-  }
-
-  // -------------------------------------------------------------------
-  // Scroll-safe tap handling (tap != scroll)
-  // -------------------------------------------------------------------
-  function useTapGuard() {
-    const startRef = useRef({ x: 0, y: 0, t: 0, moved: false });
-
-    const onTouchStart = (e) => {
-      const touch = e.touches?.[0];
-      if (!touch) return;
-      startRef.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        t: Date.now(),
-        moved: false,
-      };
-    };
-
-    const onTouchMove = (e) => {
-      const touch = e.touches?.[0];
-      if (!touch) return;
-      const dx = Math.abs(touch.clientX - startRef.current.x);
-      const dy = Math.abs(touch.clientY - startRef.current.y);
-      if (dx > 10 || dy > 10) startRef.current.moved = true;
-    };
-
-    const isTap = () => {
-      const { moved } = startRef.current;
-      return !moved;
-    };
-
-    return { onTouchStart, onTouchMove, isTap };
   }
 
   // -------------------------------------------------------------------
@@ -504,10 +513,7 @@ export default function FriendsPage() {
                   <button style={acceptBtn} onClick={() => acceptRequest(req.id)}>
                     Accept
                   </button>
-                  <button
-                    style={declineBtn}
-                    onClick={() => declineRequest(req.id)}
-                  >
+                  <button style={declineBtn} onClick={() => declineRequest(req.id)}>
                     Decline
                   </button>
                 </div>
@@ -562,7 +568,6 @@ export default function FriendsPage() {
           friends.map((p) => (
             <FriendRow
               key={p.id}
-              meId={user?.id}
               friend={p}
               online={isOnline(p)}
               lastActiveAgo={formatAgoNoMonths(p?.last_seen)}
@@ -794,7 +799,7 @@ const avatarCircle = {
   fontWeight: 900,
   position: "relative",
   flexShrink: 0,
-  overflow: "hidden", // ✅ ONLY FIX — ensures avatar image shows
+  overflow: "hidden",
 };
 
 const onlineDot = {
