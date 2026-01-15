@@ -7,9 +7,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // 🔥 AUTO-UPDATE SERVICE WORKER (NO MORE STALE BUILDS)
       registerType: "autoUpdate",
-
-      // ✅ REQUIRED FOR IOS
       injectRegister: "auto",
 
       includeAssets: [
@@ -42,21 +41,50 @@ export default defineConfig({
         ],
       },
 
-      // 🔥 THIS IS THE CRITICAL PART YOU WERE MISSING
+      // 🔒 HARD CACHE FIX (iOS / Safari / PWA SAFE)
       workbox: {
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
 
-        // 🚨 iOS WILL WHITE SCREEN WITHOUT THIS
+        // Ensures SPA routing never white-screens
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//],
+
+        // Prevents oversized bundle cache issues
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
 
         runtimeCaching: [
+          // HTML / navigation
           {
             urlPattern: ({ request }) => request.mode === "navigate",
             handler: "NetworkFirst",
             options: {
               cacheName: "html-cache",
+              networkTimeoutSeconds: 3,
+            },
+          },
+          // JS / CSS / workers
+          {
+            urlPattern: ({ request }) =>
+              request.destination === "script" ||
+              request.destination === "style" ||
+              request.destination === "worker",
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "asset-cache",
+            },
+          },
+          // Images
+          {
+            urlPattern: ({ request }) => request.destination === "image",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "image-cache",
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
             },
           },
         ],
