@@ -107,6 +107,7 @@ function AppContent() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/add-friend" element={<AddFriendFromQR />} />
         <Route path="/friend/:friendId" element={<FriendProfile />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
