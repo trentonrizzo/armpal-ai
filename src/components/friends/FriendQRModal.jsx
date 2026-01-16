@@ -10,7 +10,6 @@ import { useNavigate } from "react-router-dom";
 // - ZERO deps, ZERO App.jsx changes
 // =================================================================================================
 
-export default 
 // ======================================================
 // QR DECODING HELPERS (iOS PWA SAFE)
 // ======================================================
@@ -49,7 +48,7 @@ async function decodeImageFileForQR(file) {
   });
 }
 
-function FriendQRModal({ onClose }) {
+export default function FriendQRModal({ onClose }) {
   const navigate = useNavigate();
 
   const cameraInputRef = useRef(null);
