@@ -46,7 +46,7 @@ export default function FriendQRModal({ onClose }) {
   // -----------------------------------------------------------------------------------------------
   const qrLink = useMemo(() => {
     if (!myHandle) return "";
-    return `https://armpal.app/add-friend?handle=${encodeURIComponent(myHandle)}`;
+    return `https://www.armpal.net/add/@${encodeURIComponent(myHandle)}`;
   }, [myHandle]);
 
   const qrImg = useMemo(() => {
@@ -82,7 +82,11 @@ export default function FriendQRModal({ onClose }) {
 
     try {
       const u = new URL(raw);
-      if (u.pathname === "/add-friend") {
+      if (u.pathname === "/add-friend" || u.pathname.startsWith("/add/")) {
+        const parts = u.pathname.split("/").filter(Boolean);
+        if (parts[0] === "add" && parts[1]?.startsWith("@")) {
+          return { uid: null, handle: parts[1].slice(1) };
+        }
         return {
           uid: u.searchParams.get("uid"),
           handle: u.searchParams.get("handle"),
@@ -165,7 +169,7 @@ export default function FriendQRModal({ onClose }) {
         // ---------------------------------
         // OPTION A — HARD FALLBACK
         // ---------------------------------
-        hardNavigate(`https://armpal.app${target}`);
+        hardNavigate(`https://armpal.net${target}`);
       }
     } catch (e) {
       setErr(e?.message || "Failed to scan QR.");
