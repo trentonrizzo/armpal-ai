@@ -1,3 +1,4 @@
+import jsQR from "jsqr";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +10,46 @@ import { useNavigate } from "react-router-dom";
 // - ZERO deps, ZERO App.jsx changes
 // =================================================================================================
 
-export default function FriendQRModal({ onClose }) {
+export default 
+// ======================================================
+// QR DECODING HELPERS (iOS PWA SAFE)
+// ======================================================
+async function decodeCanvasForQR(canvas) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+
+  const result = jsQR(imageData.data, width, height);
+  if (result && result.data) return result.data;
+  return null;
+}
+
+async function decodeImageFileForQR(file) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+
+  return new Promise((resolve) => {
+    img.onload = async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const data = await decodeCanvasForQR(canvas);
+      URL.revokeObjectURL(url);
+      resolve(data);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    img.src = url;
+  });
+}
+
+function FriendQRModal({ onClose }) {
   const navigate = useNavigate();
 
   const cameraInputRef = useRef(null);
