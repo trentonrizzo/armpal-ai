@@ -201,7 +201,7 @@ export default function FriendQRModal({ onClose }) {
 
     // React Router navigate doesn't throw on unknown routes; it will just render your NotFound/blank
     // So we still do best-effort ordering.
-    navigate(candidates[0]);
+    navigate(`/u/@${encodeURIComponent(handle || '')}`);
 
     // If you have a NotFound page and want auto-fallback, you can wire it later,
     // but we keep this modal simple and safe.
