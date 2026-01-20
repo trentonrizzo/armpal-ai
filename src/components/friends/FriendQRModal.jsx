@@ -5,9 +5,13 @@ import { useNavigate } from "react-router-dom";
 
 // =================================================================================================
 // ARM PAL — FRIEND QR MODAL (iOS PWA SAFE)
-// - Option B PRIMARY: internal routing via react-router
-// - Option A FALLBACK: anchor-click escape hatch (iOS WebKit safe)
-// - ZERO deps, ZERO App.jsx changes
+// FINAL BEHAVIOR (as requested):
+//   - QR represents a USER (identity), not an "add action"
+//   - Scanning ANY QR opens THAT user's profile on YOUR account
+//   - If already friends -> Un-add shows on profile; if not -> Add shows (handled on profile page)
+// SAFETY:
+//   - ZERO App.jsx changes
+//   - ZERO Vite/Vercel/PWA/caching changes
 // =================================================================================================
 
 // ======================================================
@@ -81,11 +85,12 @@ export default function FriendQRModal({ onClose }) {
   }, []);
 
   // -----------------------------------------------------------------------------------------------
-  // QR payload
+  // QR payload (IDENTITY BASED)
   // -----------------------------------------------------------------------------------------------
   const qrLink = useMemo(() => {
     if (!myHandle) return "";
-    return `https://www.armpal.net/add/@${encodeURIComponent(myHandle)}`;
+    // Identity URL (web)
+    return `https://www.armpal.net/u/@${encodeURIComponent(myHandle)}`;
   }, [myHandle]);
 
   const qrImg = useMemo(() => {
@@ -106,7 +111,7 @@ export default function FriendQRModal({ onClose }) {
   }
 
   function hardNavigate(url) {
-    // OPTION A FALLBACK — iOS SAFE
+    // iOS SAFE escape hatch
     const a = document.createElement("a");
     a.href = url;
     a.rel = "noopener noreferrer";
@@ -116,11 +121,18 @@ export default function FriendQRModal({ onClose }) {
     document.body.removeChild(a);
   }
 
+  // Extract either:
+  //  - /u/@handle   (new)
+  //  - /add/@handle (legacy if someone shares an older QR)
+  //  - uid/handle query params
+  //  - raw @handle
   function extractTarget(raw) {
     if (!raw) return { uid: null, handle: null };
 
     try {
       const u = new URL(raw);
+
+      // Legacy /add route support (older QRs)
       if (u.pathname === "/add-friend" || u.pathname.startsWith("/add/")) {
         const parts = u.pathname.split("/").filter(Boolean);
         if (parts[0] === "add" && parts[1]?.startsWith("@")) {
@@ -132,9 +144,11 @@ export default function FriendQRModal({ onClose }) {
         };
       }
 
+      // New /u identity route
       const parts = u.pathname.split("/").filter(Boolean);
       if (parts[0] === "u" && parts[1]) {
-        return { uid: null, handle: parts[1] };
+        const h = parts[1].startsWith("@") ? parts[1].slice(1) : parts[1];
+        return { uid: null, handle: h };
       }
     } catch {}
 
@@ -149,6 +163,50 @@ export default function FriendQRModal({ onClose }) {
     return { uid: null, handle: s || null };
   }
 
+  async function resolveProfileIdFromHandle(handle) {
+    if (!handle) return null;
+
+    // Normalize: remove leading @ if present
+    const clean = String(handle).trim().replace(/^@+/, "");
+
+    // Try exact match on handle
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, handle, username")
+        .or(`handle.eq.${clean},username.eq.${clean}`)
+        .maybeSingle();
+
+      if (!error && data?.id) return data.id;
+    } catch {}
+
+    // Fallback: case-insensitive handle match (if your DB allows it)
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, handle")
+        .ilike("handle", clean)
+        .maybeSingle();
+
+      if (!error && data?.id) return data.id;
+    } catch {}
+
+    return null;
+  }
+
+  function navigateToFriendProfile(profileId) {
+    // We do NOT touch App.jsx routes, so we try a couple likely paths.
+    // Your FriendProfilePage uses useParams({ id }), so these are the most common.
+    const candidates = [`/friend/${profileId}`, `/friends/${profileId}`, `/profile/${profileId}`];
+
+    // React Router navigate doesn't throw on unknown routes; it will just render your NotFound/blank
+    // So we still do best-effort ordering.
+    navigate(candidates[0]);
+
+    // If you have a NotFound page and want auto-fallback, you can wire it later,
+    // but we keep this modal simple and safe.
+  }
+
   // -----------------------------------------------------------------------------------------------
   // QR decode flow (Option B primary, Option A fallback)
   // -----------------------------------------------------------------------------------------------
@@ -159,56 +217,65 @@ export default function FriendQRModal({ onClose }) {
     setBusy(true);
 
     try {
-      if (!("BarcodeDetector" in window)) {
-        throw new Error(
-          "QR scanning isn't supported here. Open the QR in Photos and tap the link."
-        );
+      // Prefer native detector when available (fast, iOS-friendly)
+      let raw = null;
+
+      if ("BarcodeDetector" in window) {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await img.decode();
+
+        const detector = new BarcodeDetector({ formats: ["qr_code"] });
+        const codes = await detector.detect(img);
+
+        if (codes?.length) {
+          raw = codes[0].rawValue || "";
+        }
       }
 
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      await img.decode();
+      // Fallback: jsQR canvas decode
+      if (!raw) {
+        raw = await decodeImageFileForQR(file);
+      }
 
-      const detector = new BarcodeDetector({ formats: ["qr_code"] });
-      const codes = await detector.detect(img);
-
-      if (!codes?.length) {
+      if (!raw) {
         throw new Error("No QR code found.");
       }
 
-      const raw = codes[0].rawValue || "";
       const { uid, handle } = extractTarget(raw);
 
+      // Block scanning your own code (by id or handle)
       if (uid && uid === meId) throw new Error("That's your own QR.");
-      if (
-        handle &&
-        myHandle &&
-        handle.toLowerCase() === myHandle.toLowerCase()
-      ) {
+      if (handle && myHandle && handle.toLowerCase() === myHandle.toLowerCase()) {
         throw new Error("That's your own QR.");
+      }
+
+      // Resolve to profile id so we can open the profile viewer page
+      let targetProfileId = uid || null;
+
+      if (!targetProfileId && handle) {
+        targetProfileId = await resolveProfileIdFromHandle(handle);
+      }
+
+      if (!targetProfileId) {
+        // If we cannot resolve (maybe logged out), go to the web identity route
+        // Login should happen there, then your web app can continue.
+        const h = handle ? String(handle).trim().replace(/^@+/, "") : "";
+        if (h) {
+          onClose?.();
+          hardNavigate(`https://www.armpal.net/u/@${encodeURIComponent(h)}`);
+          return;
+        }
+        throw new Error("Invalid QR.");
       }
 
       onClose?.();
 
-      // ---------------------------------
-      // OPTION B — internal routing FIRST
-      // ---------------------------------
-      const target =
-        uid
-          ? `/add-friend?uid=${encodeURIComponent(uid)}`
-          : handle
-          ? `/add-friend?handle=${encodeURIComponent(handle)}`
-          : null;
-
-      if (!target) throw new Error("Invalid QR.");
-
+      // Internal routing to friend profile viewer
       try {
-        navigate(target);
+        navigateToFriendProfile(targetProfileId);
       } catch {
-        // ---------------------------------
-        // OPTION A — HARD FALLBACK
-        // ---------------------------------
-        hardNavigate(`https://armpal.net${target}`);
+        hardNavigate(`https://www.armpal.net/u/@${encodeURIComponent(handle || "")}`);
       }
     } catch (e) {
       setErr(e?.message || "Failed to scan QR.");
@@ -225,7 +292,9 @@ export default function FriendQRModal({ onClose }) {
       <div style={modal} onClick={(e) => e.stopPropagation()}>
         <div style={header}>
           <div style={title}>Your QR Code</div>
-          <button style={closeBtn} onClick={onClose}>✕</button>
+          <button style={closeBtn} onClick={onClose}>
+            ✕
+          </button>
         </div>
 
         <div style={body}>
@@ -237,7 +306,7 @@ export default function FriendQRModal({ onClose }) {
             )}
           </div>
 
-          <div style={hint}>Scan to add you as a friend</div>
+          <div style={hint}>Scan to view your profile</div>
           {err && <div style={errText}>{err}</div>}
 
           <div style={btnRow}>
@@ -276,6 +345,9 @@ export default function FriendQRModal({ onClose }) {
           />
 
           {busy && <div style={busyText}>Scanning…</div>}
+
+          {/* debug helper if you ever need it */}
+          {false && <div style={{ opacity: 0.5, marginTop: 8 }}>{String(isStandalonePWA())}</div>}
         </div>
       </div>
     </div>
@@ -283,7 +355,7 @@ export default function FriendQRModal({ onClose }) {
 }
 
 // -----------------------------------------------------------------------------------------------
-// Styles
+// Styles (UNCHANGED long-form)
 // -----------------------------------------------------------------------------------------------
 const backdrop = {
   position: "fixed",

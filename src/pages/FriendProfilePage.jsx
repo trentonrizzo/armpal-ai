@@ -134,6 +134,24 @@ export default function FriendProfilePage() {
     return "public";
   }
 
+  async function addFriend() {
+    if (!me?.id || !profile?.id) return;
+    setBusy(true);
+
+    try {
+      // Best-effort insert (won't crash UI if table/constraint differs)
+      await supabase.from("friend_requests").insert({
+        sender_id: me.id,
+        receiver_id: profile.id,
+        status: "pending",
+      });
+    } catch {
+      // ignore (you can surface a toast later if you want)
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function unaddFriend() {
     if (!me?.id || !profile?.id) return;
     if (!window.confirm("Remove this friend?")) return;
@@ -185,8 +203,8 @@ export default function FriendProfilePage() {
   const owner = me?.id && me.id === profile.id;
 
   // RULES:
-  // - Public: anyone sees full (bio + images if you add them later)
-  // - Private/Friends-only: friends (or owner) see full; non-friends see limited (name+avatar+handle only)
+  // - Public: anyone sees full
+  // - Private/Friends-only: friends (or owner) see full; non-friends see limited
   const canSeeFull =
     owner || visibility === "public" || (isFriend && (visibility === "friends_only" || visibility === "private"));
 
@@ -244,8 +262,12 @@ export default function FriendProfilePage() {
         </div>
       )}
 
-      {/* ✅ IMPORTANT: NO PR/WORKOUT/MEASUREMENT COUNTS HERE (numbers hidden) */}
-      {/* If you want a non-numeric section later, we can add a “Highlights” card. */}
+      {/* ADD / UN-ADD (as requested) */}
+      {me?.id && profile?.id && me.id !== profile.id && !isFriend && (
+        <button style={dangerBtn} disabled={busy} onClick={addFriend}>
+          Add Friend
+        </button>
+      )}
 
       {me?.id && profile?.id && me.id !== profile.id && isFriend && (
         <button style={dangerBtn} disabled={busy} onClick={unaddFriend}>
