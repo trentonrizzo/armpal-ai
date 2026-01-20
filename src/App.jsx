@@ -12,6 +12,7 @@ import MeasurementsPage from "./pages/MeasurementsPage";
 import WorkoutsPage from "./pages/WorkoutsPage";
 import WorkoutLogger from "./pages/WorkoutLogger";
 import ProfilePage from "./pages/ProfilePage";
+import FriendProfilePage from "./pages/FriendProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 import FriendsPage from "./pages/FriendsPage";
@@ -108,8 +109,8 @@ function AppContent() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
-        <Route path="/add-friend" element={<AddFriendFromQR />} />
-        <Route path="/u/:handle" element={<AddFriendFromQR />} />
+        <Route path="/u/:handle" element={<FriendProfilePage />} />
+        <Route path="/u/:handle" element={<FriendProfilePage />} />
 
         <Route path="/friend/:friendId" element={<FriendProfile />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
