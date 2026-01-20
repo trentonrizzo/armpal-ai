@@ -1,0 +1,116 @@
+* [33md825552[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev/v1.1[m[33m, [m[1;31morigin/dev/v1.1[m[33m)[m fix(qr): open scanned user profile + add friend button
+* [33m66fa1fb[m Enable Add Friend from profile (QR flow)
+* [33m5f2f262[m fix(pwa): restore iOS home-screen auto updates
+* [33m2452974[m Fix FriendQRModal export syntax (deploy fix)
+* [33m694f103[m Enable in-app QR decoding (camera + image) with jsQR fallback
+* [33mb3b512e[m Fix QR codes: use https://www.armpal.net/add/@handle links
+* [33m40f5993[m fix(profile): viewer profile respects public/private + hides numbers
+* [33m4bc05ac[m fix(profile): enforce public/private visibility for viewer profile + gated photos
+* [33m582fb7c[m fix: serve apple-app-site-association for iOS universal links
+* [33m882421e[m fix: correct apple-app-site-association for universal links
+* [33m2818814[m fix(qr): iOS PWA-safe scan routing with internal + fallback nav
+* [33mc2208e4[m fix(pwa): iOS cache-safe service worker strategy
+* [33mf145568[m Restore QR modal UI + handle-based QR + add-friend via handle
+* [33m4a143b1[m Make QR codes handle-based with universal deep-linking
+* [33md414296[m Fix QR scanning using BarcodeDetector (no external deps)
+* [33md42d094[m Implement full QR image decoding + friend add (jsQR, iOS-safe)
+* [33m57e9362[m QR modal: add upload option alongside camera scan (iOS-safe)
+* [33mbe531bf[m Simplify QR scan UX (single iOS-safe scan button)
+* [33m17fcff1[m Fix PWA cache + force auto-updating service worker (iOS safe)
+* [33me7b7a6d[m Enable QR camera + image scanning for friend add
+* [33m4192c0f[m Wire QR icon to open QR modal (full FriendsPage)
+* [33mca5458a[m Fix App route: add-friend import + route
+* [33mf1672ac[m Add QR add-friend deep link flow
+* [33mda5a1a4[m Fix QR modal build by removing external QR dependency
+* [33m6cca1d0[m Add permanent friend QR code modal with scan entry
+* [33mce96f99[m Fix friend-aware private profile visibility
+* [33m5668a75[m Fix FriendsPage refresh after unadd
+* [33m69c2120[m Fix FriendProfile: privacy gating + crash-proof unadd
+* [33m6fe9b84[m fix: remove reload after unadd (no 404, unadd intact)
+* [33m4ec9e5f[m Fix: redirect after unadd without reload (force deploy)
+* [33md89a414[m fix: unadd friend deletes from friends table
+* [33m0f4108b[m fix: refetch friends on page return
+* [33m0c884eb[m fix: unadd friend deletes friendship and refreshes UI
+* [33m95b5053[m fix: unadd friend deletes accepted friend_requests row (syntax-safe)
+* [33m1ee5557[m fix: remove top-level return causing rollup build failure
+* [33m2154c9b[m fix: unadd friend deletes accepted friend_requests row (no syntax errors)
+* [33m4d949bd[m fix: enforce private profiles (clean render flow)
+* [33mf316145[m fix: remove ThemeContext import from profile visibility overlay
+* [33m7eebc7e[m fix: deploy-safe profile visibility toggle
+* [33m943e34b[m fix: restore profile visibility toggle mount
+* [33m3c17645[m feat: restore profile public/private toggle safely
+* [33m42192b1[m fix: remove missing ProfileVisibilityOverlay import causing build failure
+* [33m6d36d2d[m Add profile visibility toggle under settings overlay
+* [33m71eba64[m Add profile visibility toggle overlay under settings
+* [33m343c0ca[m Fix profile media: true light mode, lock background scroll, swipe priority, themed cancel
+* [33ma78d271[m Polish profile media gallery: light mode, swipe lock, themed delete modal
+* [33mf606dec[m Finalize profile photo gallery (light mode, swipe animation, modal polish)
+* [33mb8e9168[m Fix profile media gallery build (remove context dependency, theme-safe)
+* [33m2602cc5[m Polish profile photo gallery (theme, swipe viewer, clean delete)
+* [33m7a16833[m Refine profile photo gallery (12-cap grid, delete, fullscreen)
+* [33m3f9065f[m Add profile media gallery to profile page
+[31m|[m * [33m48e09a4[m[33m ([m[1;31morigin/test/public-preview[m[33m)[m trigger vercel preview deploy
+[31m|[m[31m/[m  
+* [33mf65418f[m Fix iOS home screen icon
+* [33m9320a25[m Fix dashboard Programs pill + Progress Overview theming
+* [33mfa50f55[m Theme system finalized (Friends, Programs, Dashboard)
+* [33m47b7327[m Theme system finalized (Friends, Programs, Dashboard)
+* [33m0220300[m Fix friends pages: theme system hookup, light/dark + accent colors
+* [33m4cf7b88[m Force sync: ensure all theme changes are pushed
+* [33meb2d14b[m Theme system: dynamic accent colors, light/dark support across pages, UI fixes
+* [33m0ea4139[m Theme system rollout: light/dark + accent colors across core pages
+* [33md8c73c4[m Theme system rollout: light/dark + accent colors across core pages
+* [33mbfef552[m Fix global light mode (html data-theme, red preserved)
+* [33m582851b[m Fix global light/dark mode toggle (html + body root)
+* [33mfb8c229[m Add global theme foundation for light/dark mode
+* [33m7633c03[m Fix measurements quick action route
+* [33m7bc17de[m Fix profile measurements quick action route
+* [33m4bae8be[m Fix measurements quick action route
+* [33m34aa868[m Fix PR analytics: query prs table, remove order_index, fix date parsing, remove reload loop
+* [33m3b08d66[m Force analytics diff so PR fixes apply
+* [33m72bdecf[m Fix PRs tab: remove reload loop, fix date parsing, restore auto-select
+* [33me3762b2[m Fix Analytics PRs useEffect loop and date parsing crash
+* [33m577eb99[m fix(profile): fast reliable quick action counts (prs + measurements)
+* [33m1ad5146[m fix(profile): robust quick action counts for prs and measurements
+* [33m9bdb3c1[m fix(profile): include bodyweight_logs in measurements count
+* [33m956a7be[m perf(profile): fast first paint + correct counts
+* [33m29cb63f[m fix(profile): authoritative quick action counts without truncation
+* [33m2d21788[m fix: reload PR analytics when PRs change
+* [33m81b4dc6[m Fix PRs analytics auto-selection
+* [33mff5ae85[m Fix PR analytics: include created_at and normalize PR dates
+* [33m6c78f84[m Fix PR analytics not rendering PR page entries (date fallback + guard)
+* [33m0a1fab6[m style: replace pink accents with ArmPal red in Programs overlay
+* [33m5e9d0b5[m style: switch Programs pill to ArmPal red
+* [33mfdfbd3f[m feat: add ProgramsLauncher above SmartAnalytics
+* [33mf8ba7d0[m feat: add Programs pill to Dashboard
+* [33ma8c6cd1[m feat: Programs pill + programs overlay
+* [33m4cdb636[m fix: clean one-time splash
+* [33m271517a[m fix: inline cinematic splash (ios-safe)
+* [33m2bdbbb9[m fix: load splash from correct root index.html
+* [33m8f892b0[m test: hard proof splash
+* [33ma36919f[m fix: load splash from armPalSplash.js only
+* [33m1488edf[m feat: real coded barbell slam splash
+* [33m17c6510[m feat: cinematic barbell slam splash
+* [33mc19ebe5[m feat: cinematic ArmPal barbell slam splash
+* [33m0d42ac1[m polish: premium ArmPal splash screen
+* [33m635ecf1[m feat: premium single-run ArmPal splash
+* [33m880f06e[m fix: remove duplicate runtime splash
+* [33mb894b33[m fix: remove fatal missing splash script
+* [33mda5d14a[m fix: ios pwa white screen + safe sw reload
+* [33m12b3eee[m fix: prevent iOS PWA white screen by removing null render
+* [33mcf38bc6[m fix: guaranteed in-app splash overlay
+* [33m56ca7eb[m feat: guaranteed runtime splash (iOS PWA)
+* [33m2197990[m test: confirm new code executes
+* [33m9e6a12d[m test: force visible runtime execution on iOS PWA
+* [33md92c3f1[m feat: runtime PWA splash trigger (iOS-safe)
+* [33m8219426[m feat: inline ArmPal splash (iOS/PWA guaranteed)
+* [33maf0d5aa[m fix: cache-bust splash script for iOS PWA
+* [33m7976c4c[m fix: force-visible iOS PWA splash with sound
+* [33mb89094e[m feat: add ArmPal power-on splash
+* [33m6f954ea[m fix: remove missing css import breaking build
+* [33m57ef90e[m fix: client-only AchievementOverlay to stop Vercel build crash
+* [33meaecdc5[m fix: mount AchievementOverlay globally without breaking routing
+* [33m4f8550e[m Fix App.jsx: safe OneSignal init + keep AchievementOverlay mounted
+* [33mbf5e04c[m Mount AchievementOverlay globally
+* [33me2116d7[m debug: expose achievement bus to window for testing
+* [33md

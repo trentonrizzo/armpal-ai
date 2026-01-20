@@ -1,0 +1,91 @@
+[33m66ac6bc[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev/v1.1[m[33m, [m[1;31morigin/dev/v1.1[m[33m)[m HEAD@{0}: commit: Fix FriendProfile lookup: id/handle/username OR query
+[33mbc200f6[m HEAD@{1}: commit: Disable PWA registration to fix build
+[33m19fbcff[m HEAD@{2}: commit: force redeploy: clear cache state
+[33mba7767b[m HEAD@{3}: commit: Disable PWA and service worker to fix cache
+[33ma958418[m HEAD@{4}: commit: Fix FriendProfile: support id OR handle param + restore public profile shell
+[33m1831318[m HEAD@{5}: commit: Fix PWA deploy + cache: use VitePWA generateSW
+[33mc5bf3e8[m HEAD@{6}: commit: Fix PWA cache: correct service worker location
+[33m604a1c0[m HEAD@{7}: commit: Fix Workbox injectManifest cache error
+[33me9baef3[m HEAD@{8}: commit: Fix PWA cache issue
+[33mc029d14[m HEAD@{9}: commit: Fix friend profile: pull public images from profiles (avatar + banner)
+[33m40f5993[m HEAD@{10}: reset: moving to origin/dev/v1.1
+[33m40f5993[m HEAD@{11}: commit: fix(profile): viewer profile respects public/private + hides numbers
+[33m4bc05ac[m HEAD@{12}: commit: fix(profile): enforce public/private visibility for viewer profile + gated photos
+[33m582fb7c[m HEAD@{13}: commit: fix: serve apple-app-site-association for iOS universal links
+[33m882421e[m HEAD@{14}: commit: fix: correct apple-app-site-association for universal links
+[33m2818814[m HEAD@{15}: commit: fix(qr): iOS PWA-safe scan routing with internal + fallback nav
+[33mc2208e4[m HEAD@{16}: commit: fix(pwa): iOS cache-safe service worker strategy
+[33mf145568[m HEAD@{17}: commit: Restore QR modal UI + handle-based QR + add-friend via handle
+[33m4a143b1[m HEAD@{18}: commit: Make QR codes handle-based with universal deep-linking
+[33md414296[m HEAD@{19}: commit: Fix QR scanning using BarcodeDetector (no external deps)
+[33md42d094[m HEAD@{20}: commit: Implement full QR image decoding + friend add (jsQR, iOS-safe)
+[33m57e9362[m HEAD@{21}: commit: QR modal: add upload option alongside camera scan (iOS-safe)
+[33mbe531bf[m HEAD@{22}: commit: Simplify QR scan UX (single iOS-safe scan button)
+[33m17fcff1[m HEAD@{23}: commit: Fix PWA cache + force auto-updating service worker (iOS safe)
+[33me7b7a6d[m HEAD@{24}: commit: Enable QR camera + image scanning for friend add
+[33m4192c0f[m HEAD@{25}: commit: Wire QR icon to open QR modal (full FriendsPage)
+[33mca5458a[m HEAD@{26}: commit: Fix App route: add-friend import + route
+[33mf1672ac[m HEAD@{27}: commit: Add QR add-friend deep link flow
+[33mda5a1a4[m HEAD@{28}: commit: Fix QR modal build by removing external QR dependency
+[33m6cca1d0[m HEAD@{29}: commit: Add permanent friend QR code modal with scan entry
+[33mce96f99[m HEAD@{30}: commit: Fix friend-aware private profile visibility
+[33m5668a75[m HEAD@{31}: commit: Fix FriendsPage refresh after unadd
+[33m69c2120[m HEAD@{32}: commit: Fix FriendProfile: privacy gating + crash-proof unadd
+[33m6fe9b84[m HEAD@{33}: commit: fix: remove reload after unadd (no 404, unadd intact)
+[33m4ec9e5f[m HEAD@{34}: commit: Fix: redirect after unadd without reload (force deploy)
+[33md89a414[m HEAD@{35}: commit (amend): fix: unadd friend deletes from friends table
+[33m310dd19[m HEAD@{36}: commit: fix: unadd friend deletes from friends table
+[33m0f4108b[m HEAD@{37}: commit: fix: refetch friends on page return
+[33m0c884eb[m HEAD@{38}: commit: fix: unadd friend deletes friendship and refreshes UI
+[33m95b5053[m HEAD@{39}: commit: fix: unadd friend deletes accepted friend_requests row (syntax-safe)
+[33m1ee5557[m HEAD@{40}: commit: fix: remove top-level return causing rollup build failure
+[33m2154c9b[m HEAD@{41}: commit: fix: unadd friend deletes accepted friend_requests row (no syntax errors)
+[33m4d949bd[m HEAD@{42}: commit: fix: enforce private profiles (clean render flow)
+[33mf316145[m HEAD@{43}: commit: fix: remove ThemeContext import from profile visibility overlay
+[33m7eebc7e[m HEAD@{44}: commit: fix: deploy-safe profile visibility toggle
+[33m943e34b[m HEAD@{45}: commit: fix: restore profile visibility toggle mount
+[33m3c17645[m HEAD@{46}: commit: feat: restore profile public/private toggle safely
+[33m42192b1[m HEAD@{47}: commit: fix: remove missing ProfileVisibilityOverlay import causing build failure
+[33m6d36d2d[m HEAD@{48}: commit: Add profile visibility toggle under settings overlay
+[33m71eba64[m HEAD@{49}: commit: Add profile visibility toggle overlay under settings
+[33m343c0ca[m HEAD@{50}: commit: Fix profile media: true light mode, lock background scroll, swipe priority, themed cancel
+[33ma78d271[m HEAD@{51}: commit: Polish profile media gallery: light mode, swipe lock, themed delete modal
+[33mf606dec[m HEAD@{52}: commit: Finalize profile photo gallery (light mode, swipe animation, modal polish)
+[33mb8e9168[m HEAD@{53}: commit: Fix profile media gallery build (remove context dependency, theme-safe)
+[33m2602cc5[m HEAD@{54}: commit: Polish profile photo gallery (theme, swipe viewer, clean delete)
+[33m7a16833[m HEAD@{55}: commit: Refine profile photo gallery (12-cap grid, delete, fullscreen)
+[33m3f9065f[m HEAD@{56}: commit: Add profile media gallery to profile page
+[33mf65418f[m HEAD@{57}: pull origin dev/v1.1: Fast-forward
+[33m9320a25[m HEAD@{58}: commit: Fix dashboard Programs pill + Progress Overview theming
+[33mfa50f55[m HEAD@{59}: commit: Theme system finalized (Friends, Programs, Dashboard)
+[33m47b7327[m HEAD@{60}: commit: Theme system finalized (Friends, Programs, Dashboard)
+[33m0220300[m HEAD@{61}: commit: Fix friends pages: theme system hookup, light/dark + accent colors
+[33m4cf7b88[m HEAD@{62}: commit: Force sync: ensure all theme changes are pushed
+[33meb2d14b[m HEAD@{63}: commit: Theme system: dynamic accent colors, light/dark support across pages, UI fixes
+[33m0ea4139[m HEAD@{64}: commit: Theme system rollout: light/dark + accent colors across core pages
+[33md8c73c4[m HEAD@{65}: commit: Theme system rollout: light/dark + accent colors across core pages
+[33mbfef552[m HEAD@{66}: commit: Fix global light mode (html data-theme, red preserved)
+[33m582851b[m HEAD@{67}: commit: Fix global light/dark mode toggle (html + body root)
+[33mfb8c229[m HEAD@{68}: commit: Add global theme foundation for light/dark mode
+[33m7633c03[m HEAD@{69}: commit: Fix measurements quick action route
+[33m7bc17de[m HEAD@{70}: commit: Fix profile measurements quick action route
+[33m4bae8be[m HEAD@{71}: commit: Fix measurements quick action route
+[33m34aa868[m HEAD@{72}: commit: Fix PR analytics: query prs table, remove order_index, fix date parsing, remove reload loop
+[33m3b08d66[m HEAD@{73}: commit: Force analytics diff so PR fixes apply
+[33m72bdecf[m HEAD@{74}: commit: Fix PRs tab: remove reload loop, fix date parsing, restore auto-select
+[33me3762b2[m HEAD@{75}: commit: Fix Analytics PRs useEffect loop and date parsing crash
+[33m577eb99[m HEAD@{76}: commit: fix(profile): fast reliable quick action counts (prs + measurements)
+[33m1ad5146[m HEAD@{77}: commit: fix(profile): robust quick action counts for prs and measurements
+[33m9bdb3c1[m HEAD@{78}: commit: fix(profile): include bodyweight_logs in measurements count
+[33m956a7be[m HEAD@{79}: commit: perf(profile): fast first paint + correct counts
+[33m29cb63f[m HEAD@{80}: commit: fix(profile): authoritative quick action counts without truncation
+[33m2d21788[m HEAD@{81}: commit: fix: reload PR analytics when PRs change
+[33m81b4dc6[m HEAD@{82}: commit: Fix PRs analytics auto-selection
+[33mff5ae85[m HEAD@{83}: commit: Fix PR analytics: include created_at and normalize PR dates
+[33m6c78f84[m HEAD@{84}: commit: Fix PR analytics not rendering PR page entries (date fallback + guard)
+[33m0a1fab6[m HEAD@{85}: commit: style: replace pink accents with ArmPal red in Programs overlay
+[33m5e9d0b5[m HEAD@{86}: commit: style: switch Programs pill to ArmPal red
+[33mfdfbd3f[m HEAD@{87}: commit: feat: add ProgramsLauncher above SmartAnalytics
+[33mf8ba7d0[m HEAD@{88}: commit: feat: add Programs pill to Dashboard
+[33ma8c6cd1[m HEAD@{89}: commit: feat: Programs pill + programs overlay
+[33m4cdb636[m HEAD@{90}: commit: fix: cle
