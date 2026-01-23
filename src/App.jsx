@@ -1,6 +1,6 @@
 // src/App.jsx
 import React, { useEffect, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, useParams, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
@@ -16,7 +16,6 @@ import FriendProfilePage from "./pages/FriendProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 import FriendsPage from "./pages/FriendsPage";
-import AddFriendFromQR from "./pages/AddFriendFromQR";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
@@ -32,6 +31,44 @@ import { FaShare } from "react-icons/fa";
 
 import { initOneSignal } from "./onesignal";
 import usePresence from "./hooks/usePresence";
+
+/* ============================
+   LEGACY HANDLE REDIRECT (FIX)
+============================ */
+function LegacyHandleRedirect() {
+  const { handle } = useParams();
+  const clean = handle?.startsWith("@") ? handle.slice(1) : handle;
+  const [target, setTarget] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!clean) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("handle", clean)
+        .maybeSingle();
+
+      if (!alive) return;
+
+      if (data?.id) {
+        setTarget(`/friend/${data.id}`);
+      } else {
+        setTarget("/friends");
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [clean]);
+
+  if (!target) return null;
+  return <Navigate to={target} replace />;
+}
 
 /* ============================
    RUNTIME SPLASH (SAFE)
@@ -70,14 +107,8 @@ function RuntimeSplash({ show }) {
 }
 
 /* ============================
-   CLIENT-ONLY OVERLAY
+   APP CONTENT
 ============================ */
-const AchievementOverlay = lazy(() =>
-  typeof window !== "undefined"
-    ? import("./overlays/AchievementOverlay")
-    : Promise.resolve({ default: () => null })
-);
-
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
@@ -93,11 +124,7 @@ function AppContent() {
   }, []);
 
   return (
-    <div
-      className={
-        isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"
-      }
-    >
+    <div className={isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/home" element={<HomePage />} />
@@ -109,18 +136,16 @@ function AppContent() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
-        <Route path="/u/:handle" element={<FriendProfilePage />} />
-        <Route path="/u/:handle" element={<FriendProfilePage />} />
+
+        {/* ✅ FIXED LEGACY ROUTE */}
+        <Route path="/u/:handle" element={<LegacyHandleRedirect />} />
 
         <Route path="/friend/:friendId" element={<FriendProfile />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/analytics" element={<Analytics />} />
-        <Route
-          path="/analytics/measurements"
-          element={<MeasurementAnalytics />}
-        />
+        <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
@@ -145,10 +170,7 @@ function AppContent() {
         </button>
       )}
 
-      <ShareWorkoutsModal
-        open={openShare}
-        onClose={() => setOpenShare(false)}
-      />
+      <ShareWorkoutsModal open={openShare} onClose={() => setOpenShare(false)} />
 
       {mounted && (
         <Suspense fallback={null}>
@@ -159,6 +181,9 @@ function AppContent() {
   );
 }
 
+/* ============================
+   APP ROOT
+============================ */
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
@@ -183,7 +208,7 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
 
-    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+    if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then((regs) => {
         regs.forEach((reg) => reg.unregister());
       });
@@ -192,7 +217,6 @@ export default function App() {
     initOneSignal();
   }, [session]);
 
-  // 🔑 CRITICAL FIX: NEVER RETURN NULL
   return (
     <>
       <RuntimeSplash show={showSplash} />
