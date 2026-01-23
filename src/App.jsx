@@ -63,8 +63,12 @@ function LegacyHandleRedirect() {
 
       if (!alive) return;
 
-      if (data?.id) setTarget(`/friend/${data.id}`);
-      else setTarget("/friends");
+      if (data?.id) {
+        // FORCE full navigation so PWA does not resume a cached route
+        window.location.replace(`/friend/${data.id}`);
+      } else {
+        window.location.replace("/");
+      }
     })();
 
     return () => {
@@ -72,8 +76,7 @@ function LegacyHandleRedirect() {
     };
   }, [clean]);
 
-  if (!target) return null;
-  return <Navigate to={target} replace />;
+  return null;
 }
 
 /* ============================
