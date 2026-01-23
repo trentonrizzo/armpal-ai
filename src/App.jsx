@@ -33,7 +33,16 @@ import { initOneSignal } from "./onesignal";
 import usePresence from "./hooks/usePresence";
 
 /* ============================
-   LEGACY HANDLE REDIRECT (FIX)
+   ACHIEVEMENT OVERLAY (FIX)
+============================ */
+const AchievementOverlay = lazy(() =>
+  typeof window !== "undefined"
+    ? import("./overlays/AchievementOverlay")
+    : Promise.resolve({ default: () => null })
+);
+
+/* ============================
+   LEGACY HANDLE REDIRECT
 ============================ */
 function LegacyHandleRedirect() {
   const { handle } = useParams();
@@ -54,11 +63,8 @@ function LegacyHandleRedirect() {
 
       if (!alive) return;
 
-      if (data?.id) {
-        setTarget(`/friend/${data.id}`);
-      } else {
-        setTarget("/friends");
-      }
+      if (data?.id) setTarget(`/friend/${data.id}`);
+      else setTarget("/friends");
     })();
 
     return () => {
@@ -71,7 +77,7 @@ function LegacyHandleRedirect() {
 }
 
 /* ============================
-   RUNTIME SPLASH (SAFE)
+   RUNTIME SPLASH
 ============================ */
 function RuntimeSplash({ show }) {
   if (!show) return null;
@@ -106,9 +112,6 @@ function RuntimeSplash({ show }) {
   );
 }
 
-/* ============================
-   APP CONTENT
-============================ */
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
@@ -137,9 +140,7 @@ function AppContent() {
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
 
-        {/* ✅ FIXED LEGACY ROUTE */}
         <Route path="/u/:handle" element={<LegacyHandleRedirect />} />
-
         <Route path="/friend/:friendId" element={<FriendProfile />} />
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
@@ -181,9 +182,6 @@ function AppContent() {
   );
 }
 
-/* ============================
-   APP ROOT
-============================ */
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
@@ -198,10 +196,7 @@ export default function App() {
       setTimeout(() => setShowSplash(false), 1200);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) =>
-      setSession(s)
-    );
-
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
   }, []);
 
