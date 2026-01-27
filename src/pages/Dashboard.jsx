@@ -17,6 +17,7 @@ import DashboardAISection from "../components/ai/DashboardAISection";
 
 // AI OVERLAY
 import DashboardAIOverlay from "../components/ai/DashboardAIOverlay";
+import DashboardAIChat from "../components/ai/DashboardAIChat";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -253,6 +254,9 @@ export default function Dashboard() {
 
       {/* Today's Focus */}
       <DashboardAISection />
+
+      {/* AI CHAT (PREMIUM ONLY) */}
+      <DashboardAIChat isPro={true} />
 
       <section style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
