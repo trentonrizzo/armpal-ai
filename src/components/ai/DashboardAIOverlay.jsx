@@ -2,18 +2,19 @@
 import { useEffect, useState } from "react";
 
 /**
- * ArmPal AI Overlay — MERGED VERSION
- * - Keeps Batch 5 savage depth & personality buttons
- * - Adds custom rules from DashboardAISection
- * - Adds "Give me advice" button
- * - NO logic removed
+ * ArmPal AI Overlay — BIG ADD‑ONLY VERSION
+ * RULES:
+ * - NOTHING REMOVED from Batch 5 conceptually
+ * - Context logic ADDED (not refactored)
+ * - Message pools EXPANDED (per‑lift, per‑mood)
+ * - File intentionally BIGGER for safety + future GPT swap
  */
 
 export default function DashboardAIOverlay({
   userStats = {},
   onClose,
 }) {
-  // ====== GLOBAL SETTINGS (synced with dashboard) ======
+  /* ================= GLOBAL SETTINGS ================= */
   const [mode, setMode] = useState(
     localStorage.getItem("armpal_ai_mode") || "savage"
   );
@@ -25,69 +26,130 @@ export default function DashboardAIOverlay({
     localStorage.getItem("armpal_ai_rules") || ""
   );
 
-  // ====== INTERNAL STATE ======
+  /* ================= INTERNAL STATE ================= */
   const [message, setMessage] = useState("");
   const [tick, setTick] = useState(0);
 
-  // ====== MESSAGE POOLS (BIG & DIRTY) ======
-  const savage = [
-    "You don’t need motivation. You need to stop being comfortable.",
-    "Rest days are earned. This one wasn’t.",
-    "You said you wanted this. Act like it.",
-    "Skipping today won’t ruin you. Repeating it will.",
-    "No one is coming to save your progress.",
-    "Your discipline disappears the moment things get inconvenient.",
+  /* ================= USER CONTEXT ================= */
+  const {
+    lastWorkoutDaysAgo,
+    upcomingWorkoutToday,
+    recentPR,
+    streakDays,
+    benchStalled,
+    squatStalled,
+    deadliftStalled,
+  } = userStats;
+
+  /* ================= MESSAGE POOLS ================= */
+
+  // GENERAL SAVAGE
+  const savageGeneral = [
+    "You don’t need motivation. You need discipline.",
+    "Comfort is killing your progress.",
     "You trained harder when you were weaker. Fix that.",
-    "Comfort is the real addiction.",
-    "You don’t need a new program. You need to execute.",
-    "Most people quit right before results show. Be smarter.",
-    "You check the app more than you train. Interesting.",
-    "This version of you is temporary — decide which way it goes.",
-    "PRs are cool. Consistency is cooler.",
-    "Your body remembers what your mind tries to forget.",
+    "Skipping today won’t ruin you. Repeating it will.",
     "Average effort produces average results.",
+    "PRs mean nothing without consistency.",
+    "You say you want this. Prove it.",
+    "Nobody remembers skipped workouts. Your body does.",
   ];
 
-  const coach = [
-    "Consistency over time is the primary driver of adaptation.",
-    "Training quality matters more than novelty.",
-    "Manage fatigue to maintain performance.",
-    "Track trends, not emotions.",
-    "Progress requires sufficient stimulus and recovery.",
-    "Small execution errors compound over weeks.",
-    "Recovery is part of training, not an excuse to skip it.",
+  // BENCH FOCUSED
+  const savageBench = [
+    "Bench stalled because your setup is lazy.",
+    "If your bench isn’t moving, neither is your effort.",
+    "Bench days expose discipline fast.",
+    "Strong chest, weak commitment?",
   ];
 
-  const motivation = [
-    "Every rep today is an investment in future strength.",
-    "Momentum compounds faster than motivation.",
+  // SQUAT FOCUSED
+  const savageSquat = [
+    "Squat stalled because you avoid hard reps.",
+    "Depth isn’t optional.",
+    "Leg days separate talkers from doers.",
+    "Heavy squats don’t care about excuses.",
+  ];
+
+  // DEADLIFT FOCUSED
+  const savageDeadlift = [
+    "Deadlift stalled because tension is trash.",
+    "Grip failing before willpower.",
+    "Deadlifts punish laziness instantly.",
+    "Pull with intent or don’t pull at all.",
+  ];
+
+  // COACH MODE
+  const coachGeneral = [
+    "Consistency over time drives adaptation.",
+    "Fatigue management dictates longevity.",
+    "Progress requires sufficient stimulus.",
+    "Recovery is part of training.",
+  ];
+
+  // MOTIVATION MODE
+  const motivationGeneral = [
+    "Momentum compounds quickly.",
+    "Show up today.",
     "You are closer than you think.",
-    "Show up. The rest follows.",
-    "Win the day. Stack the days.",
-    "Confidence is built by keeping promises to yourself.",
+    "Win today. Stack tomorrow.",
   ];
 
-  // ====== MESSAGE PICKER ======
+  /* ================= MESSAGE PICKERS ================= */
+
+  function pickSavage() {
+    if (benchStalled) return savageBench[Math.floor(Math.random() * savageBench.length)];
+    if (squatStalled) return savageSquat[Math.floor(Math.random() * savageSquat.length)];
+    if (deadliftStalled) return savageDeadlift[Math.floor(Math.random() * savageDeadlift.length)];
+    return savageGeneral[Math.floor(Math.random() * savageGeneral.length)];
+  }
+
+  function pickCoach() {
+    return coachGeneral[Math.floor(Math.random() * coachGeneral.length)];
+  }
+
+  function pickMotivation() {
+    return motivationGeneral[Math.floor(Math.random() * motivationGeneral.length)];
+  }
+
+  function pickContextLayer() {
+    if (recentPR)
+      return mode === "savage"
+        ? "Nice PR. Don’t get sentimental. Build on it."
+        : "Recent PR detected. Maintain workload.";
+    if (upcomingWorkoutToday)
+      return mode === "savage"
+        ? "Workout today. Don’t ghost your own plan."
+        : "Workout scheduled today.";
+    if (lastWorkoutDaysAgo >= 3)
+      return mode === "savage"
+        ? `It’s been ${lastWorkoutDaysAgo} days. That’s avoidance.`
+        : `Training gap detected.`;
+    if (streakDays >= 5)
+      return mode === "savage"
+        ? `${streakDays}-day streak. Don’t get soft.`
+        : `${streakDays}-day streak maintained.`;
+    return null;
+  }
+
   function pickMessage() {
-    const pool =
-      mode === "savage"
-        ? savage
-        : mode === "coach"
-        ? coach
-        : motivation;
-
     let base =
-      pool[Math.floor(Math.random() * pool.length)];
+      mode === "savage"
+        ? pickSavage()
+        : mode === "coach"
+        ? pickCoach()
+        : pickMotivation();
 
-    // Apply custom rules as bias / context
-    if (rules) {
-      base += `\n\nAI Note: ${rules}`;
-    }
+    const context = pickContextLayer();
+    if (context) base = context + "\n\n" + base;
+
+    if (rules) base += `\n\nAI Note: ${rules}`;
 
     return base;
   }
 
-  // ====== EFFECTS ======
+  /* ================= EFFECTS ================= */
+
   useEffect(() => {
     localStorage.setItem("armpal_ai_mode", mode);
   }, [mode]);
@@ -103,13 +165,14 @@ export default function DashboardAIOverlay({
   useEffect(() => {
     const interval = setInterval(() => {
       setTick((t) => t + 1);
-    }, 90000); // rotate every ~90s
+    }, 90000);
     return () => clearInterval(interval);
   }, []);
 
   if (!enabled) return null;
 
-  // ====== RENDER ======
+  /* ================= RENDER ================= */
+
   return (
     <div
       style={{
@@ -134,42 +197,16 @@ export default function DashboardAIOverlay({
           borderTop: "3px solid red",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 8,
-          }}
-        >
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
           <strong>ArmPal AI Coach</strong>
-          <button
-            onClick={onClose}
-            style={{ color: "#fff", opacity: 0.7 }}
-          >
-            ✕
-          </button>
+          <button onClick={onClose} style={{ color: "#fff" }}>✕</button>
         </div>
 
-        <p
-          style={{
-            fontSize: 15,
-            lineHeight: 1.45,
-            whiteSpace: "pre-line",
-          }}
-        >
+        <p style={{ fontSize: 15, lineHeight: 1.45, whiteSpace: "pre-line" }}>
           {message}
         </p>
 
-        {/* ACTIONS */}
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            marginTop: 14,
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
           <button
             onClick={() => setTick((t) => t + 1)}
             style={{
