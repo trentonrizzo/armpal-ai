@@ -12,6 +12,9 @@ import { FiUsers } from "react-icons/fi";
 // SMART ANALYTICS (READ-ONLY)
 import SmartAnalytics from "../components/SmartAnalytics";
 
+// AI SECTION
+import DashboardAISection from "../components/ai/DashboardAISection";
+
 // AI OVERLAY
 import DashboardAIOverlay from "../components/ai/DashboardAIOverlay";
 
@@ -249,6 +252,8 @@ export default function Dashboard() {
       </header>
 
       {/* Today's Focus */}
+      <DashboardAISection />
+
       <section style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Today’s Focus
