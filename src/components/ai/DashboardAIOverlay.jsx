@@ -1,69 +1,101 @@
+
 import { useEffect, useState } from "react";
 
-export default function DashboardAIOverlay({ userStats, mode = "savage", onClose }) {
+export default function DashboardAIOverlay({
+  userStats,
+  mode = "savage",
+  onClose,
+}) {
   const [message, setMessage] = useState("");
+  const [index, setIndex] = useState(0);
+
+  const savageMessages = [
+    "You opened the app. That already puts you ahead of who you were yesterday.",
+    "Squat PR is strong. Consistency is still questionable.",
+    "Discipline beats motivation. You don’t look disciplined today.",
+    "Training works when you don’t feel like training.",
+    "You don’t need more motivation. You need fewer excuses.",
+    "Strength is built on boring days. Today counts.",
+    "Most people quit right where you are. Decide who you are.",
+    "The program works. The question is whether *you* do.",
+    "No one remembers skipped workouts. Your body does.",
+    "Progress doesn’t care how you feel.",
+  ];
+
+  const coachMessages = [
+    "Consistency over time produces measurable results.",
+    "Today’s session contributes to long-term adaptation.",
+    "Strength gains depend on recovery and execution.",
+    "Track performance trends to identify plateaus.",
+    "Fatigue management is as important as intensity.",
+  ];
+
+  const pool = mode === "savage" ? savageMessages : coachMessages;
 
   useEffect(() => {
-    if (!userStats) return;
+    if (!pool.length) return;
+    setMessage(pool[index % pool.length]);
+  }, [index]);
 
-    const { lastWorkoutDaysAgo, benchPR, squatPR, streakDays } = userStats;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((i) => i + 1);
+    }, 120000); // rotate every 2 minutes
 
-    const savageMessages = [];
-    const coachMessages = [];
-
-    if (lastWorkoutDaysAgo >= 7) {
-      savageMessages.push(
-        `You haven't trained in ${lastWorkoutDaysAgo} days. Not injured. Just lazy.`
-      );
-      coachMessages.push(
-        `It's been ${lastWorkoutDaysAgo} days since your last session. Consistency is slipping.`
-      );
-    }
-
-    if (benchPR) {
-      savageMessages.push(
-        `Bench PR is ${benchPR}. Cool. Still not 405 though.`
-      );
-      coachMessages.push(
-        `Current bench PR: ${benchPR}. Progress is steady. Next milestone approaching.`
-      );
-    }
-
-    if (squatPR) {
-      savageMessages.push(
-        `Squat PR ${squatPR}. Legs aren't the problem. Your discipline is.`
-      );
-      coachMessages.push(
-        `Squat strength is solid at ${squatPR}. Maintain volume to avoid regression.`
-      );
-    }
-
-    if (streakDays >= 5) {
-      savageMessages.push(
-        `${streakDays}-day streak. Don't get soft now.`
-      );
-      coachMessages.push(
-        `${streakDays}-day training streak. Momentum is on your side.`
-      );
-    }
-
-    const pool = mode === "savage" ? savageMessages : coachMessages;
-
-    setMessage(pool[Math.floor(Math.random() * pool.length)] || "Log a workout so I have something to judge.");
-  }, [userStats, mode]);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 999999, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div style={{ width: "100%", maxWidth: 720, background: "#000", color: "#fff", padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-lg font-bold">ArmPal AI Coach</h3>
-          <button onClick={onClose} className="text-sm opacity-70 hover:opacity-100">✕</button>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 999999,
+        background: "rgba(0,0,0,0.55)",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 720,
+          background: "#000",
+          color: "#fff",
+          padding: 16,
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          borderTop: "3px solid red",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 6,
+          }}
+        >
+          <strong>ArmPal AI Coach</strong>
+          <button onClick={onClose} style={{ color: "#fff", opacity: 0.7 }}>
+            ✕
+          </button>
         </div>
 
-        <p className="text-base leading-relaxed">{message}</p>
+        <p style={{ fontSize: 15, lineHeight: 1.45 }}>{message}</p>
 
-        <div className="mt-4 flex gap-2">
-          <span className="text-xs rounded-full bg-red-600 px-3 py-1">{mode.toUpperCase()}</span>
+        <div style={{ marginTop: 10 }}>
+          <span
+            style={{
+              fontSize: 11,
+              padding: "4px 10px",
+              borderRadius: 999,
+              background: mode === "savage" ? "#b91c1c" : "#2563eb",
+            }}
+          >
+            {mode.toUpperCase()}
+          </span>
         </div>
       </div>
     </div>
