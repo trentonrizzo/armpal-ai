@@ -12,6 +12,9 @@ import { FiUsers } from "react-icons/fi";
 // SMART ANALYTICS (READ-ONLY)
 import SmartAnalytics from "../components/SmartAnalytics";
 
+// AI OVERLAY
+import DashboardAIOverlay from "../components/ai/DashboardAIOverlay";
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
@@ -19,6 +22,9 @@ export default function Dashboard() {
   const [displayName, setDisplayName] = useState("Athlete");
   const [goals, setGoals] = useState([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
+
+  // AI Overlay (auto-show)
+  const [showAI, setShowAI] = useState(true);
 
   // Strength Calculator State
   const [exerciseName, setExerciseName] = useState("");
@@ -549,6 +555,20 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+      {/* AI OVERLAY — AUTO SHOW */}
+      {showAI && (
+        <DashboardAIOverlay
+          mode="savage"
+          onClose={() => setShowAI(false)}
+          userStats={{
+            lastWorkoutDaysAgo: 7,
+            benchPR: 315,
+            squatPR: 385,
+            streakDays: 5,
+          }}
+        />
+      )}
+
     </div>
   );
 }
