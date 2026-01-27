@@ -1,7 +1,3 @@
-/**
- * AI CHAT BRAIN (PREMIUM ONLY)
- * --------------------------------
- */
 
 import OpenAI from "openai";
 
@@ -11,10 +7,14 @@ const client = new OpenAI({
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const { isPro, message, mode, context } = req.body;
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+  }
+
+  const { isPro, message, mode, context } = req.body || {};
 
   if (!isPro) {
     return res.status(403).json({ error: "Premium required" });
@@ -33,16 +33,9 @@ export default async function handler(req, res) {
     vulgar: "You are crude and offensive for humor, but correct.",
   };
 
-  const systemPrompt = `
-You are ArmPal AI Coach.
-Fitness-only assistant.
-
-Personality:
-${personalityMap[mode] || personalityMap.coach}
-
-Context:
-${context || "None"}
-`;
+  const systemPrompt = `You are ArmPal AI Coach. Fitness-only assistant.
+Personality: ${personalityMap[mode] || personalityMap.coach}
+Context: ${context || "None"}`;
 
   try {
     const completion = await client.chat.completions.create({
@@ -57,7 +50,7 @@ ${context || "None"}
       reply: completion.choices[0].message.content,
     });
   } catch (err) {
-    console.error("AI ERROR:", err);
+    console.error(err);
     return res.status(500).json({ error: "AI request failed" });
   }
 }
