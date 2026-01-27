@@ -1,4 +1,5 @@
 // src/pages/FriendProfile.jsx
+import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate, useParams } from "react-router-dom";
@@ -392,6 +393,21 @@ export default function FriendProfile() {
     }
   }
 
+  async function addFriend() {
+    if (!me?.id || !friendId) return;
+    setBusy(true);
+    try {
+      await supabase.from("friend_requests").insert({
+        sender_id: me.id,
+        receiver_id: friendId,
+        status: "pending",
+      });
+    } catch {}
+    finally {
+      setBusy(false);
+    }
+  }
+
   // ------------------------------------------------------------
   // Render gates
   // ------------------------------------------------------------
@@ -410,6 +426,7 @@ export default function FriendProfile() {
     (isFriend && (visibility === "friends_only" || visibility === "private"));
 
   const showUnadd = !isOwner && isFriend && !accessLost;
+  const showAdd = !isOwner && !isFriend && !accessLost;
 
   // If profile not found
   if (!p && !loading) {
@@ -477,6 +494,15 @@ export default function FriendProfile() {
         {/* Bio (gated) */}
         <div style={bio}>
           {canSeeFull ? p?.bio?.trim() || "No bio yet." : "This profile is private."}
+
+
+        {canSeeFull && (
+          <ProfileMediaGallery
+            userId={friendId}
+            isOwnProfile={false}
+          />
+        )}
+
         </div>
       </div>
 
@@ -542,6 +568,12 @@ export default function FriendProfile() {
             ))}
           </div>
         </div>
+      )}
+
+      {showAdd && (
+        <button style={unaddBtn} onClick={addFriend} disabled={busy}>
+          {busy ? "Requesting…" : "Add Friend"}
+        </button>
       )}
 
       {/* UNADD (only if still friends) */}

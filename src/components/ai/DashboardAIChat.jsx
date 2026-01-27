@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-/**
- * DashboardAIChat (PREMIUM + REAL AI)
- * ----------------------------------
- * - Calls backend AI brain
- * - Personality-aware
- * - Loading + error handling
- */
-
 export default function DashboardAIChat({ isPro }) {
   if (!isPro) return null;
 
@@ -17,26 +9,27 @@ export default function DashboardAIChat({ isPro }) {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
 
-  const mode = localStorage.getItem("armpal_ai_mode") || "coach";
+  const mode =
+    typeof window !== "undefined"
+      ? localStorage.getItem("armpal_ai_mode") || "coach"
+      : "coach";
 
-  function scrollToBottom() {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  function uid() {
+    return Math.random().toString(36).slice(2);
   }
 
-  useEffect(scrollToBottom, [messages, open]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, open]);
 
   async function sendMessage() {
     if (!input.trim() || loading) return;
 
-    const userMsg = {
-      id: crypto.randomUUID(),
-      role: "user",
-      text: input.trim(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
+    const userText = input.trim();
     setInput("");
     setLoading(true);
+
+    setMessages((p) => [...p, { id: uid(), role: "user", text: userText }]);
 
     try {
       const res = await fetch("/api/ai/chat", {
@@ -44,163 +37,63 @@ export default function DashboardAIChat({ isPro }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           isPro: true,
-          message: userMsg.text,
+          message: userText,
           mode,
           context: "",
         }),
       });
 
+      if (!res.ok) throw new Error("Bad response");
+
       const data = await res.json();
 
-      const aiMsg = {
-        id: crypto.randomUUID(),
-        role: "ai",
-        text: data.reply || "AI error.",
-      };
-
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "ai", text: "AI failed. Try again." },
+      setMessages((p) => [
+        ...p,
+        { id: uid(), role: "ai", text: data.reply || "No reply." },
+      ]);
+    } catch {
+      setMessages((p) => [
+        ...p,
+        { id: uid(), role: "ai", text: "AI failed. Try again." },
       ]);
     } finally {
       setLoading(false);
     }
   }
 
-  const bubble = (role) => ({
-    maxWidth: "85%",
-    padding: "10px 12px",
-    borderRadius: 14,
-    fontSize: 13,
-    background: role === "user" ? "var(--accent)" : "var(--card-2)",
-    color: "var(--text)",
-    alignSelf: role === "user" ? "flex-end" : "flex-start",
-    whiteSpace: "pre-line",
-  });
-
   return (
     <>
-      <div
-        style={{
-          background: "var(--card-2)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          padding: 12,
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <strong>AI Coach Chat</strong>
-          <button
-            onClick={() => setOpen(true)}
-            style={{
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "var(--text)",
-              borderRadius: 10,
-              padding: "6px 10px",
-              cursor: "pointer",
-            }}
-          >
-            Open Chat
-          </button>
-        </div>
+      <div style={{ marginBottom: 16 }}>
+        <button onClick={() => setOpen(true)}>Open AI Chat</button>
       </div>
 
       {open && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            padding: 12,
-            zIndex: 1000000,
-          }}
-        >
+        <div style={{ position: "fixed", inset: 0, background: "#0008" }}>
           <div
             style={{
-              width: "100%",
-              maxWidth: 820,
-              height: "85vh",
-              background: "var(--card)",
-              border: "1px solid var(--border)",
-              borderRadius: 16,
-              display: "flex",
-              flexDirection: "column",
+              maxWidth: 800,
+              margin: "40px auto",
+              background: "#111",
+              padding: 16,
             }}
           >
-            <div
-              style={{
-                padding: 12,
-                borderBottom: "1px solid var(--border)",
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-            >
-              <strong>AI Coach</strong>
-              <button onClick={() => setOpen(false)}>✕</button>
-            </div>
+            <button onClick={() => setOpen(false)}>Close</button>
 
-            <div
-              style={{
-                flex: 1,
-                padding: 12,
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-                overflowY: "auto",
-              }}
-            >
+            <div style={{ minHeight: 300 }}>
               {messages.map((m) => (
-                <div key={m.id} style={bubble(m.role)}>
-                  {m.text}
-                </div>
+                <div key={m.id}>{m.text}</div>
               ))}
-              {loading && <div style={{ opacity: 0.6 }}>Thinking…</div>}
+              {loading && <div>Thinking…</div>}
               <div ref={bottomRef} />
             </div>
 
-            <div
-              style={{
-                padding: 12,
-                borderTop: "1px solid var(--border)",
-                display: "flex",
-                gap: 8,
-              }}
-            >
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                placeholder="Ask your coach…"
-                style={{
-                  flex: 1,
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                  background: "var(--card-2)",
-                  color: "var(--text)",
-                }}
-              />
-              <button
-                onClick={sendMessage}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  background: "var(--accent)",
-                  color: "var(--text)",
-                  fontWeight: 900,
-                  border: "none",
-                }}
-              >
-                Send
-              </button>
-            </div>
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              placeholder="Ask your coach"
+            />
+            <button onClick={sendMessage}>Send</button>
           </div>
         </div>
       )}
