@@ -3,35 +3,51 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  // Allow CORS / preflight
-  if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    return res.status(200).end();
-  }
-
-  // Ignore accidental GETs instead of throwing
-  if (req.method === "GET") {
-    return res.status(200).json({ status: "AI endpoint alive" });
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
-
   try {
-    const { message, mode } = req.body || {};
+    // CORS / preflight
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      return res.status(200).end();
+    }
+
+    // Health check
+    if (req.method === "GET") {
+      return res.status(200).json({ status: "ok" });
+    }
+
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method Not Allowed" });
+    }
+
+    // 🔴 HARD BODY PARSE (fixes 400)
+    let body = req.body;
+    if (!body || typeof body === "string") {
+      try {
+        body = JSON.parse(req.body || "{}");
+      } catch {
+        body = {};
+      }
+    }
+
+    const { message, mode } = body;
 
     if (!message) {
-      return res.status(400).json({ error: "Missing message" });
+      return res.status(400).json({
+        error: "Missing message",
+        received: body,
+      });
     }
 
+    // 🔴 ENV CHECK (fixes 500)
     if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
+      return res.status(500).json({
+        error: "OPENAI_API_KEY missing in Vercel environment",
+      });
     }
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const aiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -42,7 +58,7 @@ export default async function handler(req, res) {
         input: [
           {
             role: "system",
-            content: `You are an AI fitness coach. Mode: ${mode || "coach"}.`,
+            content: `You are a fitness AI coach. Mode: ${mode || "coach"}.`,
           },
           {
             role: "user",
@@ -52,19 +68,25 @@ export default async function handler(req, res) {
       }),
     });
 
-    const data = await response.json();
+    const data = await aiRes.json();
 
-    if (!response.ok) {
-      return res.status(response.status).json(data);
+    if (!aiRes.ok) {
+      return res.status(aiRes.status).json({
+        error: "OpenAI error",
+        details: data,
+      });
     }
 
     const reply =
       data?.output_text ||
       data?.output?.[0]?.content?.[0]?.text ||
-      "No reply.";
+      null;
 
     return res.status(200).json({ reply });
   } catch (err) {
-    return res.status(500).json({ error: "Server error" });
+    return res.status(500).json({
+      error: "Server crash",
+      message: err?.message,
+    });
   }
 }
