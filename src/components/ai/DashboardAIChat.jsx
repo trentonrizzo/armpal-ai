@@ -33,7 +33,7 @@ export default function DashboardAIChat({ isPro }) {
     setMessages((p) => [...p, { id: uid(), role: "user", text: userText }]);
 
     try {
-      const res = await fetch("/api/ai/chat", {
+      const res = await fetch("https://armpal-ai-git-main-trent-rizzos-projects.vercel.app/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
