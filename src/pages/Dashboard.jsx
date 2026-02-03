@@ -19,6 +19,7 @@ import DashboardAISection from "../components/ai/DashboardAISection";
 import DashboardAIOverlay from "../components/ai/DashboardAIOverlay";
 
 export default function Dashboard() {
+  const [aiOpen, setAiOpen] = useState(false);
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
@@ -576,7 +577,33 @@ export default function Dashboard() {
         />
       )}
 
-    </div>
+    
+      {/* AI CHAT BUTTON */}
+      <button
+        type="button"
+        onClick={() => setAiOpen(true)}
+        style={{
+          position: "fixed",
+          bottom: 80,
+          right: 20,
+          zIndex: 20,
+          padding: "10px 14px",
+          borderRadius: 10,
+          background: "#e10600",
+          color: "#fff",
+          border: "none",
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        AI Chat
+      </button>
+
+      {aiOpen && (
+        <DashboardAIOverlay onClose={() => setAiOpen(false)} />
+      )}
+
+</div>
   );
 }
 
