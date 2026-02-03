@@ -28,6 +28,7 @@ export default function Dashboard() {
 
   // AI Overlay (auto-show)
   const [showAI, setShowAI] = useState(false);
+  const [showAIChat, setShowAIChat] = useState(false);
 
   // Strength Calculator State
   const [exerciseName, setExerciseName] = useState("");
@@ -230,6 +231,11 @@ export default function Dashboard() {
           <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
             Track your progress. Crush your PRs. Stay locked in.
           </p>
+      {showAIChat && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'var(--bg)' }}>
+          <DashboardAIChat onClose={() => setShowAIChat(false)} />
+        </div>
+      )}
         </div>
 
         {/* FRIENDS PAGE BUTTON */}
