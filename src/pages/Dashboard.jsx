@@ -585,7 +585,7 @@ export default function Dashboard() {
           zIndex: 20,
           padding: "10px 14px",
           borderRadius: 10,
-          background: "#e10600",
+          background: "var(--accent)",
           color: "#fff",
           border: "none",
           fontWeight: 700,
