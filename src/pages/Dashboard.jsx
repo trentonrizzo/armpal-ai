@@ -17,7 +17,6 @@ import DashboardAISection from "../components/ai/DashboardAISection";
 
 // AI OVERLAY
 import DashboardAIOverlay from "../components/ai/DashboardAIOverlay";
-import DashboardAIChat from "../components/ai/DashboardAIChat";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -28,7 +27,7 @@ export default function Dashboard() {
   const [loadingGoals, setLoadingGoals] = useState(true);
 
   // AI Overlay (auto-show)
-  const [showAI, setShowAI] = useState(true);
+  const [showAI, setShowAI] = useState(false);
 
   // Strength Calculator State
   const [exerciseName, setExerciseName] = useState("");
@@ -256,8 +255,7 @@ export default function Dashboard() {
       <DashboardAISection />
 
       {/* AI CHAT (PREMIUM ONLY) */}
-      <DashboardAIChat isPro={true} />
-
+      
       <section style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Today’s Focus
