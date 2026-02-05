@@ -1,9 +1,13 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
-import AISettingsOverlay from "./AISettingsOverlay"; // original settings overlay
+import AISettingsOverlay from "./AISettingsOverlay"; // ORIGINAL settings overlay (mode control preserved)
 
 export default function DashboardAIChat({ onClose }) {
+
+  /* ==================================================
+     STATE (UNCHANGED FROM ORIGINAL)
+     ================================================== */
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -11,14 +15,13 @@ export default function DashboardAIChat({ onClose }) {
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // GOD MODE animation state (visual only — no logic changes)
+  // GOD MODE animation state (visual only)
   const [animateIn, setAnimateIn] = useState(false);
 
   const bottomRef = useRef(null);
 
   /* ==================================================
-     GOD MODE SCROLL LOCK (PREMIUM iOS SAFE)
-     Locks background completely so ONLY chat scrolls
+     HARD SCROLL LOCK — prevents background movement
      ================================================== */
 
   useEffect(() => {
@@ -163,7 +166,7 @@ export default function DashboardAIChat({ onClose }) {
   }
 
   /* ==================================================
-     SEND MESSAGE (UNCHANGED)
+     SEND MESSAGE (UNCHANGED — ensures chosen AI mode works)
      ================================================== */
 
   async function sendMessage() {
@@ -272,7 +275,7 @@ export default function DashboardAIChat({ onClose }) {
   }
 
   /* ==================================================
-     GOD MODE UI (ONLY VISUAL/UX ENHANCEMENTS)
+     GOD MODE UI — ONLY VISUAL POLISH ADDED
      ================================================== */
 
   return (
@@ -298,7 +301,7 @@ export default function DashboardAIChat({ onClose }) {
           maxWidth: 520,
           height: "min(88vh, 720px)",
           background: "var(--card)",
-          borderRadius: 22,
+          borderRadius: 20,
           border: "1px solid var(--border)",
           display: "flex",
           flexDirection: "column",
@@ -311,7 +314,7 @@ export default function DashboardAIChat({ onClose }) {
         }}
       >
 
-        {/* HEADER (UNCHANGED VISUALLY) */}
+        {/* HEADER — ORIGINAL STYLE RESTORED (NO IOS PILL BUTTONS) */}
 
         <div
           style={{
@@ -325,12 +328,39 @@ export default function DashboardAIChat({ onClose }) {
           <strong>ArmPal AI</strong>
 
           <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={() => setShowSettings(true)}>⚙️</button>
-            <button onClick={onClose}>✕</button>
+
+            <button
+              onClick={() => setShowSettings(true)}
+              style={{
+                background: "transparent",
+                border: "none",
+                fontSize: 18,
+                cursor: "pointer",
+                color: "var(--text)"
+              }}
+              aria-label="AI Settings"
+            >
+              ⚙️
+            </button>
+
+            <button
+              onClick={onClose}
+              style={{
+                background: "transparent",
+                border: "none",
+                fontSize: 18,
+                cursor: "pointer",
+                color: "var(--text)"
+              }}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
           </div>
         </div>
 
-        {/* ERROR BLOCK PRESERVED */}
+        {/* ERROR */}
 
         {error && (
           <div
@@ -346,7 +376,7 @@ export default function DashboardAIChat({ onClose }) {
           </div>
         )}
 
-        {/* CHAT AREA */}
+        {/* CHAT */}
 
         <div
           style={{
@@ -433,7 +463,7 @@ export default function DashboardAIChat({ onClose }) {
 
         </div>
 
-        {/* INPUT AREA PRESERVED */}
+        {/* INPUT */}
 
         <div
           style={{
@@ -478,8 +508,6 @@ export default function DashboardAIChat({ onClose }) {
           </button>
 
         </div>
-
-        {/* SETTINGS OVERLAY PRESERVED */}
 
         {showSettings && (
           <AISettingsOverlay onClose={() => setShowSettings(false)} />
