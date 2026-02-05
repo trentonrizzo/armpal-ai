@@ -13,45 +13,57 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
+
     const { message, userId } = req.body || {};
+
     if (!message || !userId) {
       return res.status(400).json({ error: "Missing message or userId" });
     }
 
-    // ✅ Fetch PRs safely
-    const { data: prs } = await supabase
-      .from("prs")
-      .select("*")
-      .eq("user_id", userId);
-
-    const allPRs = prs || [];
-
-    // 🔥 Identify bench PR
-    const benchPRs = allPRs.filter(pr =>
-      pr.lift_name.toLowerCase().includes("bench")
+    // 🔥 STEP 1 — get all public tables dynamically
+    const { data: tables, error: tablesError } = await supabase.rpc(
+      "get_all_tables"
     );
 
-    const bestBench =
-      benchPRs.length > 0
-        ? benchPRs.sort((a, b) => b.weight - a.weight)[0]
-        : null;
+    // If RPC doesn't exist, fallback list:
+    const tableList = tables || [
+      { table_name: "prs" },
+      { table_name: "workouts" },
+      { table_name: "measurements" },
+      { table_name: "profiles" }
+    ];
 
-    // 🧠 Build clean context
-    const context = `
-User PR Summary:
+    let databaseContext = {};
 
-Bench Press PR:
-${bestBench ? `${bestBench.weight}${bestBench.unit} x ${bestBench.reps} reps` : "No bench PR logged"}
+    // 🔥 STEP 2 — auto query every table
+    for (const t of tableList) {
 
-All PRs:
-${JSON.stringify(allPRs, null, 2)}
-`;
+      const tableName = t.table_name;
 
+      try {
+
+        const { data } = await supabase
+          .from(tableName)
+          .select("*")
+          .eq("user_id", userId)
+          .limit(50);
+
+        if (data && data.length > 0) {
+          databaseContext[tableName] = data;
+        }
+
+      } catch {
+        // ignore tables without user_id column
+      }
+    }
+
+    // 🔥 STEP 3 — send ALL data to AI
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.6,
@@ -59,23 +71,26 @@ ${JSON.stringify(allPRs, null, 2)}
         {
           role: "system",
           content: `
-You are ArmPal AI, a personal strength coach.
-You have access to the user's real PR data below.
-Answer questions using this data accurately.
+You are ArmPal AI.
 
-${context}
+You have FULL access to the user's database below.
+Always use this data when answering.
+
+${JSON.stringify(databaseContext, null, 2)}
 `
         },
         { role: "user", content: message }
       ]
     });
 
-    const reply = completion.choices[0]?.message?.content || "No reply.";
-
-    return res.status(200).json({ reply });
+    return res.status(200).json({
+      reply: completion.choices[0].message.content
+    });
 
   } catch (err) {
+
     console.error("AI ERROR:", err);
+
     return res.status(500).json({
       error: "AI failed",
       message: err.message
