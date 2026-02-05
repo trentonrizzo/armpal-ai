@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 
 export const config = {
   runtime: "nodejs",
@@ -8,63 +9,97 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// SERVER SIDE SUPABASE (SERVICE ROLE ONLY)
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 export default async function handler(req, res) {
   const requestId = Math.random().toString(36).slice(2, 9);
 
   console.log("----- AI REQUEST START -----");
   console.log("Request ID:", requestId);
-  console.log("Method:", req.method);
-  console.log("Has API Key:", !!process.env.OPENAI_API_KEY);
 
   if (!process.env.OPENAI_API_KEY) {
-    console.error("❌ OPENAI_API_KEY IS MISSING");
     return res.status(500).json({
-      error: "Server misconfiguration",
-      details: "OPENAI_API_KEY missing",
+      error: "OPENAI_API_KEY missing",
       requestId,
     });
   }
 
   if (req.method !== "POST") {
-    console.warn("❌ Invalid method");
-    return res.status(405).json({ error: "Method not allowed", requestId });
+    return res.status(405).json({
+      error: "Method not allowed",
+      requestId,
+    });
   }
 
   try {
     const body = req.body ?? {};
-    console.log("Request body:", body);
+    const { message, userId } = body;
 
-    const { message } = body;
-
-    if (!message || typeof message !== "string") {
-      console.warn("❌ Invalid message payload");
+    if (!message || !userId) {
       return res.status(400).json({
-        error: "Missing or invalid message",
+        error: "Missing message or userId",
         requestId,
       });
     }
 
-    console.log("Sending message to OpenAI...");
+    // 🔥 FETCH USER DATA FROM SUPABASE
 
+    const { data: prs } = await supabase
+      .from("prs")
+      .select("*")
+      .eq("user_id", userId);
+
+    const { data: workouts } = await supabase
+      .from("workouts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    // 🔥 BUILD CONTEXT STRING
+    const userContext = `
+User training data:
+
+PRs:
+${JSON.stringify(prs)}
+
+Latest Workout:
+${JSON.stringify(workouts)}
+`;
+
+    console.log("Context built.");
+
+    // 🔥 CALL OPENAI
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0.7,
       messages: [
-        { role: "system", content: "You are ArmPal AI, a helpful fitness coach." },
+        {
+          role: "system",
+          content: `
+You are ArmPal AI — an in-app fitness coach.
+
+You have access to user training data:
+
+${userContext}
+
+Use this naturally in advice. Speak like a knowledgeable coach.
+`,
+        },
         { role: "user", content: message },
       ],
-      temperature: 0.7,
     });
-
-    console.log("OpenAI raw response:", completion);
 
     const reply =
       completion?.choices?.[0]?.message?.content ?? null;
 
     if (!reply) {
-      console.error("❌ No reply in OpenAI response");
       return res.status(500).json({
-        error: "OpenAI returned no message",
-        raw: completion,
+        error: "No AI response",
         requestId,
       });
     }
@@ -76,15 +111,11 @@ export default async function handler(req, res) {
       requestId,
     });
   } catch (err) {
-    console.error("❌ AI HARD FAILURE");
-    console.error("Request ID:", requestId);
-    console.error(err);
+    console.error("AI HARD FAILURE", err);
 
     return res.status(500).json({
       error: "AI failed",
       message: err.message,
-      name: err.name,
-      stack: err.stack,
       requestId,
     });
   }
