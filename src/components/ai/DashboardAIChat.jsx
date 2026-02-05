@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { supabase } from "../../supabaseClient"; // ✅ correct for src/components/ai
+import { supabase } from "../../supabaseClient";
 
 export default function DashboardAIChat({ onClose }) {
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -13,32 +14,82 @@ export default function DashboardAIChat({ onClose }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  /* -------------------------------------------------- */
+  /* SAVE WORKOUT                                       */
+  /* -------------------------------------------------- */
+
+  async function saveWorkout(workout) {
+
+    try {
+
+      const { data } = await supabase.auth.getUser();
+      const userId = data?.user?.id;
+
+      if (!userId) throw new Error("User not logged in");
+
+      await supabase.from("workouts").insert({
+        user_id: userId,
+        name: workout.title,
+        exercises: workout.exercises,
+        ai_generated: true
+      });
+
+      alert("Workout saved!");
+
+    } catch (err) {
+
+      console.error("SAVE WORKOUT ERROR:", err);
+      alert("Failed to save workout");
+
+    }
+  }
+
+  /* -------------------------------------------------- */
+  /* SEND MESSAGE                                       */
+  /* -------------------------------------------------- */
+
   async function sendMessage() {
+
     if (!input.trim() || loading) return;
 
     const userMessage = input;
     setInput("");
     setError(null);
 
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setMessages(prev => [
+      ...prev,
+      { role: "user", content: userMessage }
+    ]);
+
     setLoading(true);
 
     try {
-      // ✅ Get logged-in user id (so backend can read Supabase safely)
+
       const { data, error: authErr } = await supabase.auth.getUser();
+
       if (authErr) throw new Error(authErr.message);
+
       const userId = data?.user?.id;
-      if (!userId) throw new Error("Not logged in. Please sign in again.");
+
+      if (!userId) throw new Error("Not logged in");
 
       const res = await fetch("/api/ai", {
+
         method: "POST",
+
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, userId }),
+
+        body: JSON.stringify({
+          message: userMessage,
+          userId
+        })
+
       });
 
-      // ✅ If server returns non-JSON, this avoids "Unexpected end of JSON"
       const text = await res.text();
+
       let json = null;
+
       try {
         json = text ? JSON.parse(text) : null;
       } catch {
@@ -46,22 +97,73 @@ export default function DashboardAIChat({ onClose }) {
       }
 
       if (!res.ok) {
-        throw new Error(json?.error || json?.message || `AI request failed (${res.status})`);
+
+        throw new Error(
+          json?.error ||
+          json?.message ||
+          `AI request failed (${res.status})`
+        );
       }
 
       const reply = json?.reply;
-      if (!reply) throw new Error("AI returned no reply.");
 
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      if (!reply) throw new Error("AI returned no reply");
+
+      /* -------------------------------------------------- */
+      /* NEW STRUCTURED AI SYSTEM                           */
+      /* -------------------------------------------------- */
+
+      let parsed;
+
+      try {
+        parsed = JSON.parse(reply);
+      } catch {
+        parsed = null;
+      }
+
+      if (parsed?.type === "create_workout") {
+
+        setMessages(prev => [
+
+          ...prev,
+
+          {
+            role: "assistant",
+            content: parsed,
+            isWorkoutCard: true
+          }
+
+        ]);
+
+      } else {
+
+        setMessages(prev => [
+
+          ...prev,
+
+          { role: "assistant", content: reply }
+
+        ]);
+      }
+
     } catch (err) {
+
       console.error("AI CHAT ERROR:", err);
       setError(err.message || "AI failed");
+
     } finally {
+
       setLoading(false);
+
     }
   }
 
+  /* -------------------------------------------------- */
+  /* UI                                                  */
+  /* -------------------------------------------------- */
+
   return (
+
     <div
       style={{
         position: "fixed",
@@ -71,9 +173,10 @@ export default function DashboardAIChat({ onClose }) {
         zIndex: 9999,
         display: "flex",
         justifyContent: "center",
-        alignItems: "flex-end",
+        alignItems: "flex-end"
       }}
     >
+
       <div
         style={{
           width: "100%",
@@ -84,20 +187,23 @@ export default function DashboardAIChat({ onClose }) {
           border: "1px solid var(--border)",
           display: "flex",
           flexDirection: "column",
-          overflow: "hidden",
+          overflow: "hidden"
         }}
       >
+
         {/* HEADER */}
+
         <div
           style={{
             padding: "14px 16px",
             borderBottom: "1px solid var(--border)",
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center",
+            alignItems: "center"
           }}
         >
           <strong>ArmPal AI</strong>
+
           <button
             onClick={onClose}
             style={{
@@ -105,22 +211,23 @@ export default function DashboardAIChat({ onClose }) {
               border: "none",
               fontSize: 18,
               cursor: "pointer",
-              color: "var(--text)",
+              color: "var(--text)"
             }}
           >
             ✕
           </button>
         </div>
 
-        {/* ERROR BANNER */}
+        {/* ERROR */}
+
         {error && (
+
           <div
             style={{
               padding: "10px 12px",
               borderBottom: "1px solid var(--border)",
               background: "rgba(255,0,0,0.10)",
-              color: "var(--text)",
-              fontSize: 13,
+              fontSize: 13
             }}
           >
             <strong style={{ color: "var(--accent)" }}>AI Error:</strong> {error}
@@ -128,6 +235,7 @@ export default function DashboardAIChat({ onClose }) {
         )}
 
         {/* CHAT */}
+
         <div
           style={{
             flex: 1,
@@ -135,10 +243,12 @@ export default function DashboardAIChat({ onClose }) {
             padding: 16,
             display: "flex",
             flexDirection: "column",
-            gap: 10,
+            gap: 10
           }}
         >
+
           {messages.map((m, i) => (
+
             <div
               key={i}
               style={{
@@ -150,11 +260,53 @@ export default function DashboardAIChat({ onClose }) {
                 fontSize: 14,
                 lineHeight: 1.5,
                 whiteSpace: "pre-wrap",
-                color: m.role === "user" ? "#fff" : "var(--text)",
+                color: m.role === "user" ? "#fff" : "var(--text)"
               }}
             >
-              {m.content}
+
+              {m.isWorkoutCard ? (
+
+                <div>
+
+                  <strong>{m.content.title}</strong>
+
+                  {m.content.exercises.map((ex, idx) => (
+
+                    <div key={idx} style={{ marginTop: 6 }}>
+
+                      <div><strong>{ex.name}</strong></div>
+
+                      <div>{ex.sets} sets • {ex.reps}</div>
+
+                      {ex.notes && (
+                        <small>{ex.notes}</small>
+                      )}
+
+                    </div>
+
+                  ))}
+
+                  <button
+                    onClick={() => saveWorkout(m.content)}
+                    style={{
+                      marginTop: 10,
+                      background: "var(--accent)",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "6px 12px",
+                      color: "#fff",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Save Workout
+                  </button>
+
+                </div>
+
+              ) : m.content}
+
             </div>
+
           ))}
 
           {loading && (
@@ -164,17 +316,20 @@ export default function DashboardAIChat({ onClose }) {
           )}
 
           <div ref={bottomRef} />
+
         </div>
 
         {/* INPUT */}
+
         <div
           style={{
             borderTop: "1px solid var(--border)",
             padding: 10,
             display: "flex",
-            gap: 8,
+            gap: 8
           }}
         >
+
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -187,7 +342,7 @@ export default function DashboardAIChat({ onClose }) {
               borderRadius: 12,
               padding: "10px 12px",
               color: "var(--text)",
-              outline: "none",
+              outline: "none"
             }}
           />
 
@@ -202,13 +357,17 @@ export default function DashboardAIChat({ onClose }) {
               fontWeight: 800,
               color: "#fff",
               cursor: "pointer",
-              opacity: loading ? 0.7 : 1,
+              opacity: loading ? 0.7 : 1
             }}
           >
             {loading ? "…" : "Send"}
           </button>
+
         </div>
+
       </div>
+
     </div>
+
   );
 }
