@@ -27,6 +27,22 @@ export default async function handler(req, res) {
     }
 
     /* -------------------------------------------------- */
+    /* LOAD AI PERSONALITY                                */
+    /* -------------------------------------------------- */
+
+    let personality = "coach";
+
+    const { data: settings } = await supabase
+      .from("ai_settings")
+      .select("personality")
+      .eq("user_id", userId)
+      .single();
+
+    if (settings?.personality) {
+      personality = settings.personality;
+    }
+
+    /* -------------------------------------------------- */
     /* READ USER DATABASE                                 */
     /* -------------------------------------------------- */
 
@@ -60,6 +76,34 @@ export default async function handler(req, res) {
 
     const context = `
 You are ArmPal AI.
+
+Current personality mode: ${personality}
+
+PERSONALITY BEHAVIOR:
+
+coach:
+- structured fitness coach
+- confident and supportive
+
+friend:
+- casual relaxed tone
+- conversational
+
+motivation:
+- energetic hype coaching
+- inspiring
+
+assistant:
+- neutral helpful AI
+- clear concise responses
+
+science:
+- analytical
+- data-driven explanations
+
+vulgar:
+- aggressive edgy tone allowed
+- intense coaching style
 
 You have full access to the user's database:
 
