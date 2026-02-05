@@ -14,9 +14,19 @@ export default function DashboardAIChat({ onClose }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  /* -------------------------------------------------- */
-  /* SAVE WORKOUT                                       */
-  /* -------------------------------------------------- */
+  /* ==================================================
+     🔥 SAVE WORKOUT — FULL ARM PAL NATIVE INTEGRATION
+     ==================================================
+
+     This now matches your REAL database architecture:
+
+     1️⃣ Create workout row
+     2️⃣ Capture returned workout_id
+     3️⃣ Insert exercises linked to workout_id
+     4️⃣ Workouts page automatically detects it
+
+     No fake schema. No guessing. Native flow.
+  */
 
   async function saveWorkout(workout) {
 
@@ -27,26 +37,55 @@ export default function DashboardAIChat({ onClose }) {
 
       if (!userId) throw new Error("User not logged in");
 
-      await supabase.from("workouts").insert({
-        user_id: userId,
-        name: workout.title,
-        exercises: workout.exercises,
-        ai_generated: true
-      });
+      /* ---------- CREATE WORKOUT ---------- */
 
-      alert("Workout saved!");
+      const { data: workoutInsert, error: workoutError } = await supabase
+        .from("workouts")
+        .insert({
+          user_id: userId,
+          name: workout.title
+        })
+        .select()
+        .single();
+
+      if (workoutError) throw workoutError;
+
+      const workoutId = workoutInsert.id;
+
+      /* ---------- CREATE EXERCISES ---------- */
+
+      if (Array.isArray(workout.exercises) && workout.exercises.length > 0) {
+
+        const exerciseRows = workout.exercises.map((ex, index) => ({
+          user_id: userId,
+          workout_id: workoutId,
+          name: ex.name || "Exercise",
+          sets: Number(ex.sets) || null,
+          reps: parseInt(ex.reps) || null,
+          weight: null,
+          position: index
+        }));
+
+        const { error: exerciseError } = await supabase
+          .from("exercises")
+          .insert(exerciseRows);
+
+        if (exerciseError) throw exerciseError;
+      }
+
+      alert("Workout saved successfully! 💪");
 
     } catch (err) {
 
       console.error("SAVE WORKOUT ERROR:", err);
-      alert("Failed to save workout");
+      alert(err.message || "Failed to save workout");
 
     }
   }
 
-  /* -------------------------------------------------- */
-  /* SEND MESSAGE                                       */
-  /* -------------------------------------------------- */
+  /* ==================================================
+     🧠 SEND MESSAGE — STRUCTURED AI PIPELINE
+     ================================================== */
 
   async function sendMessage() {
 
@@ -74,16 +113,9 @@ export default function DashboardAIChat({ onClose }) {
       if (!userId) throw new Error("Not logged in");
 
       const res = await fetch("/api/ai", {
-
         method: "POST",
-
         headers: { "Content-Type": "application/json" },
-
-        body: JSON.stringify({
-          message: userMessage,
-          userId
-        })
-
+        body: JSON.stringify({ message: userMessage, userId })
       });
 
       const text = await res.text();
@@ -97,7 +129,6 @@ export default function DashboardAIChat({ onClose }) {
       }
 
       if (!res.ok) {
-
         throw new Error(
           json?.error ||
           json?.message ||
@@ -109,9 +140,7 @@ export default function DashboardAIChat({ onClose }) {
 
       if (!reply) throw new Error("AI returned no reply");
 
-      /* -------------------------------------------------- */
-      /* NEW STRUCTURED AI SYSTEM                           */
-      /* -------------------------------------------------- */
+      /* ---------- STRUCTURED RESPONSE DETECTION ---------- */
 
       let parsed;
 
@@ -124,25 +153,19 @@ export default function DashboardAIChat({ onClose }) {
       if (parsed?.type === "create_workout") {
 
         setMessages(prev => [
-
           ...prev,
-
           {
             role: "assistant",
             content: parsed,
             isWorkoutCard: true
           }
-
         ]);
 
       } else {
 
         setMessages(prev => [
-
           ...prev,
-
           { role: "assistant", content: reply }
-
         ]);
       }
 
@@ -158,9 +181,9 @@ export default function DashboardAIChat({ onClose }) {
     }
   }
 
-  /* -------------------------------------------------- */
-  /* UI                                                  */
-  /* -------------------------------------------------- */
+  /* ==================================================
+     🎨 UI — YOUR ORIGINAL DESIGN (PRESERVED)
+     ================================================== */
 
   return (
 
@@ -221,7 +244,6 @@ export default function DashboardAIChat({ onClose }) {
         {/* ERROR */}
 
         {error && (
-
           <div
             style={{
               padding: "10px 12px",
