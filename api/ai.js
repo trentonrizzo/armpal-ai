@@ -13,63 +13,64 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
+
     const { message, userId } = req.body;
 
     if (!message || !userId) {
       return res.status(400).json({ error: "Missing message or userId" });
     }
 
-    // 🔹 FETCH USER DATA
+    // 🔥 SAFE DATA FETCH (NO COLUMN ASSUMPTIONS)
     const { data: prs } = await supabase
       .from("prs")
-      .select("exercise, weight, reps")
+      .select("*")
       .eq("user_id", userId);
 
     const { data: workouts } = await supabase
       .from("workouts")
-      .select("name, date")
+      .select("*")
       .eq("user_id", userId)
-      .order("date", { ascending: false })
       .limit(5);
 
-    // 🔹 BUILD CONTEXT
     const context = `
-User PRs:
-${prs?.map(p => `- ${p.exercise}: ${p.weight} x ${p.reps}`).join("\n") || "No PRs logged"}
+User PR data:
+${JSON.stringify(prs || [])}
 
-Recent Workouts:
-${workouts?.map(w => `- ${w.name} (${w.date})`).join("\n") || "No workouts logged"}
+Recent workouts:
+${JSON.stringify(workouts || [])}
 `;
 
-    // 🔹 SEND TO OPENAI
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.6,
       messages: [
         {
           role: "system",
-          content: `
-You are ArmPal AI, a personal strength coach.
-You have full access to the user's training data below.
-Use it to answer questions accurately.
+          content: `You are ArmPal AI. Use the user's training data below when answering:
 
 ${context}
-          `,
+`
         },
-        { role: "user", content: message },
-      ],
+        { role: "user", content: message }
+      ]
     });
 
-    const reply = completion.choices[0]?.message?.content;
+    return res.status(200).json({
+      reply: completion.choices[0].message.content
+    });
 
-    return res.status(200).json({ reply });
   } catch (err) {
+
     console.error("AI ERROR:", err);
-    return res.status(500).json({ error: "AI failed", details: err.message });
+
+    return res.status(500).json({
+      error: "AI failed",
+      details: err.message
+    });
   }
 }
