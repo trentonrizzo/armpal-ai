@@ -18,11 +18,12 @@ export default function AISettingsOverlay({ onClose }) {
         .from("ai_settings")
         .select("personality")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle(); // 🔥 safer than single()
 
       if (settings?.personality) {
         setPersonality(settings.personality);
       }
+
     }
 
     loadSettings();
@@ -34,6 +35,9 @@ export default function AISettingsOverlay({ onClose }) {
     const { data } = await supabase.auth.getUser();
     const userId = data?.user?.id;
 
+    if (!userId) return;
+
+    // 🔥 upsert guarantees row exists
     await supabase.from("ai_settings").upsert({
       user_id: userId,
       personality
