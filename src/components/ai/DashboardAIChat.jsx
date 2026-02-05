@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
-import AISettingsOverlay from "./AISettingsOverlay";
+import AISettingsOverlay from "./AISettingsOverlay"; // ✅ settings overlay file
 
 export default function DashboardAIChat({ onClose }) {
 
@@ -12,75 +12,90 @@ export default function DashboardAIChat({ onClose }) {
 
   const bottomRef = useRef(null);
 
-  /* ==================================================
-     LOAD CHAT HISTORY
-     ================================================== */
-
-  useEffect(() => {
-
-    async function loadChat() {
-
-      const { data } = await supabase.auth.getUser();
-      const userId = data?.user?.id;
-      if (!userId) return;
-
-      const { data: history } = await supabase
-        .from("ai_messages")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: true })
-        .limit(30);
-
-      if (history) {
-
-        const mapped = history.map(m => {
-
-          let parsed;
-
-          try {
-            parsed = JSON.parse(m.content);
-          } catch {
-            parsed = null;
-          }
-
-          if (parsed?.type === "create_workout") {
-            return {
-              role: m.role,
-              content: parsed,
-              isWorkoutCard: true
-            };
-          }
-
-          return {
-            role: m.role,
-            content: m.content
-          };
-        });
-
-        setMessages(mapped);
-      }
-    }
-
-    loadChat();
-
-  }, []);
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
   /* ==================================================
-     SAVE WORKOUT
+     ✅ LOAD CHAT HISTORY (last 30) on open
+     ================================================== */
+
+  useEffect(() => {
+
+    let cancelled = false;
+
+    async function loadChatHistory() {
+
+      try {
+
+        const { data, error: authErr } = await supabase.auth.getUser();
+        if (authErr) throw new Error(authErr.message);
+
+        const userId = data?.user?.id;
+        if (!userId) return;
+
+        // Pull newest 30 then reverse so chat reads top->bottom
+        const { data: history, error: histErr } = await supabase
+          .from("ai_messages")
+          .select("role, content, created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(30);
+
+        if (histErr) throw histErr;
+
+        const safe = Array.isArray(history) ? [...history].reverse() : [];
+
+        const mapped = safe.map((row) => {
+
+          // Try parse saved JSON workout cards
+          let parsed = null;
+          try {
+            parsed = JSON.parse(row.content);
+          } catch {
+            parsed = null;
+          }
+
+          if (parsed?.type === "create_workout") {
+            return { role: row.role, content: parsed, isWorkoutCard: true };
+          }
+
+          return { role: row.role, content: row.content };
+        });
+
+        if (!cancelled && mapped.length) {
+          setMessages(mapped);
+        }
+
+      } catch (err) {
+        console.error("LOAD AI HISTORY ERROR:", err);
+        // Don't hard-fail UI if history load fails
+      }
+    }
+
+    loadChatHistory();
+
+    return () => {
+      cancelled = true;
+    };
+
+  }, []);
+
+  /* ==================================================
+     🔥 SAVE WORKOUT — FULL ARM PAL NATIVE INTEGRATION
      ================================================== */
 
   async function saveWorkout(workout) {
 
     try {
 
-      const { data } = await supabase.auth.getUser();
-      const userId = data?.user?.id;
+      const { data, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw new Error(authErr.message);
 
-      const { data: workoutInsert } = await supabase
+      const userId = data?.user?.id;
+      if (!userId) throw new Error("User not logged in");
+
+      const { data: workoutInsert, error: workoutError } = await supabase
         .from("workouts")
         .insert({
           user_id: userId,
@@ -89,29 +104,41 @@ export default function DashboardAIChat({ onClose }) {
         .select()
         .single();
 
+      if (workoutError) throw workoutError;
+
       const workoutId = workoutInsert.id;
 
-      const exerciseRows = workout.exercises.map((ex, index) => ({
-        user_id: userId,
-        workout_id: workoutId,
-        name: ex.name,
-        sets: Number(ex.sets) || null,
-        reps: ex.reps ?? null,
-        weight: null,
-        position: index
-      }));
+      if (Array.isArray(workout.exercises) && workout.exercises.length > 0) {
 
-      await supabase.from("exercises").insert(exerciseRows);
+        const exerciseRows = workout.exercises.map((ex, index) => ({
+          user_id: userId,
+          workout_id: workoutId,
+          name: ex.name || "Exercise",
+          sets: Number(ex.sets) || null,
+          reps: ex.reps ?? null, // ✅ allows ranges like 6-8, AMRAP, etc
+          weight: null,
+          position: index
+        }));
+
+        const { error: exerciseError } = await supabase
+          .from("exercises")
+          .insert(exerciseRows);
+
+        if (exerciseError) throw exerciseError;
+      }
 
       alert("Workout saved successfully! 💪");
 
     } catch (err) {
-      console.error(err);
+
+      console.error("SAVE WORKOUT ERROR:", err);
+      alert(err.message || "Failed to save workout");
+
     }
   }
 
   /* ==================================================
-     SEND MESSAGE
+     🧠 SEND MESSAGE — STRUCTURED AI PIPELINE + PERSISTENCE
      ================================================== */
 
   async function sendMessage() {
@@ -122,146 +149,238 @@ export default function DashboardAIChat({ onClose }) {
     setInput("");
     setError(null);
 
-    const { data } = await supabase.auth.getUser();
-    const userId = data?.user?.id;
-
-    const newUserMsg = { role:"user", content:userMessage };
-
-    setMessages(prev => [...prev, newUserMsg]);
-
-    /* SAVE USER MESSAGE */
-    await supabase.from("ai_messages").insert({
-      user_id:userId,
-      role:"user",
-      content:userMessage
-    });
+    // Immediately show user message in UI
+    setMessages(prev => [
+      ...prev,
+      { role: "user", content: userMessage }
+    ]);
 
     setLoading(true);
 
     try {
 
-      const res = await fetch("/api/ai", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ message:userMessage, userId })
+      const { data, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw new Error(authErr.message);
+
+      const userId = data?.user?.id;
+      if (!userId) throw new Error("Not logged in");
+
+      /* ---------- SAVE USER MESSAGE ---------- */
+
+      await supabase.from("ai_messages").insert({
+        user_id: userId,
+        role: "user",
+        content: userMessage
       });
 
-      const json = await res.json();
+      /* ---------- CALL AI ---------- */
+
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage, userId })
+      });
+
+      // keep your safe text parsing to avoid JSON parse crashes
+      const text = await res.text();
+      let json = null;
+
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = null;
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          json?.error ||
+          json?.message ||
+          `AI request failed (${res.status})`
+        );
+      }
 
       const reply = json?.reply;
+      if (!reply) throw new Error("AI returned no reply");
 
-      let parsed;
+      /* ---------- STRUCTURED RESPONSE DETECTION ---------- */
 
+      let parsed = null;
       try {
         parsed = JSON.parse(reply);
       } catch {
         parsed = null;
       }
 
-      let newAssistantMsg;
-
       if (parsed?.type === "create_workout") {
 
-        newAssistantMsg = {
-          role:"assistant",
-          content:parsed,
-          isWorkoutCard:true
-        };
+        // Show workout card
+        setMessages(prev => [
+          ...prev,
+          {
+            role: "assistant",
+            content: parsed,
+            isWorkoutCard: true
+          }
+        ]);
 
+        // Save assistant as JSON string
         await supabase.from("ai_messages").insert({
-          user_id:userId,
-          role:"assistant",
+          user_id: userId,
+          role: "assistant",
           content: JSON.stringify(parsed)
         });
 
       } else {
 
-        newAssistantMsg = {
-          role:"assistant",
-          content:reply
-        };
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: reply }
+        ]);
 
         await supabase.from("ai_messages").insert({
-          user_id:userId,
-          role:"assistant",
+          user_id: userId,
+          role: "assistant",
           content: reply
         });
       }
 
-      setMessages(prev => [...prev, newAssistantMsg]);
+    } catch (err) {
 
-    } catch(err) {
-
-      console.error(err);
+      console.error("AI CHAT ERROR:", err);
       setError(err.message || "AI failed");
 
     } finally {
+
       setLoading(false);
+
     }
   }
 
   /* ==================================================
-     UI
+     🎨 UI — ORIGINAL DESIGN PRESERVED
      ================================================== */
 
   return (
 
-    <div style={{
-      position:"fixed",
-      inset:0,
-      background:"rgba(0,0,0,0.65)",
-      backdropFilter:"blur(8px)",
-      zIndex:9999,
-      display:"flex",
-      justifyContent:"center",
-      alignItems:"flex-end"
-    }}>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        backdropFilter: "blur(8px)",
+        zIndex: 9999,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-end"
+      }}
+    >
 
-      <div style={{
-        width:"100%",
-        maxWidth:520,
-        height:"85vh",
-        background:"var(--card)",
-        borderRadius:"18px 18px 0 0",
-        border:"1px solid var(--border)",
-        display:"flex",
-        flexDirection:"column",
-        overflow:"hidden"
-      }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          height: "85vh",
+          background: "var(--card)",
+          borderRadius: "18px 18px 0 0",
+          border: "1px solid var(--border)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          position: "relative" // ✅ helps overlay position cleanly
+        }}
+      >
 
-        <div style={{
-          padding:"14px 16px",
-          borderBottom:"1px solid var(--border)",
-          display:"flex",
-          justifyContent:"space-between"
-        }}>
+        {/* HEADER */}
+
+        <div
+          style={{
+            padding: "14px 16px",
+            borderBottom: "1px solid var(--border)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center"
+          }}
+        >
           <strong>ArmPal AI</strong>
 
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={()=>setShowSettings(true)}>⚙️</button>
-            <button onClick={onClose}>✕</button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => setShowSettings(true)}
+              style={{
+                background: "transparent",
+                border: "none",
+                fontSize: 18,
+                cursor: "pointer",
+                color: "var(--text)"
+              }}
+              aria-label="AI Settings"
+              title="AI Settings"
+            >
+              ⚙️
+            </button>
+
+            <button
+              onClick={onClose}
+              style={{
+                background: "transparent",
+                border: "none",
+                fontSize: 18,
+                cursor: "pointer",
+                color: "var(--text)"
+              }}
+              aria-label="Close"
+              title="Close"
+            >
+              ✕
+            </button>
           </div>
         </div>
 
-        <div style={{
-          flex:1,
-          overflowY:"auto",
-          padding:16,
-          display:"flex",
-          flexDirection:"column",
-          gap:10
-        }}>
+        {/* ERROR */}
 
-          {messages.map((m,i)=>(
+        {error && (
+          <div
+            style={{
+              padding: "10px 12px",
+              borderBottom: "1px solid var(--border)",
+              background: "rgba(255,0,0,0.10)",
+              color: "var(--text)",
+              fontSize: 13
+            }}
+          >
+            <strong style={{ color: "var(--accent)" }}>AI Error:</strong> {error}
+          </div>
+        )}
 
-            <div key={i} style={{
-              alignSelf:m.role==="user"?"flex-end":"flex-start",
-              background:m.role==="user"?"var(--accent)":"var(--card-2)",
-              padding:"10px 14px",
-              borderRadius:14,
-              maxWidth:"80%",
-              whiteSpace:"pre-wrap"
-            }}>
+        {/* CHAT */}
+
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10
+          }}
+        >
+
+          {messages.map((m, i) => (
+
+            <div
+              key={i}
+              style={{
+                alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                background: m.role === "user" ? "var(--accent)" : "var(--card-2)",
+                padding: "10px 14px",
+                borderRadius: 14,
+                maxWidth: "80%",
+                fontSize: 14,
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                color: m.role === "user" ? "#fff" : "var(--text)"
+              }}
+            >
 
               {m.isWorkoutCard ? (
 
@@ -269,14 +388,34 @@ export default function DashboardAIChat({ onClose }) {
 
                   <strong>{m.content.title}</strong>
 
-                  {m.content.exercises.map((ex,idx)=>(
-                    <div key={idx}>
-                      <strong>{ex.name}</strong>
+                  {m.content.exercises.map((ex, idx) => (
+
+                    <div key={idx} style={{ marginTop: 6 }}>
+
+                      <div><strong>{ex.name}</strong></div>
+
                       <div>{ex.sets} sets • {ex.reps}</div>
+
+                      {ex.notes && (
+                        <small>{ex.notes}</small>
+                      )}
+
                     </div>
+
                   ))}
 
-                  <button onClick={()=>saveWorkout(m.content)}>
+                  <button
+                    onClick={() => saveWorkout(m.content)}
+                    style={{
+                      marginTop: 10,
+                      background: "var(--accent)",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "6px 12px",
+                      color: "#fff",
+                      cursor: "pointer"
+                    }}
+                  >
                     Save Workout
                   </button>
 
@@ -288,33 +427,71 @@ export default function DashboardAIChat({ onClose }) {
 
           ))}
 
-          {loading && <div>ArmPal is thinking…</div>}
+          {loading && (
+            <div style={{ opacity: 0.7, fontSize: 13 }}>
+              ArmPal is thinking…
+            </div>
+          )}
 
           <div ref={bottomRef} />
 
         </div>
 
-        <div style={{ padding:10, display:"flex", gap:8 }}>
+        {/* INPUT */}
+
+        <div
+          style={{
+            borderTop: "1px solid var(--border)",
+            padding: 10,
+            display: "flex",
+            gap: 8
+          }}
+        >
 
           <input
             value={input}
-            onChange={e=>setInput(e.target.value)}
-            onKeyDown={e=>e.key==="Enter" && sendMessage()}
-            style={{ flex:1 }}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            placeholder="Ask ArmPal…"
+            style={{
+              flex: 1,
+              background: "var(--card-2)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: "10px 12px",
+              color: "var(--text)",
+              outline: "none"
+            }}
           />
 
-          <button onClick={sendMessage}>
-            Send
+          <button
+            onClick={sendMessage}
+            disabled={loading}
+            style={{
+              background: "var(--accent)",
+              border: "none",
+              borderRadius: 12,
+              padding: "10px 16px",
+              fontWeight: 800,
+              color: "#fff",
+              cursor: "pointer",
+              opacity: loading ? 0.7 : 1
+            }}
+          >
+            {loading ? "…" : "Send"}
           </button>
 
         </div>
 
+        {/* SETTINGS OVERLAY */}
+
+        {showSettings && (
+          <AISettingsOverlay onClose={() => setShowSettings(false)} />
+        )}
+
       </div>
 
-      {showSettings && (
-        <AISettingsOverlay onClose={()=>setShowSettings(false)} />
-      )}
-
     </div>
+
   );
 }
