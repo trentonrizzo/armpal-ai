@@ -3,97 +3,112 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
+// OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Supabase (SERVER ONLY)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 export default async function handler(req, res) {
-
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-
     const { message, userId } = req.body || {};
 
     if (!message || !userId) {
-      return res.status(400).json({ error: "Missing message or userId" });
+      return res.status(400).json({
+        error: "Missing message or userId",
+      });
     }
 
-    // 🔥 STEP 1 — get all public tables dynamically
-    const { data: tables, error: tablesError } = await supabase.rpc(
-      "get_all_tables"
+    /* --------------------------------------------------
+       1️⃣ Discover ALL tables that belong to a user
+       -------------------------------------------------- */
+
+    const { data: tables, error: tableErr } = await supabase.rpc(
+      "get_user_tables"
     );
 
-    // If RPC doesn't exist, fallback list:
-    const tableList = tables || [
-      { table_name: "prs" },
-      { table_name: "workouts" },
-      { table_name: "measurements" },
-      { table_name: "profiles" }
-    ];
+    if (tableErr) {
+      console.error("TABLE DISCOVERY ERROR:", tableErr);
+    }
 
-    let databaseContext = {};
+    const databaseContext = {};
 
-    // 🔥 STEP 2 — auto query every table
-    for (const t of tableList) {
+    /* --------------------------------------------------
+       2️⃣ Read ALL rows for this user from ALL tables
+       -------------------------------------------------- */
 
-      const tableName = t.table_name;
+    if (Array.isArray(tables)) {
+      for (const t of tables) {
+        const tableName = t.table_name;
 
-      try {
+        try {
+          const { data, error } = await supabase
+            .from(tableName)
+            .select("*")
+            .eq("user_id", userId)
+            .limit(100);
 
-        const { data } = await supabase
-          .from(tableName)
-          .select("*")
-          .eq("user_id", userId)
-          .limit(50);
-
-        if (data && data.length > 0) {
-          databaseContext[tableName] = data;
+          if (!error && data && data.length > 0) {
+            databaseContext[tableName] = data;
+          }
+        } catch {
+          // silently ignore tables that error
         }
-
-      } catch {
-        // ignore tables without user_id column
       }
     }
 
-    // 🔥 STEP 3 — send ALL data to AI
+    /* --------------------------------------------------
+       3️⃣ Build AI context (this is the magic)
+       -------------------------------------------------- */
+
+    const context = `
+You are ArmPal AI, the user's personal in-app fitness assistant.
+
+You have FULL access to the user's real database data below.
+This data is authoritative. Use it to answer questions accurately.
+
+USER DATABASE SNAPSHOT:
+${JSON.stringify(databaseContext, null, 2)}
+
+Important rules:
+- If data exists, USE IT.
+- If data does not exist, say it has not been logged.
+- Do NOT hallucinate missing data.
+- Be concise but helpful.
+`;
+
+    /* --------------------------------------------------
+       4️⃣ Ask OpenAI with full context
+       -------------------------------------------------- */
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.6,
+      temperature: 0.5,
       messages: [
-        {
-          role: "system",
-          content: `
-You are ArmPal AI.
-
-You have FULL access to the user's database below.
-Always use this data when answering.
-
-${JSON.stringify(databaseContext, null, 2)}
-`
-        },
-        { role: "user", content: message }
-      ]
+        { role: "system", content: context },
+        { role: "user", content: message },
+      ],
     });
 
-    return res.status(200).json({
-      reply: completion.choices[0].message.content
-    });
+    const reply =
+      completion?.choices?.[0]?.message?.content ??
+      "I couldn't generate a response.";
 
+    return res.status(200).json({ reply });
   } catch (err) {
-
-    console.error("AI ERROR:", err);
-
+    console.error("AI HARD FAILURE:", err);
     return res.status(500).json({
       error: "AI failed",
-      message: err.message
+      message: err.message,
     });
   }
 }
