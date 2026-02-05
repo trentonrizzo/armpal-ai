@@ -7,55 +7,67 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Server-side Supabase (FULL ACCESS)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// 🔥 MASTER CONTEXT BUILDER
+// 🔥 SAFE AUTO CONTEXT BUILDER
 async function buildUserContext(userId) {
-  try {
 
-    const tables = [
-      "prs",
-      "workouts",
-      "goals",
-      "measurements",
-      "profiles"
-    ];
+  const tables = [
+    "prs",
+    "workouts",
+    "goals",
+    "measurements",
+    "profiles"
+  ];
 
-    let context = {};
+  let context = {};
 
-    for (const table of tables) {
-      const { data } = await supabase
+  for (const table of tables) {
+    try {
+
+      const { data, error } = await supabase
         .from(table)
         .select("*")
         .eq("user_id", userId);
 
+      if (error) {
+        console.log(`Skipping table ${table}:`, error.message);
+        continue;
+      }
+
       context[table] = data || [];
+
+    } catch (err) {
+      console.log(`Table failed ${table}`);
     }
-
-    return context;
-
-  } catch (err) {
-    console.error("Context build failed:", err);
-    return {};
   }
+
+  return context;
 }
 
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: "OPENAI_API_KEY missing" });
+  }
+
   try {
-    const { message, userId } = req.body;
+
+    const { message, userId } = req.body || {};
 
     if (!message) {
       return res.status(400).json({ error: "Missing message" });
     }
 
-    // 🔥 BUILD FULL USER CONTEXT
+    // 🔥 BUILD CONTEXT (never crashes now)
     let userContext = {};
 
     if (userId) {
@@ -69,13 +81,13 @@ export default async function handler(req, res) {
         {
           role: "system",
           content: `
-You are ArmPal AI — an in-app elite fitness coach.
+You are ArmPal AI — an elite in-app fitness coach.
 
-You have FULL access to user data:
+You have access to the user's training data:
 
 ${JSON.stringify(userContext)}
 
-Use this to give personalized responses.
+Use this context naturally when helpful.
 `
         },
         { role: "user", content: message }
@@ -83,15 +95,39 @@ Use this to give personalized responses.
     });
 
     const reply =
-      completion?.choices?.[0]?.message?.content || "No response.";
+      completion?.choices?.[0]?.message?.content ||
+      "No response.";
 
     return res.status(200).json({ reply });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      error: "AI failed",
-      message: err.message,
-    });
+
+    console.error("AI HARD FAILURE:", err);
+
+    // 🔥 FALLBACK RESPONSE (AI NEVER SILENT AGAIN)
+    try {
+
+      const completion = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are ArmPal AI." },
+          { role: "user", content: req.body?.message || "Hello" }
+        ],
+      });
+
+      const reply =
+        completion?.choices?.[0]?.message?.content ||
+        "Fallback response.";
+
+      return res.status(200).json({ reply });
+
+    } catch (fallbackError) {
+
+      return res.status(500).json({
+        error: "AI failed completely",
+        message: fallbackError.message,
+      });
+
+    }
   }
 }
