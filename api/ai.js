@@ -3,58 +3,63 @@ import { createClient } from "@supabase/supabase-js";
 
 export const config = { runtime: "nodejs" };
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-const hasSupabaseEnv =
-  !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-const supabase = hasSupabaseEnv
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-  : null;
+// 🔥 MASTER CONTEXT BUILDER
+async function buildUserContext(userId) {
+  try {
+
+    const tables = [
+      "prs",
+      "workouts",
+      "goals",
+      "measurements",
+      "profiles"
+    ];
+
+    let context = {};
+
+    for (const table of tables) {
+      const { data } = await supabase
+        .from(table)
+        .select("*")
+        .eq("user_id", userId);
+
+      context[table] = data || [];
+    }
+
+    return context;
+
+  } catch (err) {
+    console.error("Context build failed:", err);
+    return {};
+  }
+}
 
 export default async function handler(req, res) {
-  const requestId = Math.random().toString(36).slice(2, 9);
-
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed", requestId });
-  }
-
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: "OPENAI_API_KEY missing", requestId });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const body = req.body ?? {};
-    const message = body.message;
-    const userId = body.userId;
+    const { message, userId } = req.body;
 
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ error: "Missing or invalid message", requestId });
+    if (!message) {
+      return res.status(400).json({ error: "Missing message" });
     }
 
-    // ✅ Build context safely (never block replying)
-    let contextText = "No user context available.";
-    if (supabase && userId) {
-      try {
-        const { data: prs } = await supabase
-          .from("prs")
-          .select("*")
-          .eq("user_id", userId);
+    // 🔥 BUILD FULL USER CONTEXT
+    let userContext = {};
 
-        const { data: workouts } = await supabase
-          .from("workouts")
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        contextText = `User training data:
-PRs: ${JSON.stringify(prs ?? [])}
-Latest workout: ${JSON.stringify((workouts ?? [])[0] ?? null)}`;
-      } catch (ctxErr) {
-        console.error("Context build failed:", ctxErr);
-        contextText = "User context lookup failed (continuing without it).";
-      }
+    if (userId) {
+      userContext = await buildUserContext(userId);
     }
 
     const completion = await client.chat.completions.create({
@@ -63,24 +68,30 @@ Latest workout: ${JSON.stringify((workouts ?? [])[0] ?? null)}`;
       messages: [
         {
           role: "system",
-          content:
-            `You are ArmPal AI, an in-app fitness coach.\n\n` +
-            `Context:\n${contextText}\n\n` +
-            `Use context naturally when helpful. Be concise and actionable.`,
+          content: `
+You are ArmPal AI — an in-app elite fitness coach.
+
+You have FULL access to user data:
+
+${JSON.stringify(userContext)}
+
+Use this to give personalized responses.
+`
         },
-        { role: "user", content: message },
+        { role: "user", content: message }
       ],
     });
 
-    const reply = completion?.choices?.[0]?.message?.content ?? "";
+    const reply =
+      completion?.choices?.[0]?.message?.content || "No response.";
 
-    return res.status(200).json({ reply, requestId });
+    return res.status(200).json({ reply });
+
   } catch (err) {
-    console.error("AI HARD FAILURE:", err);
+    console.error(err);
     return res.status(500).json({
       error: "AI failed",
       message: err.message,
-      requestId,
     });
   }
 }
