@@ -12,11 +12,13 @@ import { FiUsers } from "react-icons/fi";
 // SMART ANALYTICS (READ-ONLY)
 import SmartAnalytics from "../components/SmartAnalytics";
 
-// AI SECTION
+// AI SECTION (keep if you still use it visually)
 import DashboardAISection from "../components/ai/DashboardAISection";
 
-// AI OVERLAY
-import DashboardAIOverlay from "../components/ai/DashboardAIOverlay";
+// ✅ AI CHAT (from api folder)
+import DashboardAIChat from "../components/ai/DashboardAIChat";
+import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
+
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -26,8 +28,7 @@ export default function Dashboard() {
   const [goals, setGoals] = useState([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
 
-  // AI Overlay (auto-show)
-  const [showAI, setShowAI] = useState(false);
+  // ✅ AI Chat State (ONLY ONCE)
   const [showAIChat, setShowAIChat] = useState(false);
 
   // Strength Calculator State
@@ -521,7 +522,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* UPCOMING WORKOUT */}
+            {/* UPCOMING WORKOUT */}
       <section style={{ marginBottom: 16 }}>
         <div
           style={{
@@ -567,40 +568,14 @@ export default function Dashboard() {
           )}
         </div>
       </section>
-      {/* AI OVERLAY — AUTO SHOW */}
-      {showAI && (
-        <DashboardAIOverlay
-          mode="savage"
-          onClose={() => setShowAI(false)}
-          userStats={{
-            lastWorkoutDaysAgo: 7,
-            benchPR: 315,
-            squatPR: 385,
-            streakDays: 5,
-          }}
-        />
-      )}
-      {/* AI CHAT BUTTON */}
-      <button
-        type="button"
-        onClick={() => setShowAI(true)}
-        style={{
-          position: "fixed",
-          bottom: 80,
-          right: 20,
-          zIndex: 20,
-          padding: "10px 14px",
-          borderRadius: 10,
-          background: "var(--accent)",
-          color: "#fff",
-          border: "none",
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        AI Chat
-      </button>
 
+      {/* ✅ AI CHAT BUTTON */}
+      <AIChatButtonOverlay onOpen={() => setShowAIChat(true)} />
+
+      {/* ✅ AI CHAT OVERLAY */}
+      {showAIChat && (
+        <DashboardAIChat onClose={() => setShowAIChat(false)} />
+      )}
 
     </div>
   );
