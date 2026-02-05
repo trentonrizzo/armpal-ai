@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { supabase } from "../../supabaseClient"; // ✅ correct for src/components/ai
 
 export default function DashboardAIChat({ onClose }) {
   const [messages, setMessages] = useState([]);
@@ -8,7 +9,6 @@ export default function DashboardAIChat({ onClose }) {
 
   const bottomRef = useRef(null);
 
-  // AUTO SCROLL
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
@@ -20,34 +20,39 @@ export default function DashboardAIChat({ onClose }) {
     setInput("");
     setError(null);
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: userMessage },
-    ]);
-
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setLoading(true);
 
     try {
+      // ✅ Get logged-in user id (so backend can read Supabase safely)
+      const { data, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw new Error(authErr.message);
+      const userId = data?.user?.id;
+      if (!userId) throw new Error("Not logged in. Please sign in again.");
+
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-  message: userMessage,
-  userId: user.id
-}),
-
+        body: JSON.stringify({ message: userMessage, userId }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || "AI request failed");
+      // ✅ If server returns non-JSON, this avoids "Unexpected end of JSON"
+      const text = await res.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = null;
       }
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.reply },
-      ]);
+      if (!res.ok) {
+        throw new Error(json?.error || json?.message || `AI request failed (${res.status})`);
+      }
+
+      const reply = json?.reply;
+      if (!reply) throw new Error("AI returned no reply.");
+
+      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       console.error("AI CHAT ERROR:", err);
       setError(err.message || "AI failed");
@@ -67,7 +72,6 @@ export default function DashboardAIChat({ onClose }) {
         display: "flex",
         justifyContent: "center",
         alignItems: "flex-end",
-        animation: "fadeIn 0.25s ease",
       }}
     >
       <div
@@ -81,8 +85,6 @@ export default function DashboardAIChat({ onClose }) {
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          transform: "translateY(0)",
-          animation: "slideUp 0.35s ease",
         }}
       >
         {/* HEADER */}
@@ -96,7 +98,6 @@ export default function DashboardAIChat({ onClose }) {
           }}
         >
           <strong>ArmPal AI</strong>
-
           <button
             onClick={onClose}
             style={{
@@ -104,11 +105,27 @@ export default function DashboardAIChat({ onClose }) {
               border: "none",
               fontSize: 18,
               cursor: "pointer",
+              color: "var(--text)",
             }}
           >
             ✕
           </button>
         </div>
+
+        {/* ERROR BANNER */}
+        {error && (
+          <div
+            style={{
+              padding: "10px 12px",
+              borderBottom: "1px solid var(--border)",
+              background: "rgba(255,0,0,0.10)",
+              color: "var(--text)",
+              fontSize: 13,
+            }}
+          >
+            <strong style={{ color: "var(--accent)" }}>AI Error:</strong> {error}
+          </div>
+        )}
 
         {/* CHAT */}
         <div
@@ -125,18 +142,15 @@ export default function DashboardAIChat({ onClose }) {
             <div
               key={i}
               style={{
-                alignSelf:
-                  m.role === "user" ? "flex-end" : "flex-start",
-                background:
-                  m.role === "user"
-                    ? "var(--accent)"
-                    : "var(--card-2)",
+                alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                background: m.role === "user" ? "var(--accent)" : "var(--card-2)",
                 padding: "10px 14px",
                 borderRadius: 14,
                 maxWidth: "80%",
                 fontSize: 14,
                 lineHeight: 1.5,
                 whiteSpace: "pre-wrap",
+                color: m.role === "user" ? "#fff" : "var(--text)",
               }}
             >
               {m.content}
@@ -144,8 +158,8 @@ export default function DashboardAIChat({ onClose }) {
           ))}
 
           {loading && (
-            <div style={{ opacity: 0.7 }}>
-              ArmPal is thinking...
+            <div style={{ opacity: 0.7, fontSize: 13 }}>
+              ArmPal is thinking…
             </div>
           )}
 
@@ -173,6 +187,7 @@ export default function DashboardAIChat({ onClose }) {
               borderRadius: 12,
               padding: "10px 12px",
               color: "var(--text)",
+              outline: "none",
             }}
           />
 
@@ -184,12 +199,13 @@ export default function DashboardAIChat({ onClose }) {
               border: "none",
               borderRadius: 12,
               padding: "10px 16px",
-              fontWeight: 700,
+              fontWeight: 800,
               color: "#fff",
               cursor: "pointer",
+              opacity: loading ? 0.7 : 1,
             }}
           >
-            Send
+            {loading ? "…" : "Send"}
           </button>
         </div>
       </div>
