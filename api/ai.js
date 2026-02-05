@@ -1,14 +1,17 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
-export const config = { runtime: "nodejs" };
+export const config = {
+  runtime: "nodejs",
+};
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// ✅ Safe Supabase client
 const supabase = createClient(
-  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
@@ -20,49 +23,72 @@ export default async function handler(req, res) {
 
   try {
 
-    const { message, userId } = req.body;
+    const { message, userId } = req.body || {};
 
     if (!message || !userId) {
-      return res.status(400).json({ error: "Missing message or userId" });
+      return res.status(400).json({
+        error: "Missing message or userId"
+      });
     }
 
     // 🔥 SAFE DATA FETCH (NO COLUMN ASSUMPTIONS)
-    const { data: prs } = await supabase
-      .from("prs")
-      .select("*")
-      .eq("user_id", userId);
+    let prs = [];
+    let workouts = [];
 
-    const { data: workouts } = await supabase
-      .from("workouts")
-      .select("*")
-      .eq("user_id", userId)
-      .limit(5);
+    try {
+      const prsRes = await supabase
+        .from("prs")
+        .select("*")
+        .eq("user_id", userId);
 
+      if (!prsRes.error) prs = prsRes.data || [];
+    } catch {}
+
+    try {
+      const workoutRes = await supabase
+        .from("workouts")
+        .select("*")
+        .eq("user_id", userId)
+        .limit(5);
+
+      if (!workoutRes.error) workouts = workoutRes.data || [];
+    } catch {}
+
+    // ✅ Build context safely
     const context = `
-User PR data:
-${JSON.stringify(prs || [])}
+User PR Data:
+${JSON.stringify(prs)}
 
-Recent workouts:
-${JSON.stringify(workouts || [])}
+Recent Workouts:
+${JSON.stringify(workouts)}
 `;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0.6,
       messages: [
         {
           role: "system",
-          content: `You are ArmPal AI. Use the user's training data below when answering:
+          content: `
+You are ArmPal AI, an in-app strength coach.
+
+You have access to the user's real training data below.
+
+Use it when answering:
 
 ${context}
 `
         },
-        { role: "user", content: message }
+        {
+          role: "user",
+          content: message
+        }
       ]
     });
 
-    return res.status(200).json({
-      reply: completion.choices[0].message.content
-    });
+    const reply = completion?.choices?.[0]?.message?.content || "No reply.";
+
+    return res.status(200).json({ reply });
 
   } catch (err) {
 
@@ -70,7 +96,7 @@ ${context}
 
     return res.status(500).json({
       error: "AI failed",
-      details: err.message
+      message: err.message
     });
   }
 }
