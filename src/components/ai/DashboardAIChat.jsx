@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
+import AISettingsOverlay from "./AISettingsOverlay"; // ✅ NEW settings overlay file
 
 export default function DashboardAIChat({ onClose }) {
 
@@ -7,6 +8,7 @@ export default function DashboardAIChat({ onClose }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showSettings, setShowSettings] = useState(false); // ✅ NEW
 
   const bottomRef = useRef(null);
 
@@ -16,17 +18,7 @@ export default function DashboardAIChat({ onClose }) {
 
   /* ==================================================
      🔥 SAVE WORKOUT — FULL ARM PAL NATIVE INTEGRATION
-     ==================================================
-
-     This now matches your REAL database architecture:
-
-     1️⃣ Create workout row
-     2️⃣ Capture returned workout_id
-     3️⃣ Insert exercises linked to workout_id
-     4️⃣ Workouts page automatically detects it
-
-     No fake schema. No guessing. Native flow.
-  */
+     ================================================== */
 
   async function saveWorkout(workout) {
 
@@ -36,8 +28,6 @@ export default function DashboardAIChat({ onClose }) {
       const userId = data?.user?.id;
 
       if (!userId) throw new Error("User not logged in");
-
-      /* ---------- CREATE WORKOUT ---------- */
 
       const { data: workoutInsert, error: workoutError } = await supabase
         .from("workouts")
@@ -52,8 +42,6 @@ export default function DashboardAIChat({ onClose }) {
 
       const workoutId = workoutInsert.id;
 
-      /* ---------- CREATE EXERCISES ---------- */
-
       if (Array.isArray(workout.exercises) && workout.exercises.length > 0) {
 
         const exerciseRows = workout.exercises.map((ex, index) => ({
@@ -61,7 +49,7 @@ export default function DashboardAIChat({ onClose }) {
           workout_id: workoutId,
           name: ex.name || "Exercise",
           sets: Number(ex.sets) || null,
-          reps: parseInt(ex.reps) || null,
+          reps: ex.reps ?? null, // ✅ allows ranges like 6-8, AMRAP, etc
           weight: null,
           position: index
         }));
@@ -140,8 +128,6 @@ export default function DashboardAIChat({ onClose }) {
 
       if (!reply) throw new Error("AI returned no reply");
 
-      /* ---------- STRUCTURED RESPONSE DETECTION ---------- */
-
       let parsed;
 
       try {
@@ -182,7 +168,7 @@ export default function DashboardAIChat({ onClose }) {
   }
 
   /* ==================================================
-     🎨 UI — YOUR ORIGINAL DESIGN (PRESERVED)
+     🎨 UI — ORIGINAL DESIGN PRESERVED
      ================================================== */
 
   return (
@@ -227,18 +213,10 @@ export default function DashboardAIChat({ onClose }) {
         >
           <strong>ArmPal AI</strong>
 
-          <button
-            onClick={onClose}
-            style={{
-              background: "transparent",
-              border: "none",
-              fontSize: 18,
-              cursor: "pointer",
-              color: "var(--text)"
-            }}
-          >
-            ✕
-          </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setShowSettings(true)}>⚙️</button>
+            <button onClick={onClose}>✕</button>
+          </div>
         </div>
 
         {/* ERROR */}
@@ -388,6 +366,10 @@ export default function DashboardAIChat({ onClose }) {
         </div>
 
       </div>
+
+      {showSettings && (
+        <AISettingsOverlay onClose={() => setShowSettings(false)} />
+      )}
 
     </div>
 
