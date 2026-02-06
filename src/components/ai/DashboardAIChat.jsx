@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
 import AISettingsOverlay from "./AISettingsOverlay"; // ORIGINAL settings overlay (mode control preserved)
@@ -6,7 +5,7 @@ import AISettingsOverlay from "./AISettingsOverlay"; // ORIGINAL settings overla
 export default function DashboardAIChat({ onClose }) {
 
   /* ==================================================
-     STATE (UNCHANGED FROM ORIGINAL)
+     STATE
      ================================================== */
 
   const [messages, setMessages] = useState([]);
@@ -14,6 +13,9 @@ export default function DashboardAIChat({ onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // NEW: current chat session
+  const [currentChat, setCurrentChat] = useState(null);
 
   // GOD MODE animation state (visual only)
   const [animateIn, setAnimateIn] = useState(false);
@@ -48,7 +50,7 @@ export default function DashboardAIChat({ onClose }) {
   }, [messages, loading]);
 
   /* ==================================================
-     LOAD CHAT HISTORY (UNCHANGED)
+     LOAD CURRENT CHAT + HISTORY (FIXED & SAFE)
      ================================================== */
 
   useEffect(() => {
@@ -65,10 +67,38 @@ export default function DashboardAIChat({ onClose }) {
         const userId = data?.user?.id;
         if (!userId) return;
 
+        // STEP 1 — load newest chat session
+        const { data: chatData, error: chatErr } = await supabase
+          .from("ai_chats")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (chatErr) throw chatErr;
+
+        let activeChat = chatData;
+
+        // If no chat exists yet, create one automatically
+        if (!activeChat) {
+          const { data: newChat, error: newChatErr } = await supabase
+            .from("ai_chats")
+            .insert({ user_id: userId, title: "New Chat" })
+            .select()
+            .single();
+
+          if (newChatErr) throw newChatErr;
+          activeChat = newChat;
+        }
+
+        if (!cancelled) setCurrentChat(activeChat);
+
+        // STEP 2 — load messages for that chat
         const { data: history, error: histErr } = await supabase
           .from("ai_messages")
           .select("role, content, created_at")
-          .eq("chat_id", currentChat.id)
+          .eq("chat_id", activeChat.id)
           .order("created_at", { ascending: false })
           .limit(30);
 
@@ -166,12 +196,12 @@ export default function DashboardAIChat({ onClose }) {
   }
 
   /* ==================================================
-     SEND MESSAGE (UNCHANGED — ensures chosen AI mode works)
+     SEND MESSAGE (UPDATED — chat sessions supported)
      ================================================== */
 
   async function sendMessage() {
 
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !currentChat) return;
 
     const userMessage = input;
     setInput("");
@@ -193,12 +223,11 @@ export default function DashboardAIChat({ onClose }) {
       if (!userId) throw new Error("Not logged in");
 
       await supabase.from("ai_messages").insert({
-  user_id: userId,
-  chat_id: currentChat.id,
-  role: "user",
-  content: userMessage
-});
-
+        user_id: userId,
+        chat_id: currentChat.id,
+        role: "user",
+        content: userMessage
+      });
 
       const res = await fetch("/api/ai", {
         method: "POST",
@@ -246,6 +275,7 @@ export default function DashboardAIChat({ onClose }) {
 
         await supabase.from("ai_messages").insert({
           user_id: userId,
+          chat_id: currentChat.id,
           role: "assistant",
           content: JSON.stringify(parsed)
         });
@@ -259,6 +289,7 @@ export default function DashboardAIChat({ onClose }) {
 
         await supabase.from("ai_messages").insert({
           user_id: userId,
+          chat_id: currentChat.id,
           role: "assistant",
           content: reply
         });
@@ -277,7 +308,7 @@ export default function DashboardAIChat({ onClose }) {
   }
 
   /* ==================================================
-     GOD MODE UI — ONLY VISUAL POLISH ADDED
+     GOD MODE UI — VISUAL
      ================================================== */
 
   return (
@@ -315,8 +346,6 @@ export default function DashboardAIChat({ onClose }) {
           transition: "all 0.35s cubic-bezier(.22,1,.36,1)"
         }}
       >
-
-        {/* HEADER — ORIGINAL STYLE RESTORED (NO IOS PILL BUTTONS) */}
 
         <div
           style={{
@@ -362,8 +391,6 @@ export default function DashboardAIChat({ onClose }) {
           </div>
         </div>
 
-        {/* ERROR */}
-
         {error && (
           <div
             style={{
@@ -377,8 +404,6 @@ export default function DashboardAIChat({ onClose }) {
             <strong style={{ color: "var(--accent)" }}>AI Error:</strong> {error}
           </div>
         )}
-
-        {/* CHAT */}
 
         <div
           style={{
@@ -464,8 +489,6 @@ export default function DashboardAIChat({ onClose }) {
           <div ref={bottomRef} />
 
         </div>
-
-        {/* INPUT */}
 
         <div
           style={{
