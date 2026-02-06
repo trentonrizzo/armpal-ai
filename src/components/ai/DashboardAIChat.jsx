@@ -68,7 +68,7 @@ export default function DashboardAIChat({ onClose }) {
         const { data: history, error: histErr } = await supabase
           .from("ai_messages")
           .select("role, content, created_at")
-          .eq("user_id", userId)
+          .eq("chat_id", currentChat.id)
           .order("created_at", { ascending: false })
           .limit(30);
 
@@ -193,10 +193,12 @@ export default function DashboardAIChat({ onClose }) {
       if (!userId) throw new Error("Not logged in");
 
       await supabase.from("ai_messages").insert({
-        user_id: userId,
-        role: "user",
-        content: userMessage
-      });
+  user_id: userId,
+  chat_id: currentChat.id,
+  role: "user",
+  content: userMessage
+});
+
 
       const res = await fetch("/api/ai", {
         method: "POST",
