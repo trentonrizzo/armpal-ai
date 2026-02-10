@@ -27,6 +27,45 @@ export default async function handler(req, res) {
     }
 
     /* -------------------------------------------------- */
+    /* 🔥 PRO ACCESS CHECK (NEW)                          */
+    /* -------------------------------------------------- */
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_pro")
+      .eq("id", userId)
+      .single();
+
+    if (!profile?.is_pro) {
+      return res.status(403).json({
+        error: "PRO_REQUIRED",
+        message: "AI Coach is Pro only."
+      });
+    }
+
+    /* -------------------------------------------------- */
+    /* 🔥 DAILY LIMIT CHECK (NEW)                         */
+    /* -------------------------------------------------- */
+
+    const today = new Date().toISOString().slice(0,10);
+
+    const { data: usage } = await supabase
+      .from("ai_usage")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", today)
+      .single();
+
+    const DAILY_LIMIT = 25;
+
+    if (usage && usage.count >= DAILY_LIMIT) {
+      return res.status(403).json({
+        error: "DAILY_LIMIT_REACHED",
+        message: "Daily AI limit reached."
+      });
+    }
+
+    /* -------------------------------------------------- */
     /* LOAD PERSONALITY                                   */
     /* -------------------------------------------------- */
 
@@ -115,13 +154,6 @@ vulgar:
 - NEVER generic motivation quotes
 - sounds like a psycho gym demon yelling at a lifter
 
-IMPORTANT FOR VULGAR MODE:
-
-- swear often
-- short punchy sentences
-- raw out-of-pocket energy
-- challenge the user constantly
-
 USER DATABASE:
 
 ${JSON.stringify(databaseContext).slice(0, 6000)}
@@ -130,33 +162,6 @@ RULES:
 
 If user asks to CREATE or MODIFY workouts,
 respond ONLY with valid JSON.
-
-CREATE:
-
-{
-"type":"create_workout",
-"title":string,
-"exercises":[
-{
-"name":string,
-"sets":number,
-"reps":string,
-"notes":string
-}
-]
-}
-
-EDIT:
-
-{
-"type":"edit_workout",
-"workout_id":string,
-"changes":[]
-}
-
-If not creating/editing workouts, respond normally as text.
-
-Do not include explanations when returning JSON.
 `;
 
     const completion = await openai.chat.completions.create({
@@ -175,6 +180,30 @@ Do not include explanations when returning JSON.
     const reply =
       completion?.choices?.[0]?.message?.content ??
       "No response";
+
+    /* -------------------------------------------------- */
+    /* 🔥 INCREMENT USAGE COUNT (NEW)                     */
+    /* -------------------------------------------------- */
+
+    if (usage) {
+
+      await supabase
+        .from("ai_usage")
+        .update({ count: usage.count + 1 })
+        .eq("user_id", userId)
+        .eq("date", today);
+
+    } else {
+
+      await supabase
+        .from("ai_usage")
+        .insert({
+          user_id: userId,
+          date: today,
+          count: 1
+        });
+
+    }
 
     return res.status(200).json({ reply });
 
