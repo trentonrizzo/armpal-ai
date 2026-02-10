@@ -626,6 +626,24 @@ export default function ChatPage() {
         })
         .select("id")
         .single();
+        // 2) Insert exercises (FIX)
+
+if (createdWorkout?.id && normalizedWorkout?.exercises?.length) {
+
+  const exerciseRows = normalizedWorkout.exercises.map((ex, index) => ({
+    workout_id: createdWorkout.id,
+    name: ex.name,
+    sets: ex.sets || null,
+    reps: ex.reps || null,
+    notes: ex.notes || null,
+    position: index,
+    user_id: user.id
+  }));
+
+  await supabase
+    .from("workout_exercises") // change if your table name differs
+    .insert(exerciseRows);
+}
 
       if (wErr || !createdWorkout?.id) {
         setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));

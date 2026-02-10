@@ -124,7 +124,7 @@ IMPORTANT FOR VULGAR MODE:
 
 USER DATABASE:
 
-${JSON.stringify(databaseContext)}
+${JSON.stringify(databaseContext).slice(0, 6000)}
 
 RULES:
 
