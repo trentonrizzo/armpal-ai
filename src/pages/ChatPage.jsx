@@ -615,6 +615,7 @@ export default function ChatPage() {
       // This makes the Save button actually work and show up in Workouts immediately.
 
       // 1) Create a workout row (THIS TABLE EXISTS)
+      console.log("NORMALIZED WORKOUT:", normalizedWorkout);
       const { data: createdWorkout, error: wErr } = await supabase
         .from("workouts")
         .insert({
