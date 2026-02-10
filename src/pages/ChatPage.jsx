@@ -210,7 +210,7 @@ function normalizeMaybeUrl(value) {
 // ============================================================
 
 function normalizeSharedWorkout(share) {
-  // Returns: { name, exercises: [{ name, sets? }] }
+
   const name =
     share?.workout?.name ||
     share?.workout_name ||
@@ -220,23 +220,26 @@ function normalizeSharedWorkout(share) {
   const rawExercises =
     (Array.isArray(share?.exercises) && share.exercises) ||
     (Array.isArray(share?.workout?.exercises) && share.workout.exercises) ||
+    (Array.isArray(share?.workout?.data?.exercises) && share.workout.data.exercises) || // 🔥 added
     (Array.isArray(share?.items) && share.items) ||
     [];
 
   const exercises = rawExercises
     .map((ex) => {
       if (!ex) return null;
-      const exName = ex.name || ex.exercise || ex.title || "Exercise";
-      const sets = ex.sets || ex.set || ex.series || null;
+
       return {
-        name: exName,
-        sets,
+        name: ex.name || ex.exercise || ex.title || "Exercise",
+        sets: ex.sets || ex.set || ex.series || null,
+        reps: ex.reps || null,
+        notes: ex.notes || null
       };
     })
     .filter(Boolean);
 
   return { name, exercises };
 }
+
 
 // ============================================================
 // WORKOUT SHARE CARD
@@ -615,7 +618,6 @@ export default function ChatPage() {
       // This makes the Save button actually work and show up in Workouts immediately.
 
       // 1) Create a workout row (THIS TABLE EXISTS)
-      console.log("NORMALIZED WORKOUT:", normalizedWorkout);
       const { data: createdWorkout, error: wErr } = await supabase
         .from("workouts")
         .insert({
