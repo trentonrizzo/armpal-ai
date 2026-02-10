@@ -199,19 +199,36 @@ export default function DashboardAIChat({ onClose }) {
       });
 
       const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, userId })
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: userMessage, userId })
+});
 
-      const text = await res.text();
-      let json = null;
+const text = await res.text();
+let json = null;
 
-      try {
-        json = text ? JSON.parse(text) : null;
-      } catch {
-        json = null;
-      }
+try {
+  json = text ? JSON.parse(text) : null;
+} catch {
+  json = null;
+}
+
+/* 🔥 NEW ERROR HANDLING (PRO + LIMIT) */
+
+if (!res.ok) {
+
+  if (json?.error === "PRO_REQUIRED") {
+    alert("🔒 ArmPal AI is Pro only. Upgrade to unlock.");
+    return;
+  }
+
+  if (json?.error === "DAILY_LIMIT_REACHED") {
+    alert("You reached your daily AI limit.");
+    return;
+  }
+
+}
+
 
       if (!res.ok) {
         throw new Error(

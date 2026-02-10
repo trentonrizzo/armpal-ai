@@ -34,7 +34,7 @@ export default async function handler(req, res) {
       .from("profiles")
       .select("is_pro")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
     if (!profile?.is_pro) {
       return res.status(403).json({
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       .select("*")
       .eq("user_id", userId)
       .eq("date", today)
-      .single();
+      .maybeSingle();
 
     const DAILY_LIMIT = 25;
 
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
       .from("ai_settings")
       .select("personality")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
     if (settings?.personality) {
       personality = settings.personality;
