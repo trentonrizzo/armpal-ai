@@ -1,4 +1,5 @@
 import { loadStripe } from "@stripe/stripe-js";
+import { supabase } from "../supabaseClient";
 
 const stripePromise = loadStripe(
   import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
@@ -10,11 +11,21 @@ export default function StripeTestButton() {
 
     try {
 
-      // AUTO detect current host + port
       const API_URL = `${window.location.origin}/api/create-checkout-session`;
+
+      // get current logged in user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       const response = await fetch(API_URL, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user?.id,
+        }),
       });
 
       if (!response.ok) {
