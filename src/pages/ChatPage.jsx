@@ -246,7 +246,7 @@ function normalizeSharedWorkout(share) {
 // ============================================================
 
 function WorkoutShareCard({ share, canSave, saving, saved, onSave }) {
-  const normalized = normalizeSharedWorkout(share);
+const normalized = normalizeSharedWorkout(share);
   const workoutName = normalized.name || "Workout";
   const exercises = Array.isArray(normalized.exercises)
     ? normalized.exercises
@@ -591,75 +591,76 @@ export default function ChatPage() {
   // WORKOUT SAVE (RESTORED)
   // ============================================================
 
-  async function saveShareToWorkouts(messageId, share) {
-    if (!user?.id) return;
-    if (!messageId) return;
-    if (!share) return;
+ async function saveShareToWorkouts(messageId, share) {
+  if (!user?.id) return;
+  if (!messageId) return;
+  if (!share) return;
 
-    if (savingWorkoutByMsgId[messageId]) return;
-    if (savedWorkoutByMsgId[messageId]) return;
+  if (savingWorkoutByMsgId[messageId]) return;
+  if (savedWorkoutByMsgId[messageId]) return;
 
-    setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
-    setError("");
+  setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
+  setError("");
 
-    try {
-      const normalized = normalizeSharedWorkout(share);
-      const workoutName = normalized.name || "Workout";
+  try {
+    const normalized = normalizeSharedWorkout(share);
+    const workoutName = normalized?.name || "Workout";
+    const exercises = Array.isArray(normalized?.exercises)
+      ? normalized.exercises
+      : [];
 
-      // IMPORTANT:
-      // Your database currently HAS: `workouts`
-      // Your database currently DOES NOT HAVE: `workout_exercises`
-      // (confirmed by your SQL error: relation "workout_exercises" does not exist)
-      //
-      // So this save action MUST:
-      // ✅ create the workout row
-      // ❌ NOT attempt to insert workout exercises (until you add that table)
-      //
-      // This makes the Save button actually work and show up in Workouts immediately.
+    // 1) Create workout row (same as AI)
+    const { data: createdWorkout, error: wErr } = await supabase
+      .from("workouts")
+      .insert({
+        user_id: user.id,
+        name: workoutName,
+      })
+      .select()
+      .single();
 
-      // 1) Create a workout row (THIS TABLE EXISTS)
-      const { data: createdWorkout, error: wErr } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: workoutName,
-          // your table includes these columns from screenshot:
-          // id, user_id, name, created_at, scheduled_for, position
-          // so we only insert what definitely exists.
-        })
-        .select("id")
-        .single();
-        // 2) Insert exercises (FIX)
+    if (wErr || !createdWorkout?.id) {
+      setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
+      return;
+    }
 
-if (createdWorkout?.id && normalizedWorkout?.exercises?.length) {
+    const workoutId = createdWorkout.id;
 
-  const exerciseRows = normalizedWorkout.exercises.map((ex, index) => ({
-    workout_id: createdWorkout.id,
-    name: ex.name,
-    sets: ex.sets || null,
-    reps: ex.reps || null,
-    notes: ex.notes || null,
-    position: index,
-    user_id: user.id
-  }));
+    // 2) Insert exercises (MATCH AI SAVE EXACTLY)
+    if (Array.isArray(exercises) && exercises.length > 0) {
 
-  await supabase
-    .from("workout_exercises") // change if your table name differs
-    .insert(exerciseRows);
-}
+      const exerciseRows = exercises.map((ex, index) => ({
+        user_id: user.id,
+        workout_id: workoutId,
+        name: ex?.name || "Exercise",
+        sets: Number(ex?.sets) || null,
+        reps: ex?.reps ?? null,
+        weight: null,
+        position: index
+      }));
 
-      if (wErr || !createdWorkout?.id) {
+      const { error: exerciseError } = await supabase
+        .from("exercises")
+        .insert(exerciseRows);
+
+      if (exerciseError) {
+        console.error("SAVE EXERCISE ERROR:", exerciseError);
         setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
         return;
       }
-
-      // 2) Mark saved in UI
-      setSavedWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
-      setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
-    } catch {
-      setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
     }
+
+    // 3) Mark saved
+    setSavedWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
+    setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
+
+  } catch (err) {
+    console.error("SAVE SHARE ERROR:", err);
+    setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
   }
+}
+
+
 
   // ============================================================
   // SEND TEXT
