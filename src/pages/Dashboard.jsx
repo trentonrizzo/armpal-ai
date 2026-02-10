@@ -24,6 +24,7 @@ import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
 export default function Dashboard() {
   const navigate = useNavigate();
 
+  const [isPro, setIsPro] = useState(false);
   const [user, setUser] = useState(null);
   const [displayName, setDisplayName] = useState("Athlete");
   const [goals, setGoals] = useState([]);
@@ -64,11 +65,12 @@ export default function Dashboard() {
       // Load profile
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username")
+        .select("username, is_pro")
         .eq("id", currentUser.id)
         .single();
 
       if (profile?.username) name = profile.username;
+      if (profile?.is_pro) setIsPro(true);
 
       await loadGoals(currentUser.id);
       await loadUpcomingWorkout(currentUser.id);
@@ -227,9 +229,23 @@ export default function Dashboard() {
       >
         <div>
           <p style={{ fontSize: 14, opacity: 0.8, margin: 0 }}>Welcome back,</p>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0" }}>
-            {displayName}
-          </h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0", display: "flex", alignItems: "center", gap: "8px" }}>
+  {displayName}
+
+  {isPro && (
+    <span style={{
+      padding: "2px 6px",
+      fontSize: "12px",
+      borderRadius: "6px",
+      background: "#ffd700",
+      color: "#000",
+      fontWeight: "bold"
+    }}>
+      PRO
+    </span>
+  )}
+</h1>
+
           <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
             Track your progress. Crush your PRs. Stay locked in.
           </p>
