@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     }
 
     /* -------------------------------------------------- */
-    /* READ USER DATABASE                                 */
+    /* READ USER DATABASE (PARALLEL = FAST)               */
     /* -------------------------------------------------- */
 
     const { data: tables } = await supabase.rpc("get_user_tables");
@@ -52,22 +52,24 @@ export default async function handler(req, res) {
 
     if (Array.isArray(tables)) {
 
-      for (const t of tables) {
+      await Promise.all(
+        tables.map(async (t) => {
+          try {
 
-        try {
+            const { data } = await supabase
+              .from(t.table_name)
+              .select("*")
+              .eq("user_id", userId)
+              .limit(100);
 
-          const { data } = await supabase
-            .from(t.table_name)
-            .select("*")
-            .eq("user_id", userId)
-            .limit(100);
+            if (data?.length) {
+              databaseContext[t.table_name] = data;
+            }
 
-          if (data?.length) {
-            databaseContext[t.table_name] = data;
-          }
+          } catch {}
+        })
+      );
 
-        } catch {}
-      }
     }
 
     /* -------------------------------------------------- */
@@ -115,11 +117,10 @@ vulgar:
 
 IMPORTANT FOR VULGAR MODE:
 
-- swear often (fuck, shit, damn, etc allowed)
+- swear often
 - short punchy sentences
 - raw out-of-pocket energy
 - challenge the user constantly
-- slightly chaotic but still helpful
 
 USER DATABASE:
 
