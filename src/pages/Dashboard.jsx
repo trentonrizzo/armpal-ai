@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { Link, useNavigate } from "react-router-dom";
+import StripeTestButton from "../components/StripeTestButton";
 
 // Programs
 import ProgramsLauncher from "../components/programs/ProgramsLauncher";
@@ -571,6 +572,8 @@ export default function Dashboard() {
 
       {/* ✅ AI CHAT BUTTON */}
       <AIChatButtonOverlay onOpen={() => setShowAIChat(true)} />
+
+        <StripeTestButton />
 
       {/* ✅ AI CHAT OVERLAY */}
       {showAIChat && (
