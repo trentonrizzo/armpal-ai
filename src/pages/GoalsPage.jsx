@@ -6,6 +6,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { checkUsageCap } from "../utils/usageCaps";
 
 import {
   DndContext,
@@ -270,6 +271,12 @@ export default function GoalsPage() {
         .select()
         .maybeSingle();
     } else {
+      const cap = await checkUsageCap(user.id, "goals");
+      if (!cap.allowed) {
+        setFormError(`Goal limit reached (${cap.limit}). Go Pro for more!`);
+        setSaving(false);
+        return;
+      }
       res = await supabase.from("goals").insert(payload).select().maybeSingle();
     }
 

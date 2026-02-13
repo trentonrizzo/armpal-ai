@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 
 // 🔥 ACHIEVEMENTS BUS (ADDED)
 import { achievementBus } from "../utils/achievementBus";
+import { checkUsageCap } from "../utils/usageCaps";
 
 // dnd-kit
 import {
@@ -83,6 +84,7 @@ export default function PRTracker() {
 
   // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
+  const [capMessage, setCapMessage] = useState("");
 
   // Drag sensors
   const sensors = useSensors(
@@ -158,6 +160,7 @@ export default function PRTracker() {
     setPrUnit("lbs");
     setPrNotes("");
     setPrDate(new Date().toISOString().slice(0, 10));
+    setCapMessage("");
     setModalOpen(true);
   }
 
@@ -175,6 +178,7 @@ export default function PRTracker() {
         : new Date(pr.date).toISOString().slice(0, 10);
 
     setPrDate(iso);
+    setCapMessage("");
     setModalOpen(true);
   }
 
@@ -211,6 +215,12 @@ export default function PRTracker() {
     if (editingPR) {
       await supabase.from("prs").update(payload).eq("id", editingPR.id);
     } else {
+      const cap = await checkUsageCap(user.id, "prs");
+      if (!cap.allowed) {
+        setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+        return;
+      }
+      setCapMessage("");
       await supabase.from("prs").insert(payload);
 
       // 🔥 FIRST PR EVER
@@ -457,6 +467,9 @@ export default function PRTracker() {
               onChange={(e) => setPrReps(e.target.value)}
             />
 
+            {capMessage ? (
+              <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p>
+            ) : null}
             <button
               style={{
                 width: "100%",

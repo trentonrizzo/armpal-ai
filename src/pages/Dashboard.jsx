@@ -1,6 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { checkUsageCap } from "../utils/usageCaps";
 import { Link, useNavigate } from "react-router-dom";
 import StripeTestButton from "../components/StripeTestButton";
 
@@ -42,6 +43,7 @@ export default function Dashboard() {
   // PR comparison
   const [bestPR, setBestPR] = useState(null);
   const [prDifference, setPrDifference] = useState(null);
+  const [prCapMessage, setPrCapMessage] = useState("");
 
   // Upcoming workout
   const [upcomingWorkout, setUpcomingWorkout] = useState(null);
@@ -178,6 +180,13 @@ export default function Dashboard() {
 
   async function handleSavePR() {
     if (!user?.id || !exerciseName || !calculated1RM) return;
+
+    const cap = await checkUsageCap(user.id, "prs");
+    if (!cap.allowed) {
+      setPrCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+      return;
+    }
+    setPrCapMessage("");
 
     const today = new Date().toISOString().split("T")[0];
 
@@ -415,6 +424,9 @@ export default function Dashboard() {
                 )
               ) : null}
 
+              {prCapMessage ? (
+                <p style={{ color: "var(--accent)", fontSize: 13, marginTop: 6 }}>{prCapMessage}</p>
+              ) : null}
               {/* Save PR button */}
               <button
                 onClick={handleSavePR}

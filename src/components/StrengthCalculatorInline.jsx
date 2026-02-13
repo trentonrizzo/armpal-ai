@@ -13,6 +13,7 @@ export default function StrengthCalculatorInline() {
   const [showPRSheet, setShowPRSheet] = useState(false);
   const [prLiftName, setPrLiftName] = useState("");
   const [prDate, setPrDate] = useState(new Date().toISOString().slice(0, 10));
+  const [capMessage, setCapMessage] = useState("");
 
   const { prs, createPR } = useContext(AppContext);
 
@@ -55,7 +56,12 @@ export default function StrengthCalculatorInline() {
       alert("Enter a lift name.");
       return;
     }
-    await createPR(prLiftName, oneRM, "lbs", prDate);
+    const result = await createPR(prLiftName, oneRM, "lbs", prDate);
+    if (result && !result.success && result.cap) {
+      setCapMessage(`PR limit reached (${result.cap.limit}). Go Pro for more!`);
+      return;
+    }
+    setCapMessage("");
     setShowPRSheet(false);
   };
 
@@ -160,6 +166,7 @@ export default function StrengthCalculatorInline() {
           <button
             onClick={() => {
               setPrLiftName(liftName);
+              setCapMessage("");
               setShowPRSheet(true);
             }}
             className="w-full mt-4 py-2 bg-neutral-800 border border-red-700 hover:bg-neutral-700 rounded-xl"
@@ -242,6 +249,8 @@ export default function StrengthCalculatorInline() {
             value={prDate}
             onChange={(e) => setPrDate(e.target.value)}
           />
+
+          {capMessage ? <p className="text-red-400 text-sm">{capMessage}</p> : null}
 
           <div className="flex justify-between mt-4">
             <button

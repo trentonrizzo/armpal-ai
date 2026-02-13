@@ -17,6 +17,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { achievementBus } from "../utils/achievementBus";
+import { checkUsageCap } from "../utils/usageCaps";
 import { supabase } from "../supabaseClient";
 import {
   DndContext,
@@ -177,6 +178,7 @@ export default function WorkoutsPage() {
 
   // summary
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [capMessage, setCapMessage] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -281,6 +283,7 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
     setWorkoutSchedule(
       workout?.scheduled_for ? workout.scheduled_for.slice(0, 16) : ""
     );
+    setCapMessage("");
     setWorkoutModalOpen(true);
   }
 
@@ -297,6 +300,12 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
     if (editingWorkout) {
       await supabase.from("workouts").update(payload).eq("id", editingWorkout.id);
     } else {
+      const cap = await checkUsageCap(user.id, "workouts");
+      if (!cap.allowed) {
+        setCapMessage(`Workout limit reached (${cap.limit} for ${cap.isPro ? "Pro" : "free"}). Go Pro for more!`);
+        return;
+      }
+      setCapMessage("");
       payload.position = workouts.length;
       await supabase.from("workouts").insert(payload);
     }
@@ -850,6 +859,9 @@ if (!editingWorkout && !alreadyFired) {
               value={workoutSchedule}
               onChange={(e) => setWorkoutSchedule(e.target.value)}
             />
+            {capMessage ? (
+              <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p>
+            ) : null}
             <button style={primaryBtn} onClick={saveWorkout}>
               Save Workout
             </button>

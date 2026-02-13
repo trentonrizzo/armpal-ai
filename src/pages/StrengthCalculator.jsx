@@ -1,6 +1,7 @@
 // src/pages/StrengthCalculator.jsx
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
+import { checkUsageCap } from "../utils/usageCaps";
 
 export default function StrengthCalculator() {
   const [liftName, setLiftName] = useState("");
@@ -8,6 +9,7 @@ export default function StrengthCalculator() {
   const [reps, setReps] = useState("");
   const [oneRM, setOneRM] = useState(null);
   const [currentPR, setCurrentPR] = useState(null);
+  const [capMessage, setCapMessage] = useState("");
 
   // Rep multipliers
   const repMultipliers = {
@@ -78,9 +80,22 @@ export default function StrengthCalculator() {
   async function savePR() {
     if (!liftName || !oneRM) return;
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const cap = await checkUsageCap(user.id, "prs");
+    if (!cap.allowed) {
+      setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+      return;
+    }
+    setCapMessage("");
+
     const cleanName = liftName.toLowerCase().trim();
 
     await supabase.from("prs").insert({
+      user_id: user.id,
       lift_name: cleanName,
       weight: oneRM,
     });
@@ -154,6 +169,7 @@ export default function StrengthCalculator() {
                   <p className="text-red-400 font-bold mt-1">
                     🔥 NEW PR POSSIBLE
                   </p>
+                  {capMessage ? <p className="text-red-400 text-sm mt-1">{capMessage}</p> : null}
                   <button
                     onClick={savePR}
                     className="w-full py-2 mt-3 bg-red-700 rounded-lg hover:bg-red-800 transition"

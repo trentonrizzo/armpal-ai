@@ -1,6 +1,7 @@
 // src/context/AppContext.jsx
 import React, { createContext, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { checkUsageCap } from "../utils/usageCaps";
 
 export const AppContext = createContext();
 
@@ -48,6 +49,11 @@ export const AppProvider = ({ children }) => {
   // CREATE PR
   // ============================
   async function createPR(lift, weight, unit, date, reps, notes) {
+    if (!user?.id) return { success: false };
+    const cap = await checkUsageCap(user.id, "prs");
+    if (!cap.allowed) {
+      return { success: false, cap };
+    }
     const { data, error } = await supabase
       .from("prs")
       .insert({
@@ -64,7 +70,9 @@ export const AppProvider = ({ children }) => {
 
     if (!error && data) {
       setPRs((prev) => [...prev, data[0]]);
+      return { success: true };
     }
+    return { success: false };
   }
 
   // ============================

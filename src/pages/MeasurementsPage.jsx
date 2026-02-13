@@ -48,6 +48,7 @@ import {
   updateMeasurement,
   deleteMeasurement,
 } from "../api/measurements";
+import { checkUsageCap } from "../utils/usageCaps";
 
 /* -------------------------------------------------------
    SORTABLE ITEM — LEFT 40% = DRAG HANDLE
@@ -112,6 +113,7 @@ export default function MeasurementsPage() {
   const [bwEditWeight, setBwEditWeight] = useState("");
   const [bwEditDate, setBwEditDate] = useState("");
   const [bwDeleteId, setBwDeleteId] = useState(null);
+  const [capMessage, setCapMessage] = useState("");
 
   // ---------------- DND ----------------
   const sensors = useSensors(
@@ -206,6 +208,7 @@ export default function MeasurementsPage() {
     setMValue("");
     setMUnit("in");
     setMDate(new Date().toISOString().slice(0, 10));
+    setCapMessage("");
     setModalOpen(true);
   }
 
@@ -233,6 +236,12 @@ export default function MeasurementsPage() {
         date: mDate,
       });
     } else {
+      const cap = await checkUsageCap(user.id, "measurements");
+      if (!cap.allowed) {
+        setCapMessage(`Measurement limit reached (${cap.limit}). Go Pro for more!`);
+        return;
+      }
+      setCapMessage("");
       await addMeasurement({
         userId: user.id,
         name: mName,
@@ -268,6 +277,13 @@ export default function MeasurementsPage() {
 
     const n = Number(bwInput);
     if (!bwInput || Number.isNaN(n) || n <= 0) return;
+
+    const cap = await checkUsageCap(user.id, "bodyweight");
+    if (!cap.allowed) {
+      setCapMessage(`Bodyweight log limit reached (${cap.limit}). Go Pro for more!`);
+      return;
+    }
+    setCapMessage("");
 
     await supabase.from("bodyweight_logs").insert({
       user_id: user.id,
@@ -383,6 +399,7 @@ export default function MeasurementsPage() {
             Log
           </button>
         </div>
+        {capMessage ? <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p> : null}
 
         {bwHistory.length > 1 && (
           <div style={{ marginTop: 12 }}>
@@ -504,6 +521,7 @@ export default function MeasurementsPage() {
             </select>
             <label style={labelStyle}>Date</label>
             <input style={inputStyle} type="date" value={mDate} onChange={(e) => setMDate(e.target.value)} />
+            {capMessage ? <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p> : null}
             <button style={primaryBtn} onClick={saveMeasurement}>Save</button>
           </div>
         </div>

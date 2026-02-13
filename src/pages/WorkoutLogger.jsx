@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient";
 import WorkoutModal from "../components/WorkoutModal.jsx";
 import "../flames.css";
 
+import { checkUsageCap } from "../utils/usageCaps";
 import {
   getWorkoutsWithExercises,
   addWorkout as addWorkoutApi,
@@ -22,6 +23,7 @@ export default function WorkoutLogger() {
 
   const [newWorkout, setNewWorkout] = useState("");
   const [modalWorkout, setModalWorkout] = useState(null);
+  const [capMessage, setCapMessage] = useState("");
 
   // LOAD WORKOUTS
   useEffect(() => {
@@ -48,6 +50,13 @@ export default function WorkoutLogger() {
   // ADD WORKOUT
   const handleAddWorkout = async () => {
     if (!newWorkout.trim() || !user) return;
+
+    const cap = await checkUsageCap(user.id, "workouts");
+    if (!cap.allowed) {
+      setCapMessage(`Workout limit reached (${cap.limit}). Go Pro for more!`);
+      return;
+    }
+    setCapMessage("");
 
     const created = await addWorkoutApi({
       userId: user.id,
@@ -148,6 +157,7 @@ export default function WorkoutLogger() {
           Add
         </button>
       </div>
+      {capMessage ? <p className="text-red-400 text-sm mb-2">{capMessage}</p> : null}
 
       {workouts.length === 0 ? (
         <p className="text-gray-400">No workouts yet.</p>
