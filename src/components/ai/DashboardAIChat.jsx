@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { getIsPro } from "../../utils/usageLimits";
 import AISettingsOverlay from "./AISettingsOverlay";
 
 export default function DashboardAIChat({ onClose }) {
+  const navigate = useNavigate();
 
   /* ==================================================
      STATE (UNCHANGED FROM ORIGINAL)
@@ -395,6 +397,29 @@ if (!res.ok) {
             }}
           >
             <strong style={{ color: "var(--accent)" }}>AI Error:</strong> {error}
+            {error.includes("Pro only") && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose?.();
+                  navigate("/pro");
+                }}
+                style={{
+                  display: "block",
+                  marginTop: 10,
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "var(--text)",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                Upgrade to Pro
+              </button>
+            )}
           </div>
         )}
 

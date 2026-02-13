@@ -24,6 +24,7 @@ import ResetPassword from "./pages/ResetPassword";
 
 import Analytics from "./pages/Analytics";
 import MeasurementAnalytics from "./pages/MeasurementAnalytics";
+import ProUpgradePage from "./pages/ProUpgradePage";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
@@ -150,6 +151,7 @@ function AppContent() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
+        <Route path="/pro" element={<ProUpgradePage />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}

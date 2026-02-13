@@ -292,6 +292,28 @@ export default function Dashboard() {
         </Link>
       </header>
 
+      {/* Upgrade to Pro — only when NOT Pro (uses existing isPro from profiles) */}
+      {!isPro && (
+        <Link
+          to="/pro"
+          style={{
+            display: "block",
+            marginBottom: 16,
+            padding: "12px 16px",
+            borderRadius: 12,
+            background: "var(--accent)",
+            color: "var(--text)",
+            fontWeight: 700,
+            fontSize: 14,
+            textAlign: "center",
+            border: "1px solid var(--border)",
+            textDecoration: "none",
+          }}
+        >
+          Upgrade to Pro
+        </Link>
+      )}
+
       {/* Today's Focus */}
       <DashboardAISection />
 
@@ -383,21 +405,41 @@ export default function Dashboard() {
             <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.9 }}>
               Upgrade to unlock Smart Analytics and full progress tracking.
             </p>
-            <button
-              type="button"
-              onClick={() => setShowAnalyticsUpgrade(false)}
-              style={{
-                padding: "10px 20px",
-                borderRadius: 10,
-                border: "none",
-                background: "var(--accent)",
-                color: "var(--text)",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              OK
-            </button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setShowAnalyticsUpgrade(false)}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAnalyticsUpgrade(false);
+                  navigate("/pro");
+                }}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "var(--text)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Upgrade to Pro
+              </button>
+            </div>
           </div>
         </div>
       )}
