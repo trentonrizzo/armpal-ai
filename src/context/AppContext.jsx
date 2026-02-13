@@ -1,7 +1,7 @@
 // src/context/AppContext.jsx
 import React, { createContext, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 
 export const AppContext = createContext();
 

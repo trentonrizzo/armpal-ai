@@ -4,7 +4,7 @@ import { supabase } from "../supabaseClient";
 
 // 🔥 ACHIEVEMENTS BUS (ADDED)
 import { achievementBus } from "../utils/achievementBus";
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 
 // dnd-kit
 import {

@@ -6,7 +6,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 
 import {
   DndContext,

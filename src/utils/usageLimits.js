@@ -1,8 +1,8 @@
 /*
-  usageCaps.js — Single source of truth for free vs pro limits.
-  Reads is_pro from Supabase profiles; caps workouts, PRs, measurements,
-  bodyweight logs, and goals. Free: 5 each. Pro: 1000 each.
-  Import and call checkUsageCap(userId, type) before creating an entry.
+  usageLimits.js — SINGLE SOURCE OF TRUTH for Pro/free limits.
+  Pro status comes ONLY from Supabase profiles.is_pro (never hard-coded).
+  All limit enforcement (workouts, PRs, measurements, bodyweight, goals) must
+  call checkUsageCap(userId, type) at action/save level.
 */
 
 import { supabase } from "../supabaseClient";
@@ -10,7 +10,6 @@ import { supabase } from "../supabaseClient";
 export const FREE_CAP = 5;
 export const PRO_CAP = 1000;
 
-/** @type {Record<string, string>} table name by usage type */
 const TABLE_BY_TYPE = {
   workouts: "workouts",
   prs: "prs",
@@ -20,7 +19,7 @@ const TABLE_BY_TYPE = {
 };
 
 /**
- * Get whether the user has Pro (from Supabase profiles.is_pro).
+ * Get Pro status from Supabase profiles only. No hard-coding.
  * @param {string} userId
  * @returns {Promise<boolean>}
  */
@@ -32,27 +31,24 @@ export async function getIsPro(userId) {
     .eq("id", userId)
     .maybeSingle();
   if (error) {
-    console.error("usageCaps getIsPro:", error);
+    console.error("usageLimits getIsPro:", error);
     return false;
   }
   return data?.is_pro === true;
 }
 
 /**
- * Check if the user can add one more entry of the given type.
- * Fetches is_pro from profiles and current count from the relevant table.
+ * Check if user can add one more entry. Uses profiles.is_pro and DB count only.
  * @param {string} userId
  * @param {'workouts'|'prs'|'measurements'|'bodyweight'|'goals'} type
  * @returns {Promise<{ allowed: boolean, limit: number, currentCount: number, isPro: boolean }>}
  */
 export async function checkUsageCap(userId, type) {
-  const limit = await getIsPro(userId).then((isPro) =>
-    isPro ? PRO_CAP : FREE_CAP
-  );
-  const isPro = limit === PRO_CAP;
+  const isPro = await getIsPro(userId);
+  const limit = isPro ? PRO_CAP : FREE_CAP;
   const table = TABLE_BY_TYPE[type];
   if (!table) {
-    return { allowed: false, limit: 0, currentCount: 0, isPro };
+    return { allowed: false, limit: 0, currentCount: 0, isPro: false };
   }
 
   const { count, error } = await supabase
@@ -61,7 +57,7 @@ export async function checkUsageCap(userId, type) {
     .eq("user_id", userId);
 
   if (error) {
-    console.error("usageCaps count error:", type, error);
+    console.error("usageLimits count error:", type, error);
     return { allowed: false, limit, currentCount: 0, isPro };
   }
 

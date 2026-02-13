@@ -17,7 +17,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { achievementBus } from "../utils/achievementBus";
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 import { supabase } from "../supabaseClient";
 import {
   DndContext,

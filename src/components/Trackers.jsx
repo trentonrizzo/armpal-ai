@@ -1,5 +1,6 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { AppContext } from "../context/AppContext";
+import { checkUsageCap, FREE_CAP } from "../utils/usageLimits";
 
 const Trackers = () => {
   const {
@@ -7,7 +8,7 @@ const Trackers = () => {
     setMeasurements,
     prs,
     setPRs,
-    isPro
+    user,
   } = useContext(AppContext);
 
   const [activeTab, setActiveTab] = useState("measurements");
@@ -15,20 +16,30 @@ const Trackers = () => {
   const [value, setValue] = useState("");
   const [unit, setUnit] = useState("in");
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [cap, setCap] = useState(null);
 
-  const handleAdd = (e) => {
+  const limitType = activeTab === "measurements" ? "measurements" : "prs";
+  const list = activeTab === "measurements" ? measurements : prs;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    checkUsageCap(user.id, limitType).then(setCap);
+  }, [user?.id, limitType, list?.length]);
+
+  const handleAdd = async (e) => {
     e.preventDefault();
 
     if (!label || !value) {
       alert("Please fill in all fields!");
       return;
     }
+    if (!user?.id) return;
 
     const currentList = activeTab === "measurements" ? measurements : prs;
     const setList = activeTab === "measurements" ? setMeasurements : setPRs;
 
-    // Only enforce free version limit if not PRO
-    if (!isPro && currentList.length >= 5) {
+    const limitCheck = await checkUsageCap(user.id, limitType);
+    if (!limitCheck.allowed) {
       setShowUpgrade(true);
       return;
     }
@@ -54,12 +65,12 @@ const Trackers = () => {
     }
   };
 
-  const list = activeTab === "measurements" ? measurements : prs;
-  const maxSlots = 5;
+  const maxSlots = cap?.limit ?? FREE_CAP;
   const freeRemaining = maxSlots - list.length;
-  const lockedSlots = !isPro
-    ? Array.from({ length: freeRemaining < 0 ? 0 : maxSlots - list.length })
-    : [];
+  const lockedSlots =
+    cap && !cap.isPro
+      ? Array.from({ length: freeRemaining < 0 ? 0 : freeRemaining })
+      : [];
 
   return (
     <div style={{ padding: "2rem", maxWidth: "500px", margin: "auto" }}>

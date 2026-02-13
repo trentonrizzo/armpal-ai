@@ -1,7 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 import { Link, useNavigate } from "react-router-dom";
 import StripeTestButton from "../components/StripeTestButton";
 

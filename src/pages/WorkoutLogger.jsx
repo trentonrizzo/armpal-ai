@@ -3,7 +3,7 @@ import { supabase } from "../supabaseClient";
 import WorkoutModal from "../components/WorkoutModal.jsx";
 import "../flames.css";
 
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 import {
   getWorkoutsWithExercises,
   addWorkout as addWorkoutApi,

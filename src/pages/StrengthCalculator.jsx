@@ -1,7 +1,7 @@
 // src/pages/StrengthCalculator.jsx
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 
 export default function StrengthCalculator() {
   const [liftName, setLiftName] = useState("");

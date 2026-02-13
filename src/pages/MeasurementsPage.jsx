@@ -48,7 +48,7 @@ import {
   updateMeasurement,
   deleteMeasurement,
 } from "../api/measurements";
-import { checkUsageCap } from "../utils/usageCaps";
+import { checkUsageCap } from "../utils/usageLimits";
 
 /* -------------------------------------------------------
    SORTABLE ITEM — LEFT 40% = DRAG HANDLE

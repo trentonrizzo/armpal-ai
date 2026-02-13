@@ -1,13 +1,13 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { AppContext } from "../context/AppContext";
+import { checkUsageCap, FREE_CAP } from "../utils/usageLimits";
 
-console.log("DEBUG — WorkoutsPage is LOADED");
 const Workouts = () => {
-  const { workouts, setWorkouts, isPro } = useContext(AppContext);
+  const { workouts, setWorkouts, user } = useContext(AppContext);
   const [workoutTitle, setWorkoutTitle] = useState("");
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [cap, setCap] = useState(null);
 
-  // Track which workout is being edited for exercises
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [exerciseName, setExerciseName] = useState("");
   const [sets, setSets] = useState("");
@@ -15,13 +15,19 @@ const Workouts = () => {
   const [weight, setWeight] = useState("");
   const [notes, setNotes] = useState("");
 
-  const handleAddWorkout = () => {
+  useEffect(() => {
+    if (!user?.id) return;
+    checkUsageCap(user.id, "workouts").then(setCap);
+  }, [user?.id, workouts?.length]);
+
+  const handleAddWorkout = async () => {
     if (!workoutTitle) {
       alert("Please enter a workout title!");
       return;
     }
-
-    if (!isPro && workouts.length >= 5) {
+    if (!user?.id) return;
+    const limitCheck = await checkUsageCap(user.id, "workouts");
+    if (!limitCheck.allowed) {
       setShowUpgrade(true);
       return;
     }
@@ -81,10 +87,9 @@ const Workouts = () => {
     setWorkouts(updatedWorkouts);
   };
 
-  // Locked workout slots for free users
-  const maxWorkouts = 5;
+  const maxWorkouts = cap?.limit ?? FREE_CAP;
   const lockedSlots =
-    !isPro && workouts.length < maxWorkouts
+    cap && !cap.isPro && workouts.length < maxWorkouts
       ? Array.from({ length: maxWorkouts - workouts.length })
       : [];
 
