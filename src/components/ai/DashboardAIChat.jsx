@@ -1,7 +1,7 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
-import AISettingsOverlay from "./AISettingsOverlay"; // ORIGINAL settings overlay (mode control preserved)
+import { getIsPro } from "../../utils/usageLimits";
+import AISettingsOverlay from "./AISettingsOverlay";
 
 export default function DashboardAIChat({ onClose }) {
 
@@ -170,28 +170,33 @@ export default function DashboardAIChat({ onClose }) {
      ================================================== */
 
   async function sendMessage() {
-
     if (!input.trim() || loading) return;
 
     const userMessage = input;
+
+    const { data, error: authErr } = await supabase.auth.getUser();
+    if (authErr) {
+      setError("Please sign in to use AI chat.");
+      return;
+    }
+    const userId = data?.user?.id;
+    if (!userId) {
+      setError("Not logged in.");
+      return;
+    }
+
+    const isPro = await getIsPro(userId);
+    if (!isPro) {
+      setError("🔒 ArmPal AI is Pro only. Upgrade to unlock.");
+      return;
+    }
+
     setInput("");
     setError(null);
-
-    setMessages(prev => [
-      ...prev,
-      { role: "user", content: userMessage }
-    ]);
-
+    setMessages(prev => [...prev, { role: "user", content: userMessage }]);
     setLoading(true);
 
     try {
-
-      const { data, error: authErr } = await supabase.auth.getUser();
-      if (authErr) throw new Error(authErr.message);
-
-      const userId = data?.user?.id;
-      if (!userId) throw new Error("Not logged in");
-
       await supabase.from("ai_messages").insert({
         user_id: userId,
         role: "user",

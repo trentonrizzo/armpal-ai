@@ -1,7 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { checkUsageCap } from "../utils/usageLimits";
+import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { Link, useNavigate } from "react-router-dom";
 import StripeTestButton from "../components/StripeTestButton";
 
@@ -33,6 +33,9 @@ export default function Dashboard() {
 
   // ✅ AI Chat State (ONLY ONCE)
   const [showAIChat, setShowAIChat] = useState(false);
+  // Smart Analytics / Progress Overview — Pro-only (centralized getIsPro)
+  const [analyticsPro, setAnalyticsPro] = useState(null);
+  const [showAnalyticsUpgrade, setShowAnalyticsUpgrade] = useState(false);
 
   // Strength Calculator State
   const [exerciseName, setExerciseName] = useState("");
@@ -51,6 +54,11 @@ export default function Dashboard() {
   useEffect(() => {
     loadUserAndData();
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    getIsPro(user.id).then(setAnalyticsPro);
+  }, [user?.id]);
 
   async function loadUserAndData() {
     const { data, error } = await supabase.auth.getUser();
@@ -305,19 +313,94 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* SMART ANALYTICS (READ-ONLY) — CLICKABLE TO FULL PAGE */}
+      {/* SMART ANALYTICS (PRO-ONLY) — lock state + upgrade on click if free */}
       <ProgramsLauncher pillStyle={{ marginBottom: 12 }} />
       <div
         role="button"
         tabIndex={0}
-        onClick={() => navigate("/analytics")}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") navigate("/analytics");
+        onClick={() => {
+          if (analyticsPro === false) {
+            setShowAnalyticsUpgrade(true);
+            return;
+          }
+          if (analyticsPro === true) navigate("/analytics");
         }}
-        style={{ cursor: "pointer" }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          if (analyticsPro === false) {
+            setShowAnalyticsUpgrade(true);
+            return;
+          }
+          if (analyticsPro === true) navigate("/analytics");
+        }}
+        style={{ cursor: "pointer", position: "relative" }}
       >
         <SmartAnalytics />
+        {analyticsPro === false && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: 16,
+              background: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              pointerEvents: "none",
+            }}
+          >
+            <span style={{ fontSize: 32 }} aria-hidden>🔒</span>
+          </div>
+        )}
       </div>
+      {showAnalyticsUpgrade && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9998,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+          onClick={() => setShowAnalyticsUpgrade(false)}
+        >
+          <div
+            style={{
+              background: "var(--card)",
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 320,
+              border: "1px solid var(--border)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p style={{ margin: "0 0 16px", fontWeight: 600 }}>
+              Progress Overview is a Pro feature
+            </p>
+            <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.9 }}>
+              Upgrade to unlock Smart Analytics and full progress tracking.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowAnalyticsUpgrade(false)}
+              style={{
+                padding: "10px 20px",
+                borderRadius: 10,
+                border: "none",
+                background: "var(--accent)",
+                color: "var(--text)",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* GOALS */}
       {/* REMOVED — goals belong in /analytics and /goals */}
