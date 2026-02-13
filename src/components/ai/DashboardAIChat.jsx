@@ -2,23 +2,31 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { getIsPro } from "../../utils/usageLimits";
+import {
+  listConversations,
+  createConversation,
+  updateConversationTitle,
+  deleteConversation,
+  getMessages,
+  titleFromFirstMessage,
+  touchConversation,
+} from "../../api/aiConversations";
 import AISettingsOverlay from "./AISettingsOverlay";
 
 export default function DashboardAIChat({ onClose }) {
   const navigate = useNavigate();
 
-  /* ==================================================
-     STATE (UNCHANGED FROM ORIGINAL)
-     ================================================== */
-
+  const [conversations, setConversations] = useState([]);
+  const [activeConversationId, setActiveConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-
-  // GOD MODE animation state (visual only)
   const [animateIn, setAnimateIn] = useState(false);
+  const [renameId, setRenameId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const bottomRef = useRef(null);
 
@@ -50,66 +58,58 @@ export default function DashboardAIChat({ onClose }) {
   }, [messages, loading]);
 
   /* ==================================================
-     LOAD CHAT HISTORY (UNCHANGED)
+     CONVERSATIONS: list, ensure one exists, load messages
      ================================================== */
 
+  const userIdRef = useRef(null);
+
   useEffect(() => {
-
     let cancelled = false;
+    async function init() {
+      const { data, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !data?.user?.id) return;
+      const uid = data.user.id;
+      userIdRef.current = uid;
 
-    async function loadChatHistory() {
+      const list = await listConversations(uid);
+      if (cancelled) return;
 
-      try {
-
-        const { data, error: authErr } = await supabase.auth.getUser();
-        if (authErr) throw new Error(authErr.message);
-
-        const userId = data?.user?.id;
-        if (!userId) return;
-
-        const { data: history, error: histErr } = await supabase
-          .from("ai_messages")
-          .select("role, content, created_at")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(30);
-
-        if (histErr) throw histErr;
-
-        const safe = Array.isArray(history) ? [...history].reverse() : [];
-
-        const mapped = safe.map((row) => {
-
-          let parsed = null;
-          try {
-            parsed = JSON.parse(row.content);
-          } catch {
-            parsed = null;
-          }
-
-          if (parsed?.type === "create_workout") {
-            return { role: row.role, content: parsed, isWorkoutCard: true };
-          }
-
-          return { role: row.role, content: row.content };
-        });
-
-        if (!cancelled && mapped.length) {
-          setMessages(mapped);
-        }
-
-      } catch (err) {
-        console.error("LOAD AI HISTORY ERROR:", err);
+      if (list.length === 0) {
+        const created = await createConversation(uid, "New chat");
+        if (cancelled || !created) return;
+        setConversations([created]);
+        setActiveConversationId(created.id);
+      } else {
+        setConversations(list);
+        setActiveConversationId(list[0].id);
       }
     }
-
-    loadChatHistory();
-
-    return () => {
-      cancelled = true;
-    };
-
+    init();
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    let cancelled = false;
+    (async () => {
+      const rows = await getMessages(activeConversationId);
+      if (cancelled) return;
+      const mapped = rows.map((row) => {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(row.content);
+        } catch {
+          parsed = null;
+        }
+        if (parsed?.type === "create_workout") {
+          return { role: row.role, content: parsed, isWorkoutCard: true };
+        }
+        return { role: row.role, content: row.content };
+      });
+      setMessages(mapped);
+    })();
+    return () => { cancelled = true; };
+  }, [activeConversationId]);
 
   /* ==================================================
      SAVE WORKOUT (UNCHANGED)
@@ -172,7 +172,7 @@ export default function DashboardAIChat({ onClose }) {
      ================================================== */
 
   async function sendMessage() {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !activeConversationId) return;
 
     const userMessage = input;
 
@@ -198,18 +198,32 @@ export default function DashboardAIChat({ onClose }) {
     setMessages(prev => [...prev, { role: "user", content: userMessage }]);
     setLoading(true);
 
+    const wasEmpty = messages.length === 0;
+
     try {
       await supabase.from("ai_messages").insert({
         user_id: userId,
+        conversation_id: activeConversationId,
         role: "user",
         content: userMessage
       });
+      await touchConversation(activeConversationId);
+
+      if (wasEmpty) {
+        const title = titleFromFirstMessage(userMessage);
+        await updateConversationTitle(activeConversationId, title);
+        setConversations(prev =>
+          prev.map(c =>
+            c.id === activeConversationId ? { ...c, title } : c
+          )
+        );
+      }
 
       const res = await fetch("/api/ai", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ message: userMessage, userId })
-});
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage, userId })
+      });
 
 const text = await res.text();
 let json = null;
@@ -268,6 +282,7 @@ if (!res.ok) {
 
         await supabase.from("ai_messages").insert({
           user_id: userId,
+          conversation_id: activeConversationId,
           role: "assistant",
           content: JSON.stringify(parsed)
         });
@@ -281,6 +296,7 @@ if (!res.ok) {
 
         await supabase.from("ai_messages").insert({
           user_id: userId,
+          conversation_id: activeConversationId,
           role: "assistant",
           content: reply
         });
@@ -298,12 +314,43 @@ if (!res.ok) {
     }
   }
 
-  /* ==================================================
-     GOD MODE UI — ONLY VISUAL POLISH ADDED
-     ================================================== */
+  async function handleNewChat() {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    const created = await createConversation(uid, "New chat");
+    if (!created) return;
+    setConversations(prev => [created, ...prev]);
+    setActiveConversationId(created.id);
+    setMessages([]);
+    setError(null);
+  }
+
+  async function handleRenameSubmit() {
+    if (!renameId || !renameValue.trim()) {
+      setRenameId(null);
+      return;
+    }
+    await updateConversationTitle(renameId, renameValue.trim());
+    setConversations(prev =>
+      prev.map(c => (c.id === renameId ? { ...c, title: renameValue.trim() } : c))
+    );
+    setRenameId(null);
+    setRenameValue("");
+  }
+
+  async function handleDelete(id) {
+    await deleteConversation(id);
+    const rest = conversations.filter(c => c.id !== id);
+    setConversations(rest);
+    if (activeConversationId === id) {
+      const next = rest[0] ?? null;
+      setActiveConversationId(next?.id ?? null);
+      setMessages([]);
+    }
+    setDeleteConfirmId(null);
+  }
 
   return (
-
     <div
       style={{
         position: "fixed",
@@ -318,17 +365,16 @@ if (!res.ok) {
         overscrollBehavior: "contain"
       }}
     >
-
       <div
         style={{
           width: "100%",
-          maxWidth: 520,
+          maxWidth: 720,
           height: "min(88vh, 720px)",
           background: "var(--card)",
           borderRadius: 20,
           border: "1px solid var(--border)",
           display: "flex",
-          flexDirection: "column",
+          flexDirection: "row",
           overflow: "hidden",
           position: "relative",
           boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
@@ -337,9 +383,129 @@ if (!res.ok) {
           transition: "all 0.35s cubic-bezier(.22,1,.36,1)"
         }}
       >
+        {/* LEFT SIDEBAR — conversations */}
+        <div
+          style={{
+            width: 200,
+            minWidth: 200,
+            borderRight: "1px solid var(--border)",
+            display: "flex",
+            flexDirection: "column",
+            background: "var(--card-2)"
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleNewChat}
+            style={{
+              margin: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px dashed var(--border)",
+              background: "transparent",
+              color: "var(--text)",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer"
+            }}
+          >
+            + New Chat
+          </button>
+          <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
+            {conversations.map((c) => (
+              <div
+                key={c.id}
+                style={{
+                  marginBottom: 4,
+                  borderRadius: 10,
+                  background: activeConversationId === c.id ? "var(--accent)" : "transparent",
+                  padding: "8px 10px"
+                }}
+              >
+                {renameId === c.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={handleRenameSubmit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRenameSubmit();
+                      if (e.key === "Escape") setRenameId(null);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: 4,
+                      fontSize: 13,
+                      background: "var(--card)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      color: "var(--text)"
+                    }}
+                  />
+                ) : (
+                  <>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setActiveConversationId(c.id)}
+                      onKeyDown={(e) => e.key === "Enter" && setActiveConversationId(c.id)}
+                      style={{
+                        fontSize: 13,
+                        cursor: "pointer",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {c.title || "New chat"}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenameId(c.id);
+                          setRenameValue(c.title || "New chat");
+                        }}
+                        style={{
+                          padding: 2,
+                          border: "none",
+                          background: "transparent",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          opacity: 0.8
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirmId(c.id);
+                        }}
+                        style={{
+                          padding: 2,
+                          border: "none",
+                          background: "transparent",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          opacity: 0.8,
+                          color: "var(--accent)"
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
 
-        {/* HEADER — ORIGINAL STYLE RESTORED (NO IOS PILL BUTTONS) */}
-
+        {/* MAIN CHAT AREA */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div
           style={{
             padding: "14px 16px",
@@ -350,9 +516,7 @@ if (!res.ok) {
           }}
         >
           <strong>ArmPal AI</strong>
-
           <div style={{ display: "flex", gap: 10 }}>
-
             <button
               onClick={() => setShowSettings(true)}
               style={{
@@ -366,7 +530,6 @@ if (!res.ok) {
             >
               ⚙️
             </button>
-
             <button
               onClick={onClose}
               style={{
@@ -380,7 +543,6 @@ if (!res.ok) {
             >
               ✕
             </button>
-
           </div>
         </div>
 
@@ -560,9 +722,67 @@ if (!res.ok) {
           <AISettingsOverlay onClose={() => setShowSettings(false)} />
         )}
 
+        </div>
       </div>
 
+      {/* Delete conversation confirm */}
+      {deleteConfirmId && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10
+          }}
+          onClick={() => setDeleteConfirmId(null)}
+        >
+          <div
+            style={{
+              background: "var(--card)",
+              padding: 20,
+              borderRadius: 12,
+              border: "1px solid var(--border)",
+              maxWidth: 280
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p style={{ margin: "0 0 16px" }}>Delete this conversation?</p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text)",
+                  cursor: "pointer"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(deleteConfirmId)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "var(--text)",
+                  cursor: "pointer"
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-
   );
 }

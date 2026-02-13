@@ -1,5 +1,6 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { Link, useNavigate } from "react-router-dom";
@@ -24,6 +25,7 @@ import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [isPro, setIsPro] = useState(false);
   const [user, setUser] = useState(null);
@@ -55,6 +57,27 @@ export default function Dashboard() {
     loadUserAndData();
   }, []);
 
+  // After Stripe redirect: re-fetch profile from Supabase only. Never assume Pro from redirect.
+  useEffect(() => {
+    const stripeReturn = searchParams.get("stripe_return");
+    if (stripeReturn !== "1") return;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const uid = data?.user?.id;
+      if (!uid) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username, is_pro")
+        .eq("id", uid)
+        .single();
+      setUser(data?.user ?? null);
+      setIsPro(!!profile?.is_pro);
+      setDisplayName(profile?.username || data?.user?.email?.split("@")[0] || "Athlete");
+      getIsPro(uid).then(setAnalyticsPro);
+      setSearchParams({}, { replace: true });
+    })();
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
     if (!user?.id) return;
     getIsPro(user.id).then(setAnalyticsPro);
@@ -72,7 +95,6 @@ export default function Dashboard() {
       (currentUser?.email ? currentUser.email.split("@")[0] : "Athlete");
 
     if (currentUser?.id) {
-      // Load profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("username, is_pro")
@@ -80,7 +102,7 @@ export default function Dashboard() {
         .single();
 
       if (profile?.username) name = profile.username;
-      if (profile?.is_pro) setIsPro(true);
+      setIsPro(!!profile?.is_pro);
 
       await loadGoals(currentUser.id);
       await loadUpcomingWorkout(currentUser.id);

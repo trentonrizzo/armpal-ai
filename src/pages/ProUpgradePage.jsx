@@ -6,9 +6,11 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
+const PRO_PRICE_DISPLAY = "$7.99";
+
 const BENEFITS = [
   "Unlimited measurements, goals, workouts (1,000 cap)",
-  "ArmPal AI chat access",
+  "ArmPal AI chat access (25 responses per day)",
   "Smart Analytics / Progress Overview",
   "Future Pro features as we ship them",
 ];
@@ -131,7 +133,7 @@ export default function ProUpgradePage() {
         >
           <span style={{ fontSize: 13, opacity: 0.8 }}>Price</span>
           <p style={{ fontSize: 22, fontWeight: 800, margin: "4px 0 0" }}>
-            $9.99 <span style={{ fontWeight: 500, fontSize: 14 }}>/ month</span>
+            {PRO_PRICE_DISPLAY} <span style={{ fontWeight: 500, fontSize: 14 }}>/ month</span>
           </p>
           <p style={{ fontSize: 12, opacity: 0.7, margin: "6px 0 0" }}>
             (Stripe test mode may show $1 — real price in production.)

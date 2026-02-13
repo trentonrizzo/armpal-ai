@@ -33,7 +33,7 @@ export default async function handler(req, res) {
         },
       ],
 
-      success_url: `${req.headers.origin}/`,
+      success_url: `${req.headers.origin}/?stripe_return=1`,
       cancel_url: `${req.headers.origin}/`,
     });
 
