@@ -67,6 +67,8 @@ import {
 
 import SettingsOverlay from "../settings/SettingsOverlay";
 import ProfileVisibilityOverlay from "../components/profile/ProfileVisibilityOverlay";
+import { useToast } from "../components/ToastProvider";
+import { SkeletonLine, SkeletonAvatar } from "../components/Skeleton";
 
 // =================================================================================================
 // 2) CONSTANTS
@@ -682,6 +684,7 @@ async function loadQuickActionCounts(userId) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const toast = useToast();
 
   // -----------------------------------------------------------------------------------------------
   // CORE STATE
@@ -902,8 +905,10 @@ useEffect(() => {
 
       setDirty(false);
       setEditMode(false);
+      toast.success("Saved");
     } catch (e) {
       console.error("saveProfile failed", e);
+      toast.error("Failed to save profile");
       alert("Failed to save profile");
     } finally {
       setSaving(false);
@@ -1019,8 +1024,19 @@ useEffect(() => {
 
   if (loading) {
     return (
-      <div style={{ padding: 30, opacity: 0.75 }}>
-        Loading profile…
+      <div style={{ padding: 30, maxWidth: PAGE_MAX_WIDTH, margin: "0 auto" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 24 }}>
+          <SkeletonAvatar size={76} />
+          <div style={{ flex: 1 }}>
+            <SkeletonLine width="60%" height={28} style={{ marginBottom: 10 }} />
+            <SkeletonLine width="40%" height={18} />
+          </div>
+        </div>
+        <div style={{ padding: 18, borderRadius: 16, border: "1px solid var(--border)", background: "var(--card)" }}>
+          <SkeletonLine width="80%" height={16} style={{ marginBottom: 12 }} />
+          <SkeletonLine width="100%" height={14} style={{ marginBottom: 8 }} />
+          <SkeletonLine width="90%" height={14} />
+        </div>
       </div>
     );
   }
@@ -1116,7 +1132,7 @@ useEffect(() => {
                     disabled={!dirty || saving}
                     style={{
                       ...styles.smallSolidBtn,
-                      background: dirty ? COLORS.green : "#2a2a2a",
+                      background: dirty ? "var(--accent)" : "#2a2a2a",
                       opacity: saving ? 0.75 : 1,
                       cursor: dirty ? "pointer" : "not-allowed",
                     }}

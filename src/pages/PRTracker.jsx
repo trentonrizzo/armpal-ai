@@ -24,6 +24,9 @@ import { CSS } from "@dnd-kit/utilities";
 
 // icons
 import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
+import { useToast } from "../components/ToastProvider";
+import EmptyState from "../components/EmptyState";
+import { SkeletonCard } from "../components/Skeleton";
 
 /* --------------------------------------------
    SORTABLE ITEM — LEFT 40% DRAGS, RIGHT SCROLLS
@@ -66,6 +69,7 @@ function SortableItem({ id, children }) {
    MAIN PAGE
 --------------------------------------------- */
 export default function PRTracker() {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
@@ -201,48 +205,56 @@ export default function PRTracker() {
       notes: prNotes || null,
     };
 
-    // PREVIOUS BEST (for NEW PR detection)
-    const { data: previous } = await supabase
-      .from("prs")
-      .select("weight")
-      .eq("user_id", user.id)
-      .eq("lift_name", prLift)
-      .order("weight", { ascending: false })
-      .limit(1);
+    try {
+      // PREVIOUS BEST (for NEW PR detection)
+      const { data: previous } = await supabase
+        .from("prs")
+        .select("weight")
+        .eq("user_id", user.id)
+        .eq("lift_name", prLift)
+        .order("weight", { ascending: false })
+        .limit(1);
 
-    const previousBest = previous?.[0]?.weight ?? null;
+      const previousBest = previous?.[0]?.weight ?? null;
 
-    if (editingPR) {
-      await supabase.from("prs").update(payload).eq("id", editingPR.id);
-    } else {
-      const cap = await checkUsageCap(user.id, "prs");
-      if (!cap.allowed) {
-        setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
-        return;
+      if (editingPR) {
+        const { error } = await supabase.from("prs").update(payload).eq("id", editingPR.id);
+        if (error) throw error;
+      } else {
+        const cap = await checkUsageCap(user.id, "prs");
+        if (!cap.allowed) {
+          setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+          return;
+        }
+        setCapMessage("");
+        const { error } = await supabase.from("prs").insert(payload);
+        if (error) throw error;
+
+        // 🔥 FIRST PR EVER
+        if (groups.length === 0) {
+          achievementBus.emit({ type: "FIRST_PR" });
+        }
+
+        // 🔥 NEW PR BEAT
+        if (!previousBest || Number(prWeight) > previousBest) {
+          achievementBus.emit({
+            type: "NEW_PR",
+            exercise: prLift,
+            value: Number(prWeight),
+            diff: previousBest
+              ? Number(prWeight) - previousBest
+              : Number(prWeight),
+          });
+        }
       }
-      setCapMessage("");
-      await supabase.from("prs").insert(payload);
 
-      // 🔥 FIRST PR EVER
-      if (groups.length === 0) {
-        achievementBus.emit({ type: "FIRST_PR" });
-      }
-
-      // 🔥 NEW PR BEAT
-      if (!previousBest || Number(prWeight) > previousBest) {
-        achievementBus.emit({
-          type: "NEW_PR",
-          exercise: prLift,
-          value: Number(prWeight),
-          diff: previousBest
-            ? Number(prWeight) - previousBest
-            : Number(prWeight),
-        });
-      }
+      await loadPRs(user.id);
+      setModalOpen(false);
+      toast.success("PR saved");
+    } catch (e) {
+      console.error("savePR failed", e);
+      toast.error("Failed to save PR");
     }
-
-    await loadPRs(user.id);
-    setModalOpen(false);
   }
 
   /* --------------------------------------------
@@ -289,9 +301,18 @@ export default function PRTracker() {
       </button>
 
       {loading ? (
-        <p style={{ opacity: 0.7 }}>Loading...</p>
+        <>
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} lines={2} style={{ marginBottom: 10 }} />
+          ))}
+        </>
       ) : groups.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>No PRs yet.</p>
+        <EmptyState
+          icon="🏋️"
+          message="No PRs yet — log your first PR 💪"
+          ctaLabel="Add PR"
+          ctaOnClick={openAddModal}
+        />
       ) : (
         <DndContext
           sensors={sensors}

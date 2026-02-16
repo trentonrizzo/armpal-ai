@@ -33,6 +33,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useToast } from "../components/ToastProvider";
+import EmptyState from "../components/EmptyState";
+import { SkeletonCard } from "../components/Skeleton";
 import {
   FaChevronDown,
   FaChevronUp,
@@ -124,6 +127,7 @@ function nowMs() {
 // ============================================================
 
 export default function WorkoutsPage() {
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [expandedExercises, setExpandedExercises] = useState({});
@@ -297,33 +301,37 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
       scheduled_for: workoutSchedule ? workoutSchedule : null,
     };
 
-    if (editingWorkout) {
-      await supabase.from("workouts").update(payload).eq("id", editingWorkout.id);
-    } else {
-      const cap = await checkUsageCap(user.id, "workouts");
-      if (!cap.allowed) {
-        setCapMessage(`Workout limit reached (${cap.limit} for ${cap.isPro ? "Pro" : "free"}). Go Pro for more!`);
-        return;
+    try {
+      if (editingWorkout) {
+        const { error } = await supabase.from("workouts").update(payload).eq("id", editingWorkout.id);
+        if (error) throw error;
+      } else {
+        const cap = await checkUsageCap(user.id, "workouts");
+        if (!cap.allowed) {
+          setCapMessage(`Workout limit reached (${cap.limit} for ${cap.isPro ? "Pro" : "free"}). Go Pro for more!`);
+          return;
+        }
+        setCapMessage("");
+        payload.position = workouts.length;
+        const { error } = await supabase.from("workouts").insert(payload);
+        if (error) throw error;
       }
-      setCapMessage("");
-      payload.position = workouts.length;
-      await supabase.from("workouts").insert(payload);
+      // FIRST WORKOUT ACHIEVEMENT
+      if (!editingWorkout && workouts.length === 0) {
+        const alreadyFired = localStorage.getItem("ach_first_workout");
+        if (!editingWorkout && !alreadyFired) {
+          achievementBus.emit({ type: "FIRST_WORKOUT" });
+          localStorage.setItem("ach_first_workout", "1");
+        }
+      }
+      setWorkoutModalOpen(false);
+      setEditingWorkout(null);
+      await loadWorkouts(user.id);
+      toast.success("Saved");
+    } catch (e) {
+      console.error("saveWorkout failed", e);
+      toast.error("Failed to save workout");
     }
-// FIRST WORKOUT ACHIEVEMENT
-if (!editingWorkout && workouts.length === 0) {
-  // FIRST WORKOUT ACHIEVEMENT (fire once)
-const alreadyFired = localStorage.getItem("ach_first_workout");
-
-if (!editingWorkout && !alreadyFired) {
-  achievementBus.emit({ type: "FIRST_WORKOUT" });
-  localStorage.setItem("ach_first_workout", "1");
-}
-
-}
-
-    setWorkoutModalOpen(false);
-    setEditingWorkout(null);
-    await loadWorkouts(user.id);
   }
 
   async function deleteWorkout(id) {
@@ -665,9 +673,18 @@ if (!editingWorkout && !alreadyFired) {
       </button>
 
       {loading ? (
-        <p style={{ opacity: 0.7 }}>Loading workouts...</p>
+        <>
+          {[1, 2, 3].map((i) => (
+            <SkeletonCard key={i} lines={2} style={{ marginBottom: 10 }} />
+          ))}
+        </>
       ) : workouts.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>No workouts yet. Add your first one.</p>
+        <EmptyState
+          icon="💪"
+          message="No workouts yet — add your first one."
+          ctaLabel="Add Workout"
+          ctaOnClick={() => openWorkoutModal()}
+        />
       ) : (
         <DndContext
           sensors={sensors}

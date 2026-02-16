@@ -36,6 +36,9 @@ import {
   FiSave,
   FiCheck,
 } from "react-icons/fi";
+import { useToast } from "../components/ToastProvider";
+import EmptyState from "../components/EmptyState";
+import { SkeletonCard } from "../components/Skeleton";
 
 // ============================================================
 // TIME HELPERS
@@ -299,6 +302,7 @@ const normalized = normalizeSharedWorkout(share);
 export default function ChatPage() {
   const { friendId } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
 
   // ----------------------------------------------------------
   // CORE STATE
@@ -426,6 +430,7 @@ export default function ChatPage() {
       const u = data?.user;
       if (!u) {
         setError("Not logged in");
+        toast.error("Not logged in");
         setLoading(false);
         return;
       }
@@ -450,7 +455,10 @@ export default function ChatPage() {
       if (!mounted) return;
 
       setFriend(f || null);
-      if (msgErr) setError(msgErr.message);
+      if (msgErr) {
+        setError(msgErr.message);
+        toast.error(msgErr.message);
+      }
       setMessages(msgs || []);
       setLoading(false);
     })();
@@ -681,7 +689,9 @@ export default function ChatPage() {
         text: payload,
       });
     } catch (e) {
-      setError(e?.message || "Send failed");
+      const msg = e?.message || "Send failed";
+      setError(msg);
+      toast.error(msg);
     }
   }
 
@@ -703,6 +713,7 @@ export default function ChatPage() {
 
       if (uploadErr) {
         setError(uploadErr.message);
+        toast.error(uploadErr.message);
         return;
       }
 
@@ -710,6 +721,7 @@ export default function ChatPage() {
 
       if (!data?.publicUrl) {
         setError("Image URL unavailable");
+        toast.error("Image URL unavailable");
         return;
       }
 
@@ -719,7 +731,9 @@ export default function ChatPage() {
         image_url: data.publicUrl,
       });
     } catch (e) {
-      setError(e?.message || "Image send failed");
+      const msgImg = e?.message || "Image send failed";
+      setError(msgImg);
+      toast.error(msgImg);
     }
   }
 
@@ -746,6 +760,7 @@ export default function ChatPage() {
 
       if (uploadErr) {
         setError(uploadErr.message);
+        toast.error(uploadErr.message);
         return;
       }
 
@@ -753,6 +768,7 @@ export default function ChatPage() {
 
       if (!data?.publicUrl) {
         setError("Video URL unavailable");
+        toast.error("Video URL unavailable");
         return;
       }
 
@@ -763,7 +779,9 @@ export default function ChatPage() {
         video_url: data.publicUrl,
       });
     } catch (e) {
-      setError(e?.message || "Video send failed");
+      const msgVid = e?.message || "Video send failed";
+      setError(msgVid);
+      toast.error(msgVid);
     }
   }
 
@@ -776,6 +794,7 @@ export default function ChatPage() {
 
     if (!navigator?.mediaDevices?.getUserMedia) {
       setError("Microphone not supported");
+      toast.error("Microphone not supported");
       return;
     }
 
@@ -823,7 +842,9 @@ export default function ChatPage() {
         });
       }, 1000);
     } catch (e) {
-      setError(e?.message || "Recording failed");
+      const msgRec = e?.message || "Recording failed";
+      setError(msgRec);
+      toast.error(msgRec);
     }
   }
 
@@ -878,6 +899,7 @@ export default function ChatPage() {
 
       if (uploadErr) {
         setError(uploadErr.message);
+        toast.error(uploadErr.message);
         setSendingAudio(false);
         return;
       }
@@ -886,6 +908,7 @@ export default function ChatPage() {
 
       if (!data?.publicUrl) {
         setError("Audio URL unavailable");
+        toast.error("Audio URL unavailable");
         setSendingAudio(false);
         return;
       }
@@ -901,7 +924,9 @@ export default function ChatPage() {
       setRecordDuration(0);
       setSendingAudio(false);
     } catch (e) {
-      setError(e?.message || "Audio send failed");
+      const msgAud = e?.message || "Audio send failed";
+      setError(msgAud);
+      toast.error(msgAud);
       setSendingAudio(false);
     }
   }
@@ -943,7 +968,19 @@ export default function ChatPage() {
   // ============================================================
 
   if (loading) {
-    return <div style={loadingWrap}>Loading…</div>;
+    return (
+      <div style={loadingWrap}>
+        <div style={{ padding: 16, maxWidth: 480, margin: "0 auto" }}>
+          {[1, 2, 3, 4].map((i) => (
+            <SkeletonCard
+              key={i}
+              lines={2}
+              style={{ marginBottom: 12, marginLeft: i % 2 === 0 ? 0 : 40 }}
+            />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -961,6 +998,13 @@ export default function ChatPage() {
 
         <div ref={listRef} style={messagesContainer}>
         {error && <div style={errBox}>{error}</div>}
+
+        {messages.length === 0 && !error ? (
+          <EmptyState
+            icon="💬"
+            message="No messages yet — say hi!"
+          />
+        ) : null}
 
         {messages.map((m) => {
           const mine = m.sender_id === user.id;

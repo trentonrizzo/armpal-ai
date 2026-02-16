@@ -489,6 +489,7 @@ export default function FriendProfile() {
             {REACTIONS.map((emoji) => (
               <button
                 key={emoji}
+                className="reaction-btn"
                 style={{
                   ...reactionBtn,
                   ...(myReaction === emoji ? reactionActive : {}),

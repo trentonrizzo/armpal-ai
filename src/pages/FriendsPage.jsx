@@ -10,10 +10,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate, useLocation } from "react-router-dom";
 import FriendQRModal from "../components/friends/FriendQRModal";
+import { useToast } from "../components/ToastProvider";
+import EmptyState from "../components/EmptyState";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
 
   const [user, setUser] = useState(null);
 
@@ -515,12 +518,16 @@ export default function FriendsPage() {
         .maybeSingle();
 
       if (error || !target) {
-        setErrorMsg("No user found with that handle.");
+        const msg = "No user found with that handle.";
+        setErrorMsg(msg);
+        toast.error(msg);
         return;
       }
 
       if (target.id === user.id) {
-        setErrorMsg("You can’t add yourself.");
+        const msg = "You can’t add yourself.";
+        setErrorMsg(msg);
+        toast.error(msg);
         return;
       }
 
@@ -532,7 +539,9 @@ export default function FriendsPage() {
         );
 
       if (existing?.length > 0) {
-        setErrorMsg("Request already exists or you're already friends.");
+        const msg = "Request already exists or you're already friends.";
+        setErrorMsg(msg);
+        toast.error(msg);
         return;
       }
 
@@ -544,24 +553,32 @@ export default function FriendsPage() {
 
       if (insertErr) {
         console.error("insert error:", insertErr);
-        setErrorMsg("Error sending request.");
+        const msg = "Error sending request.";
+        setErrorMsg(msg);
+        toast.error(msg);
         return;
       }
 
       setHandleInput("");
       setShowAddBox(false);
-      setSuccessMsg(`Friend request sent.`);
+      const successText = "Friend request sent.";
+      setSuccessMsg(successText);
+      toast.success(successText);
       await loadAllFriends(user.id);
     } catch (err) {
       console.error(err);
-      setErrorMsg("Error sending request.");
+      const msg = "Error sending request.";
+      setErrorMsg(msg);
+      toast.error(msg);
     }
   }
 
   async function addFriendRequest(profile) {
     if (!user?.id || !profile?.id) return;
     if (profile.id === user.id) {
-      setErrorMsg("You can't add yourself.");
+      const msg = "You can't add yourself.";
+      setErrorMsg(msg);
+      toast.error(msg);
       return;
     }
     setErrorMsg("");
@@ -574,10 +591,14 @@ export default function FriendsPage() {
       });
       if (insertErr) {
         console.error("friend_requests insert error:", insertErr);
-        setErrorMsg("Error sending request.");
+        const msg = "Error sending request.";
+        setErrorMsg(msg);
+        toast.error(msg);
         return;
       }
-      setSuccessMsg("Friend request sent.");
+      const successText = "Friend request sent.";
+      setSuccessMsg(successText);
+      toast.success(successText);
       await loadPendingRequests(user.id);
       const { data: newRows } = await supabase
         .from("friend_requests")
@@ -595,7 +616,9 @@ export default function FriendsPage() {
       );
     } catch (err) {
       console.error(err);
-      setErrorMsg("Error sending request.");
+      const msg = "Error sending request.";
+      setErrorMsg(msg);
+      toast.error(msg);
     }
   }
 
@@ -691,13 +714,15 @@ export default function FriendsPage() {
   // -------------------------------------------------------------------
   async function acceptRequest(rowId) {
     if (!user?.id) return;
-    await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
+    const { error } = await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
+    if (!error) toast.success("Friend added");
     await loadAllFriends(user.id);
   }
 
   async function declineRequest(rowId) {
     if (!user?.id) return;
     await supabase.from("friends").delete().eq("id", rowId);
+    toast.success("Request declined");
     await loadAllFriends(user.id);
   }
 
@@ -971,7 +996,12 @@ export default function FriendsPage() {
         <h2 style={sectionTitle}>Your Friends</h2>
 
         {friends.length === 0 ? (
-          <p style={smallMuted}>You haven't added anyone yet.</p>
+          <EmptyState
+            icon="👋"
+            message="No friends yet — search and add someone"
+            ctaLabel="Search friends"
+            ctaOnClick={() => setShowAddBox(true)}
+          />
         ) : (
           friends.map((p) => (
             <FriendRow

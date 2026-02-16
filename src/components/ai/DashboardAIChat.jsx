@@ -13,6 +13,7 @@ import {
   touchConversation,
 } from "../../api/aiConversations";
 import AISettingsOverlay from "./AISettingsOverlay";
+import EmptyState from "../EmptyState";
 
 export default function DashboardAIChat({ onClose }) {
   const navigate = useNavigate();
@@ -779,6 +780,10 @@ if (!res.ok) {
           }}
         >
 
+          {messages.length === 0 && !loading ? (
+            <EmptyState icon="🤖" message="Ask ArmPal anything — form, nutrition, or motivation." />
+          ) : null}
+
           {messages.map((m, i) => (
 
             <div
@@ -908,6 +913,7 @@ if (!res.ok) {
       {/* Delete conversation confirm */}
       {deleteConfirmId && (
         <div
+          className="modal-overlay"
           style={{
             position: "absolute",
             inset: 0,
@@ -920,6 +926,7 @@ if (!res.ok) {
           onClick={() => setDeleteConfirmId(null)}
         >
           <div
+            className="modal-content"
             style={{
               background: "var(--card)",
               padding: 20,

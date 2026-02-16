@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from "react";
 import { AppContext } from "../context/AppContext";
 import { checkUsageCap, FREE_CAP } from "../utils/usageLimits";
+import EmptyState from "./EmptyState";
 
 const Trackers = () => {
   const {
@@ -152,7 +153,7 @@ const Trackers = () => {
       {/* List */}
       <ul style={{ marginTop: "1rem", listStyle: "none", padding: 0 }}>
         {list.length === 0 ? (
-          <li>No entries yet.</li>
+          <li><EmptyState icon="📋" message="No entries yet — add one above." /></li>
         ) : (
           list.map((entry) => (
             <li key={entry.id}>

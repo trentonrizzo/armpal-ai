@@ -1,5 +1,6 @@
 import React, { useContext, useState } from "react";
 import { AppContext } from "../context/AppContext";
+import EmptyState from "./EmptyState";
 
 const Measurements = () => {
   const { measurements, setMeasurements } = useContext(AppContext);
@@ -75,7 +76,7 @@ const Measurements = () => {
 
       <h3 style={{ marginTop: "2rem" }}>History</h3>
       {measurements.length === 0 ? (
-        <p>No measurements yet.</p>
+        <EmptyState icon="📏" message="No measurements yet — add one above." />
       ) : (
         <ul>
           {measurements.map((m) => (

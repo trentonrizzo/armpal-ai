@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
+import EmptyState from "../EmptyState";
 
 /**
  * ShareWorkoutsModal (WORKING UI + WORKING SEND)
@@ -302,7 +303,7 @@ export default function ShareWorkoutsModal({ open, onClose }) {
             {loadingWorkouts ? (
               <p style={muted}>Loading workouts…</p>
             ) : workouts.length === 0 ? (
-              <p style={muted}>No workouts found.</p>
+              <EmptyState icon="💪" message="No workouts found — add some on the Workouts page." />
             ) : (
               workouts.map((w) => {
                 const sel = selectedWorkoutIds.has(w.id);
@@ -329,7 +330,7 @@ export default function ShareWorkoutsModal({ open, onClose }) {
             {loadingFriends ? (
               <p style={muted}>Loading friends…</p>
             ) : friends.length === 0 ? (
-              <p style={muted}>No accepted friends found.</p>
+              <EmptyState icon="👋" message="No friends yet — add friends from the Friends page." />
             ) : (
               friends.map((f) => {
                 const sel = selectedFriendIds.has(f.id);

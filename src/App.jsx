@@ -4,6 +4,7 @@ import { Routes, Route, useLocation, useParams, Navigate } from "react-router-do
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
+import { ToastProvider } from "./components/ToastProvider";
 import AuthPage from "./AuthPage";
 
 import Dashboard from "./pages/Dashboard";
@@ -224,7 +225,9 @@ export default function App() {
         <AuthPage />
       ) : (
         <AppProvider>
-          <AppContent />
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
         </AppProvider>
       )}
     </>

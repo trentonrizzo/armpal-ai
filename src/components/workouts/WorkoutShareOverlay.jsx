@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { FaShare, FaTimes, FaChevronRight } from "react-icons/fa";
+import EmptyState from "../EmptyState";
 
 /* =====================================================================================
    ARMPAL — WORKOUT SHARE OVERLAY (DOES NOT MODIFY WorkoutsPage.jsx)
@@ -643,9 +644,7 @@ function toggleFriend(id) {
       )}
 
       {!loadingFriends && friends.length === 0 && (
-        <p style={{ opacity: 0.6 }}>
-          No friends yet.
-        </p>
+        <EmptyState icon="👋" message="No friends yet — add friends from the Friends page." />
       )}
 
       {friends.map((f) => {

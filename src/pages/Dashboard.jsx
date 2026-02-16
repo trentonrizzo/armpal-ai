@@ -21,6 +21,7 @@ import DashboardAISection from "../components/ai/DashboardAISection";
 // ✅ AI CHAT (from api folder)
 import DashboardAIChat from "../components/ai/DashboardAIChat";
 import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
+import EmptyState from "../components/EmptyState";
 
 
 export default function Dashboard() {
@@ -733,14 +734,12 @@ export default function Dashboard() {
               </p>
             </>
           ) : (
-            <>
-              <p style={{ fontSize: 13, opacity: 0.8, margin: 0 }}>
-                No upcoming workouts yet.
-              </p>
-              <p style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                Plan your next session on the Workouts page.
-              </p>
-            </>
+            <EmptyState
+              icon="📅"
+              message="No upcoming workouts yet."
+              ctaLabel="Go to Workouts"
+              ctaOnClick={() => navigate("/workouts")}
+            />
           )}
         </div>
       </section>
