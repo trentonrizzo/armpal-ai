@@ -9,10 +9,40 @@ import { supabase } from "../supabaseClient";
 const PRO_PRICE_DISPLAY = "$7.99";
 
 const BENEFITS = [
-  "Unlimited measurements, goals, workouts (1,000 cap)",
-  "ArmPal AI chat access (25 responses per day)",
-  "Smart Analytics / Progress Overview",
-  "Future Pro features as we ship them",
+  {
+    title: "Unlimited measurements, goals, workouts (1,000 cap each)",
+    subPoints: [
+      "Track up to 1,000 entries per category — measurements, goals, workouts, PRs, and progress logs without hitting limits.",
+    ],
+  },
+  {
+    title: "ArmPal AI Coach (25 responses per day)",
+    subPoints: [
+      "Builds customized workouts and programs tailored to you",
+      "Generates savable workout cards instantly",
+      "Saves directly to your workout tracker",
+      "Fully editable — you stay in control",
+      "Helps guide training decisions, progression, and recovery",
+    ],
+  },
+  {
+    title: "Smart Analytics / Progress Overview",
+    subPoints: [
+      "Visualize strength progress, measurements, and performance trends so you always know what's working.",
+    ],
+  },
+  {
+    title: "15% off future programs, supplements & premium content",
+    subPoints: [
+      "Pro members receive exclusive discounts on upcoming ArmPal products and digital programs.",
+    ],
+  },
+  {
+    title: "Future Pro features as we ship them",
+    subPoints: [
+      "Automatic access to new Pro tools and upgrades as ArmPal evolves.",
+    ],
+  },
 ];
 
 export default function ProUpgradePage() {
@@ -105,19 +135,52 @@ export default function ProUpgradePage() {
             margin: "0 0 28px",
           }}
         >
-          {BENEFITS.map((text, i) => (
+          {BENEFITS.map((item, i) => (
             <li
               key={i}
               style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
                 marginBottom: 14,
-                fontSize: 15,
               }}
             >
-              <span style={{ color: "var(--accent)" }}>✓</span>
-              <span>{text}</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  fontSize: 15,
+                  fontWeight: 700,
+                }}
+              >
+                <span style={{ color: "var(--accent)" }}>✓</span>
+                <span>{item.title}</span>
+              </div>
+              {item.subPoints && item.subPoints.length > 0 && (
+                <ul
+                  style={{
+                    listStyle: "none",
+                    padding: 0,
+                    margin: "4px 0 0 28px",
+                    fontSize: 13,
+                    opacity: 0.9,
+                    fontWeight: 400,
+                  }}
+                >
+                  {item.subPoints.map((sub, j) => (
+                    <li
+                      key={j}
+                      style={{
+                        marginBottom: 4,
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 8,
+                      }}
+                    >
+                      <span style={{ flexShrink: 0 }}>•</span>
+                      <span>{sub}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
@@ -134,9 +197,6 @@ export default function ProUpgradePage() {
           <span style={{ fontSize: 13, opacity: 0.8 }}>Price</span>
           <p style={{ fontSize: 22, fontWeight: 800, margin: "4px 0 0" }}>
             {PRO_PRICE_DISPLAY} <span style={{ fontWeight: 500, fontSize: 14 }}>/ month</span>
-          </p>
-          <p style={{ fontSize: 12, opacity: 0.7, margin: "6px 0 0" }}>
-            (Stripe test mode may show $1 — real price in production.)
           </p>
         </div>
 
