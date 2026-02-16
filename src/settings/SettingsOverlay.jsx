@@ -412,8 +412,9 @@ export default function SettingsOverlay({ open, onClose }) {
                   flex: 1,
                   padding: 12,
                   borderRadius: 12,
-                  background: "var(--card-2)",
-                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  border: "1px solid var(--accent)",
+                  color: "var(--accent)",
                   fontWeight: 700,
                 }}
               >

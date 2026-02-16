@@ -14,11 +14,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing userId" });
   }
 
+  const priceId = process.env.STRIPE_PRICE_ID;
+  if (!priceId) {
+    return res.status(500).json({ error: "STRIPE_PRICE_ID not configured" });
+  }
+
   try {
 
     const session = await stripe.checkout.sessions.create({
 
-      mode: "subscription", // 🔥 CHANGE: subscription instead of payment
+      mode: "subscription",
 
       payment_method_types: ["card"],
 
@@ -28,7 +33,7 @@ export default async function handler(req, res) {
 
       line_items: [
         {
-          price: "price_1T0VK1EWkdbPZFlhzbkesA7L", // 🔥 YOUR $7.99 STRIPE PRICE ID
+          price: priceId,
           quantity: 1,
         },
       ],

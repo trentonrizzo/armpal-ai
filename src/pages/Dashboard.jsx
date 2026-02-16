@@ -337,9 +337,6 @@ export default function Dashboard() {
         </Link>
       )}
 
-      {/* Today's Focus */}
-      <DashboardAISection />
-
       {/* AI CHAT (PREMIUM ONLY) */}
 <section style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
