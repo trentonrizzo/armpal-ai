@@ -126,9 +126,11 @@ function AppContent() {
 
   useEffect(() => {
     setMounted(true);
-    const savedTheme = localStorage.getItem("theme") || "dark";
-    document.documentElement.setAttribute("data-theme", savedTheme);
-    document.body.setAttribute("data-theme", savedTheme);
+    const savedMode = localStorage.getItem("armpal_mode") || "dark";
+    const savedTheme = localStorage.getItem("armpal_theme") || "red";
+    document.documentElement.setAttribute("data-theme", savedMode);
+    document.documentElement.setAttribute("data-accent", savedTheme);
+    if (document.body) document.body.setAttribute("data-theme", savedMode);
   }, []);
 
   return (

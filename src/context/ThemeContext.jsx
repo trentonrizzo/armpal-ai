@@ -2,20 +2,21 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 
 const ThemeContext = createContext(null);
 
-const THEME_KEY = "armpal_theme";     // "dark" | "light"
-const ACCENT_KEY = "armpal_accent";   // "red" | "blue" | "purple" | "green"
+const THEME_KEY = "armpal_theme";   // accent: "red" | "blue" | "purple" | "green"
+const MODE_KEY = "armpal_mode";     // "dark" | "light"
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || "dark");
-  const [accent, setAccent] = useState(() => localStorage.getItem(ACCENT_KEY) || "red");
+  const [theme, setTheme] = useState(() => localStorage.getItem(MODE_KEY) || "dark");
+  const [accent, setAccent] = useState(() => localStorage.getItem(THEME_KEY) || "red");
 
   useEffect(() => {
     const html = document.documentElement;
     html.setAttribute("data-theme", theme);
     html.setAttribute("data-accent", accent);
+    if (document.body) document.body.setAttribute("data-theme", theme);
 
-    localStorage.setItem(THEME_KEY, theme);
-    localStorage.setItem(ACCENT_KEY, accent);
+    localStorage.setItem(MODE_KEY, theme);
+    localStorage.setItem(THEME_KEY, accent);
   }, [theme, accent]);
 
   const value = useMemo(() => ({

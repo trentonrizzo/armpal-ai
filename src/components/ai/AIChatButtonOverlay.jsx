@@ -30,7 +30,7 @@ export default function AIChatButtonOverlay({ onOpen }) {
         cursor: "pointer",
 
         boxShadow: `
-          0 0 0 0 rgba(255,0,0,0.7),
+          0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent),
           0 8px 25px rgba(0,0,0,0.6),
           inset 0 -3px 8px rgba(0,0,0,0.4)
         `,
@@ -52,19 +52,19 @@ export default function AIChatButtonOverlay({ onOpen }) {
         @keyframes armPalPulse {
           0% {
             box-shadow:
-              0 0 0 0 rgba(255,0,0,0.6),
+              0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent),
               0 8px 25px rgba(0,0,0,0.6),
               inset 0 -3px 8px rgba(0,0,0,0.4);
           }
           70% {
             box-shadow:
-              0 0 0 14px rgba(255,0,0,0),
+              0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent),
               0 8px 25px rgba(0,0,0,0.6),
               inset 0 -3px 8px rgba(0,0,0,0.4);
           }
           100% {
             box-shadow:
-              0 0 0 0 rgba(255,0,0,0),
+              0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent),
               0 8px 25px rgba(0,0,0,0.6),
               inset 0 -3px 8px rgba(0,0,0,0.4);
           }

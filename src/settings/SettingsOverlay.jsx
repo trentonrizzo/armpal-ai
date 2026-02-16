@@ -132,7 +132,9 @@ export default function SettingsOverlay({ open, onClose }) {
   }, [open]);
 
   function toggleTheme() {
-    setTheme(theme === "dark" ? "light" : "dark");
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("armpal_mode", next);
   }
 
   async function toggleNotifications() {
@@ -254,6 +256,7 @@ export default function SettingsOverlay({ open, onClose }) {
                       onClick={(e) => {
                         e.stopPropagation();
                         setAccent(c);
+                        localStorage.setItem("armpal_theme", c);
                       }}
                       style={{
                         flex: 1,
