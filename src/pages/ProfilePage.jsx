@@ -876,26 +876,28 @@ useEffect(() => {
     try {
       setSaving(true);
 
-      // Keep handle stored WITHOUT @ (common pattern)
-      const cleanedHandle = stripHandle(handle);
+      const displayNameValue = safeString(displayName);
+      const bioValue = safeString(bio);
+      const avatarUrlValue = avatarUrl || "";
+      const visibilityValue = isPublic ? "public" : "private";
 
-      const updates = {
-        id: user.id,
-        display_name: safeString(displayName),
-        handle: safeString(cleanedHandle),
-        bio: safeString(bio),
-        avatar_url: avatarUrl || "",
-        is_public: isPublic,
-      };
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          bio: bioValue,
+          display_name: displayNameValue,
+          avatar_url: avatarUrlValue,
+          profile_visibility: visibilityValue,
+        })
+        .eq("id", user.id);
 
-      const { error } = await supabase.from("profiles").upsert(updates);
       if (error) throw error;
 
       setOrig({
-        display_name: updates.display_name,
-        handle: updates.handle,
-        bio: updates.bio,
-        avatar_url: updates.avatar_url,
+        display_name: displayNameValue,
+        handle: orig.handle,
+        bio: bioValue,
+        avatar_url: avatarUrlValue,
       });
 
       setDirty(false);
@@ -1460,7 +1462,7 @@ useEffect(() => {
             onClick={async () => {
               const next = !isPublic;
               setIsPublic(next);
-              await supabase.from("profiles").upsert({ id: user.id, is_public: next });
+              await supabase.from("profiles").update({ is_public: next }).eq("id", user.id);
             }}
             style={{
               width: "100%",
