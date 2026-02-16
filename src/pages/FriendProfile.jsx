@@ -466,7 +466,7 @@ export default function FriendProfile() {
           {canSeeFull ? p?.bio?.trim() || "No bio yet." : "This profile is private."}
         </div>
 
-        {/* Photos: same as profile page — ProfileMediaGallery only; no custom fetch. userId = viewed profile (friendId). */}
+        {/* Photos: same as profile page. Uses profile_media only; query: .eq("user_id", friendId). Show when profile public OR viewer is friend OR viewer is owner (canSeeFull). If images don't load, verify RLS allows SELECT on profile_media where user_id = viewed profile id. */}
         {canSeeFull && !accessLost && friendId && (
           <ProfileMediaGallery
             userId={friendId}

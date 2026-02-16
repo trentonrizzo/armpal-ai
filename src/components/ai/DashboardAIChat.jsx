@@ -29,6 +29,7 @@ export default function DashboardAIChat({ onClose }) {
   const [renameValue, setRenameValue] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const bottomRef = useRef(null);
   const longPressTimerRef = useRef(null);
@@ -394,7 +395,7 @@ if (!res.ok) {
           borderRadius: 20,
           border: "1px solid var(--border)",
           display: "flex",
-          flexDirection: "row",
+          flexDirection: "column",
           overflow: "hidden",
           position: "relative",
           boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
@@ -404,20 +405,57 @@ if (!res.ok) {
         }}
         className="chatLayout"
       >
-        {/* LEFT SIDEBAR — conversations */}
-        <div
-          className="chatSidebar"
-          style={{
-            minWidth: 240,
-            maxWidth: 280,
-            width: 240,
-            borderRight: "1px solid var(--border)",
-            display: "flex",
-            flexDirection: "column",
-            background: "var(--card-2)",
-            overflow: "hidden"
-          }}
-        >
+        <style>{`
+          .chatDrawer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 80vw;
+            max-width: 320px;
+            background: var(--card-2);
+            border-right: 1px solid var(--border);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: transform 0.25s ease;
+            transform: translateX(-100%);
+          }
+          .chatDrawer.open {
+            transform: translateX(0);
+          }
+          .chatDrawerItem {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            gap: 10px;
+            border-radius: 12px;
+            margin-bottom: 4px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+          }
+          .chatDrawerItem:hover {
+            background: var(--card-2);
+          }
+          .chatDrawerItem.active {
+            background: var(--accent);
+          }
+          .chatDrawerItemTitle {
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 14px;
+            cursor: pointer;
+          }
+        `}</style>
+
+        {/* Sliding drawer — hidden by default */}
+        <div className={`chatDrawer ${drawerOpen ? "open" : ""}`}>
           <button
             type="button"
             onClick={handleNewChat}
@@ -435,66 +473,54 @@ if (!res.ok) {
           >
             + New Chat
           </button>
-          <style>{`
-            .chatItem {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              padding: 12px;
-              gap: 10px;
-              border-radius: 12px;
-              margin-bottom: 4px;
-              border: 1px solid var(--border);
-              background: var(--card);
-              color: var(--text);
-            }
-            .chatItem:hover {
-              background: var(--card-2);
-            }
-            .chatItem.active {
-              background: var(--accent);
-            }
-            .chatItemTitle {
-              flex: 1;
-              min-width: 0;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              font-size: 13px;
-              cursor: pointer;
-            }
-          `}</style>
           <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0 8px 8px" }}>
             {conversations.map((c) => (
               <div
                 key={c.id}
-                className={`chatItem ${activeConversationId === c.id ? "active" : ""}`}
+                className={`chatDrawerItem ${activeConversationId === c.id ? "active" : ""}`}
                 style={{ position: "relative" }}
               >
                 {renameId === c.id ? (
-                  <input
-                    autoFocus
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onBlur={handleRenameSubmit}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRenameSubmit();
-                      if (e.key === "Escape") setRenameId(null);
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: 4,
-                      fontSize: 13,
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 6,
-                      color: "var(--text)"
-                    }}
-                  />
+                  <div style={{ display: "flex", gap: 8, width: "100%", alignItems: "center" }}>
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRenameSubmit();
+                        if (e.key === "Escape") setRenameId(null);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: "6px 8px",
+                        fontSize: 13,
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        color: "var(--text)"
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRenameSubmit}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "var(--accent)",
+                        color: "var(--text)",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <div
-                      className="chatItemTitle"
+                      className="chatDrawerItemTitle"
                       role="button"
                       tabIndex={0}
                       onClick={() => {
@@ -504,6 +530,7 @@ if (!res.ok) {
                         }
                         setActiveConversationId(c.id);
                         setMenuOpenId(null);
+                        setDrawerOpen(false);
                       }}
                       onTouchStart={() => {
                         longPressTimerRef.current = setTimeout(() => {
@@ -544,10 +571,11 @@ if (!res.ok) {
                         color: "var(--text)",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center"
+                        justifyContent: "center",
+                        flexShrink: 0
                       }}
                     >
-                      <FiMoreVertical size={16} />
+                      <FiMoreVertical size={18} />
                     </button>
                     {menuOpenId === c.id && (
                       <div
@@ -621,50 +649,84 @@ if (!res.ok) {
           </div>
         </div>
 
-        {/* MAIN CHAT AREA */}
-        <div className="chatContent" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <div
-          style={{
-            padding: "14px 16px",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center"
-          }}
-        >
-          <strong>ArmPal AI</strong>
-          <div style={{ display: "flex", gap: 10 }}>
+        {drawerOpen && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setDrawerOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && setDrawerOpen(false)}
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(0,0,0,0.3)",
+              zIndex: 40
+            }}
+            aria-label="Close drawer"
+          />
+        )}
+
+        {/* Chat container: header + content (full width) */}
+        <div className="chatContainer" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%" }}>
+          {/* Chat header — hamburger + title + settings/close */}
+          <div
+            style={{
+              padding: "14px 16px",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexShrink: 0
+            }}
+          >
             <button
-              onClick={() => setShowSettings(true)}
+              type="button"
+              onClick={() => setDrawerOpen(true)}
               style={{
-                background: "transparent",
+                padding: "6px 10px",
                 border: "none",
-                fontSize: 18,
-                cursor: "pointer",
-                color: "var(--text)"
-              }}
-              aria-label="AI Settings"
-            >
-              ⚙️
-            </button>
-            <button
-              onClick={onClose}
-              style={{
                 background: "transparent",
-                border: "none",
-                fontSize: 18,
+                color: "var(--text)",
+                fontSize: 20,
                 cursor: "pointer",
-                color: "var(--text)"
+                lineHeight: 1
               }}
-              aria-label="Close"
+              aria-label="Open menu"
             >
-              ✕
+              ☰
             </button>
+            <strong style={{ flex: 1 }}>ArmPal AI</strong>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowSettings(true)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: 18,
+                  cursor: "pointer",
+                  color: "var(--text)"
+                }}
+                aria-label="AI Settings"
+              >
+                ⚙️
+              </button>
+              <button
+                onClick={onClose}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  fontSize: 18,
+                  cursor: "pointer",
+                  color: "var(--text)"
+                }}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* ERROR */}
-
+          {/* Chat content — full width */}
+          <div className="chatContent" style={{ flex: 1, width: "100%", minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {error && (
           <div
             style={{
@@ -839,6 +901,7 @@ if (!res.ok) {
           <AISettingsOverlay onClose={() => setShowSettings(false)} />
         )}
 
+          </div>
         </div>
       </div>
 
@@ -866,7 +929,7 @@ if (!res.ok) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p style={{ margin: "0 0 16px" }}>Delete this conversation?</p>
+            <p style={{ margin: "0 0 16px" }}>Delete chat?</p>
             <div style={{ display: "flex", gap: 10 }}>
               <button
                 type="button"
