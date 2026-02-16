@@ -748,7 +748,7 @@ export default function Dashboard() {
       {/* ✅ AI CHAT BUTTON */}
       <AIChatButtonOverlay onOpen={() => setShowAIChat(true)} />
 
-        <StripeTestButton />
+      {false && <StripeTestButton />}
 
       {/* ✅ AI CHAT OVERLAY */}
       {showAIChat && (

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { FiMoreVertical } from "react-icons/fi";
 import { supabase } from "../../supabaseClient";
 import { getIsPro } from "../../utils/usageLimits";
 import {
@@ -27,8 +28,12 @@ export default function DashboardAIChat({ onClose }) {
   const [renameId, setRenameId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [menuOpenId, setMenuOpenId] = useState(null);
 
   const bottomRef = useRef(null);
+  const longPressTimerRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
+  const menuContainerRef = useRef(null);
 
   /* ==================================================
      HARD SCROLL LOCK — prevents background movement
@@ -56,6 +61,21 @@ export default function DashboardAIChat({ onClose }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const close = (e) => {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target)) {
+        setMenuOpenId(null);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [menuOpenId]);
 
   /* ==================================================
      CONVERSATIONS: list, ensure one exists, load messages
@@ -415,16 +435,31 @@ if (!res.ok) {
           >
             + New Chat
           </button>
+          <style>{`
+            .chatItem {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 10px;
+              border-radius: 10px;
+              margin-bottom: 4px;
+              border: 1px solid var(--border);
+              background: var(--card);
+              color: var(--text);
+            }
+            .chatItem:hover {
+              background: var(--card-2);
+            }
+            .chatItem.active {
+              background: var(--accent);
+            }
+          `}</style>
           <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
             {conversations.map((c) => (
               <div
                 key={c.id}
-                style={{
-                  marginBottom: 4,
-                  borderRadius: 10,
-                  background: activeConversationId === c.id ? "var(--accent)" : "transparent",
-                  padding: "8px 10px"
-                }}
+                className={`chatItem ${activeConversationId === c.id ? "active" : ""}`}
+                style={{ position: "relative" }}
               >
                 {renameId === c.id ? (
                   <input
@@ -451,9 +486,37 @@ if (!res.ok) {
                     <div
                       role="button"
                       tabIndex={0}
-                      onClick={() => setActiveConversationId(c.id)}
+                      onClick={() => {
+                        if (longPressTriggeredRef.current) {
+                          longPressTriggeredRef.current = false;
+                          return;
+                        }
+                        setActiveConversationId(c.id);
+                        setMenuOpenId(null);
+                      }}
+                      onTouchStart={() => {
+                        longPressTimerRef.current = setTimeout(() => {
+                          longPressTimerRef.current = null;
+                          longPressTriggeredRef.current = true;
+                          setMenuOpenId(c.id);
+                        }, 400);
+                      }}
+                      onTouchEnd={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }}
+                      onTouchCancel={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }}
                       onKeyDown={(e) => e.key === "Enter" && setActiveConversationId(c.id)}
                       style={{
+                        flex: 1,
+                        minWidth: 0,
                         fontSize: 13,
                         cursor: "pointer",
                         overflow: "hidden",
@@ -463,45 +526,92 @@ if (!res.ok) {
                     >
                       {c.title || "New chat"}
                     </div>
-                    <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRenameId(c.id);
-                          setRenameValue(c.title || "New chat");
-                        }}
+                    <button
+                      type="button"
+                      aria-label="Menu"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpenId((prev) => (prev === c.id ? null : c.id));
+                      }}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      style={{
+                        padding: 4,
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                        color: "var(--text)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <FiMoreVertical size={16} />
+                    </button>
+                    {menuOpenId === c.id && (
+                      <div
+                        ref={menuContainerRef}
                         style={{
-                          padding: 2,
-                          border: "none",
-                          background: "transparent",
-                          cursor: "pointer",
-                          fontSize: 11,
-                          opacity: 0.8,
-                          color: "var(--accent)"
+                          position: "absolute",
+                          right: 0,
+                          top: "100%",
+                          marginTop: 2,
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                          zIndex: 20,
+                          minWidth: 100
                         }}
                       >
-                        Rename
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirmId(c.id);
-                        }}
-                        style={{
-                          padding: 2,
-                          border: "none",
-                          background: "transparent",
-                          cursor: "pointer",
-                          fontSize: 11,
-                          opacity: 0.8,
-                          color: "var(--accent)"
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenameId(c.id);
+                            setRenameValue(c.title || "New chat");
+                            setMenuOpenId(null);
+                          }}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            padding: "8px 12px",
+                            textAlign: "left",
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            color: "var(--text)",
+                            borderTopLeftRadius: 8,
+                            borderTopRightRadius: 8
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmId(c.id);
+                            setMenuOpenId(null);
+                          }}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            padding: "8px 12px",
+                            textAlign: "left",
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            color: "var(--accent)",
+                            borderBottomLeftRadius: 8,
+                            borderBottomRightRadius: 8
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
