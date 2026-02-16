@@ -229,8 +229,7 @@ export default function FriendProfile() {
   }
 
   // ------------------------------------------------------------
-  // Reactions (GATED) — profile_reactions: id, profile_id, reactor_id, reaction_type, created_at
-  // One reaction per type per user per 24 hours. Count = count(*) per profile_id + reaction_type.
+  // Reactions (GATED) — profile_reactions schema: id, from_user_id, to_user_id, reaction_type, reaction_date, created_at
   // ------------------------------------------------------------
   const twentyFourHoursAgo = () =>
     new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -244,7 +243,7 @@ export default function FriendProfile() {
         const { count, error } = await supabase
           .from("profile_reactions")
           .select("*", { count: "exact", head: true })
-          .eq("profile_id", profileId)
+          .eq("to_user_id", profileId)
           .eq("reaction_type", emoji);
 
         if (!error && count != null) counts[emoji] = count;
@@ -255,8 +254,8 @@ export default function FriendProfile() {
       const { data: myRows } = await supabase
         .from("profile_reactions")
         .select("reaction_type")
-        .eq("profile_id", profileId)
-        .eq("reactor_id", meId)
+        .eq("to_user_id", profileId)
+        .eq("from_user_id", meId)
         .gte("created_at", twentyFourHoursAgo())
         .order("created_at", { ascending: false })
         .limit(1);
@@ -288,8 +287,8 @@ export default function FriendProfile() {
       const { data: existing } = await supabase
         .from("profile_reactions")
         .select("id")
-        .eq("profile_id", friendId)
-        .eq("reactor_id", me.id)
+        .eq("to_user_id", friendId)
+        .eq("from_user_id", me.id)
         .eq("reaction_type", emoji)
         .gte("created_at", twentyFourHoursAgo())
         .limit(1);
@@ -297,10 +296,9 @@ export default function FriendProfile() {
       if (existing?.length) return;
 
       await supabase.from("profile_reactions").insert({
-        profile_id: friendId,
-        reactor_id: me.id,
+        from_user_id: me.id,
+        to_user_id: friendId,
         reaction_type: emoji,
-        created_at: new Date().toISOString(),
       });
     } catch {
       return;
