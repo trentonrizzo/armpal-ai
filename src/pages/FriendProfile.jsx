@@ -229,38 +229,35 @@ export default function FriendProfile() {
   }
 
   // ------------------------------------------------------------
-  // Reactions (GATED) — profile_reactions schema: id, from_user_id, to_user_id, reaction_type, reaction_date, created_at
+  // Reactions (GATED) — profile_reactions: id, from_user_id, to_user_id, reaction_type, reaction_date, created_at
   // ------------------------------------------------------------
-  const twentyFourHoursAgo = () =>
-    new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   async function loadReactions(meId, profileId) {
     if (!profileId) return;
 
     try {
-      const counts = {};
-      for (const emoji of REACTIONS) {
-        const { count, error } = await supabase
-          .from("profile_reactions")
-          .select("*", { count: "exact", head: true })
-          .eq("to_user_id", profileId)
-          .eq("reaction_type", emoji);
-
-        if (!error && count != null) counts[emoji] = count;
-        else counts[emoji] = 0;
-      }
-
-      let mine = null;
-      const { data: myRows } = await supabase
+      const { data } = await supabase
         .from("profile_reactions")
         .select("reaction_type")
-        .eq("to_user_id", profileId)
-        .eq("from_user_id", meId)
-        .gte("created_at", twentyFourHoursAgo())
-        .order("created_at", { ascending: false })
-        .limit(1);
+        .eq("to_user_id", profileId);
 
-      if (myRows?.length) mine = myRows[0].reaction_type;
+      const counts = {};
+      REACTIONS.forEach((emoji) => (counts[emoji] = 0));
+      (data || []).forEach((row) => {
+        const t = row.reaction_type;
+        if (t != null) counts[t] = (counts[t] || 0) + 1;
+      });
+
+      let mine = null;
+      const { data: myRow } = await supabase
+        .from("profile_reactions")
+        .select("reaction_type")
+        .eq("from_user_id", meId)
+        .eq("to_user_id", profileId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (myRow?.reaction_type) mine = myRow.reaction_type;
 
       if (!mountedRef.current) return;
       setReactionCounts(counts);
@@ -287,18 +284,18 @@ export default function FriendProfile() {
       const { data: existing } = await supabase
         .from("profile_reactions")
         .select("id")
-        .eq("to_user_id", friendId)
         .eq("from_user_id", me.id)
+        .eq("to_user_id", friendId)
         .eq("reaction_type", emoji)
-        .gte("created_at", twentyFourHoursAgo())
-        .limit(1);
+        .maybeSingle();
 
-      if (existing?.length) return;
+      if (existing) return;
 
       await supabase.from("profile_reactions").insert({
         from_user_id: me.id,
         to_user_id: friendId,
         reaction_type: emoji,
+        reaction_date: new Date().toISOString(),
       });
     } catch {
       return;
