@@ -16,7 +16,7 @@ export default function AIChatButtonOverlay({ onOpen }) {
         border: "none",
 
         background:
-          "linear-gradient(145deg, var(--accent), #ff1a1a)",
+          "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, black))",
 
         color: "#fff",
         fontWeight: 900,

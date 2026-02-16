@@ -942,47 +942,24 @@ export default function ChatPage() {
   // RENDER
   // ============================================================
 
-  const messagesBottom = useMemo(() => {
-    // Keep the composer visible + keep scroll area correct.
-    // Base composer is 86px. KeyboardLift adds on top.
-    const baseComposer = 86;
-    const lift = Math.max(0, keyboardLift);
-    return baseComposer + lift;
-  }, [keyboardLift]);
-
-  const messagesBoxDynamic = useMemo(() => {
-    return {
-      ...messagesBox,
-      bottom: messagesBottom,
-    };
-  }, [messagesBottom]);
-
-  const composerWrapDynamic = useMemo(() => {
-    return {
-      ...composerWrap,
-      transform: keyboardLift
-        ? `translateY(-${keyboardLift}px)`
-        : "translateY(0px)",
-    };
-  }, [keyboardLift]);
-
   if (loading) {
     return <div style={loadingWrap}>Loading…</div>;
   }
 
   return (
     <div style={shell}>
-      <div style={header}>
-        <button onClick={() => navigate("/friends")} style={backBtn}>
-          <FiArrowLeft size={20} />
-        </button>
-        <div style={headerTextWrap}>
-          <strong style={headerName}>{friendName}</strong>
-          {friendStatus && <span style={friendStatusText}>{friendStatus}</span>}
+      <div style={chatContainer}>
+        <div style={header}>
+          <button onClick={() => navigate("/friends")} style={backBtn}>
+            <FiArrowLeft size={20} />
+          </button>
+          <div style={headerTextWrap}>
+            <strong style={headerName}>{friendName}</strong>
+            {friendStatus && <span style={friendStatusText}>{friendStatus}</span>}
+          </div>
         </div>
-      </div>
 
-      <div ref={listRef} style={messagesBoxDynamic}>
+        <div ref={listRef} style={messagesContainer}>
         {error && <div style={errBox}>{error}</div>}
 
         {messages.map((m) => {
@@ -1057,10 +1034,11 @@ export default function ChatPage() {
             </div>
           );
         })}
-      </div>
+        </div>
 
-      <div style={composerWrapDynamic}>
-        <div style={composerRow}>
+        <div style={composerContainer}>
+          <div style={composerWrap}>
+            <div style={composerRow}>
           <label style={iconBtn}>
             <FiImage size={18} />
             <input
@@ -1123,6 +1101,8 @@ export default function ChatPage() {
             </button>
           </div>
         )}
+          </div>
+        </div>
       </div>
 
       {deleteTarget && (
@@ -1169,14 +1149,51 @@ const shell = {
   bottom: 0,
   left: 0,
   background: "var(--bg)",
+  display: "flex",
+  flexDirection: "column",
+  height: "100%",
   overflow: "hidden",
 };
 
+const chatContainer = {
+  display: "flex",
+  flexDirection: "column",
+  flex: 1,
+  minHeight: 0,
+};
+
+const messagesContainer = {
+  flex: 1,
+  overflowY: "auto",
+  WebkitOverflowScrolling: "touch",
+  overscrollBehavior: "contain",
+  minHeight: 0,
+  paddingTop: 12,
+  paddingRight: 12,
+  paddingBottom: 12,
+  paddingLeft: 12,
+};
+
+const composerContainer = {
+  position: "sticky",
+  bottom: 0,
+  zIndex: 10,
+  background: "var(--background, var(--bg))",
+  borderTopWidth: 1,
+  borderTopStyle: "solid",
+  borderTopColor: "var(--border)",
+  paddingTop: 10,
+  paddingRight: 10,
+  paddingBottom: "env(safe-area-inset-bottom)",
+  paddingLeft: 10,
+  flexShrink: 0,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+};
+
 const header = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
+  flexShrink: 0,
   height: 56,
   background: "var(--accent)",
   color: "var(--text)",
@@ -1223,14 +1240,11 @@ const backBtn = {
 };
 
 const messagesBox = {
-  position: "absolute",
-  top: 56,
-  left: 0,
-  right: 0,
-  bottom: 86,
+  flex: 1,
   overflowY: "auto",
   WebkitOverflowScrolling: "touch",
   overscrollBehavior: "contain",
+  minHeight: 0,
   paddingTop: 12,
   paddingRight: 12,
   paddingBottom: 12,
@@ -1317,25 +1331,17 @@ const audioMeta = {
 };
 
 const composerWrap = {
-  position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  backgroundColor: "var(--bg)",
-  borderTopWidth: 1,
-  borderTopStyle: "solid",
-  borderTopColor: "var(--border)",
-  paddingTop: 10,
-  paddingRight: 10,
-  paddingBottom: 10,
-  paddingLeft: 10,
+  width: "100%",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
 };
 
 const composerRow = {
   display: "flex",
   flexDirection: "row",
   alignItems: "center",
-  justifyContent: "space-between",
+  width: "100%",
   gap: 10,
 };
 
@@ -1385,6 +1391,8 @@ const input = {
 const sendBtnIcon = {
   width: 46,
   height: 46,
+  minWidth: 46,
+  flexShrink: 0,
   borderRadius: 16,
   backgroundColor: "var(--accent)",
   borderWidth: 0,

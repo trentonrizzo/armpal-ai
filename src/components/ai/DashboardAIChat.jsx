@@ -382,16 +382,20 @@ if (!res.ok) {
           opacity: animateIn ? 1 : 0,
           transition: "all 0.35s cubic-bezier(.22,1,.36,1)"
         }}
+        className="chatLayout"
       >
         {/* LEFT SIDEBAR — conversations */}
         <div
+          className="chatSidebar"
           style={{
-            width: 200,
-            minWidth: 200,
+            width: "clamp(80px, 18vw, 220px)",
+            minWidth: 80,
+            maxWidth: 220,
             borderRight: "1px solid var(--border)",
             display: "flex",
             flexDirection: "column",
-            background: "var(--card-2)"
+            background: "var(--card-2)",
+            overflowY: "auto"
           }}
         >
           <button
@@ -473,7 +477,8 @@ if (!res.ok) {
                           background: "transparent",
                           cursor: "pointer",
                           fontSize: 11,
-                          opacity: 0.8
+                          opacity: 0.8,
+                          color: "var(--accent)"
                         }}
                       >
                         Rename
@@ -505,7 +510,7 @@ if (!res.ok) {
         </div>
 
         {/* MAIN CHAT AREA */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div className="chatContent" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div
           style={{
             padding: "14px 16px",

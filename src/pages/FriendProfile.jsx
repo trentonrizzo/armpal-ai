@@ -15,9 +15,8 @@ const REACTIONS = ["💪", "👊", "❤️", "🔥"];
  *  - ALWAYS HIDE: measurements + PR counts/numbers on this viewer page (no numbers leak)
  *
  * Notes:
- *  - Extra images are loaded "best-effort" from a table named `profile_photos`
- *    with columns: id, user_id, url, created_at
- *    If that table doesn't exist, this page will NOT crash (it just won't show extra images).
+ *  - Photos use the same loader as the profile page: ProfileMediaGallery
+ *    (profile_media table + profile-media bucket). Viewed user's ID (friendId) is used.
  */
 export default function FriendProfile() {
   const { friendId } = useParams();
@@ -43,12 +42,7 @@ export default function FriendProfile() {
   // Reactions (gated)
   const [reactionCounts, setReactionCounts] = useState({});
   const [myReaction, setMyReaction] = useState(null);
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  // Extra images (gated)
-  const [photos, setPhotos] = useState([]);
-  const [photosLoading, setPhotosLoading] = useState(false);
-  const [photoPreview, setPhotoPreview] = useState(null);
 
   const mountedRef = useRef(true);
 
@@ -71,8 +65,6 @@ export default function FriendProfile() {
       setAccessLost(false);
       setReactionCounts({});
       setMyReaction(null);
-      setPhotos([]);
-      setPhotoPreview(null);
 
       // 1) Current user
       const { data: auth } = await supabase.auth.getUser();
@@ -161,16 +153,12 @@ export default function FriendProfile() {
       // We show the limited view (this is what you asked for).
       setAccessLost(false);
 
-      // 4) Load gated sections ONLY if allowed
+      // 4) Load gated sections ONLY if allowed (photos loaded by ProfileMediaGallery via friendId)
       if (canSeeFull) {
-        await Promise.all([
-          loadReactions(meId, otherId),
-          loadExtraPhotos(otherId),
-        ]);
+        await loadReactions(meId, otherId);
       } else {
         setReactionCounts({});
         setMyReaction(null);
-        setPhotos([]);
       }
     })();
 
@@ -241,62 +229,39 @@ export default function FriendProfile() {
   }
 
   // ------------------------------------------------------------
-  // Extra photos (GATED)
-  // Best-effort: tries profile_photos table; if missing, silently ignores.
+  // Reactions (GATED) — profile_reactions: id, profile_id, reactor_id, reaction_type, created_at
+  // One reaction per type per user per 24 hours. Count = count(*) per profile_id + reaction_type.
   // ------------------------------------------------------------
-  async function loadExtraPhotos(userId) {
-    if (!userId) return;
+  const twentyFourHoursAgo = () =>
+    new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    setPhotosLoading(true);
+  async function loadReactions(meId, profileId) {
+    if (!profileId) return;
+
     try {
-      const { data, error } = await supabase
-        .from("profile_photos")
-        .select("id, user_id, url, created_at")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(24);
+      const counts = {};
+      for (const emoji of REACTIONS) {
+        const { count, error } = await supabase
+          .from("profile_reactions")
+          .select("*", { count: "exact", head: true })
+          .eq("profile_id", profileId)
+          .eq("reaction_type", emoji);
 
-      if (error) {
-        if (!mountedRef.current) return;
-        setPhotos([]);
-        return;
+        if (!error && count != null) counts[emoji] = count;
+        else counts[emoji] = 0;
       }
 
-      const list = (data || [])
-        .map((r) => r?.url)
-        .filter(Boolean);
-
-      if (!mountedRef.current) return;
-      setPhotos(list);
-    } catch {
-      if (!mountedRef.current) return;
-      setPhotos([]);
-    } finally {
-      if (!mountedRef.current) return;
-      setPhotosLoading(false);
-    }
-  }
-
-  // ------------------------------------------------------------
-  // Reactions (GATED)
-  // ------------------------------------------------------------
-  async function loadReactions(meId, toId) {
-    if (!meId || !toId) return;
-
-    try {
-      const { data } = await supabase
-        .from("profile_reactions")
-        .select("emoji, from_user_id")
-        .eq("to_user_id", toId)
-        .eq("reaction_date", today);
-
-      const counts = {};
       let mine = null;
+      const { data: myRows } = await supabase
+        .from("profile_reactions")
+        .select("reaction_type")
+        .eq("profile_id", profileId)
+        .eq("reactor_id", meId)
+        .gte("created_at", twentyFourHoursAgo())
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      (data || []).forEach((r) => {
-        counts[r.emoji] = (counts[r.emoji] || 0) + 1;
-        if (r.from_user_id === meId) mine = r.emoji;
-      });
+      if (myRows?.length) mine = myRows[0].reaction_type;
 
       if (!mountedRef.current) return;
       setReactionCounts(counts);
@@ -312,8 +277,6 @@ export default function FriendProfile() {
     if (!me?.id || !friendId) return;
 
     const owner = me.id === friendId;
-
-    // Only allow reactions if they can see the full profile
     const canSeeFull =
       owner ||
       visibility === "public" ||
@@ -321,22 +284,29 @@ export default function FriendProfile() {
 
     if (!canSeeFull || accessLost) return;
 
-    setMyReaction(emoji);
-
     try {
-      await supabase.from("profile_reactions").upsert(
-        {
-          from_user_id: me.id,
-          to_user_id: friendId,
-          emoji,
-          reaction_date: today,
-        },
-        { onConflict: "from_user_id,to_user_id,reaction_date" }
-      );
+      const { data: existing } = await supabase
+        .from("profile_reactions")
+        .select("id")
+        .eq("profile_id", friendId)
+        .eq("reactor_id", me.id)
+        .eq("reaction_type", emoji)
+        .gte("created_at", twentyFourHoursAgo())
+        .limit(1);
+
+      if (existing?.length) return;
+
+      await supabase.from("profile_reactions").insert({
+        profile_id: friendId,
+        reactor_id: me.id,
+        reaction_type: emoji,
+        created_at: new Date().toISOString(),
+      });
     } catch {
-      // ignore
+      return;
     }
 
+    setMyReaction(emoji);
     await loadReactions(me.id, friendId);
   }
 
@@ -494,16 +464,15 @@ export default function FriendProfile() {
         {/* Bio (gated) */}
         <div style={bio}>
           {canSeeFull ? p?.bio?.trim() || "No bio yet." : "This profile is private."}
+        </div>
 
-
-        {canSeeFull && (
+        {/* Photos: same as profile page — profile_media via ProfileMediaGallery */}
+        {canSeeFull && !accessLost && (
           <ProfileMediaGallery
             userId={friendId}
             isOwnProfile={false}
           />
         )}
-
-        </div>
       </div>
 
       {/* 🔒 LOCKED NOTICE (when not allowed full view) */}
@@ -512,36 +481,6 @@ export default function FriendProfile() {
           <div style={lockedTitle}>🔒 Private Profile</div>
           <div style={lockedText}>
             You can only see their full profile if you’re friends.
-          </div>
-        </div>
-      )}
-
-      {/* 📸 EXTRA PHOTOS (gated) */}
-      {canSeeFull && !accessLost && (
-        <div style={sectionCard}>
-          <div style={sectionTitle}>Photos</div>
-
-          {photosLoading ? (
-            <div style={muted}>Loading photos…</div>
-          ) : photos.length === 0 ? (
-            <div style={muted}>No photos yet.</div>
-          ) : (
-            <div style={grid}>
-              {photos.map((url, idx) => (
-                <button
-                  key={`${url}-${idx}`}
-                  style={gridItem}
-                  onClick={() => setPhotoPreview(url)}
-                >
-                  <img src={url} alt="" style={gridImg} />
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div style={tinyNote}>
-            {/* Always hide measurements/PR numbers on this page */}
-            Numbers like PRs / measurements are hidden on viewer profiles.
           </div>
         </div>
       )}
@@ -587,13 +526,6 @@ export default function FriendProfile() {
       {showImage && p?.avatar_url && (
         <div style={overlay} onClick={() => setShowImage(false)}>
           <img src={p.avatar_url} alt="" style={previewImg} />
-        </div>
-      )}
-
-      {/* PHOTO PREVIEW */}
-      {photoPreview && (
-        <div style={overlay} onClick={() => setPhotoPreview(null)}>
-          <img src={photoPreview} alt="" style={previewImg} />
         </div>
       )}
 
