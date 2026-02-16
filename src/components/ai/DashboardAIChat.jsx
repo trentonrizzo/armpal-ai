@@ -408,14 +408,14 @@ if (!res.ok) {
         <div
           className="chatSidebar"
           style={{
-            width: "clamp(80px, 18vw, 220px)",
-            minWidth: 80,
-            maxWidth: 220,
+            minWidth: 240,
+            maxWidth: 280,
+            width: 240,
             borderRight: "1px solid var(--border)",
             display: "flex",
             flexDirection: "column",
             background: "var(--card-2)",
-            overflowY: "auto"
+            overflow: "hidden"
           }}
         >
           <button
@@ -440,8 +440,9 @@ if (!res.ok) {
               display: flex;
               align-items: center;
               justify-content: space-between;
-              padding: 10px;
-              border-radius: 10px;
+              padding: 12px;
+              gap: 10px;
+              border-radius: 12px;
               margin-bottom: 4px;
               border: 1px solid var(--border);
               background: var(--card);
@@ -453,8 +454,17 @@ if (!res.ok) {
             .chatItem.active {
               background: var(--accent);
             }
+            .chatItemTitle {
+              flex: 1;
+              min-width: 0;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              font-size: 13px;
+              cursor: pointer;
+            }
           `}</style>
-          <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0 8px 8px" }}>
             {conversations.map((c) => (
               <div
                 key={c.id}
@@ -484,6 +494,7 @@ if (!res.ok) {
                 ) : (
                   <>
                     <div
+                      className="chatItemTitle"
                       role="button"
                       tabIndex={0}
                       onClick={() => {
@@ -514,15 +525,6 @@ if (!res.ok) {
                         }
                       }}
                       onKeyDown={(e) => e.key === "Enter" && setActiveConversationId(c.id)}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        fontSize: 13,
-                        cursor: "pointer",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
-                      }}
                     >
                       {c.title || "New chat"}
                     </div>
@@ -554,13 +556,13 @@ if (!res.ok) {
                           position: "absolute",
                           right: 0,
                           top: "100%",
-                          marginTop: 2,
+                          marginTop: 4,
                           background: "var(--card)",
                           border: "1px solid var(--border)",
-                          borderRadius: 8,
-                          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                          zIndex: 20,
-                          minWidth: 100
+                          borderRadius: 12,
+                          boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
+                          zIndex: 100,
+                          minWidth: 120
                         }}
                       >
                         <button
@@ -574,15 +576,15 @@ if (!res.ok) {
                           style={{
                             display: "block",
                             width: "100%",
-                            padding: "8px 12px",
+                            padding: "10px 12px",
                             textAlign: "left",
                             border: "none",
                             background: "transparent",
                             cursor: "pointer",
                             fontSize: 13,
                             color: "var(--text)",
-                            borderTopLeftRadius: 8,
-                            borderTopRightRadius: 8
+                            borderTopLeftRadius: 12,
+                            borderTopRightRadius: 12
                           }}
                         >
                           Rename
@@ -597,15 +599,15 @@ if (!res.ok) {
                           style={{
                             display: "block",
                             width: "100%",
-                            padding: "8px 12px",
+                            padding: "10px 12px",
                             textAlign: "left",
                             border: "none",
                             background: "transparent",
                             cursor: "pointer",
                             fontSize: 13,
                             color: "var(--accent)",
-                            borderBottomLeftRadius: 8,
-                            borderBottomRightRadius: 8
+                            borderBottomLeftRadius: 12,
+                            borderBottomRightRadius: 12
                           }}
                         >
                           Delete

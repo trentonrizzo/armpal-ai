@@ -466,8 +466,8 @@ export default function FriendProfile() {
           {canSeeFull ? p?.bio?.trim() || "No bio yet." : "This profile is private."}
         </div>
 
-        {/* Photos: same as profile page — profile_media via ProfileMediaGallery */}
-        {canSeeFull && !accessLost && (
+        {/* Photos: same as profile page — ProfileMediaGallery only; no custom fetch. userId = viewed profile (friendId). */}
+        {canSeeFull && !accessLost && friendId && (
           <ProfileMediaGallery
             userId={friendId}
             isOwnProfile={false}
