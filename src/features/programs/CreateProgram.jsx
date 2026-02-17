@@ -22,7 +22,19 @@ export default function CreateProgram() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Convert failed");
-      setParsedProgram(data);
+
+      const enrichRes = await fetch("/api/enrichProgram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawContent, parsedProgram: data }),
+      });
+      const metadata = await enrichRes.json();
+      if (enrichRes.ok && metadata && !metadata.error) {
+        const updated = { ...data, meta: metadata };
+        setParsedProgram(updated);
+      } else {
+        setParsedProgram(data);
+      }
     } catch (e) {
       console.error(e);
       alert(e.message || "Convert failed");

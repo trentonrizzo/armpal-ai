@@ -3,19 +3,37 @@ import { useNavigate } from "react-router-dom";
 
 export default function ProgramCard({ program, owned }) {
   const navigate = useNavigate();
+  const meta = program?.parsed_program?.meta;
+  const thumbnailStyle = meta?.thumbnail_style ?? "default";
 
   return (
     <button
       type="button"
       onClick={() => navigate(`/programs/${program.id}`)}
+      className={`program-card ${thumbnailStyle}`}
       style={styles.card}
     >
-      <div style={styles.top}>
-        <span style={styles.title}>{program.title}</span>
+      <div style={styles.badges}>
+        {meta?.difficulty && (
+          <span className="badge difficulty">{meta.difficulty}</span>
+        )}
+        {program.creator_id && (
+          <span className="badge creator">Creator</span>
+        )}
         {owned && <span style={styles.owned}>Owned</span>}
       </div>
-      {program.preview_description ? (
-        <p style={styles.desc}>{program.preview_description}</p>
+      <div style={styles.top}>
+        <span style={styles.title}>{program.title}</span>
+      </div>
+      {meta?.tags?.length > 0 && (
+        <div style={styles.tags}>
+          {meta.tags.map((tag) => (
+            <span key={tag} className="badge tag">{tag}</span>
+          ))}
+        </div>
+      )}
+      {(program.preview_description || meta?.description) ? (
+        <p style={styles.desc}>{program.preview_description || meta.description}</p>
       ) : null}
     </button>
   );
@@ -32,16 +50,42 @@ const styles = {
     padding: 14,
     cursor: "pointer",
   },
+  badges: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  badges: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
   top: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+  tags: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
   title: {
     color: "var(--text)",
     fontSize: 15,
     fontWeight: 800,
+  },
+  tags: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
   },
   owned: {
     background: "color-mix(in srgb, var(--accent) 25%, transparent)",
