@@ -104,8 +104,8 @@ export default function ProgramViewer() {
           user_id: userId,
           workout_id: workoutId,
           name: ex.name || "Exercise",
-          sets: ex.sets ?? null,
-          reps: ex.reps ?? null,
+          sets: ex.sets != null ? String(ex.sets) : null,
+          reps: ex.reps != null ? String(ex.reps) : null,
           weight: ex.intensity ?? null,
           position: i,
         });
