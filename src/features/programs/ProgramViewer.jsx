@@ -8,11 +8,16 @@ export default function ProgramViewer() {
   const [program, setProgram] = useState(null);
   const [logic, setLogic] = useState(null);
   const [owned, setOwned] = useState(false);
-  const [frequency, setFrequency] = useState(null);
+  const [selectedFrequency, setSelectedFrequency] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null);
 
-  const frequencyRange = logic?.logic_json?.frequency_range;
+  const logicJson = logic?.logic_json ?? {};
+  const frequencyRange = logicJson.frequency_range ?? [];
   const hasFrequencyRange = Array.isArray(frequencyRange) && frequencyRange.length > 0;
+  const layout = hasFrequencyRange && selectedFrequency != null
+    ? logicJson.layouts?.[selectedFrequency]
+    : null;
 
   useEffect(() => {
     let alive = true;
@@ -58,8 +63,8 @@ export default function ProgramViewer() {
       if (!logicErr && logicRow?.logic_json) {
         setLogic({ logic_json: logicRow.logic_json });
         const fr = logicRow.logic_json?.frequency_range;
-        if (Array.isArray(fr) && fr.length > 0 && !frequency) {
-          setFrequency(fr[0]);
+        if (Array.isArray(fr) && fr.length > 0) {
+          setSelectedFrequency(fr[0]);
         }
       } else {
         setLogic({ logic_json: {} });
@@ -70,13 +75,46 @@ export default function ProgramViewer() {
     return () => { alive = false; };
   }, [id]);
 
-  // When logic loads and we have frequency_range, set initial frequency if not set
-  useEffect(() => {
-    const fr = logic?.logic_json?.frequency_range;
-    if (Array.isArray(fr) && fr.length > 0 && frequency === null) {
-      setFrequency(fr[0]);
+  async function saveProgramWorkout(workout) {
+    const { data } = await supabase.auth.getSession();
+    const userId = data?.session?.user?.id;
+    if (!userId) return;
+
+    setSavingId(workout.name);
+    try {
+      const { data: newWorkout, error: wErr } = await supabase
+        .from("workouts")
+        .insert({
+          user_id: userId,
+          name: workout.name,
+        })
+        .select("id")
+        .single();
+
+      if (wErr) throw wErr;
+      const workoutId = newWorkout?.id;
+      if (!workoutId || !Array.isArray(workout.exercises)) {
+        setSavingId(null);
+        return;
+      }
+
+      for (let i = 0; i < workout.exercises.length; i++) {
+        const ex = workout.exercises[i];
+        await supabase.from("exercises").insert({
+          user_id: userId,
+          workout_id: workoutId,
+          name: ex.name || "Exercise",
+          sets: ex.sets ?? null,
+          reps: ex.reps ?? null,
+          weight: ex.intensity ?? null,
+          position: i,
+        });
+      }
+    } catch (e) {
+      console.error("saveProgramWorkout failed", e);
     }
-  }, [logic, frequency]);
+    setSavingId(null);
+  }
 
   if (loading) {
     return (
@@ -97,9 +135,7 @@ export default function ProgramViewer() {
     );
   }
 
-  const logicJson = logic?.logic_json ?? {};
-  const fr = logicJson.frequency_range ?? [];
-  const layout = getLayoutForFrequency(logicJson, frequency);
+  const workouts = layout?.days ?? layout?.workouts ?? [];
 
   return (
     <div style={styles.wrap}>
@@ -118,17 +154,18 @@ export default function ProgramViewer() {
         <div style={styles.frequencyRow}>
           <span style={styles.frequencyLabel}>Days per week</span>
           <div style={styles.frequencyButtons}>
-            {fr.map((f) => (
+            {frequencyRange.map((freq) => (
               <button
-                key={f}
+                key={freq}
                 type="button"
-                onClick={() => setFrequency(f)}
+                onClick={() => setSelectedFrequency(freq)}
+                className={selectedFrequency === freq ? "pill active" : "pill"}
                 style={{
                   ...styles.freqBtn,
-                  ...(frequency === f ? styles.freqBtnActive : {}),
+                  ...(selectedFrequency === freq ? styles.freqBtnActive : {}),
                 }}
               >
-                {f}×
+                {freq}×
               </button>
             ))}
           </div>
@@ -136,57 +173,54 @@ export default function ProgramViewer() {
       )}
 
       <div style={styles.layout}>
-        {layout}
-      </div>
-    </div>
-  );
-}
+        {layout?.summary && (
+          <div style={styles.summary}>{layout.summary}</div>
+        )}
 
-function getLayoutForFrequency(logicJson, frequency) {
-  const layouts = logicJson.layouts;
-  const weeks = logicJson.weeks ?? 1;
-  const phases = logicJson.phases ?? [];
-
-  if (layouts && typeof layouts[frequency] !== "undefined") {
-    const block = layouts[frequency];
-    if (typeof block === "string") {
-      return <p style={styles.layoutText}>{block}</p>;
-    }
-    if (Array.isArray(block)) {
-      return (
-        <ul style={styles.layoutList}>
-          {block.map((item, i) => (
-            <li key={i} style={styles.layoutItem}>{String(item)}</li>
-          ))}
-        </ul>
-      );
-    }
-    if (block && typeof block === "object" && block.summary) {
-      return <p style={styles.layoutText}>{block.summary}</p>;
-    }
-  }
-
-  if (phases.length > 0) {
-    return (
-      <div style={styles.phaseBlock}>
-        <div style={styles.phaseLabel}>
-          {frequency != null ? `${frequency}×/week` : ""} · {weeks} week(s)
-        </div>
-        {phases.map((phase, i) => (
-          <div key={i} style={styles.phaseCard}>
-            <strong>{phase.name ?? `Phase ${i + 1}`}</strong>
-            {phase.description ? <p style={styles.phaseDesc}>{phase.description}</p> : null}
+        {workouts.length > 0 && workouts.map((workout) => (
+          <div key={workout.name || Math.random()} style={styles.workoutBlock}>
+            <h3 style={styles.workoutTitle}>{workout.name}</h3>
+            {workout.estimated_time && (
+              <p style={styles.estimatedTime}>{workout.estimated_time}</p>
+            )}
+            {workout.exercises?.map((exercise) => (
+              <div key={exercise.name || exercise} style={styles.exerciseRow}>
+                {exercise.name} — {exercise.sets} × {exercise.reps}
+                {exercise.intensity ? ` @ ${exercise.intensity}` : ""}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => saveProgramWorkout(workout)}
+              disabled={!!savingId || !workout.exercises?.length}
+              style={styles.saveBtn}
+            >
+              {savingId === workout.name ? "Saving…" : "Save as Workout Card"}
+            </button>
           </div>
         ))}
-      </div>
-    );
-  }
 
-  return (
-    <p style={styles.layoutText}>
-      No layout defined for {frequency != null ? `${frequency}×/week` : "this frequency"}.
-      Add layout data in program_logic.logic_json.
-    </p>
+        {!layout?.summary && workouts.length === 0 && logicJson.phases?.length > 0 && (
+          <div style={styles.phaseBlock}>
+            <div style={styles.phaseLabel}>
+              {selectedFrequency != null ? `${selectedFrequency}×/week` : ""} · {logicJson.weeks ?? 1} week(s)
+            </div>
+            {logicJson.phases.map((phase, i) => (
+              <div key={i} style={styles.phaseCard}>
+                <strong>{phase.name ?? `Phase ${i + 1}`}</strong>
+                {phase.description ? <p style={styles.phaseDesc}>{phase.description}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!layout?.summary && workouts.length === 0 && !logicJson.phases?.length && (
+          <p style={styles.layoutText}>
+            No layout for {selectedFrequency != null ? `${selectedFrequency}×/week` : "this frequency"}.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -249,18 +283,47 @@ const styles = {
     border: "1px solid var(--border)",
     padding: 16,
   },
-  layoutText: {
-    margin: 0,
+  summary: {
+    margin: "0 0 16px",
     fontSize: 14,
     lineHeight: 1.5,
     color: "var(--text-dim)",
   },
-  layoutList: {
-    margin: 0,
-    paddingLeft: 20,
+  workoutBlock: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottom: "1px solid var(--border)",
   },
-  layoutItem: {
+  workoutTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    margin: "0 0 4px",
+    color: "var(--text)",
+  },
+  estimatedTime: {
+    fontSize: 12,
+    color: "var(--text-dim)",
+    margin: "0 0 10px",
+  },
+  exerciseRow: {
+    fontSize: 13,
+    color: "var(--text-dim)",
     marginBottom: 6,
+    paddingLeft: 8,
+  },
+  saveBtn: {
+    marginTop: 12,
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid var(--accent)",
+    background: "transparent",
+    color: "var(--accent)",
+    fontWeight: 600,
+    fontSize: 13,
+    cursor: "pointer",
+  },
+  layoutText: {
+    margin: 0,
     fontSize: 14,
     color: "var(--text-dim)",
   },
