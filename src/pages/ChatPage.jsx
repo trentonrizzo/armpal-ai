@@ -169,6 +169,15 @@ function extractWorkoutShare(message) {
   return null;
 }
 
+function extractGameSessionMessage(message) {
+  const candidates = [message.text, message.payload, message.data];
+  for (const c of candidates) {
+    const parsed = safeParseJSON(c);
+    if (parsed?.type === "game_session" && parsed?.session_id) return parsed;
+  }
+  return null;
+}
+
 // ============================================================
 // VIDEO URL RESOLVER (THE ACTUAL “VIDEOS WORK” UPGRADE)
 // ============================================================
@@ -1036,6 +1045,7 @@ export default function ChatPage() {
         {messages.map((m) => {
           const mine = m.sender_id === user.id;
           const share = extractWorkoutShare(m);
+          const gameSession = extractGameSessionMessage(m);
 
           return (
             <div key={m.id} style={mine ? messageRowMine : messageRow}>
@@ -1045,7 +1055,18 @@ export default function ChatPage() {
                 onTouchEnd={endHold}
                 onTouchCancel={endHold}
               >
-                {share ? (
+                {gameSession ? (
+                  <div style={gameSessionCard}>
+                    <span style={gameSessionCardTitle}>{gameSession.game_title || "Game"}</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/games/session/${gameSession.session_id}`)}
+                      style={gameSessionCardBtn}
+                    >
+                      Open Game
+                    </button>
+                  </div>
+                ) : share ? (
                   <WorkoutShareCard
                     share={share}
                     canSave={!!user?.id}
@@ -1720,6 +1741,22 @@ const gameCardPlayBtn = {
   background: "var(--accent)",
   color: "var(--text)",
   fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+const gameSessionCard = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+};
+const gameSessionCardTitle = { fontSize: 14, fontWeight: 700, color: "var(--text)" };
+const gameSessionCardBtn = {
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "var(--accent)",
+  color: "var(--text)",
+  fontSize: 13,
   fontWeight: 700,
   cursor: "pointer",
 };

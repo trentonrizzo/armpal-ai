@@ -1,17 +1,22 @@
 import React from "react";
-import ReactionTest from "./ReactionTest";
+import ReactionSpeed from "./ReactionSpeed";
 import TapStrength from "./TapStrength";
 import TicTacToe from "./TicTacToe";
+import FlappyArm from "./FlappyArm";
 
 export default function GameViewer({ game, session }) {
   if (!game) return null;
 
-  if (game.game_type === "reaction_test") {
-    return <ReactionTest game={game} />;
+  if (game.game_type === "reaction_test" || game.game_type === "reaction_speed") {
+    return <ReactionSpeed game={game} />;
   }
 
   if (game.game_type === "tap_strength") {
     return <TapStrength game={game} />;
+  }
+
+  if (game.game_type === "flappy_arm") {
+    return <FlappyArm game={game} />;
   }
 
   if (game.game_type === "tictactoe" && session) {

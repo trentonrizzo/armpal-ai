@@ -609,3 +609,9 @@ button:active:not(:disabled) {
   border: 1px solid var(--border);
   color: var(--text);
 }
+
+@keyframes tictactoePop {
+  0% { transform: scale(0.5); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
