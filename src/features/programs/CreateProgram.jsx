@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import ProgramViewer from "./ProgramViewer";
@@ -10,29 +10,28 @@ export default function CreateProgram() {
   const [rawContent, setRawContent] = useState("");
   const [parsedProgram, setParsedProgram] = useState(null);
   const [loadingAI, setLoadingAI] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [price, setPrice] = useState(15.99);
 
-  async function handleConvertWithAI() {
-    if (!rawContent.trim()) return;
+  async function convertAI() {
     setLoadingAI(true);
     try {
       const res = await fetch("/api/parseProgram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawContent: rawContent.trim() }),
+        body: JSON.stringify({ rawContent }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Parse failed");
+      if (!res.ok) throw new Error(data?.error || "Convert failed");
       setParsedProgram(data);
     } catch (e) {
       console.error(e);
-      alert(e.message || "Failed to convert with AI");
+      alert(e.message || "Convert failed");
     } finally {
       setLoadingAI(false);
     }
   }
 
-  async function handleSaveProgram() {
+  async function saveProgram() {
     if (!title.trim()) {
       alert("Enter a title.");
       return;
@@ -41,184 +40,95 @@ export default function CreateProgram() {
       alert("Convert with AI first.");
       return;
     }
-    setSaving(true);
     try {
-      const { error } = await supabase.from("programs").insert({
-        title: title.trim(),
-        preview_description: description.trim() || null,
-        raw_content: rawContent.trim() || null,
+      await supabase.from("programs").insert({
+        title,
+        preview_description: description || null,
+        raw_content: rawContent || null,
         parsed_program: parsedProgram,
         is_ai_parsed: true,
+        price,
       });
-      if (error) throw error;
+      alert("Program created");
       navigate("/programs");
     } catch (e) {
       console.error(e);
-      alert(e.message || "Failed to save program");
-    } finally {
-      setSaving(false);
+      alert(e.message || "Save failed");
     }
   }
 
   return (
-    <div style={styles.wrap}>
-      <button
-        type="button"
-        onClick={() => navigate("/programs")}
-        style={styles.backBtn}
-        aria-label="Back to programs"
-      >
+    <div style={{ padding: "16px 16px 90px", maxWidth: 560, margin: "0 auto" }}>
+      <button type="button" onClick={() => navigate("/programs")} style={{ marginBottom: 16, background: "none", border: "none", color: "var(--text-dim)", fontSize: 14, cursor: "pointer" }}>
         ← Programs
       </button>
 
-      <h1 style={styles.title}>Create Program</h1>
+      <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 16px", color: "var(--text)" }}>Create Program</h2>
 
-      <label style={styles.label}>Title</label>
       <input
-        type="text"
+        placeholder="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Program name"
-        style={styles.input}
+        style={{ width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}
       />
 
-      <label style={styles.label}>Description (optional)</label>
       <input
-        type="text"
+        placeholder="Description (optional)"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder="Short preview description"
-        style={styles.input}
+        style={{ width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}
       />
 
-      <label style={styles.label}>Raw program content</label>
+      <input
+        type="number"
+        step="0.01"
+        value={price}
+        onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+        placeholder="Price"
+        style={{ width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}
+      />
+
+      {(() => {
+        const platformFeePercent = 0.20;
+        const stripePercent = 0.029;
+        const stripeFixed = 0.30;
+        const p = Number(price) || 0;
+        const stripeFee = p * stripePercent + stripeFixed;
+        const platformFee = p * platformFeePercent;
+        const creatorEarnings = p - stripeFee - platformFee;
+        return (
+          <div style={{ marginBottom: 24, padding: 14, background: "var(--card-2)", borderRadius: 10, border: "1px solid var(--border)", fontSize: 14 }}>
+            <p style={{ margin: "0 0 6px", color: "var(--text)" }}>You set price: ${p.toFixed(2)}</p>
+            <p style={{ margin: "0 0 6px", color: "var(--text-dim)" }}>ArmPal fee (20%): ${platformFee.toFixed(2)}</p>
+            <p style={{ margin: "0 0 6px", color: "var(--text-dim)" }}>Stripe fee (est): ${stripeFee.toFixed(2)}</p>
+            <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "10px 0" }} />
+            <p style={{ margin: 0, color: "var(--text)" }}><strong>You earn ≈ ${creatorEarnings.toFixed(2)} per sale</strong></p>
+          </div>
+        );
+      })()}
+
       <textarea
+        placeholder="Paste program here..."
         value={rawContent}
         onChange={(e) => setRawContent(e.target.value)}
-        placeholder="Paste your training program text here…"
-        style={styles.textarea}
-        rows={8}
+        style={{ width: "100%", padding: 10, marginBottom: 12, minHeight: 120, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box", resize: "vertical" }}
       />
 
-      <div style={styles.actions}>
-        <button
-          type="button"
-          onClick={handleConvertWithAI}
-          disabled={loadingAI || !rawContent.trim()}
-          style={styles.convertBtn}
-        >
-          {loadingAI ? "Converting…" : "Convert With AI ⚡"}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 24 }}>
+        <button onClick={convertAI} disabled={loadingAI || !rawContent.trim()} style={{ padding: "12px 18px", borderRadius: 12, border: "none", background: "var(--accent)", color: "var(--text)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          {loadingAI ? "Converting..." : "Convert With AI ⚡"}
         </button>
-        <button
-          type="button"
-          onClick={handleSaveProgram}
-          disabled={saving || !parsedProgram}
-          style={styles.saveBtn}
-        >
-          {saving ? "Saving…" : "Save Program"}
+        <button onClick={saveProgram} disabled={!parsedProgram} style={{ padding: "12px 18px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--text)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          Save Program
         </button>
       </div>
 
       {parsedProgram && (
-        <section style={styles.previewSection}>
-          <h2 style={styles.previewTitle}>Preview</h2>
-          <ProgramViewer
-            previewProgram={{
-              title: title || "Preview",
-              preview_description: description || null,
-              parsed_program: parsedProgram,
-            }}
-          />
-        </section>
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 12px", color: "var(--text)" }}>Live Preview</h3>
+          <ProgramViewer program={{ title: title || "Preview", parsed_program: parsedProgram }} />
+        </div>
       )}
     </div>
   );
 }
-
-const styles = {
-  wrap: {
-    padding: "16px 16px 90px",
-    maxWidth: "560px",
-    margin: "0 auto",
-  },
-  backBtn: {
-    marginBottom: 16,
-    padding: "8px 0",
-    background: "none",
-    border: "none",
-    color: "var(--text-dim)",
-    fontSize: 14,
-    cursor: "pointer",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 800,
-    margin: "0 0 16px",
-    color: "var(--text)",
-  },
-  label: {
-    display: "block",
-    fontSize: 12,
-    fontWeight: 600,
-    color: "var(--text-dim)",
-    marginBottom: 6,
-  },
-  input: {
-    width: "100%",
-    padding: "10px 12px",
-    marginBottom: 14,
-    background: "var(--card-2)",
-    border: "1px solid var(--border)",
-    borderRadius: 10,
-    color: "var(--text)",
-    fontSize: 14,
-    boxSizing: "border-box",
-  },
-  textarea: {
-    width: "100%",
-    padding: "10px 12px",
-    marginBottom: 14,
-    background: "var(--card-2)",
-    border: "1px solid var(--border)",
-    borderRadius: 10,
-    color: "var(--text)",
-    fontSize: 14,
-    resize: "vertical",
-    boxSizing: "border-box",
-  },
-  actions: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 24,
-  },
-  convertBtn: {
-    padding: "12px 18px",
-    borderRadius: 12,
-    border: "none",
-    background: "var(--accent)",
-    color: "var(--text)",
-    fontWeight: 700,
-    fontSize: 14,
-    cursor: "pointer",
-  },
-  saveBtn: {
-    padding: "12px 18px",
-    borderRadius: 12,
-    border: "1px solid var(--border)",
-    background: "var(--card-2)",
-    color: "var(--text)",
-    fontWeight: 700,
-    fontSize: 14,
-    cursor: "pointer",
-  },
-  previewSection: {
-    marginTop: 8,
-  },
-  previewTitle: {
-    fontSize: 16,
-    fontWeight: 700,
-    margin: "0 0 12px",
-    color: "var(--text)",
-  },
-};

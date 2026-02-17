@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 
-export default function ProgramViewer({ previewProgram = null }) {
+export default function ProgramViewer({ previewProgram = null, program: programProp = null }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [program, setProgram] = useState(null);
@@ -11,8 +11,10 @@ export default function ProgramViewer({ previewProgram = null }) {
   const [selectedFrequency, setSelectedFrequency] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
+  const [aiVariant, setAiVariant] = useState(null);
 
-  const logicJson = logic?.logic_json ?? {};
+  const preview = previewProgram ?? (programProp?.parsed_program ? { ...programProp, parsed_program: programProp.parsed_program } : null);
+  const logicJson = aiVariant ?? program?.parsed_program ?? logic?.logic_json ?? {};
   const frequencyRange = logicJson.frequency_range ?? [];
   const hasFrequencyRange = Array.isArray(frequencyRange) && frequencyRange.length > 0;
   const layout = hasFrequencyRange && selectedFrequency != null
@@ -24,18 +26,18 @@ export default function ProgramViewer({ previewProgram = null }) {
   }
 
   useEffect(() => {
-    if (!previewProgram) return;
-    const parsed = previewProgram.parsed_program ?? {};
-    setProgram(previewProgram);
+    if (!preview) return;
+    const parsed = preview.parsed_program ?? {};
+    setProgram(preview);
     setLogic({ logic_json: parsed });
     setOwned(true);
     setLoading(false);
     const fr = parsed.frequency_range;
     if (Array.isArray(fr) && fr.length > 0) setSelectedFrequency(fr[0]);
-  }, [previewProgram]);
+  }, [preview]);
 
   useEffect(() => {
-    if (previewProgram) return;
+    if (preview) return;
     let alive = true;
 
     (async () => {
@@ -86,7 +88,25 @@ export default function ProgramViewer({ previewProgram = null }) {
     })();
 
     return () => { alive = false; };
-  }, [id, previewProgram]);
+  }, [id, preview]);
+
+  async function modifyProgram(type) {
+    const base = program?.parsed_program;
+    if (!base) return;
+    try {
+      const res = await fetch("/api/modifyProgram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseProgram: base, modification: type }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Modify failed");
+      setAiVariant(data);
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "Modify failed");
+    }
+  }
 
   async function saveProgramWorkout(workout) {
     const { data } = await supabase.auth.getSession();
@@ -161,7 +181,16 @@ export default function ProgramViewer({ previewProgram = null }) {
         ← Back
       </button>
 
-      <h1 style={styles.title}>{program.title}</h1>
+      <h1 style={styles.title}>{program?.title ?? "Program"}</h1>
+
+      {program?.parsed_program && (
+        <div style={styles.aiVariantRow}>
+          <button type="button" onClick={() => modifyProgram("beginner")} style={styles.aiVariantBtn}>Beginner</button>
+          <button type="button" onClick={() => modifyProgram("strength")} style={styles.aiVariantBtn}>Strength</button>
+          <button type="button" onClick={() => modifyProgram("short_sessions")} style={styles.aiVariantBtn}>Short Sessions</button>
+          <button type="button" onClick={() => modifyProgram("hook_focus")} style={styles.aiVariantBtn}>Hook Focus</button>
+        </div>
+      )}
 
       {hasFrequencyRange && (
         <div style={styles.frequencyRow}>
@@ -261,6 +290,22 @@ const styles = {
     fontWeight: 800,
     margin: "0 0 16px",
     color: "var(--text)",
+  },
+  aiVariantRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+  aiVariantBtn: {
+    padding: "8px 14px",
+    borderRadius: 10,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    fontWeight: 600,
+    fontSize: 13,
+    cursor: "pointer",
   },
   frequencyRow: {
     marginBottom: 20,

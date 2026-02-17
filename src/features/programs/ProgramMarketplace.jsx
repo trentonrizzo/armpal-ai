@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import ProgramCard from "./ProgramCard";
 
@@ -60,6 +60,10 @@ export default function ProgramMarketplace() {
   return (
     <div style={styles.wrap}>
       <h1 style={styles.title}>Programs</h1>
+
+      <Link to="/programs/create" className="pill" style={styles.createLink}>
+        + Create Program
+      </Link>
 
       <input
         type="search"
@@ -148,5 +152,17 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 12,
+  },
+  createLink: {
+    display: "inline-block",
+    marginBottom: 16,
+    padding: "10px 16px",
+    borderRadius: 999,
+    background: "var(--accent)",
+    color: "var(--text)",
+    fontWeight: 700,
+    fontSize: 14,
+    textDecoration: "none",
+    border: "1px solid var(--border)",
   },
 };
