@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import ProgramCard from "./ProgramCard";
+import ProgramPreviewModal from "./ProgramPreviewModal";
 
 export default function ProgramMarketplace() {
   const navigate = useNavigate();
@@ -10,6 +11,9 @@ export default function ProgramMarketplace() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
+  const [difficultyFilter, setDifficultyFilter] = useState("All");
+  const [activeTag, setActiveTag] = useState(null);
+  const [previewProgram, setPreviewProgram] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -52,10 +56,75 @@ export default function ProgramMarketplace() {
     }, {})
   );
 
+  let filtered = uniquePrograms;
   const searchLower = search.trim().toLowerCase();
-  const filtered = searchLower
-    ? uniquePrograms.filter((p) => (p.title || "").toLowerCase().includes(searchLower))
-    : uniquePrograms;
+  if (searchLower) {
+    filtered = filtered.filter((p) => (p.title || "").toLowerCase().includes(searchLower));
+  }
+  if (difficultyFilter !== "All") {
+    filtered = filtered.filter(
+      (p) => p.parsed_program?.meta?.difficulty === difficultyFilter
+    );
+  }
+  if (activeTag) {
+    filtered = filtered.filter((p) =>
+      p.parsed_program?.meta?.tags?.includes(activeTag)
+    );
+  }
+
+  const allTags = [
+    ...new Set(uniquePrograms.flatMap((p) => p.parsed_program?.meta?.tags ?? [])),
+  ].sort();
+
+  const trending = [...uniquePrograms].sort(
+    (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+  );
+  const hookFocused = uniquePrograms.filter((p) =>
+    p.parsed_program?.meta?.tags?.includes("Hook")
+  );
+  const strengthPrograms = uniquePrograms.filter((p) =>
+    p.parsed_program?.meta?.tags?.includes("Strength")
+  );
+  const beginnerFriendly = uniquePrograms.filter(
+    (p) => p.parsed_program?.meta?.difficulty === "Beginner"
+  );
+
+  const recommended = [...uniquePrograms]
+    .filter((p) => !ownedIds.has(p.id))
+    .sort((a, b) => {
+      const aTags = a.parsed_program?.meta?.tags ?? [];
+      const bTags = b.parsed_program?.meta?.tags ?? [];
+      const aPri = (aTags.includes("Hook") ? 2 : 0) + (aTags.includes("Strength") ? 2 : 0);
+      const bPri = (bTags.includes("Hook") ? 2 : 0) + (bTags.includes("Strength") ? 2 : 0);
+      return bPri - aPri;
+    });
+
+  function renderCard(program) {
+    return (
+      <ProgramCard
+        key={program.id}
+        program={program}
+        owned={ownedIds.has(program.id)}
+        onPreviewClick={() => setPreviewProgram(program)}
+      />
+    );
+  }
+
+  function renderRow(title, items) {
+    if (!items.length) return null;
+    return (
+      <section style={styles.section}>
+        <h3 style={styles.sectionTitle}>{title}</h3>
+        <div className="horizontal-row">
+          {items.map((p) => (
+            <div key={p.id} style={styles.cardWrap}>
+              {renderCard(p)}
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div style={styles.wrap}>
@@ -84,27 +153,93 @@ export default function ProgramMarketplace() {
         </button>
       </div>
 
-      {loading ? (
-        <p style={styles.hint}>Loading…</p>
-      ) : filtered.length === 0 ? (
-        <p style={styles.hint}>
-          {uniquePrograms.length === 0
-            ? "No programs in the marketplace yet."
-            : "No programs match your search."}
-        </p>
-      ) : (
-        <div style={styles.grid}>
-          {filtered.map((program) => (
-            <ProgramCard
-              key={program.id}
-              program={program}
-              owned={ownedIds.has(program.id)}
-            />
-          ))}
-        </div>
+      {!loading && (
+        <>
+          <div style={styles.filterRow}>
+            {["All", "Beginner", "Intermediate", "Advanced", "Elite"].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDifficultyFilter(d)}
+                className={difficultyFilter === d ? "pill active" : "pill"}
+                style={{
+                  ...styles.filterPill,
+                  ...(difficultyFilter === d ? styles.filterPillActive : {}),
+                }}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          {allTags.length > 0 && (
+            <div style={styles.tagRow}>
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  className={activeTag === tag ? "pill active" : "pill"}
+                  style={{
+                    ...styles.tagChip,
+                    ...(activeTag === tag ? styles.tagChipActive : {}),
+                  }}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Future: creator filter / creator support */}
+      {loading ? (
+        <p style={styles.hint}>Loading…</p>
+      ) : (
+        <>
+          {recommended.length > 0 && (
+            <section style={styles.section}>
+              <h3 style={styles.sectionTitle}>Recommended For You</h3>
+              <div className="horizontal-row">
+                {recommended.slice(0, 12).map((p) => (
+                  <div key={p.id} style={styles.cardWrap}>
+                    {renderCard(p)}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {renderRow("🔥 Trending Programs", trending)}
+          {renderRow("🔥 Hook Focused", hookFocused)}
+          {renderRow("🔥 Strength Programs", strengthPrograms)}
+          {renderRow("🔥 Beginner Friendly", beginnerFriendly)}
+
+          {(filtered.length > 0 && (searchLower || difficultyFilter !== "All" || activeTag)) && (
+            <section style={styles.section}>
+              <h3 style={styles.sectionTitle}>Filtered Results</h3>
+              <div style={styles.grid}>
+                {filtered.map((p) => renderCard(p))}
+              </div>
+            </section>
+          )}
+
+          {filtered.length === 0 && (
+            <p style={styles.hint}>
+              {uniquePrograms.length === 0
+                ? "No programs in the marketplace yet."
+                : "No programs match your search or filters."}
+            </p>
+          )}
+        </>
+      )}
+
+      {previewProgram && (
+        <ProgramPreviewModal
+          program={previewProgram}
+          owned={ownedIds.has(previewProgram.id)}
+          onClose={() => setPreviewProgram(null)}
+        />
+      )}
     </div>
   );
 }
@@ -112,7 +247,7 @@ export default function ProgramMarketplace() {
 const styles = {
   wrap: {
     padding: "16px 16px 90px",
-    maxWidth: "560px",
+    maxWidth: "900px",
     margin: "0 auto",
   },
   title: {
@@ -143,6 +278,60 @@ const styles = {
     fontSize: 14,
     fontWeight: 600,
     cursor: "pointer",
+  },
+  filterRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterPill: {
+    padding: "8px 14px",
+    borderRadius: 999,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  filterPillActive: {
+    background: "var(--accent)",
+    borderColor: "var(--accent)",
+  },
+  tagRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 20,
+  },
+  tagChip: {
+    padding: "6px 12px",
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--text-dim)",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  tagChipActive: {
+    background: "var(--accent)",
+    borderColor: "var(--accent)",
+    color: "var(--text)",
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    margin: "0 0 12px",
+    color: "var(--text)",
+  },
+  cardWrap: {
+    minWidth: 280,
+    flexShrink: 0,
   },
   hint: {
     color: "var(--text-dim)",

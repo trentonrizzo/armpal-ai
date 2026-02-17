@@ -1,15 +1,23 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function ProgramCard({ program, owned }) {
+export default function ProgramCard({ program, owned, onPreviewClick }) {
   const navigate = useNavigate();
   const meta = program?.parsed_program?.meta;
   const thumbnailStyle = meta?.thumbnail_style ?? "default";
 
+  function handleClick() {
+    if (onPreviewClick) {
+      onPreviewClick(program);
+    } else {
+      navigate(`/programs/${program.id}`);
+    }
+  }
+
   return (
     <button
       type="button"
-      onClick={() => navigate(`/programs/${program.id}`)}
+      onClick={handleClick}
       className={`program-card ${thumbnailStyle}`}
       style={styles.card}
     >
@@ -18,7 +26,7 @@ export default function ProgramCard({ program, owned }) {
           <span className="badge difficulty">{meta.difficulty}</span>
         )}
         {program.creator_id && (
-          <span className="badge creator">Creator</span>
+          <span className="badge creator-pro">Creator Program</span>
         )}
         {owned && <span style={styles.owned}>Owned</span>}
       </div>
@@ -43,19 +51,13 @@ const styles = {
   card: {
     display: "block",
     width: "100%",
+    minHeight: 140,
     textAlign: "left",
     background: "var(--card-2)",
     borderRadius: 14,
     border: "1px solid var(--border)",
     padding: 14,
     cursor: "pointer",
-  },
-  badges: {
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
   },
   badges: {
     display: "flex",
@@ -80,12 +82,6 @@ const styles = {
     color: "var(--text)",
     fontSize: 15,
     fontWeight: 800,
-  },
-  tags: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 6,
   },
   owned: {
     background: "color-mix(in srgb, var(--accent) 25%, transparent)",
