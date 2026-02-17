@@ -27,6 +27,11 @@ import Analytics from "./pages/Analytics";
 import MeasurementAnalytics from "./pages/MeasurementAnalytics";
 import ProUpgradePage from "./pages/ProUpgradePage";
 
+import ProgramMarketplace from "./features/programs/ProgramMarketplace";
+import ProgramPreview from "./features/programs/ProgramPreview";
+import ProgramViewer from "./features/programs/ProgramViewer";
+import MyPrograms from "./features/programs/MyPrograms";
+
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
@@ -155,6 +160,10 @@ function AppContent() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
         <Route path="/pro" element={<ProUpgradePage />} />
+        <Route path="/programs" element={<ProgramMarketplace />} />
+        <Route path="/programs/my" element={<MyPrograms />} />
+        <Route path="/programs/:id" element={<ProgramPreview />} />
+        <Route path="/programs/:id/view" element={<ProgramViewer />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}

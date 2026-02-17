@@ -6,9 +6,6 @@ import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { Link, useNavigate } from "react-router-dom";
 import StripeTestButton from "../components/StripeTestButton";
 
-// Programs
-import ProgramsLauncher from "../components/programs/ProgramsLauncher";
-
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
 
@@ -356,7 +353,27 @@ export default function Dashboard() {
       </section>
 
       {/* SMART ANALYTICS (PRO-ONLY) — lock state + upgrade on click if free */}
-      <ProgramsLauncher pillStyle={{ marginBottom: 12 }} />
+      <Link to="/programs" style={{ display: "inline-block", marginBottom: 12 }}>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            background: "linear-gradient(135deg, var(--accent), var(--accent-soft))",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: 999,
+            padding: "7px 12px",
+            fontSize: 13,
+            fontWeight: 900,
+            boxShadow: "0 8px 20px color-mix(in srgb, var(--accent) 35%, transparent)",
+            textDecoration: "none",
+          }}
+        >
+          <span style={{ opacity: 0.95 }}>💪</span>
+          <span>Programs</span>
+        </span>
+      </Link>
       <div
         role="button"
         tabIndex={0}
