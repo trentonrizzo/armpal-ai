@@ -1,18 +1,10 @@
 // src/onesignal.ts
 /// <reference types="vite/client" />
 //
-// OneSignal Web SDK integration (v16-style) for React + Supabase.
-//
-// Responsibilities:
-// - Initialize the OneSignal Web SDK for the current Supabase user
-// - Request push permission (slidedown/native prompt)
-// - When granted, obtain the current push Subscription ID
-//   and save it into `profiles.onesignal_player_id`
-// - Avoid duplicate prompts within a single browser session
-//
-// IMPORTANT:
-// - Do NOT expose the OneSignal REST API key here. Only the App ID is public.
-// - Configure VITE_ONESIGNAL_APP_ID in your Vite frontend env.
+// OneSignal Web SDK integration (v16) for React + Supabase.
+// - Init and login run on session load; permission prompt is NOT auto-triggered
+//   (iOS requires user interaction). Use promptPushIfNeeded() from first tap or Settings.
+// - When permission is granted, subscription id is saved to profiles.onesignal_player_id.
 
 declare global {
   interface Window {
@@ -25,11 +17,7 @@ import { supabase } from "./supabaseClient";
 
 const ONESIGNAL_APP_ID = import.meta.env?.VITE_ONESIGNAL_APP_ID;
 
-// Track which user we have already queued initialization for
 let queuedForUserId: string | null = null;
-
-// Prevent duplicate permission prompts per browser session
-let promptShownThisSession = false;
 
 function ensureDeferred(): any[] {
   if (typeof window === "undefined") return [];
@@ -40,8 +28,26 @@ function ensureDeferred(): any[] {
 }
 
 /**
- * Initialize OneSignal for the current authenticated Supabase user.
- * Safe to call multiple times; the real work is queued once per user per session.
+ * Trigger OneSignal Slidedown permission prompt. Call only from user interaction (e.g. first tap, Settings toggle).
+ * No-op if permission already granted or OneSignal not ready.
+ */
+export async function promptPushIfNeeded(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") return;
+
+  const OneSignal = window.OneSignal;
+  if (!OneSignal || !OneSignal.Slidedown || !OneSignal.Slidedown.promptPush) return;
+
+  try {
+    await OneSignal.Slidedown.promptPush();
+  } catch (e) {
+    console.debug("OneSignal Slidedown promptPush error:", e);
+  }
+}
+
+/**
+ * Initialize OneSignal for the current authenticated user (init + login + save subscription id).
+ * Does NOT trigger the permission prompt (use promptPushIfNeeded on first user interaction).
  */
 export async function initOneSignalForCurrentUser(): Promise<void> {
   if (typeof window === "undefined") return;
@@ -61,9 +67,7 @@ export async function initOneSignalForCurrentUser(): Promise<void> {
   }
 
   const userId = user?.id;
-  if (!userId) {
-    return;
-  }
+  if (!userId) return;
 
   if (queuedForUserId === userId) return;
   queuedForUserId = userId;
@@ -82,15 +86,6 @@ export async function initOneSignalForCurrentUser(): Promise<void> {
         await OneSignal.login(userId);
       } catch (e: any) {
         console.debug("OneSignal.login warning:", e?.message || e);
-      }
-
-      if (!promptShownThisSession) {
-        promptShownThisSession = true;
-        try {
-          await OneSignal.Slidedown.promptPush();
-        } catch (e: any) {
-          console.debug("OneSignal Slidedown prompt may be throttled:", e?.message || e);
-        }
       }
 
       async function saveCurrentSubscriptionId() {
@@ -137,23 +132,14 @@ export async function initOneSignalForCurrentUser(): Promise<void> {
   });
 }
 
-/**
- * Backwards‑compatible helper: keep existing calls working.
- */
 export async function initOneSignal(): Promise<void> {
   return initOneSignalForCurrentUser();
 }
 
-/**
- * Request notification permission.
- * For compatibility with EnableNotifications page.
- */
 export async function requestNotificationPermission(): Promise<boolean> {
   await initOneSignalForCurrentUser();
-
   if (typeof Notification === "undefined") return false;
   if (Notification.permission !== "default" && Notification.permission !== "denied") return true;
-
   try {
     const result = await Notification.requestPermission();
     return result !== "default" && result !== "denied";
@@ -162,23 +148,15 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
-/**
- * Returns whether push notifications are currently enabled for this browser.
- */
 export async function getSubscriptionState(): Promise<boolean> {
   if (typeof Notification === "undefined") return false;
   return Notification.permission !== "default" && Notification.permission !== "denied";
 }
 
-/**
- * Opt the current browser out of receiving push.
- * Uses the OneSignal v16 PushSubscription optOut API when available.
- */
 export async function unsubscribe(): Promise<void> {
   if (typeof window === "undefined") return;
   const OneSignal = window.OneSignal;
   if (!OneSignal?.User?.PushSubscription?.optOut) return;
-
   try {
     await OneSignal.User.PushSubscription.optOut();
   } catch (e: any) {

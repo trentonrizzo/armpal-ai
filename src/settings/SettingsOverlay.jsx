@@ -1,64 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { initOneSignalForCurrentUser } from "../onesignal";
+import { initOneSignalForCurrentUser, promptPushIfNeeded } from "../onesignal";
 import { useTheme } from "../context/ThemeContext";
-
-/* ============================
-   PUSH HELPERS
-============================ */
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  const raw = window.atob(base64);
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
-}
-
-function getVapidPublicKey() {
-  try {
-    return import.meta.env.VITE_VAPID_PUBLIC_KEY || null;
-  } catch {
-    return null;
-  }
-}
-
-async function getServiceWorkerRegistration() {
-  if (!("serviceWorker" in navigator)) {
-    throw new Error("Service worker not supported");
-  }
-  return navigator.serviceWorker.ready;
-}
-
-async function getExistingPushSubscription() {
-  const reg = await getServiceWorkerRegistration();
-  return reg.pushManager.getSubscription();
-}
-
-async function saveSubscription(userId, subscription) {
-  const json = subscription.toJSON();
-  const { error } = await supabase.from("push_subscriptions").upsert(
-    {
-      user_id: userId,
-      endpoint: subscription.endpoint,
-      p256dh: json?.keys?.p256dh || null,
-      auth: json?.keys?.auth || null,
-      created_at: new Date().toISOString(),
-    },
-    { onConflict: "endpoint" }
-  );
-  if (error) throw error;
-}
-
-async function removeSubscription(userId, endpoint) {
-  const { error } = await supabase
-    .from("push_subscriptions")
-    .delete()
-    .eq("user_id", userId)
-    .eq("endpoint", endpoint);
-  if (error) throw error;
-}
 
 /* ============================
    TOGGLE PILL
@@ -118,17 +61,10 @@ export default function SettingsOverlay({ open, onClose }) {
 
     supabase.auth.getUser().then(({ data }) => setUser(data?.user));
 
-    const supported =
-      "Notification" in window &&
-      "serviceWorker" in navigator &&
-      "PushManager" in window;
-
-    setNotifSupported(!!supported);
-
+    const supported = typeof Notification !== "undefined";
+    setNotifSupported(supported);
     if (supported) {
-      getExistingPushSubscription()
-        .then((sub) => setNotifEnabled(!!sub))
-        .catch(() => setNotifEnabled(false));
+      setNotifEnabled(Notification.permission === "granted");
     }
   }, [open]);
 
@@ -144,50 +80,20 @@ export default function SettingsOverlay({ open, onClose }) {
     setNotifBusy(true);
 
     try {
-      const reg = await getServiceWorkerRegistration();
-      const existing = await reg.pushManager.getSubscription();
-
-      if (!existing) {
-        // iOS / Safari: OneSignal permission must be triggered directly
-        // from a user interaction. Because this function is called from
-        // the toggle's onClick handler, we can safely invoke the Slidedown
-        // prompt here.
-        try {
-          const w = window;
-          const OneSignal = (w && w.OneSignal) || null;
-          if (OneSignal?.Slidedown?.promptPush) {
-            await OneSignal.Slidedown.promptPush();
-          }
-        } catch {
-          // If OneSignal is not available or Slidedown fails, fall back
-          // to the standard Notification API prompt below.
-        }
-
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") throw new Error("Permission denied");
-
-        const vapidKey = getVapidPublicKey();
-        if (!vapidKey) throw new Error("Missing VAPID key");
-
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
-        });
-
-        await saveSubscription(user.id, sub);
+      if (Notification.permission === "granted") {
         setNotifEnabled(true);
+        return;
+      }
 
-        // After permission is granted, initialize OneSignal again
-        // so the current browser subscription / player id is registered
-        // against this user in the profiles table.
-        initOneSignalForCurrentUser();
-      } else {
-        await removeSubscription(user.id, existing.endpoint);
-        await existing.unsubscribe();
-        setNotifEnabled(false);
+      // Same permission flow as first-tap: trigger OneSignal Slidedown from user interaction.
+      await promptPushIfNeeded();
+
+      if (Notification.permission === "granted") {
+        await initOneSignalForCurrentUser();
+        setNotifEnabled(true);
       }
     } catch (err) {
-      alert(err.message || "Notification error");
+      alert(err?.message || "Notification error");
     } finally {
       setNotifBusy(false);
     }

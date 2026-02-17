@@ -31,7 +31,7 @@ import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
 
-import { initOneSignalForCurrentUser } from "./onesignal";
+import { initOneSignalForCurrentUser, promptPushIfNeeded } from "./onesignal";
 import usePresence from "./hooks/usePresence";
 
 /* ============================
@@ -220,6 +220,26 @@ export default function App() {
     // Initialize OneSignal + register device for this user.
     // Safe to call multiple times; underlying helper de‑duplicates per session.
     initOneSignalForCurrentUser();
+
+    // One-time first tap/click: trigger permission prompt if not yet granted (iOS-safe).
+    let fired = false;
+    function onFirstInteraction() {
+      if (fired) return;
+      fired = true;
+      removeListener();
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") return;
+      promptPushIfNeeded();
+    }
+
+    function removeListener() {
+      document.removeEventListener("click", onFirstInteraction);
+      document.removeEventListener("touchstart", onFirstInteraction, { capture: true });
+    }
+
+    document.addEventListener("click", onFirstInteraction);
+    document.addEventListener("touchstart", onFirstInteraction, { capture: true });
+
+    return removeListener;
   }, [session]);
 
   return (
