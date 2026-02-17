@@ -72,6 +72,7 @@ export default function MiniGameShareOverlay({ open, onClose, game, onSent }) {
           player_two: friendId,
           current_turn: friendId,
           state,
+          status: "pending",
           ...(chatId && { chat_id: chatId }),
         })
         .select()

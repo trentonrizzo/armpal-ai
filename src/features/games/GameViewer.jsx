@@ -7,25 +7,24 @@ import FlappyArm from "./FlappyArm";
 export default function GameViewer({ game, session }) {
   if (!game) return null;
 
-  if (game.game_type === "reaction_test" || game.game_type === "reaction_speed") {
-    return <ReactionSpeed game={game} />;
+  switch (game.game_type) {
+    case "reaction_test":
+    case "reaction_speed":
+      return <ReactionSpeed game={game} />;
+    case "tap_strength":
+      return <TapStrength game={game} />;
+    case "flappy_arm":
+      return <FlappyArm game={game} />;
+    case "tictactoe":
+    case "tic_tac_toe":
+      return session ? <TicTacToe game={game} session={session} /> : (
+        <div style={{ padding: 16, color: "var(--text-dim)" }}>Open this game from a chat or session link.</div>
+      );
+    default:
+      return (
+        <div style={{ padding: 16, color: "var(--text-dim)" }}>
+          Unknown game type: {game.game_type}
+        </div>
+      );
   }
-
-  if (game.game_type === "tap_strength") {
-    return <TapStrength game={game} />;
-  }
-
-  if (game.game_type === "flappy_arm") {
-    return <FlappyArm game={game} />;
-  }
-
-  if (game.game_type === "tictactoe" && session) {
-    return <TicTacToe game={game} session={session} />;
-  }
-
-  return (
-    <div style={{ padding: 16, color: "var(--text-dim)" }}>
-      Unknown game type: {game.game_type}
-    </div>
-  );
 }

@@ -87,6 +87,7 @@ export default function TicTacToe({ game, session: initialSession }) {
     const updates = {
       state: newState,
       current_turn: nextTurnId,
+      ...(session.status === "pending" && { status: "active" }),
     };
     if (winResultNew || drawNew) {
       updates.status = "complete";

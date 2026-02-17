@@ -2,14 +2,19 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 
-const GRAVITY = 0.35;
-const FLAP = -8;
-const OBSTACLE_GAP = 140;
-const OBSTACLE_WIDTH = 48;
-const OBSTACLE_SPEED_BASE = 3;
-const ARM_WIDTH = 40;
-const ARM_HEIGHT = 24;
-const GROUND = 280;
+const GRAVITY = 0.25;
+const JUMP_FORCE = -6;
+const VELOCITY_CLAMP = [-6, 6];
+const PIPE_SPEED = 1.6;
+const PIPE_SPACING = 260;
+const PIPE_GAP = 220;
+const GRACE_MS = 800;
+const PLAYER = { emoji: "💪", size: 36, rotationOnJump: -15 };
+const CANVAS_W = 360;
+const CANVAS_H = 520;
+const GROUND_Y = 440;
+const OBSTACLE_WIDTH = 56;
+const OBSTACLE_EMOJI = ["🏋️", "🏋"];
 
 export default function FlappyArm({ game }) {
   const navigate = useNavigate();
@@ -17,16 +22,18 @@ export default function FlappyArm({ game }) {
   const [user, setUser] = useState(null);
   const [bestScore, setBestScore] = useState(null);
   const [loadingBest, setLoadingBest] = useState(true);
-  const [phase, setPhase] = useState("idle"); // idle | playing | over
+  const [phase, setPhase] = useState("idle");
   const [score, setScore] = useState(0);
   const [newRecord, setNewRecord] = useState(false);
   const animRef = useRef(null);
   const stateRef = useRef({
-    y: GROUND - ARM_HEIGHT - 40,
+    y: (GROUND_Y - PLAYER.size) / 2,
     vy: 0,
+    rotation: 0,
+    graceUntil: 0,
+    started: false,
     obstacles: [],
-    lastSpawn: 0,
-    passed: new Set(),
+    lastSpawnX: 0,
   });
 
   useEffect(() => {
@@ -54,19 +61,15 @@ export default function FlappyArm({ game }) {
       });
   }, [user?.id, game?.id]);
 
-  const getSpeed = useCallback((s) => {
-    if (s < 50) return OBSTACLE_SPEED_BASE;
-    if (s < 100) return OBSTACLE_SPEED_BASE + 0.5;
-    return OBSTACLE_SPEED_BASE + 0.8;
-  }, []);
-
   const spawnObstacle = useCallback((x) => {
-    const gapY = 80 + Math.random() * 120;
+    const gapCenter = 120 + Math.random() * (GROUND_Y - 240);
+    const emoji = OBSTACLE_EMOJI[Math.random() > 0.5 ? 0 : 1];
     return {
       x,
-      top: { y: 0, h: gapY - OBSTACLE_GAP / 2 },
-      bottom: { y: gapY + OBSTACLE_GAP / 2, h: 400 - (gapY + OBSTACLE_GAP / 2) },
+      top: { y: 0, h: gapCenter - PIPE_GAP / 2 },
+      bottom: { y: gapCenter + PIPE_GAP / 2, h: CANVAS_H - (gapCenter + PIPE_GAP / 2) },
       passed: false,
+      emoji,
     };
   }, []);
 
@@ -74,13 +77,25 @@ export default function FlappyArm({ game }) {
     setPhase("playing");
     setScore(0);
     setNewRecord(false);
+    const centerY = (GROUND_Y - PLAYER.size) / 2;
     stateRef.current = {
-      y: GROUND - ARM_HEIGHT - 40,
+      y: centerY,
       vy: 0,
-      obstacles: [spawnObstacle(320)],
-      passed: new Set(),
+      rotation: 0,
+      graceUntil: Date.now() + GRACE_MS,
+      started: false,
+      obstacles: [],
+      lastSpawnX: CANVAS_W + OBSTACLE_WIDTH,
     };
-  }, [spawnObstacle]);
+  }, []);
+
+  const onTap = useCallback(() => {
+    const s = stateRef.current;
+    if (phase !== "playing") return;
+    s.started = true;
+    s.vy = JUMP_FORCE;
+    s.rotation = PLAYER.rotationOnJump;
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -88,70 +103,73 @@ export default function FlappyArm({ game }) {
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = CANVAS_W;
+    const h = CANVAS_H;
+    const playerHalf = PLAYER.size / 2;
+    const playerCenterX = w / 2;
 
     function frame() {
       const s = stateRef.current;
-      s.vy += GRAVITY;
-      s.y += s.vy;
-      if (s.y > GROUND - ARM_HEIGHT) {
-        s.y = GROUND - ARM_HEIGHT;
-        s.vy = 0;
-      }
-      if (s.y < 0) {
-        s.y = 0;
-        s.vy = 0;
+      const now = Date.now();
+      const inGrace = now < s.graceUntil;
+
+      if (s.started && !inGrace) {
+        s.vy += GRAVITY;
+        s.vy = Math.max(VELOCITY_CLAMP[0], Math.min(VELOCITY_CLAMP[1], s.vy));
+        s.y += s.vy;
+        s.rotation = s.vy < 0 ? PLAYER.rotationOnJump : Math.min(60, s.rotation + 4);
       }
 
-      const spd = getSpeed(score);
-      s.obstacles.forEach((ob) => {
-        ob.x -= spd;
-        if (!ob.passed && ob.x + OBSTACLE_WIDTH < w / 2 - ARM_WIDTH / 2) {
-          ob.passed = true;
-          setScore((prev) => prev + 1);
+      s.y = Math.max(20, Math.min(GROUND_Y - PLAYER.size - 4, s.y));
+
+      if (s.started) {
+        s.obstacles.forEach((ob) => {
+          ob.x -= PIPE_SPEED;
+          if (!ob.passed && ob.x + OBSTACLE_WIDTH < playerCenterX - playerHalf) {
+            ob.passed = true;
+            setScore((prev) => prev + 1);
+          }
+        });
+        s.obstacles = s.obstacles.filter((o) => o.x > -OBSTACLE_WIDTH);
+        if (s.lastSpawnX - (s.obstacles[s.obstacles.length - 1]?.x ?? 0) > PIPE_SPACING) {
+          s.obstacles.push(spawnObstacle(w + OBSTACLE_WIDTH));
+          s.lastSpawnX = w + OBSTACLE_WIDTH;
         }
-      });
-      s.obstacles = s.obstacles.filter((o) => o.x > -OBSTACLE_WIDTH);
-      const last = s.obstacles[s.obstacles.length - 1];
-      if (!last || last.x < w - 220) {
-        s.obstacles.push(spawnObstacle(w + OBSTACLE_WIDTH));
       }
 
       ctx.fillStyle = "#0a0a0a";
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = "var(--card-2)";
-      ctx.fillRect(0, GROUND, w, h - GROUND);
+      ctx.fillRect(0, GROUND_Y, w, h - GROUND_Y);
 
       s.obstacles.forEach((ob) => {
-        ctx.fillStyle = "var(--accent)";
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
         ctx.fillRect(ob.x, ob.top.y, OBSTACLE_WIDTH, ob.top.h);
         ctx.fillRect(ob.x, ob.bottom.y, OBSTACLE_WIDTH, ob.bottom.h);
-        ctx.fillStyle = "#333";
-        ctx.fillRect(ob.x + 8, ob.top.h - 20, 12, 20);
-        ctx.fillRect(ob.x + 28, ob.top.h - 20, 12, 20);
-        ctx.fillRect(ob.x + 8, ob.bottom.y, 12, 20);
-        ctx.fillRect(ob.x + 28, ob.bottom.y, 12, 20);
+        ctx.font = "32px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(ob.emoji, ob.x + OBSTACLE_WIDTH / 2, ob.top.h - 24);
+        ctx.fillText(ob.emoji, ob.x + OBSTACLE_WIDTH / 2, ob.bottom.y + 40);
       });
 
-      const armX = w / 2 - ARM_WIDTH / 2;
-      ctx.fillStyle = "var(--accent)";
-      ctx.beginPath();
-      ctx.roundRect(armX, s.y, ARM_WIDTH, ARM_HEIGHT, 8);
-      ctx.fill();
-      ctx.strokeStyle = "var(--border)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.save();
+      ctx.translate(playerCenterX, s.y + playerHalf);
+      ctx.rotate((s.rotation * Math.PI) / 180);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `${PLAYER.size}px system-ui, sans-serif`;
+      ctx.fillText(PLAYER.emoji, 0, 0);
+      ctx.restore();
 
-      const ax = armX + ARM_WIDTH / 2;
-      const ay = s.y + ARM_HEIGHT / 2;
-      const o = s.obstacles.find(
+      const px = playerCenterX;
+      const py = s.y + playerHalf;
+      const hitOb = s.obstacles.find(
         (ob) =>
-          ob.x < ax + ARM_WIDTH / 2 + 4 &&
-          ob.x + OBSTACLE_WIDTH > ax - ARM_WIDTH / 2 - 4 &&
-          (ay < ob.top.h || ay + ARM_HEIGHT > ob.bottom.y)
+          ob.x < px + playerHalf + 8 &&
+          ob.x + OBSTACLE_WIDTH > px - playerHalf - 8 &&
+          (py < ob.top.h - 12 || py > ob.bottom.y + 12)
       );
-      if (o || s.y + ARM_HEIGHT >= GROUND - 2) {
+      if (hitOb || s.y + PLAYER.size >= GROUND_Y - 4) {
         setPhase("over");
         if (user?.id && game?.id) {
           const isNewBest = bestScore == null || score > bestScore;
@@ -178,7 +196,7 @@ export default function FlappyArm({ game }) {
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [phase, score, user?.id, game?.id, bestScore, getSpeed, spawnObstacle]);
+  }, [phase, score, user?.id, game?.id, bestScore, spawnObstacle]);
 
   return (
     <div style={styles.wrap}>
@@ -194,8 +212,8 @@ export default function FlappyArm({ game }) {
 
       {phase === "idle" && (
         <div style={styles.section}>
-          <p style={styles.instruction}>Tap to raise your arm. Avoid the barbells!</p>
-          <p style={styles.difficulty}>0–50 easy · 50–100 medium · 100+ moderate</p>
+          <p style={styles.instruction}>Tap to raise your arm. Avoid the obstacles!</p>
+          <p style={styles.difficulty}>Wide gaps · Smooth play · 800ms grace after start</p>
           <button type="button" onClick={startGame} style={styles.primaryBtn}>
             Start
           </button>
@@ -210,15 +228,13 @@ export default function FlappyArm({ game }) {
           </div>
           <canvas
             ref={canvasRef}
-            width={320}
-            height={400}
+            width={CANVAS_W}
+            height={CANVAS_H}
             style={styles.canvas}
-            onClick={() => {
-              if (phase === "playing") stateRef.current.vy = FLAP;
-            }}
+            onClick={onTap}
             onTouchStart={(e) => {
               e.preventDefault();
-              if (phase === "playing") stateRef.current.vy = FLAP;
+              onTap();
             }}
           />
         </>
@@ -245,7 +261,7 @@ export default function FlappyArm({ game }) {
 }
 
 const styles = {
-  wrap: { padding: "16px 16px 90px", maxWidth: "400px", margin: "0 auto" },
+  wrap: { padding: "20px 16px 90px", maxWidth: "400px", margin: "0 auto" },
   backBtn: {
     marginBottom: 12,
     padding: "8px 0",
@@ -255,7 +271,7 @@ const styles = {
     fontSize: 14,
     cursor: "pointer",
   },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { fontSize: 18, fontWeight: 800, margin: 0, color: "var(--text)" },
   leaderboardBtn: {
     padding: "8px 12px",
@@ -267,7 +283,7 @@ const styles = {
     fontWeight: 600,
     cursor: "pointer",
   },
-  section: { textAlign: "center", marginTop: 20 },
+  section: { textAlign: "center", marginTop: 24 },
   instruction: { color: "var(--text-dim)", fontSize: 14, margin: "0 0 8px" },
   difficulty: { color: "var(--text-dim)", fontSize: 12, margin: "0 0 20px" },
   primaryBtn: {
@@ -279,6 +295,7 @@ const styles = {
     fontWeight: 700,
     fontSize: 16,
     cursor: "pointer",
+    transition: "opacity 0.2s ease",
   },
   secondaryBtn: {
     marginTop: 10,
@@ -294,24 +311,25 @@ const styles = {
   scoreBar: {
     display: "flex",
     justifyContent: "space-between",
-    padding: "8px 0",
-    fontSize: 14,
+    padding: "10px 0",
+    fontSize: 15,
     fontWeight: 700,
     color: "var(--text)",
   },
   canvas: {
     display: "block",
     width: "100%",
-    maxWidth: 320,
+    maxWidth: CANVAS_W,
     margin: "0 auto",
-    borderRadius: 14,
+    borderRadius: 16,
     border: "1px solid var(--border)",
     background: "var(--bg)",
+    transition: "opacity 0.15s ease",
   },
   overlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.8)",
+    background: "rgba(0,0,0,0.85)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -320,8 +338,8 @@ const styles = {
   },
   overlayCard: {
     background: "var(--card)",
-    borderRadius: 16,
-    padding: 24,
+    borderRadius: 20,
+    padding: 28,
     border: "1px solid var(--border)",
     textAlign: "center",
     maxWidth: 320,

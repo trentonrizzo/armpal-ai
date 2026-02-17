@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 
@@ -11,7 +11,7 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true);
   const lowerIsBetter = game?.game_type === "reaction_test" || game?.game_type === "reaction_speed";
 
-  function fetchLeaderboard() {
+  const fetchLeaderboard = useCallback(() => {
     if (!gameId) return;
     const order = lowerIsBetter ? { ascending: true } : { ascending: false };
     supabase
@@ -21,7 +21,7 @@ export default function Leaderboard() {
       .order("score", order)
       .limit(100)
       .then(({ data }) => setEntries(data || []));
-  }
+  }, [gameId, lowerIsBetter]);
 
   useEffect(() => {
     if (!gameId) {
@@ -44,15 +44,15 @@ export default function Leaderboard() {
   useEffect(() => {
     if (!gameId) return;
     const channel = supabase
-      .channel(`leaderboard-${gameId}`)
+      .channel("leaderboard")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_leaderboard", filter: `game_id=eq.${gameId}` },
-        () => fetchLeaderboard()
+        fetchLeaderboard
       )
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [gameId]);
+  }, [gameId, fetchLeaderboard]);
 
   if (!gameId) {
     return (

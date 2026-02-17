@@ -116,8 +116,16 @@ export default function GamesHub() {
       if (!byGame.has(key))
         byGame.set(key, { game_id: r.game_id, game_title: r.game_title, session_id: null, created_at: r.created_at });
     });
-    return [...byGame.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8);
+    return [...byGame.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 16);
   }, [recentSessions, recentScores]);
+
+  const uniqueRecent = useMemo(() => {
+    const recentGames = recentMerged.map((r) => ({
+      ...r,
+      id: r.session_id || `score-${r.game_id}-${r.created_at}`,
+    }));
+    return Array.from(new Map(recentGames.map((g) => [g.id, g])).values());
+  }, [recentMerged]);
 
   function renderCard(game, options = {}) {
     const { recentSessionId, showBest = false } = options;
@@ -195,13 +203,13 @@ export default function GamesHub() {
         <>
           {renderRow(
             "Recently Played",
-            recentMerged,
+            uniqueRecent,
             (r) => {
               const game = games.find((g) => g.id === r.game_id);
               return game ? renderCard(game, { recentSessionId: r.session_id }) : null;
             }
           )}
-          {recentMerged.length === 0 && <section style={styles.section}><p style={styles.placeholder}>No recent games yet.</p></section>}
+          {uniqueRecent.length === 0 && <section style={styles.section}><p style={styles.placeholder}>No recent games yet.</p></section>}
 
           {renderRow("Single Player", filterGames(singlePlayer), (g) => renderCard(g, { showBest: true }))}
           {filterGames(singlePlayer).length === 0 && <section style={styles.section}><p style={styles.hint}>No single player games yet.</p></section>}
