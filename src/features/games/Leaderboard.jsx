@@ -11,17 +11,26 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true);
   const lowerIsBetter = game?.game_type === "reaction_test" || game?.game_type === "reaction_speed";
 
-  const fetchLeaderboard = useCallback(() => {
+  const fetchLeaderboard = useCallback(async () => {
     if (!gameId) return;
+    const effectiveGameId = game?.id || game?.game_id || gameId;
+    console.log("game_id for leaderboard:", effectiveGameId, "(game.id:", game?.id, ", gameId from URL:", gameId, ")");
     const order = lowerIsBetter ? { ascending: true } : { ascending: false };
-    supabase
+    const { data, error } = await supabase
       .from("game_leaderboard")
-      .select("id, user_id, score, created_at, profiles(username, display_name)")
-      .eq("game_id", gameId)
+      .select(`
+        id,
+        user_id,
+        score,
+        created_at,
+        profiles(display_name, username)
+      `)
+      .eq("game_id", effectiveGameId)
       .order("score", order)
-      .limit(100)
-      .then(({ data }) => setEntries(data || []));
-  }, [gameId, lowerIsBetter]);
+      .limit(100);
+    if (error) console.error("Leaderboard fetch error:", error);
+    setEntries(data ?? []);
+  }, [gameId, game?.id, game?.game_id, lowerIsBetter]);
 
   useEffect(() => {
     if (!gameId) {
