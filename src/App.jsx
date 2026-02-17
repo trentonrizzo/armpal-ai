@@ -31,6 +31,7 @@ import ProgramMarketplace from "./features/programs/ProgramMarketplace";
 import ProgramPreview from "./features/programs/ProgramPreview";
 import ProgramViewer from "./features/programs/ProgramViewer";
 import MyPrograms from "./features/programs/MyPrograms";
+import CreateProgram from "./features/programs/CreateProgram";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
@@ -161,6 +162,7 @@ function AppContent() {
         <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
         <Route path="/pro" element={<ProUpgradePage />} />
         <Route path="/programs" element={<ProgramMarketplace />} />
+        <Route path="/programs/create" element={<CreateProgram />} />
         <Route path="/programs/my" element={<MyPrograms />} />
         <Route path="/programs/:id" element={<ProgramPreview />} />
         <Route path="/programs/:id/view" element={<ProgramViewer />} />

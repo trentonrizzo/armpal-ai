@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 
-export default function ProgramViewer() {
+export default function ProgramViewer({ previewProgram = null }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [program, setProgram] = useState(null);
@@ -24,6 +24,18 @@ export default function ProgramViewer() {
   }
 
   useEffect(() => {
+    if (!previewProgram) return;
+    const parsed = previewProgram.parsed_program ?? {};
+    setProgram(previewProgram);
+    setLogic({ logic_json: parsed });
+    setOwned(true);
+    setLoading(false);
+    const fr = parsed.frequency_range;
+    if (Array.isArray(fr) && fr.length > 0) setSelectedFrequency(fr[0]);
+  }, [previewProgram]);
+
+  useEffect(() => {
+    if (previewProgram) return;
     let alive = true;
 
     (async () => {
@@ -74,7 +86,7 @@ export default function ProgramViewer() {
     })();
 
     return () => { alive = false; };
-  }, [id]);
+  }, [id, previewProgram]);
 
   async function saveProgramWorkout(workout) {
     const { data } = await supabase.auth.getSession();
@@ -142,7 +154,7 @@ export default function ProgramViewer() {
     <div style={styles.wrap}>
       <button
         type="button"
-        onClick={() => navigate(`/programs/${id}`)}
+        onClick={() => navigate(id ? `/programs/${id}` : "/programs")}
         style={styles.backBtn}
         aria-label="Back to program"
       >
