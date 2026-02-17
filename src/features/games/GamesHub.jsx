@@ -104,34 +104,30 @@ export default function GamesHub() {
         )
       : list;
 
-  const recentMerged = useMemo(() => {
-    const byGame = new Map();
-    recentSessions.forEach((s) => {
-      const key = s.session_id ? `session-${s.session_id}` : s.game_id;
-      if (!byGame.has(key))
-        byGame.set(key, { game_id: s.game_id, game_title: s.game_title, session_id: s.session_id, created_at: s.created_at });
-    });
-    recentScores.forEach((r) => {
-      const key = `score-${r.game_id}-${r.created_at}`;
-      if (!byGame.has(key))
-        byGame.set(key, { game_id: r.game_id, game_title: r.game_title, session_id: null, created_at: r.created_at });
-    });
-    return [...byGame.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 16);
-  }, [recentSessions, recentScores]);
-
   const uniqueRecent = useMemo(() => {
-    const recentGames = recentMerged.map((r) => ({
-      ...r,
-      id: r.session_id || `score-${r.game_id}-${r.created_at}`,
-    }));
-    return Array.from(new Map(recentGames.map((g) => [g.id, g])).values());
-  }, [recentMerged]);
+    const byGameId = new Map();
+    const add = (item) => {
+      const key = item.game_id;
+      const existing = byGameId.get(key);
+      if (!existing || new Date(item.created_at) > new Date(existing.created_at))
+        byGameId.set(key, item);
+    };
+    recentSessions.forEach((s) =>
+      add({ game_id: s.game_id, game_title: s.game_title, session_id: s.session_id, created_at: s.created_at })
+    );
+    recentScores.forEach((r) =>
+      add({ game_id: r.game_id, game_title: r.game_title, session_id: null, created_at: r.created_at })
+    );
+    return [...byGameId.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 12);
+  }, [recentSessions, recentScores]);
 
   function renderCard(game, options = {}) {
     const { recentSessionId, showBest = false } = options;
     const isMulti = game.mode === "multiplayer";
     const best = bestScores[game.id];
     const isReaction = game.game_type === "reaction_test" || game.game_type === "reaction_speed";
+    const isTtt = game.game_type === "tictactoe" || game.game_type === "tic_tac_toe";
+    const showLeaderboard = !isTtt;
     const emoji = getEmoji(game.title);
     return (
       <div key={game.id} style={styles.cardWrap}>
@@ -162,27 +158,17 @@ export default function GamesHub() {
             </span>
           )}
           {isMulti && !recentSessionId && <span style={styles.sendLabel}>Send To Friend</span>}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); navigate(`/games/leaderboard?game_id=${game.id}`); }}
-            style={styles.leaderboardBtn}
-          >
-            Leaderboard
-          </button>
+          {showLeaderboard && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); navigate(`/games/leaderboard?game_id=${game.id}`); }}
+              style={styles.leaderboardBtn}
+            >
+              Leaderboard
+            </button>
+          )}
         </button>
       </div>
-    );
-  }
-
-  function renderRow(title, items, renderItem) {
-    if (!items.length) return null;
-    return (
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>{title}</h2>
-        <div style={styles.rowScroll}>
-          {items.map(renderItem)}
-        </div>
-      </section>
     );
   }
 
@@ -201,21 +187,40 @@ export default function GamesHub() {
         <p style={styles.hint}>Loading…</p>
       ) : (
         <>
-          {renderRow(
-            "Recently Played",
-            uniqueRecent,
-            (r) => {
-              const game = games.find((g) => g.id === r.game_id);
-              return game ? renderCard(game, { recentSessionId: r.session_id }) : null;
-            }
+          {uniqueRecent.length > 0 && (
+            <section style={styles.section}>
+              <h2 style={styles.sectionTitle}>Recently Played</h2>
+              <div style={styles.grid}>
+                {uniqueRecent.map((r) => {
+                  const game = games.find((g) => g.id === r.game_id);
+                  return game ? renderCard(game, { recentSessionId: r.session_id }) : null;
+                })}
+              </div>
+            </section>
           )}
           {uniqueRecent.length === 0 && <section style={styles.section}><p style={styles.placeholder}>No recent games yet.</p></section>}
 
-          {renderRow("Single Player", filterGames(singlePlayer), (g) => renderCard(g, { showBest: true }))}
-          {filterGames(singlePlayer).length === 0 && <section style={styles.section}><p style={styles.hint}>No single player games yet.</p></section>}
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Single Player</h2>
+            {filterGames(singlePlayer).length === 0 ? (
+              <p style={styles.hint}>No single player games yet.</p>
+            ) : (
+              <div style={styles.grid}>
+                {filterGames(singlePlayer).map((g) => renderCard(g, { showBest: true }))}
+              </div>
+            )}
+          </section>
 
-          {renderRow("Multiplayer", filterGames(multiplayer), (g) => renderCard(g))}
-          {filterGames(multiplayer).length === 0 && <section style={styles.section}><p style={styles.hint}>No multiplayer games yet.</p></section>}
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Multiplayer</h2>
+            {filterGames(multiplayer).length === 0 ? (
+              <p style={styles.hint}>No multiplayer games yet.</p>
+            ) : (
+              <div style={styles.grid}>
+                {filterGames(multiplayer).map((g) => renderCard(g))}
+              </div>
+            )}
+          </section>
         </>
       )}
 
@@ -243,14 +248,12 @@ const styles = {
   sectionTitle: { fontSize: 16, fontWeight: 800, margin: "0 0 12px", color: "var(--text)" },
   placeholder: { color: "var(--text-dim)", fontSize: 14, margin: 0 },
   hint: { color: "var(--text-dim)", fontSize: 14, margin: 0 },
-  rowScroll: {
-    display: "flex",
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
     gap: 12,
-    overflowX: "auto",
-    paddingBottom: 8,
-    WebkitOverflowScrolling: "touch",
   },
-  cardWrap: { flexShrink: 0, width: 180 },
+  cardWrap: {},
   card: {
     display: "block",
     width: "100%",

@@ -183,7 +183,13 @@ export default function FlappyArm({ game }) {
                 { onConflict: "user_id,game_id" }
               )
               .then(() => {});
-            supabase.from("game_leaderboard").insert({ game_id: game.id, user_id: user.id, score }).then(() => {});
+            supabase
+              .from("game_leaderboard")
+              .upsert(
+                { game_id: game.id, user_id: user.id, score },
+                { onConflict: "user_id,game_id" }
+              )
+              .then(() => {});
           }
         }
         return;

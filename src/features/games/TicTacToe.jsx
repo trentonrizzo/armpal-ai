@@ -26,6 +26,8 @@ export default function TicTacToe({ game, session: initialSession }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastPlaced, setLastPlaced] = useState(null);
+  const [localStats, setLocalStats] = useState({ wins: 0, losses: 0, draws: 0 });
+  const statsRecordedRef = React.useRef(new Set());
 
   useEffect(() => {
     let alive = true;
@@ -34,6 +36,18 @@ export default function TicTacToe({ game, session: initialSession }) {
     });
     return () => { alive = false; };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from("user_tictactoe_stats")
+      .select("wins, losses, draws")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setLocalStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0 });
+      });
+  }, [user?.id]);
 
   useEffect(() => {
     if (!session?.id) return;
@@ -62,6 +76,11 @@ export default function TicTacToe({ game, session: initialSession }) {
   const winnerMark = winResult?.mark ?? null;
   const winnerId = winnerMark === "X" ? session?.player_one : session?.player_two;
   const isComplete = session?.status === "complete" || winnerMark || draw;
+
+  useEffect(() => {
+    if (!session?.id || !user?.id || !isComplete) return;
+    recordTttStatsOnce(session);
+  }, [session?.id, session?.status, session?.winner, session?.state, user?.id, isComplete]);
 
   async function makeMove(index) {
     if (!session || !myId || board[index] || !isMyTurn || isComplete || loading) return;
@@ -110,7 +129,27 @@ export default function TicTacToe({ game, session: initialSession }) {
           score: 1,
         });
       }
+      await recordTttStatsOnce(data);
     }
+  }
+
+  async function recordTttStatsOnce(sess) {
+    if (!user?.id || !sess?.id) return;
+    if (statsRecordedRef.current.has(sess.id)) return;
+    const isWinner = sess.winner === user.id;
+    const isLoser = sess.winner && sess.winner !== user.id;
+    const isDraw = !sess.winner && (sess.state?.board || []).every(Boolean);
+    if (!isWinner && !isLoser && !isDraw) return;
+    statsRecordedRef.current.add(sess.id);
+    const { data: row } = await supabase.from("user_tictactoe_stats").select("wins, losses, draws").eq("user_id", user.id).maybeSingle();
+    const w = (row?.wins ?? 0) + (isWinner ? 1 : 0);
+    const l = (row?.losses ?? 0) + (isLoser ? 1 : 0);
+    const d = (row?.draws ?? 0) + (isDraw ? 1 : 0);
+    await supabase.from("user_tictactoe_stats").upsert(
+      { user_id: user.id, wins: w, losses: l, draws: d, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    setLocalStats({ wins: w, losses: l, draws: d });
   }
 
   async function rematch() {
@@ -153,6 +192,9 @@ export default function TicTacToe({ game, session: initialSession }) {
         <span style={styles.scoreSep}>–</span>
         <span style={!amPlayerOne ? styles.scoreHighlight : {}}>Opponent {score.player_two}</span>
       </div>
+      <p style={styles.localStats}>
+        W: {localStats.wins} &nbsp; L: {localStats.losses} &nbsp; D: {localStats.draws}
+      </p>
 
       <p style={styles.turn}>
         {!isComplete && (isMyTurn ? "Your turn" : "Opponent's turn")}
@@ -255,6 +297,7 @@ const styles = {
   },
   scoreHighlight: { color: "var(--accent)" },
   scoreSep: { margin: "0 6px", opacity: 0.7 },
+  localStats: { fontSize: 12, color: "var(--text-dim)", margin: "0 0 8px" },
   turn: {
     fontSize: 14,
     color: "var(--text-dim)",

@@ -75,15 +75,21 @@ export default function Leaderboard() {
         <p style={styles.hint}>Loading…</p>
       ) : (
         <ul style={styles.list}>
-          {entries.map((e, i) => (
-            <li key={e.id} style={styles.row}>
-              <span style={styles.rank}>{i + 1}</span>
-              <span style={styles.name}>{e.profiles?.display_name || e.profiles?.username || "Player"}</span>
-              <span style={styles.score}>
-                {lowerIsBetter ? `${Number(e.score)} ms` : Number(e.score)}
-              </span>
-            </li>
-          ))}
+          {entries.map((e, i) => {
+            const rank = i + 1;
+            const isTop3 = rank <= 3;
+            const rowStyle = isTop3 ? { ...styles.row, ...styles.rowTop3 } : styles.row;
+            const rankStyle = rank === 1 ? styles.rankGold : rank === 2 ? styles.rankSilver : rank === 3 ? styles.rankBronze : styles.rank;
+            return (
+              <li key={e.id} style={rowStyle}>
+                <span style={rankStyle}>{rank}</span>
+                <span style={styles.name}>{e.profiles?.display_name || e.profiles?.username || "Player"}</span>
+                <span style={styles.score}>
+                  {lowerIsBetter ? `${Number(e.score)} ms` : Number(e.score)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
       {!loading && entries.length === 0 && <p style={styles.hint}>No scores yet.</p>}
@@ -116,7 +122,14 @@ const styles = {
     borderRadius: 10,
     marginBottom: 8,
   },
+  rowTop3: {
+    borderWidth: 2,
+    fontWeight: 700,
+  },
   rank: { width: 28, fontWeight: 800, color: "var(--accent)" },
+  rankGold: { width: 28, fontWeight: 800, color: "#f0c14b" },
+  rankSilver: { width: 28, fontWeight: 800, color: "#c0c0c0" },
+  rankBronze: { width: 28, fontWeight: 800, color: "#cd7f32" },
   name: { flex: 1, color: "var(--text)", fontWeight: 600 },
   score: { color: "var(--text-dim)", fontWeight: 700 },
 };
