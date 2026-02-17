@@ -154,7 +154,7 @@ export default function SettingsOverlay({ open, onClose }) {
         // prompt here.
         try {
           const w = window;
-          const OneSignal = (w && (w as any).OneSignal) || null;
+          const OneSignal = (w && w.OneSignal) || null;
           if (OneSignal?.Slidedown?.promptPush) {
             await OneSignal.Slidedown.promptPush();
           }
