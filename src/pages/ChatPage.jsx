@@ -39,6 +39,7 @@ import {
 import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
+import { getOrCreateConversation } from "../utils/getOrCreateConversation";
 
 // ============================================================
 // TIME HELPERS
@@ -347,6 +348,9 @@ export default function ChatPage() {
   const [savingWorkoutByMsgId, setSavingWorkoutByMsgId] = useState({}); // { [msgId]: true }
   const [savedWorkoutByMsgId, setSavedWorkoutByMsgId] = useState({}); // { [msgId]: true }
 
+  // Game sessions for this chat (Tic Tac Toe etc.)
+  const [gameSessions, setGameSessions] = useState([]);
+
   // ----------------------------------------------------------
   // KEYBOARD / SAFE AREA (KEEP COMPOSER VISIBLE)
   // ----------------------------------------------------------
@@ -437,7 +441,9 @@ export default function ChatPage() {
 
       setUser(u);
 
-      const [{ data: f }, { data: msgs, error: msgErr }] = await Promise.all([
+      const chatId = await getOrCreateConversation(u.id, friendId);
+
+      const [{ data: f }, { data: msgs, error: msgErr }, { data: sessions }] = await Promise.all([
         supabase
           .from("profiles")
           .select("id, username, display_name, is_online, last_seen")
@@ -450,6 +456,9 @@ export default function ChatPage() {
             `and(sender_id.eq.${u.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${u.id})`
           )
           .order("created_at", { ascending: true }),
+        chatId
+          ? supabase.from("game_sessions").select("*").eq("chat_id", chatId).order("created_at", { ascending: false })
+          : Promise.resolve({ data: [] }),
       ]);
 
       if (!mounted) return;
@@ -460,6 +469,7 @@ export default function ChatPage() {
         toast.error(msgErr.message);
       }
       setMessages(msgs || []);
+      setGameSessions(sessions || []);
       setLoading(false);
     })();
 
@@ -998,6 +1008,23 @@ export default function ChatPage() {
 
         <div ref={listRef} style={messagesContainer}>
         {error && <div style={errBox}>{error}</div>}
+
+        {gameSessions.length > 0 && (
+          <div style={gameCardsWrap}>
+            {gameSessions.map((s) => (
+              <div key={s.id} style={gameCard}>
+                <span style={gameCardTitle}>Tic Tac Toe Game Started</span>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/games/session/${s.id}`)}
+                  style={gameCardPlayBtn}
+                >
+                  Play Turn
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {messages.length === 0 && !error ? (
           <EmptyState
@@ -1674,4 +1701,25 @@ const saveWorkoutBtnDone = {
   gap: 8,
   fontSize: 13,
   fontWeight: 900,
+};
+
+const gameCardsWrap = { marginBottom: 12 };
+const gameCard = {
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
+  borderRadius: 14,
+  padding: 14,
+  marginBottom: 8,
+};
+const gameCardTitle = { display: "block", fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 10 };
+const gameCardPlayBtn = {
+  width: "100%",
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "var(--accent)",
+  color: "var(--text)",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
 };

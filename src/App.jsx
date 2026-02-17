@@ -33,8 +33,9 @@ import ProgramViewer from "./features/programs/ProgramViewer";
 import MyPrograms from "./features/programs/MyPrograms";
 import CreateProgram from "./features/programs/CreateProgram";
 
-import GamesPage from "./features/games/GamesPage";
+import GamesHub from "./features/games/GamesHub";
 import GamePage from "./features/games/GamePage";
+import SessionPage from "./features/games/SessionPage";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
@@ -169,7 +170,8 @@ function AppContent() {
         <Route path="/programs/my" element={<MyPrograms />} />
         <Route path="/programs/:id" element={<ProgramPreview />} />
         <Route path="/programs/:id/view" element={<ProgramViewer />} />
-        <Route path="/games" element={<GamesPage />} />
+        <Route path="/games" element={<GamesHub />} />
+        <Route path="/games/session/:sessionId" element={<SessionPage />} />
         <Route path="/games/:id" element={<GamePage />} />
       </Routes>
 

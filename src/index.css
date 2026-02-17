@@ -46,6 +46,19 @@ html[data-accent="green"] {
   --accent-soft: #34d399;
 }
 
+a.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+}
+
 /* =============================== */
 /*              RESET              */
 /* =============================== */

@@ -375,25 +375,8 @@ export default function Dashboard() {
             <span>Programs</span>
           </span>
         </Link>
-        <Link to="/games" style={{ display: "inline-block" }}>
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              background: "var(--card-2)",
-              color: "var(--text)",
-              border: "1px solid var(--border)",
-              borderRadius: 999,
-              padding: "7px 12px",
-              fontSize: 13,
-              fontWeight: 900,
-              textDecoration: "none",
-            }}
-          >
-            <span style={{ opacity: 0.95 }}>🎮</span>
-            <span>Games</span>
-          </span>
+        <Link to="/games" className="pill" style={{ display: "inline-block" }}>
+          Mini Games
         </Link>
       </div>
       <div

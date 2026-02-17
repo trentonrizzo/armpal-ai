@@ -10,22 +10,22 @@ export default function ReactionTest({ game }) {
   const readyAtRef = React.useRef(null);
 
   const startRound = useCallback(() => {
-    setPhase("waiting");
+    setPhase("red");
     setReaction(null);
   }, []);
 
   React.useEffect(() => {
-    if (phase !== "waiting") return;
-    const delay = 1000 + Math.random() * 3000;
+    if (phase !== "red") return;
+    const delay = 1000 + Math.random() * 2000;
     const t = setTimeout(() => {
       readyAtRef.current = performance.now();
-      setPhase("ready");
+      setPhase("green");
     }, delay);
     return () => clearTimeout(t);
   }, [phase]);
 
   async function handleClick() {
-    if (phase === "ready" && readyAtRef.current != null) {
+    if (phase === "green" && readyAtRef.current != null) {
       const reactionMs = Math.round(performance.now() - readyAtRef.current);
       setReaction(reactionMs);
       setPhase("result");
@@ -34,8 +34,8 @@ export default function ReactionTest({ game }) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.id) {
           await supabase.from("user_game_scores").insert({
-            game_id: game.id,
             user_id: user.id,
+            game_id: game.id,
             score: reactionMs,
           });
         }
@@ -59,25 +59,27 @@ export default function ReactionTest({ game }) {
 
       {phase === "idle" && (
         <div style={styles.section}>
-          <p style={styles.instruction}>Click when the button appears. Don&apos;t click too early.</p>
+          <p style={styles.instruction}>
+            Screen will turn red, then green after 1–3 seconds. Click as soon as it turns green.
+          </p>
           <button type="button" onClick={startRound} style={styles.primaryBtn}>
             Start
           </button>
         </div>
       )}
 
-      {phase === "waiting" && (
-        <div style={styles.section}>
-          <p style={styles.waitText}>Wait for it…</p>
-        </div>
-      )}
-
-      {phase === "ready" && (
-        <div style={styles.section}>
-          <button type="button" onClick={handleClick} style={styles.tapBtn}>
-            CLICK NOW
-          </button>
-        </div>
+      {(phase === "red" || phase === "green") && (
+        <button
+          type="button"
+          onClick={handleClick}
+          style={{
+            ...styles.screen,
+            background: phase === "red" ? "#c00" : "#0a0",
+            cursor: phase === "green" ? "pointer" : "default",
+          }}
+        >
+          {phase === "red" ? "Wait…" : "CLICK NOW"}
+        </button>
       )}
 
       {phase === "result" && (
@@ -130,11 +132,6 @@ const styles = {
     textAlign: "center",
     margin: 0,
   },
-  waitText: {
-    color: "var(--text-dim)",
-    fontSize: 18,
-    margin: 0,
-  },
   primaryBtn: {
     padding: "14px 28px",
     borderRadius: 12,
@@ -145,15 +142,15 @@ const styles = {
     fontSize: 16,
     cursor: "pointer",
   },
-  tapBtn: {
-    padding: "24px 48px",
+  screen: {
+    display: "block",
+    width: "100%",
+    minHeight: 220,
     borderRadius: 14,
     border: "none",
-    background: "var(--accent)",
-    color: "var(--text)",
-    fontWeight: 900,
+    color: "#fff",
     fontSize: 18,
-    cursor: "pointer",
+    fontWeight: 800,
   },
   resultLabel: {
     margin: 0,

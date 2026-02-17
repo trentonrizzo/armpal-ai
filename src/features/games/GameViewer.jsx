@@ -1,8 +1,9 @@
 import React from "react";
 import ReactionTest from "./ReactionTest";
 import TapStrength from "./TapStrength";
+import TicTacToe from "./TicTacToe";
 
-export default function GameViewer({ game }) {
+export default function GameViewer({ game, session }) {
   if (!game) return null;
 
   if (game.game_type === "reaction_test") {
@@ -11,6 +12,10 @@ export default function GameViewer({ game }) {
 
   if (game.game_type === "tap_strength") {
     return <TapStrength game={game} />;
+  }
+
+  if (game.game_type === "tictactoe" && session) {
+    return <TicTacToe game={game} session={session} />;
   }
 
   return (
