@@ -57,21 +57,18 @@ export default function ProgramViewer() {
         if (alive) setOwned(!!up);
       }
 
-      const { data: logicRow, error: logicErr } = await supabase
+      const { data: logicRow } = await supabase
         .from("program_logic")
         .select("logic_json")
         .eq("program_id", id)
         .maybeSingle();
 
       if (!alive) return;
-      if (!logicErr && logicRow?.logic_json) {
-        setLogic({ logic_json: logicRow.logic_json });
-        const fr = logicRow.logic_json?.frequency_range;
-        if (Array.isArray(fr) && fr.length > 0) {
-          setSelectedFrequency(fr[0]);
-        }
-      } else {
-        setLogic({ logic_json: {} });
+      const logic = prog.parsed_program ?? logicRow?.logic_json ?? {};
+      setLogic({ logic_json: logic });
+      const fr = logic?.frequency_range;
+      if (Array.isArray(fr) && fr.length > 0) {
+        setSelectedFrequency(fr[0]);
       }
       setLoading(false);
     })();
