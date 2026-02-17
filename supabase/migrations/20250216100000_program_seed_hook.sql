@@ -1,8 +1,11 @@
 -- ============================================
 -- ARM PAL PROGRAM SEED
 -- Arm Wrestling (Hook Optimized)
--- FULL ADAPTIVE PROGRAM INSERT
+-- Always remove existing by title, then insert program + program_logic together.
 -- ============================================
+
+DELETE FROM programs
+WHERE title = 'Arm Wrestling (Hook Optimized)';
 
 WITH new_program AS (
   INSERT INTO programs (
@@ -31,7 +34,7 @@ SELECT
   "layouts": {
     "2": {
       "summary": "2 Day High Volume Hook Specialization (Approx 120 mins/session)",
-      "workouts": [
+      "days": [
         {
           "name": "Heavy Hook Strength",
           "estimated_time": "120 min",
@@ -58,7 +61,7 @@ SELECT
     },
     "3": {
       "summary": "3 Day Balanced Hook Program (90 min/session)",
-      "workouts": [
+      "days": [
         {
           "name": "Cup Strength",
           "estimated_time": "90 min",
@@ -89,7 +92,7 @@ SELECT
     },
     "4": {
       "summary": "4 Day Hook Specialization Split (75 min/session)",
-      "workouts": [
+      "days": [
         {
           "name": "Heavy Cup Training",
           "estimated_time": "75 min",
@@ -132,7 +135,7 @@ SELECT
     },
     "5": {
       "summary": "5 Day High Frequency Hook Builder (45–60 min/session)",
-      "workouts": [
+      "days": [
         {
           "name": "Cup Focus",
           "estimated_time": "50 min",
@@ -181,7 +184,7 @@ SELECT
     },
     "6": {
       "summary": "6 Day Neural Skill Focus (30 min/session)",
-      "workouts": [
+      "days": [
         {
           "name": "Micro Session A",
           "estimated_time": "30 min",

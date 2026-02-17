@@ -25,11 +25,8 @@ export default function ProgramMarketplace() {
         .order("created_at", { ascending: false });
 
       if (!alive) return;
-      if (progErr) {
-        setPrograms([]);
-      } else {
-        setPrograms(progs ?? []);
-      }
+      const raw = progErr ? [] : (progs ?? []);
+      setPrograms(raw);
 
       if (u?.id) {
         const { data: upRows } = await supabase
@@ -46,10 +43,19 @@ export default function ProgramMarketplace() {
     return () => { alive = false; };
   }, []);
 
+  const uniquePrograms = Object.values(
+    programs.reduce((acc, p) => {
+      if (!acc[p.title] || (acc[p.title].created_at < p.created_at)) {
+        acc[p.title] = p;
+      }
+      return acc;
+    }, {})
+  );
+
   const searchLower = search.trim().toLowerCase();
   const filtered = searchLower
-    ? programs.filter((p) => (p.title || "").toLowerCase().includes(searchLower))
-    : programs;
+    ? uniquePrograms.filter((p) => (p.title || "").toLowerCase().includes(searchLower))
+    : uniquePrograms;
 
   return (
     <div style={styles.wrap}>
@@ -78,7 +84,7 @@ export default function ProgramMarketplace() {
         <p style={styles.hint}>Loading…</p>
       ) : filtered.length === 0 ? (
         <p style={styles.hint}>
-          {programs.length === 0
+          {uniquePrograms.length === 0
             ? "No programs in the marketplace yet."
             : "No programs match your search."}
         </p>

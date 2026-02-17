@@ -19,6 +19,10 @@ export default function ProgramViewer() {
     ? logicJson.layouts?.[selectedFrequency]
     : null;
 
+  if (hasFrequencyRange && selectedFrequency != null && layout === undefined) {
+    console.warn("Missing layout for frequency", selectedFrequency);
+  }
+
   useEffect(() => {
     let alive = true;
 
