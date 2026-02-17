@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import { updateGameStats } from "./utils/updateGameStats";
+import { useToast } from "../../components/ToastProvider";
 
 const WIN_LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -20,13 +22,17 @@ function isDraw(board) {
   return board.every(Boolean) && !checkWinner(board);
 }
 
+const TTT_GAME_TYPE = "tictactoe";
+
 export default function TicTacToe({ game, session: initialSession }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [session, setSession] = useState(initialSession);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastPlaced, setLastPlaced] = useState(null);
   const [localStats, setLocalStats] = useState({ wins: 0, losses: 0, draws: 0 });
+  const [arcadeStats, setArcadeStats] = useState({ wins: 0, losses: 0, win_streak: 0, best_streak: 0 });
   const statsRecordedRef = React.useRef(new Set());
 
   useEffect(() => {
@@ -48,6 +54,25 @@ export default function TicTacToe({ game, session: initialSession }) {
         if (data) setLocalStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0 });
       });
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const gameType = game?.game_type === "tic_tac_toe" ? "tic_tac_toe" : TTT_GAME_TYPE;
+    supabase
+      .from("game_user_stats")
+      .select("wins, losses, win_streak, best_streak")
+      .eq("user_id", user.id)
+      .eq("game_type", gameType)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setArcadeStats({
+          wins: data.wins ?? 0,
+          losses: data.losses ?? 0,
+          win_streak: data.win_streak ?? 0,
+          best_streak: data.best_streak ?? 0,
+        });
+      });
+  }, [user?.id, game?.game_type]);
 
   useEffect(() => {
     if (!session?.id) return;
@@ -150,6 +175,15 @@ export default function TicTacToe({ game, session: initialSession }) {
       { onConflict: "user_id" }
     );
     setLocalStats({ wins: w, losses: l, draws: d });
+    const gameType = game?.game_type === "tic_tac_toe" ? "tic_tac_toe" : TTT_GAME_TYPE;
+    const { newPersonalRecord, stats: next } = await updateGameStats({
+      userId: user.id,
+      gameType,
+      isWin: isWinner,
+      isLoss: isLoser,
+    });
+    if (next) setArcadeStats({ wins: next.wins, losses: next.losses, win_streak: next.win_streak, best_streak: next.best_streak });
+    if (newPersonalRecord && toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
   }
 
   async function rematch() {
@@ -193,7 +227,7 @@ export default function TicTacToe({ game, session: initialSession }) {
         <span style={!amPlayerOne ? styles.scoreHighlight : {}}>Opponent {score.player_two}</span>
       </div>
       <p style={styles.localStats}>
-        W: {localStats.wins} &nbsp; L: {localStats.losses} &nbsp; D: {localStats.draws}
+        W: {arcadeStats.wins} &nbsp; L: {arcadeStats.losses} &nbsp; Streak: {arcadeStats.win_streak} &nbsp; Best: {arcadeStats.best_streak}
       </p>
 
       <p style={styles.turn}>

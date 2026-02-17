@@ -174,7 +174,16 @@ export default function GamesHub() {
 
   return (
     <div style={styles.wrap}>
-      <h1 style={styles.title}>Mini Games</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <h1 style={styles.title}>Mini Games</h1>
+        <button
+          type="button"
+          onClick={() => navigate("/games/arcade")}
+          style={styles.arcadeStatsBtn}
+        >
+          My Arcade Stats
+        </button>
+      </div>
       <input
         type="text"
         placeholder="Search games…"
@@ -290,6 +299,16 @@ const styles = {
     color: "var(--text-dim)",
     fontSize: 12,
     fontWeight: 600,
+    cursor: "pointer",
+  },
+  arcadeStatsBtn: {
+    padding: "8px 14px",
+    borderRadius: 10,
+    border: "1px solid var(--accent)",
+    background: "color-mix(in srgb, var(--accent) 20%, transparent)",
+    color: "var(--accent)",
+    fontSize: 13,
+    fontWeight: 700,
     cursor: "pointer",
   },
 };

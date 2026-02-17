@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import { updateGameStats } from "./utils/updateGameStats";
+import { useToast } from "../../components/ToastProvider";
 
 export default function ReactionSpeed({ game }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [phase, setPhase] = useState("idle"); // idle | wait | go | result
   const [lastTime, setLastTime] = useState(null);
   const [bestTime, setBestTime] = useState(null);
@@ -76,6 +79,8 @@ export default function ReactionSpeed({ game }) {
           });
           setBestTime(ms);
         }
+        const { newPersonalRecord } = await updateGameStats({ userId: user.id, gameType: game.game_type || "reaction_speed", reactionTime: ms });
+        if (newPersonalRecord && toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
       }
     }
   }

@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import { updateGameStats } from "./utils/updateGameStats";
+import { useToast } from "../../components/ToastProvider";
 
 const GRAVITY = 0.25;
 const JUMP_FORCE = -6;
@@ -18,6 +20,7 @@ const OBSTACLE_EMOJI = ["🏋️", "🏋"];
 
 export default function FlappyArm({ game }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const canvasRef = useRef(null);
   const [user, setUser] = useState(null);
   const [bestScore, setBestScore] = useState(null);
@@ -191,6 +194,9 @@ export default function FlappyArm({ game }) {
               )
               .then(() => {});
           }
+          updateGameStats({ userId: user.id, gameType: game.game_type || "flappy_arm", score }).then(({ newPersonalRecord }) => {
+            if (newPersonalRecord && toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
+          });
         }
         return;
       }

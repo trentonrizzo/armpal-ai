@@ -37,6 +37,7 @@ import GamesHub from "./features/games/GamesHub";
 import GamePage from "./features/games/GamePage";
 import SessionPage from "./features/games/SessionPage";
 import Leaderboard from "./features/games/Leaderboard";
+import ArcadeProfile from "./features/games/ArcadeProfile";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
@@ -172,6 +173,7 @@ function AppContent() {
         <Route path="/programs/:id" element={<ProgramPreview />} />
         <Route path="/programs/:id/view" element={<ProgramViewer />} />
         <Route path="/games" element={<GamesHub />} />
+        <Route path="/games/arcade" element={<ArcadeProfile />} />
         <Route path="/games/leaderboard" element={<Leaderboard />} />
         <Route path="/games/session/:sessionId" element={<SessionPage />} />
         <Route path="/games/:id" element={<GamePage />} />
