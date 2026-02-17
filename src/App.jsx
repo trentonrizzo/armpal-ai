@@ -31,7 +31,7 @@ import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
 
-import { initOneSignal } from "./onesignal";
+import { initOneSignalForCurrentUser } from "./onesignal";
 import usePresence from "./hooks/usePresence";
 
 /* ============================
@@ -209,7 +209,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session?.user) return;
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -217,7 +217,9 @@ export default function App() {
       });
     }
 
-    initOneSignal();
+    // Initialize OneSignal + register device for this user.
+    // Safe to call multiple times; underlying helper de‑duplicates per session.
+    initOneSignalForCurrentUser();
   }, [session]);
 
   return (

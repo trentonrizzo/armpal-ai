@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { initOneSignalForCurrentUser } from "../onesignal";
 import { useTheme } from "../context/ThemeContext";
 
 /* ============================
@@ -147,6 +148,21 @@ export default function SettingsOverlay({ open, onClose }) {
       const existing = await reg.pushManager.getSubscription();
 
       if (!existing) {
+        // iOS / Safari: OneSignal permission must be triggered directly
+        // from a user interaction. Because this function is called from
+        // the toggle's onClick handler, we can safely invoke the Slidedown
+        // prompt here.
+        try {
+          const w = window;
+          const OneSignal = (w && (w as any).OneSignal) || null;
+          if (OneSignal?.Slidedown?.promptPush) {
+            await OneSignal.Slidedown.promptPush();
+          }
+        } catch {
+          // If OneSignal is not available or Slidedown fails, fall back
+          // to the standard Notification API prompt below.
+        }
+
         const permission = await Notification.requestPermission();
         if (permission !== "granted") throw new Error("Permission denied");
 
@@ -160,6 +176,11 @@ export default function SettingsOverlay({ open, onClose }) {
 
         await saveSubscription(user.id, sub);
         setNotifEnabled(true);
+
+        // After permission is granted, initialize OneSignal again
+        // so the current browser subscription / player id is registered
+        // against this user in the profiles table.
+        initOneSignalForCurrentUser();
       } else {
         await removeSubscription(user.id, existing.endpoint);
         await existing.unsubscribe();
