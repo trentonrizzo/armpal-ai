@@ -1,4 +1,5 @@
 // src/onesignal.ts
+/// <reference types="vite/client" />
 //
 // OneSignal Web SDK integration (v16-style) for React + Supabase.
 //
@@ -22,7 +23,7 @@ declare global {
 
 import { supabase } from "./supabaseClient";
 
-const ONESIGNAL_APP_ID = (import.meta as any).env?.VITE_ONESIGNAL_APP_ID as string | undefined;
+const ONESIGNAL_APP_ID = import.meta.env?.VITE_ONESIGNAL_APP_ID;
 
 // Track which user we have already queued initialization for
 let queuedForUserId: string | null = null;
@@ -175,7 +176,7 @@ export async function getSubscriptionState(): Promise<boolean> {
  */
 export async function unsubscribe(): Promise<void> {
   if (typeof window === "undefined") return;
-  const OneSignal = (window as any).OneSignal;
+  const OneSignal = window.OneSignal;
   if (!OneSignal?.User?.PushSubscription?.optOut) return;
 
   try {
