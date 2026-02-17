@@ -33,6 +33,9 @@ import ProgramViewer from "./features/programs/ProgramViewer";
 import MyPrograms from "./features/programs/MyPrograms";
 import CreateProgram from "./features/programs/CreateProgram";
 
+import GamesPage from "./features/games/GamesPage";
+import GamePage from "./features/games/GamePage";
+
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
@@ -166,6 +169,8 @@ function AppContent() {
         <Route path="/programs/my" element={<MyPrograms />} />
         <Route path="/programs/:id" element={<ProgramPreview />} />
         <Route path="/programs/:id/view" element={<ProgramViewer />} />
+        <Route path="/games" element={<GamesPage />} />
+        <Route path="/games/:id" element={<GamePage />} />
       </Routes>
 
       {!isChatRoute && <BottomNav />}
