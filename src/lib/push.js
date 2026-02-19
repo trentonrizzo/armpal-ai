@@ -1,41 +1,46 @@
 export async function enablePush(userId) {
-  if ("serviceWorker" in navigator) {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    for (const reg of regs) {
-      console.log("Removing old service worker:", reg.scope);
-      await reg.unregister();
+  try {
+    // OneSignal SDK must already be loaded in index.html
+    if (!window.OneSignal) {
+      alert("OneSignal missing");
+      return;
     }
-  }
 
-  alert("OneSignal type: " + typeof window.OneSignal);
+    // Always use the same App ID as your OneSignal app
+    const APP_ID = "edd3f271-1b21-4f0b-ba32-8fafd9132f10";
 
-  if (!window.OneSignal) {
-    console.log("OneSignal missing");
-    return;
-  }
+    // If OneSignal already initialized, DO NOT re-init
+    // Just login + request permission.
+    const OneSignal = window.OneSignal;
 
-  const OneSignal = window.OneSignal;
+    // v16 supports deferred pattern; we use it safely once.
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
 
-  console.log("Starting manual push enable");
+    window.OneSignalDeferred.push(async function (OS) {
+      try {
+        // If SDK already initialized, init() can throw; ignore and continue
+        try {
+          await OS.init({
+            appId: APP_ID,
+            notifyButton: { enable: false },
+          });
+        } catch (e) {
+          // swallow "SDK already initialized"
+        }
 
-  if (window.__ONESIGNAL_INITIALIZED__) {
-    console.log("Already initialized — skipping init");
-  } else {
-    await OneSignal.init({
-      appId: "PUT_REAL_APP_ID_HERE",
-      notifyButton: { enable: false },
+        if (userId) {
+          try { await OS.login(userId); } catch (e) {}
+        }
+
+        await OS.Notifications.requestPermission();
+
+        const optedIn = await OS.User.PushSubscription.optedIn;
+        console.log("OneSignal optedIn:", optedIn);
+      } catch (e) {
+        alert("Push error: " + (e?.message || String(e)));
+      }
     });
-    window.__ONESIGNAL_INITIALIZED__ = true;
+  } catch (e) {
+    alert("Push fatal: " + (e?.message || String(e)));
   }
-
-  if (userId) {
-    await OneSignal.login(userId);
-  }
-
-  // MUST run directly inside click event
-  await OneSignal.Notifications.requestPermission();
-
-  const subscribed = await OneSignal.User.PushSubscription.optedIn;
-
-  console.log("Subscribed:", subscribed);
 }
