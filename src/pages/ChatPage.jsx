@@ -1176,7 +1176,7 @@ export default function ChatPage() {
     <div style={shell}>
       <div style={chatContainer}>
         <div style={header}>
-          <button onClick={() => navigate(isGroup ? "/groups" : "/friends")} style={backBtn}>
+          <button onClick={() => navigate(isGroup ? "/chat" : "/messages")} style={backBtn}>
             <FiArrowLeft size={20} />
           </button>
           <div style={headerTextWrap}>

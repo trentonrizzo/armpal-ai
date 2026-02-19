@@ -106,6 +106,7 @@ export default function FlappyArm({ game }) {
     s.started = true;
     s.vy = JUMP_FORCE;
     s.rotation = PLAYER.rotationOnJump;
+    s.bounceAt = Date.now() + 80;
   }, [phase]);
 
   useEffect(() => {
@@ -125,6 +126,10 @@ export default function FlappyArm({ game }) {
       const inGrace = now < s.graceUntil;
 
       if (s.started && !inGrace) {
+        if (s.bounceAt && now >= s.bounceAt) {
+          s.vy += -1.8;
+          s.bounceAt = null;
+        }
         s.vy += GRAVITY;
         s.vy = Math.max(VELOCITY_CLAMP[0], Math.min(VELOCITY_CLAMP[1], s.vy));
         s.y += s.vy;
@@ -232,22 +237,15 @@ export default function FlappyArm({ game }) {
         setPhase("over");
         if (user?.id) {
           (async () => {
-            await supabase.rpc("ensure_arcade_user_stats");
-            const { data, error } = await supabase
-              .from("arcade_flappy_arm_scores")
-              .insert({ user_id: user.id, score })
-              .select("id, is_pr")
-              .single();
-            if (!error && data?.is_pr === true) {
+            const { data } = await supabase.rpc("record_flappy_arm_score", {
+              user_id: user.id,
+              score,
+            });
+            if (data?.is_pr === true) {
               setShowPrInOverlay(true);
               if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
             }
-            const { data: stats } = await supabase
-              .from("arcade_user_stats")
-              .select("flappy_best_score, flappy_total_games, flappy_last_score")
-              .eq("user_id", user.id)
-              .single();
-            setArcadeStats(stats || null);
+            await loadArcadeStats(user.id);
           })();
         }
         return;
@@ -260,7 +258,7 @@ export default function FlappyArm({ game }) {
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [phase, score, user?.id, spawnObstacle, toast]);
+  }, [phase, score, user?.id, spawnObstacle, toast, loadArcadeStats]);
 
   const bestScore = arcadeStats?.flappy_best_score ?? 0;
 

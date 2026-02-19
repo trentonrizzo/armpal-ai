@@ -160,6 +160,8 @@ function AppContent() {
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/groups" element={<GroupsPage />} />
+        <Route path="/messages" element={<FriendsPage />} />
+        <Route path="/chat" element={<GroupsPage />} />
 
         <Route path="/u/:handle" element={<LegacyHandleRedirect />} />
         <Route path="/friend/:friendId" element={<FriendProfile />} />

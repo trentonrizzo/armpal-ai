@@ -129,62 +129,60 @@ export default function FriendsPage() {
       const statusByTarget = {};
       friendIds.forEach((id) => (statusByTarget[id] = { relationshipStatus: "none" }));
 
-      const [friendsA, friendsB, requestsOut, requestsIn] = await Promise.all([
-        friendIds.length
-          ? supabase
-              .from("friends")
-              .select("user_id, friend_id, status")
-              .eq("user_id", meId)
-              .in("friend_id", friendIds)
-          : { data: [] },
-        friendIds.length
-          ? supabase
-              .from("friends")
-              .select("user_id, friend_id, status")
-              .eq("friend_id", meId)
-              .in("user_id", friendIds)
-          : { data: [] },
-        friendIds.length
-          ? supabase
-              .from("friend_requests")
-              .select("id, sender_id, receiver_id, status")
-              .eq("sender_id", meId)
-              .eq("status", "pending")
-              .in("receiver_id", friendIds)
-          : { data: [] },
-        friendIds.length
-          ? supabase
-              .from("friend_requests")
-              .select("id, sender_id, receiver_id, status")
-              .eq("receiver_id", meId)
-              .eq("status", "pending")
-              .in("sender_id", friendIds)
-          : { data: [] },
-      ]);
+      const { data: statusRows } = await supabase
+        .from("friend_status_view")
+        .select("target_id, are_friends, request_pending, request_id")
+        .eq("user_id", meId)
+        .in("target_id", friendIds);
 
-      const friendsRows = [...(friendsA.data || []), ...(friendsB.data || [])];
-      const requestsRows = [...(requestsOut.data || []), ...(requestsIn.data || [])];
-
-      friendsRows.forEach((row) => {
-        const otherId = row.user_id === meId ? row.friend_id : row.user_id;
-        if (String(row?.status || "").toLowerCase() === "accepted" && statusByTarget[otherId]) {
-          statusByTarget[otherId].relationshipStatus = "friends";
-        }
-      });
-
-      requestsRows.forEach((req) => {
-        const isOutgoing = req.sender_id === meId;
-        const targetId = isOutgoing ? req.receiver_id : req.sender_id;
-        if (!statusByTarget[targetId]) return;
-        if (statusByTarget[targetId].relationshipStatus === "friends") return;
-        if (isOutgoing) {
-          statusByTarget[targetId].relationshipStatus = "pending_outgoing";
-          statusByTarget[targetId].requestId = req.id;
-        } else {
-          statusByTarget[targetId].relationshipStatus = "pending_incoming";
-          statusByTarget[targetId].requestId = req.id;
-        }
-      });
+      if (statusRows && statusRows.length > 0) {
+        statusRows.forEach((row) => {
+          const tid = row.target_id;
+          if (!statusByTarget[tid]) return;
+          if (row.are_friends === true) {
+            statusByTarget[tid].relationshipStatus = "friends";
+          } else if (row.request_pending === true) {
+            statusByTarget[tid].relationshipStatus = "pending_outgoing";
+            if (row.request_id) statusByTarget[tid].requestId = row.request_id;
+          }
+        });
+      } else {
+        const [friendsA, friendsB, requestsOut, requestsIn] = await Promise.all([
+          friendIds.length
+            ? supabase.from("friends").select("user_id, friend_id, status").eq("user_id", meId).in("friend_id", friendIds)
+            : { data: [] },
+          friendIds.length
+            ? supabase.from("friends").select("user_id, friend_id, status").eq("friend_id", meId).in("user_id", friendIds)
+            : { data: [] },
+          friendIds.length
+            ? supabase.from("friend_requests").select("id, sender_id, receiver_id, status").eq("sender_id", meId).eq("status", "pending").in("receiver_id", friendIds)
+            : { data: [] },
+          friendIds.length
+            ? supabase.from("friend_requests").select("id, sender_id, receiver_id, status").eq("receiver_id", meId).eq("status", "pending").in("sender_id", friendIds)
+            : { data: [] },
+        ]);
+        const friendsRows = [...(friendsA.data || []), ...(friendsB.data || [])];
+        const requestsRows = [...(requestsOut.data || []), ...(requestsIn.data || [])];
+        friendsRows.forEach((row) => {
+          const otherId = row.user_id === meId ? row.friend_id : row.user_id;
+          if (String(row?.status || "").toLowerCase() === "accepted" && statusByTarget[otherId]) {
+            statusByTarget[otherId].relationshipStatus = "friends";
+          }
+        });
+        requestsRows.forEach((req) => {
+          const isOutgoing = req.sender_id === meId;
+          const targetId = isOutgoing ? req.receiver_id : req.sender_id;
+          if (!statusByTarget[targetId]) return;
+          if (statusByTarget[targetId].relationshipStatus === "friends") return;
+          if (isOutgoing) {
+            statusByTarget[targetId].relationshipStatus = "pending_outgoing";
+            statusByTarget[targetId].requestId = req.id;
+          } else {
+            statusByTarget[targetId].relationshipStatus = "pending_incoming";
+            statusByTarget[targetId].requestId = req.id;
+          }
+        });
+      }
 
       const enriched = profiles.map((p) => ({
         ...p,
@@ -829,28 +827,16 @@ export default function FriendsPage() {
                           View profile
                         </button>
                         {status === "friends" && !isSelf && (
-                          <>
-                            <span style={friendsBadge}>Friends</span>
-                            <button
-                              type="button"
-                              style={withdrawBtn}
-                              onClick={() => unaddFriendFromSearch(p.id)}
-                            >
-                              Unadd
-                            </button>
-                          </>
+                          <span style={friendsBadge}>Friends</span>
                         )}
                         {status === "pending_outgoing" && (
-                          <>
-                            <span style={pendingText}>Pending</span>
-                            <button
-                              type="button"
-                              style={withdrawBtn}
-                              onClick={() => withdrawRequest(p.requestId)}
-                            >
-                              Withdraw
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            style={withdrawBtn}
+                            onClick={() => withdrawRequest(p.requestId)}
+                          >
+                            Withdraw
+                          </button>
                         )}
                         {status === "pending_incoming" && (
                           <>
