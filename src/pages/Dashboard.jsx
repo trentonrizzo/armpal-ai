@@ -49,6 +49,24 @@ export default function Dashboard() {
   const [prDifference, setPrDifference] = useState(null);
   const [prCapMessage, setPrCapMessage] = useState("");
 
+  // Today's Focus — rotating motivation messages (every 8s)
+  const MOTIVATION_MESSAGES = [
+    "Consistency beats intensity.",
+    "Small wins build big strength.",
+    "ArmPal never skips progress.",
+    "Train smarter every day.",
+    "Show up even when it's hard.",
+  ];
+  const [rotatingMessage, setRotatingMessage] = useState(MOTIVATION_MESSAGES[0]);
+  useEffect(() => {
+    let i = 0;
+    const t = setInterval(() => {
+      i = (i + 1) % MOTIVATION_MESSAGES.length;
+      setRotatingMessage(MOTIVATION_MESSAGES[i]);
+    }, 8000);
+    return () => clearInterval(t);
+  }, []);
+
   // Upcoming workout
   const [upcomingWorkout, setUpcomingWorkout] = useState(null);
 
@@ -352,7 +370,7 @@ export default function Dashboard() {
             fontSize: 14,
           }}
         >
-          Don’t wait for motivation — build it under the bar.
+          {rotatingMessage}
         </div>
       </section>
 

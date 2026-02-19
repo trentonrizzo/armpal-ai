@@ -12,6 +12,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import FriendQRModal from "../components/friends/FriendQRModal";
 import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
+import { getRecommended } from "../utils/recommendedFriends";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
@@ -42,6 +43,9 @@ export default function FriendsPage() {
 
   // Pending requests (friend_requests where sender_id = me, status = 'pending')
   const [pendingRequests, setPendingRequests] = useState([]);
+
+  // Recommended friends count (for Find Friends button badge)
+  const [recommendedCount, setRecommendedCount] = useState(0);
 
   // ✅ Presence realtime channel ref (prevents duplicates)
   const presenceChannelRef = useRef(null);
@@ -229,6 +233,11 @@ export default function FriendsPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVis);
     };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    getRecommended(user.id).then(({ count }) => setRecommendedCount(count));
   }, [user?.id]);
 
   // ✅ Realtime presence subscription once user + friends exist
@@ -763,9 +772,31 @@ export default function FriendsPage() {
           fontSize: 15,
           fontWeight: 700,
           cursor: "pointer",
+          position: "relative",
         }}
       >
         Find Friends Nearby
+        {recommendedCount > 0 && (
+          <span
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 12,
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: "var(--accent)",
+              color: "var(--text)",
+              fontSize: 11,
+              fontWeight: 800,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {recommendedCount > 99 ? "99+" : recommendedCount}
+          </span>
+        )}
       </button>
 
       {/* ADD FRIEND */}

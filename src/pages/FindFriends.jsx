@@ -1,8 +1,10 @@
-// Find Friends: filters (age, distance, interests) + list from profiles
+// Find Friends: recommended + filters (age, distance, interests) + list from profiles
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import EmptyState from "../components/EmptyState";
+import { getRecommended } from "../utils/recommendedFriends";
+import { useToast } from "../components/ToastProvider";
 
 const INTERESTS = [
   "Arm Wrestling",
@@ -112,19 +114,73 @@ const badge = {
   fontSize: 11,
   color: "var(--text-dim)",
 };
+const recommendedHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "14px 16px",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
+  borderRadius: 16,
+  marginBottom: 16,
+  cursor: "pointer",
+};
+const recommendedBadge = {
+  width: 20,
+  height: 20,
+  borderRadius: "50%",
+  background: "var(--accent)",
+  color: "var(--text)",
+  fontSize: 11,
+  fontWeight: 800,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  marginLeft: 6,
+};
+const addFriendBtn = {
+  padding: "6px 12px",
+  borderRadius: 10,
+  border: "none",
+  background: "var(--accent)",
+  color: "var(--text)",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+  flexShrink: 0,
+};
 
 export default function FindFriends() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
 
+  const [recommended, setRecommended] = useState([]);
+  const [recommendedLoading, setRecommendedLoading] = useState(false);
+  const [recommendedExpanded, setRecommendedExpanded] = useState(false);
+  const [sentRequestIds, setSentRequestIds] = useState(new Set());
+
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(60);
   const [distance, setDistance] = useState("anywhere");
   const [selectedInterests, setSelectedInterests] = useState([]);
+
+  const fetchRecommendedUsers = useCallback(async () => {
+    if (!user?.id) return;
+    setRecommendedLoading(true);
+    try {
+      const { list } = await getRecommended(user.id);
+      setRecommended(list);
+    } catch (e) {
+      console.error("fetchRecommendedUsers", e);
+      setRecommended([]);
+    }
+    setRecommendedLoading(false);
+  }, [user?.id]);
 
   useEffect(() => {
     let alive = true;
@@ -145,6 +201,26 @@ export default function FindFriends() {
     })();
     return () => { alive = false; };
   }, []);
+
+  useEffect(() => {
+    if (user?.id) fetchRecommendedUsers();
+  }, [user?.id, fetchRecommendedUsers]);
+
+  const handleAddFriend = async (receiverId) => {
+    if (!user?.id || sentRequestIds.has(receiverId)) return;
+    try {
+      const { error } = await supabase.from("friend_requests").insert({
+        sender_id: user.id,
+        receiver_id: receiverId,
+        status: "pending",
+      });
+      if (error) throw error;
+      setSentRequestIds((prev) => new Set([...prev, receiverId]));
+      toast.success("Friend request sent");
+    } catch (e) {
+      toast.error(e?.message || "Could not send request");
+    }
+  };
 
   const toggleInterest = (name) => {
     setSelectedInterests((prev) =>
@@ -203,6 +279,94 @@ export default function FindFriends() {
         </button>
         <h1 style={title}>Find Friends</h1>
       </div>
+
+      {/* Recommended Friends — collapsible, default collapsed */}
+      <div
+        style={recommendedHeader}
+        onClick={() => setRecommendedExpanded((e) => !e)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === "Enter" && setRecommendedExpanded((v) => !v)}
+      >
+        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center" }}>
+          🔥 Recommended Friends
+          {recommended.length > 0 && (
+            <span style={recommendedBadge}>{recommended.length}</span>
+          )}
+        </span>
+        <span style={{ color: "var(--text-dim)", fontSize: 14 }}>
+          {recommendedExpanded ? "▼" : "▶"}
+        </span>
+      </div>
+
+      {recommendedExpanded && (
+        <div style={{ marginBottom: 20 }}>
+          {recommendedLoading ? (
+            <p style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading…</p>
+          ) : recommended.length === 0 ? (
+            <p style={{ color: "var(--text-dim)", fontSize: 14, padding: "8px 0" }}>
+              No recommendations yet. Add age, city & interests in your Profile.
+            </p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {recommended.map((r) => (
+                <li
+                  key={r.user_id}
+                  style={{
+                    ...card,
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                  }}
+                >
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
+                    onClick={() => navigate(`/friend/${r.user_id}`)}
+                  >
+                    {r.avatar_url ? (
+                      <img src={r.avatar_url} alt="" style={avatar} />
+                    ) : (
+                      <div style={avatarFallback}>
+                        {(r.display_name || r.username || "?").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={cardBody}>
+                      <span style={cardName}>{r.display_name || r.username || "User"}</span>
+                      <span style={cardLocation}>
+                        {[r.city, r.state].filter(Boolean).join(", ") || "—"}
+                      </span>
+                      {r.interests?.length > 0 && (
+                        <div style={badgeWrap}>
+                          {(r.interests || []).slice(0, 5).map((i) => (
+                            <span key={i} style={badge}>
+                              {i}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      style={addFriendBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddFriend(r.user_id);
+                      }}
+                      disabled={sentRequestIds.has(r.user_id)}
+                    >
+                      {sentRequestIds.has(r.user_id) ? "Sent" : "Add Friend"}
+                    </button>
+                  </div>
+                  {r.match_reasons?.length > 0 && (
+                    <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 8, marginBottom: 0 }}>
+                      Matched because: {r.match_reasons.join(" · ")}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div style={filterBar}>
         <div style={filterLabel}>Age range</div>
