@@ -1,4 +1,12 @@
 export async function enablePush(userId) {
+  if ("serviceWorker" in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const reg of regs) {
+      console.log("Removing old service worker:", reg.scope);
+      await reg.unregister();
+    }
+  }
+
   alert("OneSignal type: " + typeof window.OneSignal);
 
   if (!window.OneSignal) {
