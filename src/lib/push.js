@@ -10,10 +10,15 @@ export async function enablePush(userId) {
 
   console.log("Starting manual push enable");
 
-  await OneSignal.init({
-    appId: "PUT_REAL_APP_ID_HERE",
-    notifyButton: { enable: false },
-  });
+  if (window.__ONESIGNAL_INITIALIZED__) {
+    console.log("Already initialized — skipping init");
+  } else {
+    await OneSignal.init({
+      appId: "PUT_REAL_APP_ID_HERE",
+      notifyButton: { enable: false },
+    });
+    window.__ONESIGNAL_INITIALIZED__ = true;
+  }
 
   if (userId) {
     await OneSignal.login(userId);
