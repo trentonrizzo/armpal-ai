@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { initOneSignalForCurrentUser, promptPushIfNeeded } from "../onesignal";
+import { requestPushPermission } from "../lib/push";
 import { useTheme } from "../context/ThemeContext";
 
 /* ============================
@@ -85,13 +85,8 @@ export default function SettingsOverlay({ open, onClose }) {
         return;
       }
 
-      // Same permission flow as first-tap: trigger OneSignal Slidedown from user interaction.
-      await promptPushIfNeeded();
-
-      if (Notification.permission === "granted") {
-        await initOneSignalForCurrentUser();
-        setNotifEnabled(true);
-      }
+      await requestPushPermission();
+      setNotifEnabled(Notification.permission === "granted");
     } catch (err) {
       alert(err?.message || "Notification error");
     } finally {

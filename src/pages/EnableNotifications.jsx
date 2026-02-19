@@ -1,9 +1,6 @@
 // src/pages/EnableNotifications.jsx
 import React, { useEffect, useState } from "react";
-import {
-  requestNotificationPermission,
-  getSubscriptionState,
-} from "../onesignal";
+import { requestPushPermission, getSubscriptionState } from "../lib/push";
 import { useNavigate } from "react-router-dom";
 
 export default function EnableNotifications() {
@@ -25,11 +22,13 @@ export default function EnableNotifications() {
   }, [navigate]);
 
   async function handleEnable() {
-    const granted = await requestNotificationPermission();
-    if (granted) {
-      setEnabled(true);
-      setTimeout(() => navigate("/"), 1200);
-    }
+    await requestPushPermission();
+    // Permission dialog is async; re-check after a short delay.
+    setTimeout(() => {
+      const granted = getSubscriptionState();
+      setEnabled(granted);
+      if (granted) setTimeout(() => navigate("/"), 1200);
+    }, 1500);
   }
 
   if (loading) return null;
