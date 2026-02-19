@@ -6,25 +6,23 @@ export async function enablePush(userId) {
     return;
   }
 
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  const OneSignal = window.OneSignal;
 
-  window.OneSignalDeferred.push(async function (OneSignal) {
-    console.log("Starting manual push enable");
+  console.log("Starting manual push enable");
 
-    await OneSignal.init({
-      appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
-      notifyButton: { enable: false },
-    });
-
-    if (userId) {
-      await OneSignal.login(userId);
-    }
-
-    // THIS MUST RUN FROM USER CLICK
-    await OneSignal.Notifications.requestPermission();
-
-    const subscribed = await OneSignal.User.PushSubscription.optedIn;
-
-    console.log("Subscribed:", subscribed);
+  await OneSignal.init({
+    appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
+    notifyButton: { enable: false },
   });
+
+  if (userId) {
+    await OneSignal.login(userId);
+  }
+
+  // MUST run directly inside click event
+  await OneSignal.Notifications.requestPermission();
+
+  const subscribed = await OneSignal.User.PushSubscription.optedIn;
+
+  console.log("Subscribed:", subscribed);
 }
