@@ -1,43 +1,28 @@
-export async function setupPush(userId) {
+export async function enablePush(userId) {
   if (!window.OneSignal) {
-    console.log("OneSignal not loaded");
+    console.log("OneSignal missing");
     return;
   }
 
   window.OneSignalDeferred = window.OneSignalDeferred || [];
 
   window.OneSignalDeferred.push(async function (OneSignal) {
-    console.log("ONESIGNAL CLEAN INIT");
+    console.log("Starting manual push enable");
 
     await OneSignal.init({
       appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
       notifyButton: { enable: false },
-      allowLocalhostAsSecureOrigin: true,
     });
 
     if (userId) {
       await OneSignal.login(userId);
     }
+
+    // THIS MUST RUN FROM USER CLICK
+    await OneSignal.Notifications.requestPermission();
+
+    const subscribed = await OneSignal.User.PushSubscription.optedIn;
+
+    console.log("Subscribed:", subscribed);
   });
-}
-
-export async function requestPushPermission() {
-  if (!window.OneSignal) return;
-
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-
-  window.OneSignalDeferred.push(async function (OneSignal) {
-    const permission = await OneSignal.Notifications.permission;
-
-    console.log("Current permission:", permission);
-
-    if (permission !== "granted") {
-      await OneSignal.Notifications.requestPermission();
-    }
-  });
-}
-
-export function getSubscriptionState() {
-  if (typeof Notification === "undefined") return false;
-  return Notification.permission === "granted";
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { requestPushPermission } from "../lib/push";
+import { enablePush } from "../lib/push";
 import { useTheme } from "../context/ThemeContext";
 
 /* ============================
@@ -78,14 +78,8 @@ export default function SettingsOverlay({ open, onClose }) {
     if (!user || !notifSupported) return;
 
     setNotifBusy(true);
-
     try {
-      if (Notification.permission === "granted") {
-        setNotifEnabled(true);
-        return;
-      }
-
-      await requestPushPermission();
+      await enablePush(user.id);
       setNotifEnabled(Notification.permission === "granted");
     } catch (err) {
       alert(err?.message || "Notification error");

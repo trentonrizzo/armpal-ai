@@ -47,7 +47,6 @@ import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
 
-import { setupPush } from "./lib/push";
 import usePresence from "./hooks/usePresence";
 
 /* ============================
@@ -254,13 +253,6 @@ export default function App() {
     const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (!session?.user) return;
-
-    // Initialize push after user session load (DO NOT init before auth).
-    setupPush(session.user.id);
-  }, [session]);
 
   return (
     <>

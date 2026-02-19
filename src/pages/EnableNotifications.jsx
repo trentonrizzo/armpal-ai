@@ -1,31 +1,34 @@
 // src/pages/EnableNotifications.jsx
 import React, { useEffect, useState } from "react";
-import { requestPushPermission, getSubscriptionState } from "../lib/push";
+import { enablePush } from "../lib/push";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
 
 export default function EnableNotifications() {
+  const [user, setUser] = useState(null);
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function check() {
-      const isEnabled = await getSubscriptionState();
-      setEnabled(isEnabled);
+    supabase.auth.getUser().then(({ data: { user: u } }) => {
+      setUser(u ?? null);
       setLoading(false);
+    });
+  }, []);
 
-      if (isEnabled) {
-        setTimeout(() => navigate("/"), 1200);
-      }
-    }
-    check();
-  }, [navigate]);
+  useEffect(() => {
+    if (!user) return;
+    const granted = typeof Notification !== "undefined" && Notification.permission === "granted";
+    setEnabled(granted);
+    if (granted) setTimeout(() => navigate("/"), 1200);
+  }, [user, navigate]);
 
   async function handleEnable() {
-    await requestPushPermission();
-    // Permission dialog is async; re-check after a short delay.
+    if (!user?.id) return;
+    await enablePush(user.id);
     setTimeout(() => {
-      const granted = getSubscriptionState();
+      const granted = typeof Notification !== "undefined" && Notification.permission === "granted";
       setEnabled(granted);
       if (granted) setTimeout(() => navigate("/"), 1200);
     }, 1500);
