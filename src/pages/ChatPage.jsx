@@ -481,7 +481,7 @@ export default function ChatPage() {
             .eq("role", "admin")
             .maybeSingle(),
           supabase
-            .from("messages")
+            .from("group_messages")
             .select("*")
             .eq("group_id", groupId)
             .order("created_at", { ascending: true }),
@@ -582,13 +582,13 @@ export default function ChatPage() {
     if (!user) return;
     if (isGroup && groupId) {
       const channel = supabase
-        .channel(`chat-group-${groupId}`)
+        .channel("group_messages")
         .on(
           "postgres_changes",
           {
             event: "INSERT",
             schema: "public",
-            table: "messages",
+            table: "group_messages",
             filter: `group_id=eq.${groupId}`,
           },
           (payload) => {
@@ -814,12 +814,20 @@ export default function ChatPage() {
     setError("");
 
     try {
-      await supabase.from("messages").insert({
-        sender_id: user.id,
-        receiver_id: isGroup ? null : friendId,
-        group_id: isGroup ? groupId : null,
-        text: payload,
-      });
+      if (isGroup && groupId) {
+        await supabase.from("group_messages").insert({
+          group_id: groupId,
+          sender_id: user.id,
+          text: payload,
+        });
+      } else {
+        await supabase.from("messages").insert({
+          sender_id: user.id,
+          receiver_id: friendId,
+          group_id: null,
+          text: payload,
+        });
+      }
     } catch (e) {
       const msg = e?.message || "Send failed";
       setError(msg);
@@ -857,12 +865,20 @@ export default function ChatPage() {
         return;
       }
 
-      await supabase.from("messages").insert({
-        sender_id: user.id,
-        receiver_id: isGroup ? null : friendId,
-        group_id: isGroup ? groupId : null,
-        image_url: data.publicUrl,
-      });
+      if (isGroup && groupId) {
+        await supabase.from("group_messages").insert({
+          group_id: groupId,
+          sender_id: user.id,
+          image_url: data.publicUrl,
+        });
+      } else {
+        await supabase.from("messages").insert({
+          sender_id: user.id,
+          receiver_id: friendId,
+          group_id: null,
+          image_url: data.publicUrl,
+        });
+      }
     } catch (e) {
       const msgImg = e?.message || "Image send failed";
       setError(msgImg);
@@ -905,13 +921,20 @@ export default function ChatPage() {
         return;
       }
 
-      // Insert message with video_url EXACTLY like your base file expects.
-      await supabase.from("messages").insert({
-        sender_id: user.id,
-        receiver_id: isGroup ? null : friendId,
-        group_id: isGroup ? groupId : null,
-        video_url: data.publicUrl,
-      });
+      if (isGroup && groupId) {
+        await supabase.from("group_messages").insert({
+          group_id: groupId,
+          sender_id: user.id,
+          video_url: data.publicUrl,
+        });
+      } else {
+        await supabase.from("messages").insert({
+          sender_id: user.id,
+          receiver_id: friendId,
+          group_id: null,
+          video_url: data.publicUrl,
+        });
+      }
     } catch (e) {
       const msgVid = e?.message || "Video send failed";
       setError(msgVid);
@@ -1047,13 +1070,22 @@ export default function ChatPage() {
         return;
       }
 
-      await supabase.from("messages").insert({
-        sender_id: user.id,
-        receiver_id: isGroup ? null : friendId,
-        group_id: isGroup ? groupId : null,
-        audio_url: data.publicUrl,
-        audio_duration: recordDuration,
-      });
+      if (isGroup && groupId) {
+        await supabase.from("group_messages").insert({
+          group_id: groupId,
+          sender_id: user.id,
+          audio_url: data.publicUrl,
+          audio_duration: recordDuration,
+        });
+      } else {
+        await supabase.from("messages").insert({
+          sender_id: user.id,
+          receiver_id: friendId,
+          group_id: null,
+          audio_url: data.publicUrl,
+          audio_duration: recordDuration,
+        });
+      }
 
       setRecordedBlob(null);
       setRecordDuration(0);
@@ -1090,7 +1122,8 @@ export default function ChatPage() {
     if (!deleteTarget) return;
 
     try {
-      await supabase.from("messages").delete().eq("id", deleteTarget.id);
+      const table = isGroup ? "group_messages" : "messages";
+      await supabase.from(table).delete().eq("id", deleteTarget.id);
 
       setMessages((prev) => prev.filter((x) => x.id !== deleteTarget.id));
     } catch {}
@@ -1194,7 +1227,7 @@ export default function ChatPage() {
     <div style={shell}>
       <div style={chatContainer}>
         <div style={header}>
-          <button onClick={() => navigate(isGroup ? "/friends" : "/messages")} style={backBtn}>
+          <button onClick={() => navigate(isGroup ? "/groups" : "/messages")} style={backBtn}>
             <FiArrowLeft size={20} />
           </button>
           <div style={headerTextWrap}>

@@ -91,7 +91,7 @@ export default function GroupsPage() {
   return (
     <div style={pageWrap}>
       <div style={headerRow}>
-        <button type="button" onClick={() => navigate("/chat")} style={backBtn}>
+        <button type="button" onClick={() => navigate("/friends")} style={backBtn}>
           ← Back
         </button>
         <h1 style={title}>Groups</h1>
