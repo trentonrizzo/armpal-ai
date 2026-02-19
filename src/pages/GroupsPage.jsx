@@ -1,4 +1,4 @@
-// Groups list: my chat groups + pro-gated create. Opens group chat on select.
+// Groups list: my chat groups + pro-gated create via RPC. Opens group chat on select.
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -32,22 +32,16 @@ export default function GroupsPage() {
       if (!alive) return;
       setIsPro(!!pro);
 
-      const { data: memberRows, error } = await supabase
-        .from("chat_group_members")
-        .select("group_id")
-        .eq("user_id", u.id);
-      if (error || !memberRows?.length) {
+      const { data: groupRows, error } = await supabase
+        .from("chat_groups")
+        .select("id, name, created_by, created_at")
+        .order("created_at", { ascending: false });
+      if (!alive) return;
+      if (error) {
         setGroups([]);
         setLoading(false);
         return;
       }
-      const ids = [...new Set(memberRows.map((r) => r.group_id))];
-      const { data: groupRows } = await supabase
-        .from("chat_groups")
-        .select("id, name, created_at")
-        .in("id", ids)
-        .order("created_at", { ascending: false });
-      if (!alive) return;
       setGroups(groupRows ?? []);
       setLoading(false);
     })();
@@ -62,31 +56,24 @@ export default function GroupsPage() {
     }
     setCreating(true);
     try {
-      const { data: group, error: groupErr } = await supabase
-        .from("chat_groups")
-        .insert({ name: createName.trim(), created_by: user.id })
-        .select("id")
-        .single();
-      if (groupErr || !group?.id) {
-        toast.error(groupErr?.message || "Failed to create group");
+      const { data, error } = await supabase.rpc("create_chat_group", {
+        p_name: createName.trim(),
+      });
+      if (error) {
+        toast.error(error.message || "Failed to create group");
         setCreating(false);
         return;
       }
-      const { error: memberErr } = await supabase.from("chat_group_members").insert({
-        group_id: group.id,
-        user_id: user.id,
-        role: "admin",
-        added_by: user.id,
-      });
-      if (memberErr) {
-        toast.error(memberErr.message || "Failed to add you to group");
+      const groupId = (typeof data === "object" && data != null && data.group_id) ? data.group_id : data;
+      if (!groupId) {
+        toast.error("Failed to create group");
         setCreating(false);
         return;
       }
       setCreateOpen(false);
       setCreateName("");
-      setGroups((prev) => [{ id: group.id, name: createName.trim(), created_at: new Date().toISOString() }, ...prev]);
-      navigate(`/chat/group/${group.id}`);
+      setGroups((prev) => [{ id: groupId, name: createName.trim(), created_by: user.id, created_at: new Date().toISOString() }, ...prev]);
+      navigate(`/chat/group/${groupId}`);
     } catch (e) {
       toast.error(e?.message || "Failed to create group");
     }

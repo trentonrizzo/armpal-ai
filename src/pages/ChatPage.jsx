@@ -471,7 +471,7 @@ export default function ChatPage() {
           { data: msgs, error: msgErr },
         ] = await Promise.all([
           supabase.from("chat_groups").select("*").eq("id", groupId).single(),
-          supabase.from("chat_group_members").select("user_id, role").eq("group_id", groupId),
+          supabase.from("chat_group_members").select("user_id, role, created_at").eq("group_id", groupId),
           supabase
             .from("chat_group_members")
             .select("id")
@@ -1104,11 +1104,9 @@ export default function ChatPage() {
     }
     setAddingMemberId(profile.id);
     try {
-      const { error } = await supabase.from("chat_group_members").insert({
-        group_id: groupId,
-        user_id: profile.id,
-        role: "member",
-        added_by: user.id,
+      const { error } = await supabase.rpc("add_chat_group_member", {
+        p_group_id: groupId,
+        p_user_id: profile.id,
       });
       if (error) throw error;
       setGroupMembers((prev) => [...prev, { ...profile, role: "member", user_id: profile.id }]);
@@ -1126,11 +1124,10 @@ export default function ChatPage() {
     if (memberUserId === user.id) return;
     setRemovingMemberId(memberUserId);
     try {
-      const { error } = await supabase
-        .from("chat_group_members")
-        .delete()
-        .eq("group_id", groupId)
-        .eq("user_id", memberUserId);
+      const { error } = await supabase.rpc("remove_chat_group_member", {
+        p_group_id: groupId,
+        p_user_id: memberUserId,
+      });
       if (error) throw error;
       setGroupMembers((prev) => prev.filter((m) => m.user_id !== memberUserId && m.id !== memberUserId));
       toast.success("Member removed");

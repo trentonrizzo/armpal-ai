@@ -12,6 +12,7 @@ const GAME_TYPES = {
 export default function ArcadeProfile() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [arcadeStats, setArcadeStats] = useState(null);
   const [statsByType, setStatsByType] = useState({});
   const [rankByGameId, setRankByGameId] = useState({});
   const [gamesWithLeaderboard, setGamesWithLeaderboard] = useState([]);
@@ -32,7 +33,15 @@ export default function ArcadeProfile() {
     }
     let alive = true;
     (async () => {
-      const types = ["flappy_arm", "tictactoe", "tic_tac_toe", "reaction_speed"];
+      const { data: arcadeRow } = await supabase
+        .from("arcade_user_stats")
+        .select("flappy_best_score, flappy_total_games, flappy_last_score")
+        .eq("user_id", user.id)
+        .single();
+      if (!alive) return;
+      setArcadeStats(arcadeRow || null);
+
+      const types = ["tictactoe", "tic_tac_toe", "reaction_speed"];
       const { data: statsRows } = await supabase
         .from("game_user_stats")
         .select("game_type, best_score, total_games, wins, losses, win_streak, best_streak, fastest_time")
@@ -54,17 +63,28 @@ export default function ArcadeProfile() {
 
       const ranks = {};
       for (const g of games || []) {
-        const lowerIsBetter = g.game_type === "reaction_speed" || g.game_type === "reaction_test";
-        const order = lowerIsBetter ? { ascending: true } : { ascending: false };
-        const { data: entries } = await supabase
-          .from("game_leaderboard")
-          .select("user_id, score")
-          .eq("game_id", g.id)
-          .order("score", order)
-          .limit(500);
-        if (!alive) break;
-        const idx = (entries || []).findIndex((e) => e.user_id === user.id);
-        if (idx >= 0) ranks[g.id] = idx + 1;
+        if (g.game_type === "flappy_arm") {
+          const { data: flappyRows } = await supabase
+            .from("arcade_flappy_arm_leaderboard")
+            .select("user_id")
+            .order("best_score", { ascending: false })
+            .limit(500);
+          if (!alive) break;
+          const idx = (flappyRows || []).findIndex((e) => e.user_id === user.id);
+          if (idx >= 0) ranks[g.id] = idx + 1;
+        } else {
+          const lowerIsBetter = g.game_type === "reaction_speed" || g.game_type === "reaction_test";
+          const order = lowerIsBetter ? { ascending: true } : { ascending: false };
+          const { data: entries } = await supabase
+            .from("game_leaderboard")
+            .select("user_id, score")
+            .eq("game_id", g.id)
+            .order("score", order)
+            .limit(500);
+          if (!alive) break;
+          const idx = (entries || []).findIndex((e) => e.user_id === user.id);
+          if (idx >= 0) ranks[g.id] = idx + 1;
+        }
       }
       if (alive) setRankByGameId(ranks);
       if (alive) setLoading(false);
@@ -72,14 +92,10 @@ export default function ArcadeProfile() {
     return () => { alive = false; };
   }, [user?.id]);
 
-  const flappy = statsByType.flappy_arm;
   const ttt = statsByType.tictactoe || statsByType.tic_tac_toe;
   const reaction = statsByType.reaction_speed;
-
-  const flappyGame = gamesWithLeaderboard.find((g) => g.game_type === "flappy_arm");
-  const reactionGame = gamesWithLeaderboard.find((g) => g.game_type === "reaction_speed");
-  const flappyRank = flappyGame?.id ? rankByGameId[flappyGame.id] : null;
-  const reactionRank = reactionGame?.id ? rankByGameId[reactionGame.id] : null;
+  const flappyRank = rankByGameId[gamesWithLeaderboard.find((g) => g.game_type === "flappy_arm")?.id];
+  const reactionRank = rankByGameId[gamesWithLeaderboard.find((g) => g.game_type === "reaction_speed")?.id];
 
   return (
     <div style={styles.wrap}>
@@ -95,11 +111,12 @@ export default function ArcadeProfile() {
           <section style={styles.section}>
             <h2 style={styles.sectionTitle}>Flappy Arm</h2>
             <ul style={styles.statsList}>
-              <li style={styles.statRow}><span style={styles.statLabel}>Best Score</span><span style={styles.statVal}>{flappy?.best_score ?? 0}</span></li>
+              <li style={styles.statRow}><span style={styles.statLabel}>Best Score</span><span style={styles.statVal}>{arcadeStats?.flappy_best_score ?? 0}</span></li>
               {flappyRank != null && (
                 <li style={styles.statRow}><span style={styles.statLabel}>Rank</span><span style={styles.statVal}>#{flappyRank}</span></li>
               )}
-              <li style={styles.statRow}><span style={styles.statLabel}>Total Games</span><span style={styles.statVal}>{flappy?.total_games ?? 0}</span></li>
+              <li style={styles.statRow}><span style={styles.statLabel}>Total Games</span><span style={styles.statVal}>{arcadeStats?.flappy_total_games ?? 0}</span></li>
+              <li style={styles.statRow}><span style={styles.statLabel}>Last Score</span><span style={styles.statVal}>{arcadeStats?.flappy_last_score ?? "—"}</span></li>
             </ul>
           </section>
 

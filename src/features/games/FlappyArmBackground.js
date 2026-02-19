@@ -1,10 +1,84 @@
 /**
- * Flappy Arm — gym environment background.
- * Back: squat rack silhouettes, mounted barbells, depth.
- * Mid: dumbbell racks, benches, darker gym lighting.
- * Front: dust particles, soft spotlight glow.
- * Parallax: back 0.2x, mid 0.5x. No flat gradient only.
+ * Flappy Arm — gym background from BG_BACK_SVG and BG_MID_SVG.
+ * Parallax: back 0.20 * obstacle speed, mid 0.45 * obstacle speed. Faint dust particles.
  */
+
+const BG_BACK_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600">
+  <rect width="900" height="1600" fill="#0A0A0A"/>
+  <g opacity="0.35" fill="#1B1B1B">
+    <rect x="80" y="240" width="80" height="980" rx="24"/>
+    <rect x="740" y="240" width="80" height="980" rx="24"/>
+    <rect x="140" y="300" width="620" height="18" rx="9"/>
+    <rect x="140" y="1080" width="620" height="18" rx="9"/>
+    <rect x="220" y="320" width="20" height="760" rx="10"/>
+    <rect x="660" y="320" width="20" height="760" rx="10"/>
+  </g>
+</svg>
+`;
+
+const BG_MID_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600">
+  <rect width="900" height="1600" fill="none"/>
+  <g opacity="0.50" fill="#141414">
+    <rect x="120" y="1160" width="660" height="26" rx="13"/>
+    <rect x="160" y="1200" width="580" height="18" rx="9"/>
+    <g>
+      <rect x="200" y="1090" width="40" height="12" rx="6"/>
+      <rect x="260" y="1090" width="40" height="12" rx="6"/>
+      <rect x="320" y="1090" width="40" height="12" rx="6"/>
+      <rect x="380" y="1090" width="40" height="12" rx="6"/>
+      <rect x="440" y="1090" width="40" height="12" rx="6"/>
+      <rect x="500" y="1090" width="40" height="12" rx="6"/>
+      <rect x="560" y="1090" width="40" height="12" rx="6"/>
+      <rect x="620" y="1090" width="40" height="12" rx="6"/>
+    </g>
+  </g>
+</svg>
+`;
+
+let bgBackImage = null;
+let bgMidImage = null;
+let bgBackReady = false;
+let bgMidReady = false;
+
+function loadBgBack(cb) {
+  if (bgBackReady && bgBackImage) {
+    cb();
+    return;
+  }
+  if (bgBackImage) {
+    bgBackImage.onload = cb;
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    bgBackImage = img;
+    bgBackReady = true;
+    cb();
+  };
+  img.onerror = () => cb();
+  img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(BG_BACK_SVG.trim())));
+}
+
+function loadBgMid(cb) {
+  if (bgMidReady && bgMidImage) {
+    cb();
+    return;
+  }
+  if (bgMidImage) {
+    bgMidImage.onload = cb;
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    bgMidImage = img;
+    bgMidReady = true;
+    cb();
+  };
+  img.onerror = () => cb();
+  img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(BG_MID_SVG.trim())));
+}
 
 /**
  * @param {CanvasRenderingContext2D} ctx
@@ -13,86 +87,47 @@
  * @param {number} groundY
  * @param {number} totalScroll
  * @param {number} scrollSpeed
- * @param {number} time - seconds for subtle animation
+ * @param {number} time - seconds
  */
 export function drawGymBackground(ctx, w, h, groundY, totalScroll, scrollSpeed, time) {
-  const backOffset = (totalScroll * 0.2) % (w + 280);
-  const midOffset = (totalScroll * 0.5) % (w + 200);
-  const t = time * 0.4;
+  const backOffset = (totalScroll * 0.2) % 900;
+  const midOffset = (totalScroll * 0.45) % 900;
 
-  // —— Back layer: squat rack silhouettes + mounted barbells ——
   ctx.save();
-  ctx.globalAlpha = 0.92;
-  ctx.fillStyle = "#0a0a0c";
-  ctx.fillRect(0, 0, w, groundY);
-  const wallGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-  wallGrad.addColorStop(0, "#0f0f12");
-  wallGrad.addColorStop(0.6, "#14141a");
-  wallGrad.addColorStop(1, "#0c0c0f");
-  ctx.fillStyle = wallGrad;
+
+  ctx.fillStyle = "#0A0A0A";
   ctx.fillRect(0, 0, w, groundY);
 
-  for (let i = -1; i < 4; i++) {
-    const bx = -backOffset + i * (w * 0.38) + 30;
-    // Squat rack silhouette (uprights + crossbar)
-    ctx.fillStyle = "#1a1a1e";
-    ctx.fillRect(bx, 20, 6, groundY - 20);
-    ctx.fillRect(bx + 52, 20, 6, groundY - 20);
-    ctx.fillRect(bx, 24, 58, 5);
-    ctx.fillRect(bx, groundY - 95, 58, 5);
-    // Mounted barbell (horizontal bar on rack)
-    ctx.fillStyle = "#2a2a2e";
-    ctx.fillRect(bx + 8, 50, 42, 4);
-    ctx.beginPath();
-    ctx.arc(bx + 12, 52, 6, 0, Math.PI * 2);
-    ctx.arc(bx + 46, 52, 6, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-  ctx.restore();
+  loadBgBack(() => {});
+  loadBgMid(() => {});
 
-  // —— Mid layer: dumbbell racks, benches ——
-  ctx.save();
-  ctx.globalAlpha = 0.78;
-  for (let i = -1; i < 4; i++) {
-    const mx = -midOffset + i * (w * 0.42) + 15;
-    // Dumbbell rack (tiered shelves)
-    ctx.fillStyle = "#1e1e22";
-    ctx.fillRect(mx, groundY - 70, 50, 6);
-    ctx.fillRect(mx + 2, groundY - 55, 46, 5);
-    ctx.fillRect(mx + 4, groundY - 40, 42, 5);
-    ctx.fillStyle = "#252530";
-    ctx.fillRect(mx + 8, groundY - 68, 8, 18);
-    ctx.fillRect(mx + 22, groundY - 68, 8, 18);
-    ctx.fillRect(mx + 34, groundY - 68, 8, 18);
-    // Bench silhouette
-    ctx.fillStyle = "#1a1a1f";
-    ctx.fillRect(mx + 55, groundY - 35, 45, 10);
-    ctx.fillRect(mx + 58, groundY - 80, 6, 50);
-    ctx.fillRect(mx + 92, groundY - 80, 6, 50);
+  if (bgBackImage && bgBackReady) {
+    const scale = (groundY + 100) / 1600;
+    const drawW = 900 * scale;
+    const drawH = 1600 * scale;
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(bgBackImage, -backOffset * scale, 0, drawW, drawH);
+    ctx.drawImage(bgBackImage, -backOffset * scale + drawW, 0, drawW, drawH);
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
-  ctx.restore();
+  if (bgMidImage && bgMidReady) {
+    const scale = (groundY + 100) / 1600;
+    const drawW = 900 * scale;
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(bgMidImage, -midOffset * scale, 0, drawW, 1600 * scale);
+    ctx.drawImage(bgMidImage, -midOffset * scale + drawW, 0, drawW, 1600 * scale);
+    ctx.globalAlpha = 1;
+  }
 
-  // —— Front: dust particles + soft spotlight ——
-  ctx.save();
   ctx.fillStyle = "#fff";
-  for (let i = 0; i < 12; i++) {
-    const px = (i * 97 + totalScroll * 0.15) % (w + 60) - 20;
-    const py = (groundY - 150 + (i * 41) % 180) + Math.sin(t + i * 0.7) * 4;
-    ctx.globalAlpha = 0.08 + Math.sin(t + i) * 0.04;
+  for (let i = 0; i < 10; i++) {
+    const px = (i * 89 + totalScroll * 0.12) % (w + 40) - 20;
+    const py = (groundY - 100 + (i * 37) % 200) + Math.sin(time + i * 0.5) * 3;
+    ctx.globalAlpha = 0.06 + Math.sin(time * 0.4 + i) * 0.02;
     ctx.beginPath();
-    ctx.arc(px, py, 2, 0, Math.PI * 2);
+    ctx.arc(px, py, 1.5, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
-
-  // Soft spotlight (radial from top-center)
-  const spotGrad = ctx.createRadialGradient(w / 2, 80, 0, w / 2, 200, 220);
-  spotGrad.addColorStop(0, "rgba(255,248,240,0.06)");
-  spotGrad.addColorStop(0.5, "rgba(255,248,240,0.02)");
-  spotGrad.addColorStop(1, "rgba(255,248,240,0)");
-  ctx.fillStyle = spotGrad;
-  ctx.fillRect(0, 0, w, groundY);
   ctx.restore();
 }

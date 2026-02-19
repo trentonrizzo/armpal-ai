@@ -1,119 +1,112 @@
 /**
- * FlappyArmCharacter — clearly identifiable FLEXING ARM.
- * Side-view bicep curl pose: muscular, exaggerated bicep, strong forearm.
- * No circles/blobs for main form; arm built from defined muscle shapes.
- * Hitbox unchanged (size 36). Idle: float. Tap: flex + upward rotation. Fall: downward tilt.
+ * Flappy Arm — player rendered from exact ARM_SVG. Canvas drawImage from loaded Image.
+ * Tilt: fall +18deg, tap -10deg. Subtle bobbing while alive. Hitbox unchanged.
  */
+
+const ARM_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="140" viewBox="0 0 220 140">
+  <defs>
+    <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F2C6A0"/>
+      <stop offset="0.5" stop-color="#D9A07A"/>
+      <stop offset="1" stop-color="#B77D5E"/>
+    </linearGradient>
+    <linearGradient id="shadow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+  </defs>
+
+  <!-- Forearm -->
+  <path d="M35 85 C20 75, 20 55, 38 45 C62 33, 96 40, 118 56
+           C135 68, 143 90, 127 102 C107 118, 62 112, 35 85 Z"
+        fill="url(#skin)"/>
+
+  <!-- Bicep bulge -->
+  <path d="M92 38 C92 18, 116 10, 140 18 C165 26, 176 50, 168 70
+           C160 92, 136 96, 121 86 C103 74, 92 56, 92 38 Z"
+        fill="url(#skin)"/>
+
+  <!-- Inner crease/shadows -->
+  <path d="M55 78 C46 69, 50 58, 63 54 C82 48, 104 57, 114 70
+           C122 80, 118 92, 104 96 C86 101, 67 92, 55 78 Z"
+        fill="url(#shadow)" filter="url(#soft)"/>
+
+  <!-- Fist -->
+  <path d="M150 74 C150 62, 160 54, 172 54 C186 54, 196 64, 196 76
+           C196 88, 187 98, 174 98 C161 98, 150 88, 150 74 Z"
+        fill="url(#skin)"/>
+  <path d="M160 70 C165 66, 171 66, 178 70" stroke="#7A4E3A" stroke-opacity="0.35" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Outline for clarity -->
+  <path d="M35 85 C20 75, 20 55, 38 45 C62 33, 96 40, 118 56
+           C135 68, 143 90, 127 102 C107 118, 62 112, 35 85 Z"
+        fill="none" stroke="#2A1B14" stroke-opacity="0.35" stroke-width="3"/>
+  <path d="M92 38 C92 18, 116 10, 140 18 C165 26, 176 50, 168 70
+           C160 92, 136 96, 121 86 C103 74, 92 56, 92 38 Z"
+        fill="none" stroke="#2A1B14" stroke-opacity="0.35" stroke-width="3"/>
+</svg>
+`;
 
 const ARM_SIZE = 36;
+let armImage = null;
+let armImageReady = false;
 
-/**
- * Draw the flexing arm at (x, y) with rotation in degrees.
- * Side-view: shoulder/bicep behind, forearm/fist forward — classic curl pose.
- */
-export function drawFlappyArmCharacter(ctx, x, y, rotation, opts = {}) {
-  const size = opts.size ?? ARM_SIZE;
-  const hoverY = opts.hoverY ?? 0;
-  const drawX = x;
-  const drawY = y + hoverY;
-
-  ctx.save();
-  ctx.translate(drawX, drawY);
-  ctx.rotate((rotation * Math.PI) / 180);
-
-  const half = size / 2;
-  const u = size / 12; // unit for proportions
-
-  // —— Shoulder / upper bicep (anchor) ——
-  ctx.beginPath();
-  ctx.moveTo(-half - 2, 0);
-  ctx.lineTo(-half + u * 1.5, -u * 1.2);
-  ctx.lineTo(-half + u * 1.5, u * 1.2);
-  ctx.closePath();
-  const shoulderGrad = ctx.createRadialGradient(-half, 0, 0, -half + u, 0, u * 2);
-  shoulderGrad.addColorStop(0, "#8b7355");
-  shoulderGrad.addColorStop(0.5, "#6b5344");
-  shoulderGrad.addColorStop(1, "#4a3c32");
-  ctx.fillStyle = shoulderGrad;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.25)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // —— Bicep (exaggerated bulge, side-view) ——
-  ctx.beginPath();
-  ctx.ellipse(-u * 1.2, 0, u * 2.2, u * 1.8, 0, 0, Math.PI * 2);
-  const bicepGrad = ctx.createRadialGradient(-u * 1.5, -u * 0.5, 0, -u * 1.2, 0, u * 2.5);
-  bicepGrad.addColorStop(0, "#d4b896");
-  bicepGrad.addColorStop(0.35, "#b8956a");
-  bicepGrad.addColorStop(0.65, "#8b6914");
-  bicepGrad.addColorStop(1, "#5c4a32");
-  ctx.fillStyle = bicepGrad;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.2)";
-  ctx.stroke();
-  // Bicep peak highlight (flex definition)
-  ctx.beginPath();
-  ctx.ellipse(-u * 1.4, -u * 0.4, u * 0.7, u * 0.9, 0.4, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,236,200,0.55)";
-  ctx.fill();
-
-  // —— Elbow crease ——
-  ctx.beginPath();
-  ctx.ellipse(u * 0.8, 0, u * 0.5, u * 1.1, 0, 0, Math.PI * 2);
-  ctx.fillStyle = "#5c4a32";
-  ctx.fill();
-
-  // —— Forearm (strong definition, tapering toward wrist) ——
-  ctx.beginPath();
-  ctx.moveTo(u * 0.4, -u * 1.1);
-  ctx.lineTo(u * 2.8, -u * 0.9);
-  ctx.lineTo(u * 2.9, u * 0.5);
-  ctx.lineTo(u * 0.5, u * 1.0);
-  ctx.closePath();
-  const forearmGrad = ctx.createLinearGradient(u * 0.5, 0, u * 2.9, 0);
-  forearmGrad.addColorStop(0, "#8b6914");
-  forearmGrad.addColorStop(0.4, "#b8956a");
-  forearmGrad.addColorStop(0.7, "#a08050");
-  forearmGrad.addColorStop(1, "#6b5344");
-  ctx.fillStyle = forearmGrad;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.2)";
-  ctx.stroke();
-  // Forearm vein/shadow line
-  ctx.beginPath();
-  ctx.moveTo(u * 1.2, -u * 0.3);
-  ctx.lineTo(u * 2.4, u * 0.1);
-  ctx.strokeStyle = "rgba(0,0,0,0.15)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // —— Fist (closed, side profile) ——
-  ctx.beginPath();
-  ctx.ellipse(half - 1, 0, u * 1.1, u * 1.35, 0, 0, Math.PI * 2);
-  const fistGrad = ctx.createRadialGradient(half - u, -u * 0.3, 0, half - 1, 0, u * 1.4);
-  fistGrad.addColorStop(0, "#d4b896");
-  fistGrad.addColorStop(0.5, "#b8956a");
-  fistGrad.addColorStop(1, "#6b5344");
-  ctx.fillStyle = fistGrad;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.2)";
-  ctx.stroke();
-  // Knuckle hint
-  ctx.beginPath();
-  ctx.arc(half + u * 0.2, -u * 0.2, 2, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(0,0,0,0.12)";
-  ctx.fill();
-
-  ctx.restore();
+function loadArmImage(cb) {
+  if (armImageReady && armImage) {
+    cb();
+    return;
+  }
+  if (armImage) {
+    armImage.onload = cb;
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    armImage = img;
+    armImageReady = true;
+    cb();
+  };
+  img.onerror = () => cb();
+  img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(ARM_SVG.trim())));
 }
 
 /**
- * Visual rotation: TAP -10°, FALL +20° (display only).
+ * Draw the arm at (x, y) with rotation in degrees. Optional hoverY for bobbing.
+ */
+export function drawFlappyArmCharacter(ctx, x, y, rotation, opts = {}) {
+  const hoverY = opts.hoverY ?? 0;
+  const drawY = y + hoverY;
+
+  const scale = ARM_SIZE / 140;
+  const w = 220 * scale;
+  const h = ARM_SIZE;
+
+  const draw = () => {
+    if (!armImage || !armImageReady) return;
+    ctx.save();
+    ctx.translate(x, drawY);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.drawImage(armImage, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  };
+
+  if (armImageReady) {
+    draw();
+    return;
+  }
+  loadArmImage(draw);
+}
+
+/**
+ * Visual rotation: tap -10°, fall +18° (spec).
  */
 export function getVisualRotation(vy, physicsRotation) {
   if (vy < 0) return -10;
-  return Math.min(20, physicsRotation);
+  return Math.min(18, physicsRotation);
 }
 
 export { ARM_SIZE };
