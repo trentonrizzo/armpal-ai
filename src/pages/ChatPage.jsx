@@ -325,6 +325,10 @@ export default function ChatPage() {
   const [groupMembers, setGroupMembers] = useState([]);
   const [isGroupAdmin, setIsGroupAdmin] = useState(false);
   const [showMembersPanel, setShowMembersPanel] = useState(false);
+  const [editGroupOpen, setEditGroupOpen] = useState(false);
+  const [editGroupName, setEditGroupName] = useState("");
+  const [editGroupAvatarFile, setEditGroupAvatarFile] = useState(null);
+  const [editGroupSaving, setEditGroupSaving] = useState(false);
   const [addMemberQuery, setAddMemberQuery] = useState("");
   const [addMemberResults, setAddMemberResults] = useState([]);
   const [addingMemberId, setAddingMemberId] = useState(null);
@@ -1222,6 +1226,39 @@ export default function ChatPage() {
     setRemovingMemberId(null);
   }
 
+  async function saveEditGroup() {
+    if (!group?.id || group.created_by !== user?.id || editGroupSaving) return;
+    const newName = (editGroupName || "").trim();
+    if (!newName) {
+      toast.error("Group name is required");
+      return;
+    }
+    setEditGroupSaving(true);
+    try {
+      let newAvatarUrl = group.avatar_url ?? null;
+      if (editGroupAvatarFile) {
+        const ext = editGroupAvatarFile.name.split(".").pop() || "jpg";
+        const path = `group-avatars/${group.id}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from("avatars").upload(path, editGroupAvatarFile, { upsert: true });
+        if (uploadErr) throw uploadErr;
+        const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+        newAvatarUrl = data.publicUrl;
+      }
+      const { error } = await supabase
+        .from("chat_groups")
+        .update({ name: newName, avatar_url: newAvatarUrl })
+        .eq("id", group.id);
+      if (error) throw error;
+      setGroup((prev) => (prev ? { ...prev, name: newName, avatar_url: newAvatarUrl } : null));
+      setEditGroupOpen(false);
+      setEditGroupAvatarFile(null);
+      toast.success("Group updated");
+    } catch (e) {
+      toast.error(e?.message || "Failed to update group");
+    }
+    setEditGroupSaving(false);
+  }
+
   async function addFriendFromPanel(profile) {
     if (!user?.id || !profile?.id || profile.id === user.id) return;
     try {
@@ -1268,6 +1305,11 @@ export default function ChatPage() {
             <strong style={headerName}>{friendName}</strong>
             {friendStatus && <span style={friendStatusText}>{friendStatus}</span>}
           </div>
+          {isGroup && group?.created_by === user?.id && (
+            <button type="button" onClick={() => { setEditGroupName(group?.name || ""); setEditGroupAvatarFile(null); setEditGroupOpen(true); }} style={membersBtn} aria-label="Edit group">
+              Edit
+            </button>
+          )}
           {isGroup && (
             <button type="button" onClick={() => setShowMembersPanel(true)} style={membersBtn} aria-label="Members">
               👥
@@ -1569,6 +1611,43 @@ export default function ChatPage() {
                 );
               })}
             </ul>
+          </div>
+        </div>
+      )}
+
+      {isGroup && editGroupOpen && (
+        <div style={membersPanelBackdrop} onClick={() => !editGroupSaving && setEditGroupOpen(false)}>
+          <div style={editGroupModal} onClick={(e) => e.stopPropagation()}>
+            <div style={membersPanelHeader}>
+              <strong style={membersPanelTitle}>Edit group</strong>
+              <button type="button" onClick={() => !editGroupSaving && setEditGroupOpen(false)} style={membersPanelClose}>×</button>
+            </div>
+            <input
+              type="text"
+              value={editGroupName}
+              onChange={(e) => setEditGroupName(e.target.value)}
+              placeholder="Group name"
+              style={editGroupInput}
+            />
+            <div style={editGroupAvatarRow}>
+              <label style={editGroupLabel}>Avatar</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setEditGroupAvatarFile(e.target.files?.[0] ?? null)}
+                style={{ display: "none" }}
+                id="edit-group-avatar"
+              />
+              <label htmlFor="edit-group-avatar" style={editGroupFileLabel}>
+                {editGroupAvatarFile ? editGroupAvatarFile.name : (group?.avatar_url ? "Change photo" : "Upload photo")}
+              </label>
+            </div>
+            <div style={editGroupActions}>
+              <button type="button" style={memberActionBtn} onClick={() => !editGroupSaving && setEditGroupOpen(false)}>Cancel</button>
+              <button type="button" style={editGroupSubmitBtn} onClick={saveEditGroup} disabled={editGroupSaving || !editGroupName.trim()}>
+                {editGroupSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2156,6 +2235,38 @@ const membersPanel = {
 const membersPanelHeader = { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 };
 const membersPanelTitle = { fontSize: 18, fontWeight: 800, color: "var(--text)" };
 const membersPanelClose = { background: "none", border: "none", fontSize: 24, color: "var(--text)", cursor: "pointer", padding: "0 4px" };
+const editGroupModal = {
+  background: "var(--card)",
+  borderRadius: 16,
+  padding: 16,
+  maxWidth: 360,
+  width: "100%",
+};
+const editGroupInput = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "10px 12px",
+  marginBottom: 12,
+  border: "1px solid var(--border)",
+  borderRadius: 10,
+  background: "var(--bg)",
+  color: "var(--text)",
+  fontSize: 16,
+};
+const editGroupAvatarRow = { marginBottom: 16 };
+const editGroupLabel = { display: "block", fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 };
+const editGroupFileLabel = {
+  display: "inline-block",
+  padding: "8px 14px",
+  borderRadius: 10,
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
+  fontSize: 14,
+  cursor: "pointer",
+};
+const editGroupActions = { display: "flex", gap: 12, justifyContent: "flex-end" };
+const editGroupSubmitBtn = { padding: "8px 16px", borderRadius: 10, border: "none", background: "var(--accent)", color: "var(--text)", fontWeight: 700, cursor: "pointer" };
 const addMemberWrap = { marginBottom: 16 };
 const addMemberInput = {
   width: "100%",

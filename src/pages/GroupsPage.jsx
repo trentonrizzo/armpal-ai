@@ -34,7 +34,7 @@ export default function GroupsPage() {
 
       const { data: groupRows, error } = await supabase
         .from("chat_groups")
-        .select("id, name, created_by, created_at")
+        .select("id, name, avatar_url, created_by, created_at")
         .order("created_at", { ascending: false });
       if (!alive) return;
       if (error) {
@@ -42,7 +42,23 @@ export default function GroupsPage() {
         setLoading(false);
         return;
       }
-      setGroups(groupRows ?? []);
+      const list = groupRows ?? [];
+      const { data: msgRows } = await supabase
+        .schema("public")
+        .from("group_messages")
+        .select("group_id, text, created_at")
+        .order("created_at", { ascending: false });
+      const latestByGroup = {};
+      (msgRows || []).forEach((row) => {
+        if (row.group_id && latestByGroup[row.group_id] === undefined) {
+          latestByGroup[row.group_id] = row.text ?? "No messages yet";
+        }
+      });
+      const withPreview = list.map((g) => ({
+        ...g,
+        lastMessage: latestByGroup[g.id] ?? "No messages yet",
+      }));
+      setGroups(withPreview);
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -70,9 +86,10 @@ export default function GroupsPage() {
         setCreating(false);
         return;
       }
+      await supabase.from("chat_groups").update({ created_by: user.id }).eq("id", groupId);
       setCreateOpen(false);
       setCreateName("");
-      setGroups((prev) => [{ id: groupId, name: createName.trim(), created_by: user.id, created_at: new Date().toISOString() }, ...prev]);
+      setGroups((prev) => [{ id: groupId, name: createName.trim(), avatar_url: null, created_by: user.id, created_at: new Date().toISOString(), lastMessage: "No messages yet" }, ...prev]);
       navigate(`/chat/group/${groupId}`);
     } catch (e) {
       toast.error(e?.message || "Failed to create group");
@@ -120,7 +137,17 @@ export default function GroupsPage() {
               style={listItem}
               onClick={() => navigate(`/chat/group/${g.id}`)}
             >
-              <span style={groupName}>{g.name || "Unnamed group"}</span>
+              <div style={avatarWrap}>
+                {g.avatar_url ? (
+                  <img src={g.avatar_url} alt="" style={avatarImg} />
+                ) : (
+                  <span style={avatarLetter}>{(g.name || "G").charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+              <div style={groupInfo}>
+                <span style={groupName}>{g.name || "Unnamed group"}</span>
+                <span style={lastPreview}>{g.lastMessage ?? "No messages yet"}</span>
+              </div>
             </li>
           ))}
         </ul>
@@ -172,6 +199,9 @@ const createBtn = {
 const hint = { color: "var(--text-dim)", fontSize: 14 };
 const list = { listStyle: "none", margin: 0, padding: 0 };
 const listItem = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
   padding: "14px 16px",
   background: "var(--card-2)",
   border: "1px solid var(--border)",
@@ -179,7 +209,22 @@ const listItem = {
   marginBottom: 8,
   cursor: "pointer",
 };
-const groupName = { fontSize: 16, fontWeight: 700, color: "var(--text)" };
+const avatarWrap = {
+  width: 44,
+  height: 44,
+  borderRadius: "50%",
+  overflow: "hidden",
+  flexShrink: 0,
+  background: "var(--border)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+const avatarImg = { width: "100%", height: "100%", objectFit: "cover" };
+const avatarLetter = { fontSize: 18, fontWeight: 800, color: "var(--text)" };
+const groupInfo = { flex: 1, minWidth: 0 };
+const groupName = { fontSize: 16, fontWeight: 700, color: "var(--text)", display: "block" };
+const lastPreview = { fontSize: 13, color: "var(--text-dim)", display: "block", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const modalBackdrop = {
   position: "fixed",
   inset: 0,
