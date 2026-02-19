@@ -482,6 +482,7 @@ export default function ChatPage() {
             .eq("role", "admin")
             .maybeSingle(),
           supabase
+            .schema("public")
             .from("group_messages")
             .select("*")
             .eq("group_id", groupId)
@@ -838,7 +839,7 @@ export default function ChatPage() {
             created_at: new Date().toISOString(),
           },
         ]);
-        await supabase.from("group_messages").insert({
+        await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           text: payload,
@@ -892,7 +893,7 @@ export default function ChatPage() {
       }
 
       if (isGroup && groupId) {
-        await supabase.from("group_messages").insert({
+        await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           image_url: data.publicUrl,
@@ -948,7 +949,7 @@ export default function ChatPage() {
       }
 
       if (isGroup && groupId) {
-        await supabase.from("group_messages").insert({
+        await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           video_url: data.publicUrl,
@@ -1097,7 +1098,7 @@ export default function ChatPage() {
       }
 
       if (isGroup && groupId) {
-        await supabase.from("group_messages").insert({
+        await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           audio_url: data.publicUrl,
@@ -1148,8 +1149,11 @@ export default function ChatPage() {
     if (!deleteTarget) return;
 
     try {
-      const table = isGroup ? "group_messages" : "messages";
-      await supabase.from(table).delete().eq("id", deleteTarget.id);
+      if (isGroup) {
+        await supabase.schema("public").from("group_messages").delete().eq("id", deleteTarget.id);
+      } else {
+        await supabase.from("messages").delete().eq("id", deleteTarget.id);
+      }
 
       setMessages((prev) => prev.filter((x) => x.id !== deleteTarget.id));
     } catch {}
