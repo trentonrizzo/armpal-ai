@@ -232,6 +232,18 @@ export default function App() {
 
   usePresence(session?.user);
 
+  // Force remove old service workers once on app load (OneSignal v16 clean register)
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((reg) => {
+          console.log("Unregistering old SW:", reg.scope);
+          reg.unregister();
+        });
+      });
+    }
+  }, []);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -245,12 +257,6 @@ export default function App() {
 
   useEffect(() => {
     if (!session?.user) return;
-
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((reg) => reg.unregister());
-      });
-    }
 
     // Initialize push after user session load (DO NOT init before auth).
     setupPush(session.user.id);
