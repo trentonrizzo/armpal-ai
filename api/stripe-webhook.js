@@ -72,76 +72,64 @@ export default async function handler(req, res) {
     }
   }
 
-  // 🔥 INVOICE.PAID — Referral reward when referred user pays for Pro
+  // 🔥 INVOICE.PAID — Referral reward when referred user pays for Pro (double-sided)
   if (event.type === "invoice.paid") {
     const invoice = event.data.object;
-    const stripeCustomerId = invoice.customer;
 
-    if (!stripeCustomerId) {
-      res.status(200).json({ received: true });
-      return;
-    }
-
+    // Resolve subscriber user from stripe_customer_id
     const { data: subscriberProfile } = await supabase
       .from("profiles")
       .select("id, referred_by")
-      .eq("stripe_customer_id", stripeCustomerId)
+      .eq("stripe_customer_id", invoice.customer)
       .maybeSingle();
 
-    if (!subscriberProfile?.id) {
-      res.status(200).json({ received: true });
-      return;
-    }
+    if (!subscriberProfile) return;
+    if (!subscriberProfile.referred_by) return;
 
-    const referredBy = subscriberProfile.referred_by;
-    if (!referredBy) {
-      res.status(200).json({ received: true });
-      return;
-    }
-
+    // Find referrer by referral_code
     const { data: referrerProfile } = await supabase
       .from("profiles")
       .select("id")
-      .eq("referral_code", referredBy)
+      .eq("referral_code", subscriberProfile.referred_by)
       .maybeSingle();
 
-    if (!referrerProfile?.id) {
-      res.status(200).json({ received: true });
-      return;
-    }
+    if (!referrerProfile) return;
 
-    const referrerId = referrerProfile.id;
-    const referredUserId = subscriberProfile.id;
-
+    // Check duplicate reward
     const { data: existingReward } = await supabase
       .from("referral_rewards")
       .select("id")
-      .eq("referrer_user_id", referrerId)
-      .eq("referred_user_id", referredUserId)
+      .eq("referrer_user_id", referrerProfile.id)
+      .eq("referred_user_id", subscriberProfile.id)
       .eq("reward_type", "pro_signup")
       .maybeSingle();
 
-    if (existingReward) {
-      res.status(200).json({ received: true });
-      return;
-    }
+    if (existingReward) return;
 
-    const { error: rpcError } = await supabase.rpc("add_points_safe", {
-      target_user: referrerId,
+    // --------------------------------------------------
+    // DOUBLE-SIDED REWARD
+    // --------------------------------------------------
+
+    // 1) Referrer gets 100 credits
+    await supabase.rpc("add_points_safe", {
+      target_user: referrerProfile.id,
       points_amount: 100,
       reason_text: "Referral Pro Signup",
-      related: referredUserId,
+      related: subscriberProfile.id,
     });
 
-    if (rpcError) {
-      console.error("add_points_safe failed:", rpcError);
-      res.status(200).json({ received: true });
-      return;
-    }
+    // 2) New Pro user gets 50 credits
+    await supabase.rpc("add_points_safe", {
+      target_user: subscriberProfile.id,
+      points_amount: 50,
+      reason_text: "Referral Bonus (Welcome)",
+      related: referrerProfile.id,
+    });
 
+    // Insert lock record to prevent duplicate rewards
     await supabase.from("referral_rewards").insert({
-      referrer_user_id: referrerId,
-      referred_user_id: referredUserId,
+      referrer_user_id: referrerProfile.id,
+      referred_user_id: subscriberProfile.id,
       reward_type: "pro_signup",
     });
   }
