@@ -476,7 +476,7 @@ export default function ChatPage() {
           { data: adminRow },
           { data: msgs, error: msgErr },
         ] = await Promise.all([
-          supabase.from("chat_groups").select("*").eq("id", groupId).single(),
+          supabase.schema("public").from("chat_groups").select("*").eq("id", groupId).single(),
           supabase.from("chat_group_members").select("user_id, role, created_at").eq("group_id", groupId),
           supabase
             .from("chat_group_members")
@@ -1245,6 +1245,7 @@ export default function ChatPage() {
         newAvatarUrl = data.publicUrl;
       }
       const { error } = await supabase
+        .schema("public")
         .from("chat_groups")
         .update({ name: newName, avatar_url: newAvatarUrl })
         .eq("id", group.id);

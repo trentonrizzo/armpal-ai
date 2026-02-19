@@ -33,8 +33,9 @@ export default function GroupsPage() {
       setIsPro(!!pro);
 
       const { data: groupRows, error } = await supabase
+        .schema("public")
         .from("chat_groups")
-        .select("id, name, avatar_url, created_by, created_at")
+        .select("*")
         .order("created_at", { ascending: false });
       if (!alive) return;
       if (error) {
@@ -43,20 +44,24 @@ export default function GroupsPage() {
         return;
       }
       const list = groupRows ?? [];
-      const { data: msgRows } = await supabase
-        .schema("public")
-        .from("group_messages")
-        .select("group_id, text, created_at")
-        .order("created_at", { ascending: false });
-      const latestByGroup = {};
-      (msgRows || []).forEach((row) => {
-        if (row.group_id && latestByGroup[row.group_id] === undefined) {
-          latestByGroup[row.group_id] = row.text ?? "No messages yet";
-        }
-      });
+      const groupIds = list.map((g) => g.id).filter(Boolean);
+      const latestMessage = {};
+      if (groupIds.length > 0) {
+        const { data: msgRows } = await supabase
+          .schema("public")
+          .from("group_messages")
+          .select("group_id, text, created_at")
+          .in("group_id", groupIds)
+          .order("created_at", { ascending: false });
+        (msgRows || []).forEach((row) => {
+          if (row.group_id && latestMessage[row.group_id] === undefined) {
+            latestMessage[row.group_id] = row;
+          }
+        });
+      }
       const withPreview = list.map((g) => ({
         ...g,
-        lastMessage: latestByGroup[g.id] ?? "No messages yet",
+        lastMessage: latestMessage[g.id]?.text || "No messages yet",
       }));
       setGroups(withPreview);
       setLoading(false);
@@ -86,7 +91,7 @@ export default function GroupsPage() {
         setCreating(false);
         return;
       }
-      await supabase.from("chat_groups").update({ created_by: user.id }).eq("id", groupId);
+      await supabase.schema("public").from("chat_groups").update({ created_by: user.id }).eq("id", groupId);
       setCreateOpen(false);
       setCreateName("");
       setGroups((prev) => [{ id: groupId, name: createName.trim(), avatar_url: null, created_by: user.id, created_at: new Date().toISOString(), lastMessage: "No messages yet" }, ...prev]);
@@ -126,8 +131,6 @@ export default function GroupsPage() {
         <EmptyState
           icon="👥"
           message={isPro ? "No groups yet — create one or get invited." : "No groups yet — join one to see it here."}
-          ctaLabel={isPro ? "Create group" : null}
-          ctaOnClick={isPro ? () => setCreateOpen(true) : undefined}
         />
       ) : (
         <ul style={list}>
