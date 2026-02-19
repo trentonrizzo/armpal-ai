@@ -40,6 +40,44 @@ import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
 import { getOrCreateConversation } from "../utils/getOrCreateConversation";
+import Cropper from "react-easy-crop";
+
+// ============================================================
+// CROP HELPERS (group avatar)
+// ============================================================
+
+function createImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve(image));
+    image.addEventListener("error", (err) => reject(err));
+    image.setAttribute("crossOrigin", "anonymous");
+    image.src = url;
+  });
+}
+
+async function getCroppedImg(imageSrc, pixelCrop) {
+  const image = await createImage(imageSrc);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No 2d context");
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  );
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92);
+  });
+}
 
 // ============================================================
 // TIME HELPERS
@@ -327,8 +365,14 @@ export default function ChatPage() {
   const [showMembersPanel, setShowMembersPanel] = useState(false);
   const [editGroupOpen, setEditGroupOpen] = useState(false);
   const [editGroupName, setEditGroupName] = useState("");
-  const [editGroupAvatarFile, setEditGroupAvatarFile] = useState(null);
+  const [editGroupAvatarBlob, setEditGroupAvatarBlob] = useState(null);
   const [editGroupSaving, setEditGroupSaving] = useState(false);
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [editGroupPreviewUrl, setEditGroupPreviewUrl] = useState(null);
   const [addMemberQuery, setAddMemberQuery] = useState("");
   const [addMemberResults, setAddMemberResults] = useState([]);
   const [addingMemberId, setAddingMemberId] = useState(null);
@@ -1236,12 +1280,13 @@ export default function ChatPage() {
     setEditGroupSaving(true);
     try {
       let newAvatarUrl = group.avatar_url ?? null;
-      if (editGroupAvatarFile) {
-        const ext = editGroupAvatarFile.name.split(".").pop() || "jpg";
-        const path = `group-avatars/${group.id}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("avatars").upload(path, editGroupAvatarFile, { upsert: true });
+      if (editGroupAvatarBlob) {
+        const filePath = `group-avatars/${group.id}.jpg`;
+        const { error: uploadErr } = await supabase.storage
+          .from("avatars")
+          .upload(filePath, editGroupAvatarBlob, { upsert: true, contentType: "image/jpeg" });
         if (uploadErr) throw uploadErr;
-        const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+        const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
         newAvatarUrl = data.publicUrl;
       }
       const { error } = await supabase
@@ -1252,12 +1297,48 @@ export default function ChatPage() {
       if (error) throw error;
       setGroup((prev) => (prev ? { ...prev, name: newName, avatar_url: newAvatarUrl } : null));
       setEditGroupOpen(false);
-      setEditGroupAvatarFile(null);
+      setEditGroupAvatarBlob(null);
+      if (editGroupPreviewUrl) {
+        URL.revokeObjectURL(editGroupPreviewUrl);
+        setEditGroupPreviewUrl(null);
+      }
       toast.success("Group updated");
     } catch (e) {
       toast.error(e?.message || "Failed to update group");
     }
     setEditGroupSaving(false);
+  }
+
+  function handleEditGroupAvatarFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !group?.id) return;
+    const url = URL.createObjectURL(file);
+    setCropImageSrc(url);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setShowCropModal(true);
+  }
+
+  function closeCropModal() {
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
+    setCropImageSrc(null);
+    setShowCropModal(false);
+    setCroppedAreaPixels(null);
+  }
+
+  async function handleCropApply() {
+    if (!cropImageSrc || !croppedAreaPixels) return;
+    try {
+      const blob = await getCroppedImg(cropImageSrc, croppedAreaPixels);
+      if (editGroupPreviewUrl) URL.revokeObjectURL(editGroupPreviewUrl);
+      setEditGroupPreviewUrl(URL.createObjectURL(blob));
+      setEditGroupAvatarBlob(blob);
+    } catch (err) {
+      toast.error(err?.message || "Crop failed");
+    }
+    closeCropModal();
   }
 
   async function addFriendFromPanel(profile) {
@@ -1307,7 +1388,7 @@ export default function ChatPage() {
             {friendStatus && <span style={friendStatusText}>{friendStatus}</span>}
           </div>
           {isGroup && group?.created_by === user?.id && (
-            <button type="button" onClick={() => { setEditGroupName(group?.name || ""); setEditGroupAvatarFile(null); setEditGroupOpen(true); }} style={membersBtn} aria-label="Edit group">
+            <button type="button" onClick={() => { setEditGroupName(group?.name || ""); setEditGroupAvatarBlob(null); if (editGroupPreviewUrl) { URL.revokeObjectURL(editGroupPreviewUrl); setEditGroupPreviewUrl(null); } setEditGroupOpen(true); }} style={membersBtn} aria-label="Edit group">
               Edit
             </button>
           )}
@@ -1617,11 +1698,11 @@ export default function ChatPage() {
       )}
 
       {isGroup && editGroupOpen && (
-        <div style={membersPanelBackdrop} onClick={() => !editGroupSaving && setEditGroupOpen(false)}>
+        <div style={membersPanelBackdrop} onClick={() => { if (!editGroupSaving) { if (editGroupPreviewUrl) { URL.revokeObjectURL(editGroupPreviewUrl); setEditGroupPreviewUrl(null); } setEditGroupOpen(false); } }}>
           <div style={editGroupModal} onClick={(e) => e.stopPropagation()}>
             <div style={membersPanelHeader}>
               <strong style={membersPanelTitle}>Edit group</strong>
-              <button type="button" onClick={() => !editGroupSaving && setEditGroupOpen(false)} style={membersPanelClose}>×</button>
+              <button type="button" onClick={() => { if (!editGroupSaving) { if (editGroupPreviewUrl) { URL.revokeObjectURL(editGroupPreviewUrl); setEditGroupPreviewUrl(null); } setEditGroupOpen(false); } }} style={membersPanelClose}>×</button>
             </div>
             <input
               type="text"
@@ -1632,21 +1713,60 @@ export default function ChatPage() {
             />
             <div style={editGroupAvatarRow}>
               <label style={editGroupLabel}>Avatar</label>
+              <div style={editGroupAvatarPreviewWrap}>
+                {group?.avatar_url || editGroupAvatarBlob ? (
+                  <img
+                    src={editGroupAvatarBlob ? editGroupPreviewUrl : group?.avatar_url}
+                    alt=""
+                    style={editGroupAvatarPreview}
+                  />
+                ) : (
+                  <div style={editGroupAvatarFallbackPreview}>
+                    {(group?.name || "G").charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => setEditGroupAvatarFile(e.target.files?.[0] ?? null)}
+                onChange={handleEditGroupAvatarFile}
                 style={{ display: "none" }}
                 id="edit-group-avatar"
               />
               <label htmlFor="edit-group-avatar" style={editGroupFileLabel}>
-                {editGroupAvatarFile ? editGroupAvatarFile.name : (group?.avatar_url ? "Change photo" : "Upload photo")}
+                {editGroupAvatarBlob ? "Change photo (cropped)" : (group?.avatar_url ? "Change photo" : "Upload photo")}
               </label>
             </div>
             <div style={editGroupActions}>
-              <button type="button" style={memberActionBtn} onClick={() => !editGroupSaving && setEditGroupOpen(false)}>Cancel</button>
+              <button type="button" style={memberActionBtn} onClick={() => { if (!editGroupSaving) { if (editGroupPreviewUrl) { URL.revokeObjectURL(editGroupPreviewUrl); setEditGroupPreviewUrl(null); } setEditGroupOpen(false); } }}>Cancel</button>
               <button type="button" style={editGroupSubmitBtn} onClick={saveEditGroup} disabled={editGroupSaving || !editGroupName.trim()}>
                 {editGroupSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCropModal && cropImageSrc && (
+        <div style={membersPanelBackdrop} onClick={closeCropModal}>
+          <div style={cropModalBox} onClick={(e) => e.stopPropagation()}>
+            <div style={cropContainer}>
+              <Cropper
+                image={cropImageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={(_croppedArea, pixels) => setCroppedAreaPixels(pixels)}
+              />
+            </div>
+            <div style={editGroupActions}>
+              <button type="button" style={memberActionBtn} onClick={closeCropModal}>Cancel</button>
+              <button type="button" style={editGroupSubmitBtn} onClick={handleCropApply} disabled={!croppedAreaPixels}>
+                Apply
               </button>
             </div>
           </div>
@@ -2256,6 +2376,28 @@ const editGroupInput = {
 };
 const editGroupAvatarRow = { marginBottom: 16 };
 const editGroupLabel = { display: "block", fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 };
+const editGroupAvatarPreviewWrap = { marginBottom: 8 };
+const editGroupAvatarPreview = { width: 56, height: 56, borderRadius: "50%", objectFit: "cover" };
+const editGroupAvatarFallbackPreview = {
+  width: 56,
+  height: 56,
+  borderRadius: "50%",
+  background: "#222",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 20,
+  fontWeight: "bold",
+  color: "#fff",
+};
+const cropModalBox = {
+  background: "var(--card)",
+  borderRadius: 16,
+  padding: 16,
+  maxWidth: 400,
+  width: "100%",
+};
+const cropContainer = { position: "relative", width: "100%", height: 320 };
 const editGroupFileLabel = {
   display: "inline-block",
   padding: "8px 14px",

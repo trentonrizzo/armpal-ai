@@ -140,13 +140,13 @@ export default function GroupsPage() {
               style={listItem}
               onClick={() => navigate(`/chat/group/${g.id}`)}
             >
-              <div style={avatarWrap}>
-                {g.avatar_url ? (
-                  <img src={g.avatar_url} alt="" style={avatarImg} />
-                ) : (
-                  <span style={avatarLetter}>{(g.name || "G").charAt(0).toUpperCase()}</span>
-                )}
-              </div>
+              {g.avatar_url ? (
+                <img src={g.avatar_url} alt="avatar" className="group-avatar" style={groupAvatarStyle} />
+              ) : (
+                <div className="group-avatar-fallback" style={groupAvatarFallbackStyle}>
+                  {g.name?.charAt(0) || "G"}
+                </div>
+              )}
               <div style={groupInfo}>
                 <span style={groupName}>{g.name || "Unnamed group"}</span>
                 <span style={lastPreview}>{g.lastMessage ?? "No messages yet"}</span>
@@ -212,19 +212,26 @@ const listItem = {
   marginBottom: 8,
   cursor: "pointer",
 };
-const avatarWrap = {
+const groupAvatarStyle = {
   width: 44,
   height: 44,
   borderRadius: "50%",
-  overflow: "hidden",
+  objectFit: "cover",
   flexShrink: 0,
-  background: "var(--border)",
+};
+const groupAvatarFallbackStyle = {
+  width: 44,
+  height: 44,
+  borderRadius: "50%",
+  background: "#222",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  fontWeight: "bold",
+  color: "#fff",
+  fontSize: 18,
+  flexShrink: 0,
 };
-const avatarImg = { width: "100%", height: "100%", objectFit: "cover" };
-const avatarLetter = { fontSize: 18, fontWeight: 800, color: "var(--text)" };
 const groupInfo = { flex: 1, minWidth: 0 };
 const groupName = { fontSize: 16, fontWeight: 700, color: "var(--text)", display: "block" };
 const lastPreview = { fontSize: 13, color: "var(--text-dim)", display: "block", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
