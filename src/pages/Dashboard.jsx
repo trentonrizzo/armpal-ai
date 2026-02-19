@@ -19,6 +19,7 @@ import DashboardAISection from "../components/ai/DashboardAISection";
 import DashboardAIChat from "../components/ai/DashboardAIChat";
 import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
 import EmptyState from "../components/EmptyState";
+import DashboardCreditsCard from "../components/credits/DashboardCreditsCard";
 
 
 export default function Dashboard() {
@@ -311,6 +312,9 @@ export default function Dashboard() {
           <FiUsers size={18} color="var(--text)" />
         </Link>
       </header>
+
+      {/* ArmPal Credits — directly below username header */}
+      <DashboardCreditsCard />
 
       {/* Upgrade to Pro — only when NOT Pro (uses existing isPro from profiles) */}
       {!isPro && (

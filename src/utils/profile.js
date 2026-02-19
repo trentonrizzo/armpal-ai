@@ -36,7 +36,18 @@ export async function createProfileIfMissing() {
 
   const existing = await fetchProfile(user.id);
 
-  if (existing) return existing;
+  const referredBy =
+    typeof localStorage !== "undefined"
+      ? localStorage.getItem("armpal_referral_ref")
+      : null;
+
+  if (existing) {
+    if (referredBy && !existing.referred_by) {
+      await supabase.from("profiles").update({ referred_by: referredBy }).eq("id", user.id);
+      if (typeof localStorage !== "undefined") localStorage.removeItem("armpal_referral_ref");
+    }
+    return existing;
+  }
 
   const { data, error } = await supabase.from("profiles").insert([
     {
@@ -45,8 +56,13 @@ export async function createProfileIfMissing() {
       username: null,
       bio: "",
       avatar_url: "",
+      ...(referredBy && { referred_by: referredBy }),
     },
   ]);
+
+  if (referredBy && typeof localStorage !== "undefined") {
+    localStorage.removeItem("armpal_referral_ref");
+  }
 
   if (error) throw error;
   return data;

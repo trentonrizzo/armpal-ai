@@ -11,13 +11,24 @@ import { supabase } from "./supabaseClient";
   ✅ Redirects to /reset-password
 */
 
-export default function AuthPage() {
-  const [mode, setMode] = useState("login"); // login | signup | forgot
+export default function AuthPage({ initialMode }) {
+  const [mode, setMode] = useState(initialMode || "login"); // login | signup | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
+
+  /* ============================
+     CAPTURE REFERRAL CODE FROM URL (?ref=CODE)
+  ============================ */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref && typeof localStorage !== "undefined") {
+      localStorage.setItem("armpal_referral_ref", ref);
+    }
+  }, []);
 
   /* ============================
      BLOCK AUTO LOGIN DURING RECOVERY

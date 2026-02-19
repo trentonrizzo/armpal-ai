@@ -23,6 +23,9 @@ import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
 import ResetPassword from "./pages/ResetPassword";
+import CreditsPage from "./pages/CreditsPage";
+import RedeemPage from "./pages/RedeemPage";
+import ReferralsPage from "./pages/ReferralsPage";
 
 import Analytics from "./pages/Analytics";
 import MeasurementAnalytics from "./pages/MeasurementAnalytics";
@@ -150,6 +153,7 @@ function AppContent() {
     <div className={isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/signup" element={<Navigate to="/" replace />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/prs" element={<PRTracker />} />
         <Route path="/measure" element={<MeasurementsPage />} />
@@ -169,6 +173,9 @@ function AppContent() {
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/credits" element={<CreditsPage />} />
+        <Route path="/redeem" element={<RedeemPage />} />
+        <Route path="/referrals" element={<ReferralsPage />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
         <Route path="/pro" element={<ProUpgradePage />} />
@@ -218,6 +225,7 @@ function AppContent() {
 }
 
 export default function App() {
+  const location = useLocation();
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -273,7 +281,7 @@ export default function App() {
     <>
       <RuntimeSplash show={showSplash} />
       {!ready ? null : !session ? (
-        <AuthPage />
+        <AuthPage initialMode={location?.pathname === "/signup" ? "signup" : undefined} />
       ) : (
         <AppProvider>
           <ToastProvider>
