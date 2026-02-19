@@ -1,4 +1,6 @@
 export async function enablePush(userId) {
+  alert("OneSignal type: " + typeof window.OneSignal);
+
   if (!window.OneSignal) {
     console.log("OneSignal missing");
     return;
