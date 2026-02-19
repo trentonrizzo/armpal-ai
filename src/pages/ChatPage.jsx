@@ -329,6 +329,7 @@ export default function ChatPage() {
   const [addMemberResults, setAddMemberResults] = useState([]);
   const [addingMemberId, setAddingMemberId] = useState(null);
   const [removingMemberId, setRemovingMemberId] = useState(null);
+  const [friendIds, setFriendIds] = useState(new Set());
   const [messages, setMessages] = useState([]);
 
   const [text, setText] = useState("");
@@ -506,6 +507,18 @@ export default function ChatPage() {
         } else {
           setGroupMembers([]);
         }
+        const { data: friendsRows } = await supabase
+          .from("friends")
+          .select("user_id, friend_id, status")
+          .or(`user_id.eq.${u.id},friend_id.eq.${u.id}`);
+        const ids = new Set();
+        (friendsRows || []).forEach((row) => {
+          if ((row?.status || "").toLowerCase() === "accepted") {
+            const otherId = row.user_id === u.id ? row.friend_id : row.user_id;
+            if (otherId) ids.add(otherId);
+          }
+        });
+        setFriendIds(ids);
         if (msgErr) {
           setError(msgErr.message);
           toast.error(msgErr.message);
@@ -514,6 +527,7 @@ export default function ChatPage() {
         setFriend(null);
         setGameSessions([]);
       } else if (friendId) {
+        setFriendIds(new Set());
         const chatId = await getOrCreateConversation(u.id, friendId);
 
         const [{ data: f }, { data: msgs, error: msgErr }, { data: sessions }] = await Promise.all([
@@ -571,10 +585,14 @@ export default function ChatPage() {
         .channel(`chat-group-${groupId}`)
         .on(
           "postgres_changes",
-          { event: "INSERT", schema: "public", table: "messages" },
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `group_id=eq.${groupId}`,
+          },
           (payload) => {
             const m = payload.new;
-            if (m.group_id !== groupId) return;
             setMessages((prev) => {
               if (prev.some((x) => x.id === m.id)) return prev;
               return [...prev, m];
@@ -1176,7 +1194,7 @@ export default function ChatPage() {
     <div style={shell}>
       <div style={chatContainer}>
         <div style={header}>
-          <button onClick={() => navigate(isGroup ? "/chat" : "/messages")} style={backBtn}>
+          <button onClick={() => navigate(isGroup ? "/friends" : "/messages")} style={backBtn}>
             <FiArrowLeft size={20} />
           </button>
           <div style={headerTextWrap}>
@@ -1441,6 +1459,7 @@ export default function ChatPage() {
                 const displayName = m.display_name || m.username || m.handle || "Member";
                 const handle = m.handle || m.username || "";
                 const isSelf = mid === user?.id;
+                const isFriend = friendIds.has(mid);
                 return (
                   <li key={mid} style={memberRow}>
                     <div
@@ -1457,26 +1476,28 @@ export default function ChatPage() {
                       <span style={memberName}>{displayName}</span>
                       <span style={memberHandle}>@{handle}</span>
                     </div>
-                    <div style={memberActions}>
-                      <button type="button" style={memberActionBtn} onClick={() => { setShowMembersPanel(false); navigate(`/friend/${mid}`); }}>
-                        View profile
-                      </button>
-                      {!isSelf && (
-                        <button type="button" style={memberActionBtn} onClick={() => addFriendFromPanel(m)}>
-                          Add friend
+                    {mid !== user?.id && (
+                      <div style={memberActions}>
+                        <button type="button" style={memberActionBtn} onClick={() => { setShowMembersPanel(false); navigate(`/friend/${mid}`); }}>
+                          View profile
                         </button>
-                      )}
-                      {isGroupAdmin && !isSelf && (
-                        <button
-                          type="button"
-                          style={memberRemoveBtn}
-                          onClick={() => removeMemberFromGroup(mid)}
-                          disabled={!!removingMemberId}
-                        >
-                          {removingMemberId === mid ? "…" : "Remove"}
-                        </button>
-                      )}
-                    </div>
+                        {!isFriend && (
+                          <button type="button" style={memberActionBtn} onClick={() => addFriendFromPanel(m)}>
+                            Add friend
+                          </button>
+                        )}
+                        {isGroupAdmin && (
+                          <button
+                            type="button"
+                            style={memberRemoveBtn}
+                            onClick={() => removeMemberFromGroup(mid)}
+                            disabled={!!removingMemberId}
+                          >
+                            {removingMemberId === mid ? "…" : "Remove"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </li>
                 );
               })}
