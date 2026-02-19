@@ -382,6 +382,7 @@ export default function ChatPage() {
 
   const listRef = useRef(null);
   const holdTimer = useRef(null);
+  const lastLoadedChatKeyRef = useRef(null);
 
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -523,7 +524,11 @@ export default function ChatPage() {
           setError(msgErr.message);
           toast.error(msgErr.message);
         }
-        setMessages(msgs || []);
+        const chatKey = `group-${groupId}`;
+        if (lastLoadedChatKeyRef.current !== chatKey) {
+          setMessages(msgs || []);
+          lastLoadedChatKeyRef.current = chatKey;
+        }
         setFriend(null);
         setGameSessions([]);
       } else if (friendId) {
@@ -559,7 +564,11 @@ export default function ChatPage() {
           setError(msgErr.message);
           toast.error(msgErr.message);
         }
-        setMessages(msgs || []);
+        const chatKey = `friend-${friendId}`;
+        if (lastLoadedChatKeyRef.current !== chatKey) {
+          setMessages(msgs || []);
+          lastLoadedChatKeyRef.current = chatKey;
+        }
         setGameSessions(sessions || []);
       } else {
         setLoading(false);
@@ -595,7 +604,10 @@ export default function ChatPage() {
             const m = payload.new;
             setMessages((prev) => {
               if (prev.some((x) => x.id === m.id)) return prev;
-              return [...prev, m];
+              const withoutTemp = prev.filter(
+                (x) => !(String(x.id).startsWith("temp-") && x.sender_id === m.sender_id && x.text === m.text)
+              );
+              return [...withoutTemp, m];
             });
           }
         )
@@ -815,6 +827,17 @@ export default function ChatPage() {
 
     try {
       if (isGroup && groupId) {
+        const tempId = `temp-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: tempId,
+            group_id: groupId,
+            sender_id: user.id,
+            text: payload,
+            created_at: new Date().toISOString(),
+          },
+        ]);
         await supabase.from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
@@ -832,6 +855,9 @@ export default function ChatPage() {
       const msg = e?.message || "Send failed";
       setError(msg);
       toast.error(msg);
+      if (isGroup && groupId) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      }
     }
   }
 
