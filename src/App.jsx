@@ -17,6 +17,9 @@ import FriendProfilePage from "./pages/FriendProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
 import FriendsPage from "./pages/FriendsPage";
+import FindFriends from "./pages/FindFriends";
+import FindFriendsPage from "./pages/FindFriendsPage";
+import FindFriendsSetupPage from "./pages/FindFriendsSetupPage";
 import GroupsPage from "./pages/GroupsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
@@ -162,6 +165,8 @@ function AppContent() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/strength" element={<StrengthCalculator />} />
         <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/find-friends" element={<FindFriends />} />
+        <Route path="/find-friends/setup" element={<FindFriendsSetupPage />} />
         <Route path="/groups" element={<GroupsPage />} />
         <Route path="/messages" element={<FriendsPage />} />
         <Route path="/chat" element={<GroupsPage />} />

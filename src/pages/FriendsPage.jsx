@@ -748,6 +748,26 @@ export default function FriendsPage() {
   </button>
 </div>
 
+      <button
+        type="button"
+        onClick={() => navigate("/find-friends")}
+        style={{
+          display: "block",
+          width: "100%",
+          padding: "12px 16px",
+          marginBottom: 16,
+          borderRadius: 12,
+          border: "1px solid var(--border)",
+          background: "var(--card-2)",
+          color: "var(--text)",
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        Find Friends Nearby
+      </button>
+
       {/* ADD FRIEND */}
       <section style={card}>
         <button

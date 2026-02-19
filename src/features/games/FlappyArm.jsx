@@ -237,14 +237,55 @@ export default function FlappyArm({ game }) {
         setPhase("over");
         if (user?.id) {
           (async () => {
+            const userId = user.id;
+            const finalScore = score;
+
             const { data } = await supabase.rpc("record_flappy_arm_score", {
-              user_id: user.id,
-              score,
+              user_id: userId,
+              score: finalScore,
             });
             if (data?.is_pr === true) {
               setShowPrInOverlay(true);
               if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
             }
+
+            const gameId = game?.id;
+
+            if (gameId) {
+              await supabase.from("user_game_scores").insert({
+                user_id: userId,
+                game_id: gameId,
+                score: finalScore,
+              });
+
+              const { data: existingBest } = await supabase
+                .from("user_game_best")
+                .select("*")
+                .eq("user_id", userId)
+                .eq("game_id", gameId)
+                .maybeSingle();
+
+              if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
+                await supabase
+                  .from("user_game_best")
+                  .upsert(
+                    {
+                      user_id: userId,
+                      game_id: gameId,
+                      best_score: finalScore,
+                      updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "user_id,game_id" }
+                  );
+              }
+            }
+
+            await supabase.rpc("increment_arcade_stats", {
+              p_user_id: userId,
+              p_game_id: "flappy_arm",
+              p_score: finalScore,
+            });
+
             await loadArcadeStats(user.id);
           })();
         }

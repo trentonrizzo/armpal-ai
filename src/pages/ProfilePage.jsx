@@ -89,6 +89,17 @@ const FALLBACK_AVATAR = "https://via.placeholder.com/400";
 // Heartbeat interval for online presence.
 const PRESENCE_HEARTBEAT_MS = 30000;
 
+// Discovery profile interests (Find Friends)
+const DISCOVERY_INTERESTS = [
+  "Arm Wrestling",
+  "Powerlifting",
+  "Bodybuilding",
+  "Fitness",
+  "Gym Bro",
+  "General Training",
+  "Other",
+];
+
 // =================================================================================================
 // 3) SMALL UTILS
 // =================================================================================================
@@ -460,13 +471,17 @@ async function fetchProfileRow(userId) {
     handle: "",
     bio: "",
     avatar_url: "",
+    age: null,
+    city: "",
+    state: "",
+    interests: [],
   };
 
   const res = await safeQuery(
     async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name, handle, bio, avatar_url")
+        .select("id, display_name, handle, bio, avatar_url, age, city, state, interests")
         .eq("id", userId)
         .single();
 
@@ -704,6 +719,12 @@ export default function ProfilePage() {
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
 
+  const [discoveryAge, setDiscoveryAge] = useState("");
+  const [discoveryCity, setDiscoveryCity] = useState("");
+  const [discoveryState, setDiscoveryState] = useState("");
+  const [discoveryInterests, setDiscoveryInterests] = useState([]);
+  const [discoverySaving, setDiscoverySaving] = useState(false);
+
   const [isPublic, setIsPublic] = useState(true);
 
   // snapshot for cancel
@@ -789,6 +810,11 @@ useEffect(() => {
   setHandle(row.handle || "");
   setBio(row.bio || "");
   setAvatarUrl(row.avatar_url || "");
+
+  setDiscoveryAge(row.age != null ? String(row.age) : "");
+  setDiscoveryCity(row.city || "");
+  setDiscoveryState(row.state || "");
+  setDiscoveryInterests(Array.isArray(row.interests) ? [...row.interests] : []);
 
   setIsPublic(row.is_public !== false);
 
@@ -913,6 +939,34 @@ useEffect(() => {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveDiscovery() {
+    if (!user?.id || discoverySaving) return;
+    setDiscoverySaving(true);
+    try {
+      const ageNum = discoveryAge.trim() ? parseInt(discoveryAge, 10) : null;
+      const payload = {
+        age: ageNum >= 0 && ageNum <= 150 ? ageNum : null,
+        city: safeString(discoveryCity) || null,
+        state: safeString(discoveryState) || null,
+        interests: discoveryInterests.length > 0 ? discoveryInterests : null,
+      };
+      const { error } = await supabase.from("profiles").update(payload).eq("id", user.id);
+      if (error) throw error;
+      toast.success("Discovery profile saved");
+    } catch (e) {
+      console.error("saveDiscovery failed", e);
+      toast.error("Failed to save");
+    } finally {
+      setDiscoverySaving(false);
+    }
+  }
+
+  function toggleDiscoveryInterest(name) {
+    setDiscoveryInterests((prev) =>
+      prev.includes(name) ? prev.filter((i) => i !== name) : [...prev, name]
+    );
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -1305,6 +1359,89 @@ useEffect(() => {
   userId={user.id}
   isOwnProfile={true}
 />
+        </BigCard>
+
+        {/* =========================================================================================
+            DISCOVERY PROFILE (Find Friends)
+        ========================================================================================= */}
+
+        <BigCard>
+          <SectionTitle>Discovery Profile</SectionTitle>
+          <p style={{ fontSize: 14, color: COLORS.subtext, marginBottom: 16 }}>
+            Used for Find Friends. Age, location, and interests help others find you.
+          </p>
+          <FieldLabel>Age</FieldLabel>
+          <input
+            type="number"
+            min={1}
+            max={150}
+            value={discoveryAge}
+            onChange={(e) => setDiscoveryAge(e.target.value)}
+            placeholder="Optional"
+            style={{
+              width: "100%",
+              height: 56,
+              borderRadius: 18,
+              padding: "0 16px",
+              background: COLORS.surface2,
+              border: `1px solid ${COLORS.border2}`,
+              color: COLORS.text,
+              fontSize: 16,
+              boxSizing: "border-box",
+            }}
+          />
+          <div style={{ height: 12 }} />
+          <FieldLabel>City</FieldLabel>
+          <TextInput
+            value={discoveryCity}
+            onChange={(e) => setDiscoveryCity(e.target.value)}
+            placeholder="City"
+          />
+          <div style={{ height: 12 }} />
+          <FieldLabel>State</FieldLabel>
+          <TextInput
+            value={discoveryState}
+            onChange={(e) => setDiscoveryState(e.target.value)}
+            placeholder="State"
+          />
+          <div style={{ height: 16 }} />
+          <FieldLabel>Interests</FieldLabel>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            {DISCOVERY_INTERESTS.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => toggleDiscoveryInterest(name)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  border: `1px solid ${discoveryInterests.includes(name) ? COLORS.red : COLORS.border}`,
+                  background: discoveryInterests.includes(name) ? COLORS.red : COLORS.surface2,
+                  color: COLORS.text,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={saveDiscovery}
+            disabled={discoverySaving}
+            style={{
+              padding: "12px 20px",
+              borderRadius: 14,
+              border: "none",
+              background: COLORS.red,
+              color: COLORS.text,
+              fontWeight: 900,
+              cursor: discoverySaving ? "not-allowed" : "pointer",
+              opacity: discoverySaving ? 0.75 : 1,
+            }}
+          >
+            {discoverySaving ? "Saving…" : "Save"}
+          </button>
         </BigCard>
 
         {/* =========================================================================================
