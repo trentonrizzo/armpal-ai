@@ -4,7 +4,7 @@ import { supabase } from "../../supabaseClient";
 import { updateGameStats } from "./utils/updateGameStats";
 import { useToast } from "../../components/ToastProvider";
 import { drawFlappyArmCharacter, getVisualRotation } from "./FlappyArmCharacter";
-import { drawBarbell, drawDumbbell } from "./FlappyArmObstacles";
+import { drawVerticalBarbell } from "./FlappyArmObstacles";
 import { drawGymBackground } from "./FlappyArmBackground";
 
 const GRAVITY = 0.25;
@@ -21,7 +21,6 @@ const CANVAS_W = 360;
 const CANVAS_H = 520;
 const GROUND_Y = 440;
 const OBSTACLE_WIDTH = 56;
-const OBSTACLE_TYPES = ["barbell", "dumbbell"];
 
 export default function FlappyArm({ game }) {
   const navigate = useNavigate();
@@ -76,8 +75,6 @@ export default function FlappyArm({ game }) {
       top: { y: 0, h: gapCenter - PIPE_GAP / 2 },
       bottom: { y: gapCenter + PIPE_GAP / 2, h: CANVAS_H - (gapCenter + PIPE_GAP / 2) },
       passed: false,
-      topType: OBSTACLE_TYPES[Math.random() > 0.5 ? 0 : 1],
-      bottomType: OBSTACLE_TYPES[Math.random() > 0.5 ? 0 : 1],
     };
   }, []);
 
@@ -185,12 +182,8 @@ export default function FlappyArm({ game }) {
       ctx.fillRect(0, GROUND_Y, w, h - GROUND_Y);
 
       s.obstacles.forEach((ob) => {
-        const topType = ob.topType || "barbell";
-        const bottomType = ob.bottomType || "dumbbell";
-        if (topType === "barbell") drawBarbell(ctx, ob.x, ob.top.y, OBSTACLE_WIDTH, ob.top.h, true);
-        else drawDumbbell(ctx, ob.x, ob.top.y, OBSTACLE_WIDTH, ob.top.h, true);
-        if (bottomType === "barbell") drawBarbell(ctx, ob.x, ob.bottom.y, OBSTACLE_WIDTH, ob.bottom.h, false);
-        else drawDumbbell(ctx, ob.x, ob.bottom.y, OBSTACLE_WIDTH, ob.bottom.h, false);
+        drawVerticalBarbell(ctx, ob.x, ob.top.y, OBSTACLE_WIDTH, ob.top.h, true);
+        drawVerticalBarbell(ctx, ob.x, ob.bottom.y, OBSTACLE_WIDTH, ob.bottom.h, false);
       });
 
       const parts = s.particles || [];

@@ -1,110 +1,99 @@
 /**
- * Flappy Arm — obstacle visuals: barbell and dumbbell (chrome/steel).
- * Same gap and spawn logic; only rendering replaced.
+ * Flappy Arm — obstacles: VERTICAL BARBELL only.
+ * Olympic barbell, side profile: chrome shaft + plates (45, 25, 10).
+ * Spawn/gap/collision unchanged. No clips/collars.
  */
 
-const PLATE_HEIGHT = 8;
+const BAR_WIDTH = 6; // chrome shaft thickness (vertical bar)
+const PLATE_45_R = 14;
+const PLATE_25_R = 11;
+const PLATE_10_R = 8;
 
-function drawPlate(ctx, cx, cy, r, h) {
-  const g = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
-  g.addColorStop(0, "#1a1a1a");
-  g.addColorStop(0.3, "#4a4a4a");
-  g.addColorStop(0.5, "#7a7a7a");
-  g.addColorStop(0.7, "#4a4a4a");
-  g.addColorStop(1, "#2a2a2a");
+/**
+ * Draw one plate (side view = circle/ellipse) with metal shading.
+ */
+function drawPlate(ctx, cx, cy, radius, thickness) {
+  const g = ctx.createRadialGradient(cx - radius * 0.3, cy, 0, cx, cy, radius * 1.1);
+  g.addColorStop(0, "#6a6a6a");
+  g.addColorStop(0.25, "#9a9a9a");
+  g.addColorStop(0.5, "#c0c0c0");
+  g.addColorStop(0.75, "#7a7a7a");
+  g.addColorStop(1, "#3a3a3a");
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, r, h, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, radius, thickness, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
   ctx.lineWidth = 1;
   ctx.stroke();
 }
 
 /**
- * Draw a barbell segment (long bar + plates) in the given rect.
+ * Draw vertical Olympic barbell segment (side profile).
+ * Bar runs vertically; plates 45, 25, 10 stacked. Bar extends past plates.
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} x
- * @param {number} y
+ * @param {number} x - rect left
+ * @param {number} y - rect top
  * @param {number} w - OBSTACLE_WIDTH
  * @param {number} h - segment height
- * @param {boolean} isTop - true = top obstacle (hangs down)
+ * @param {boolean} isTop - true = segment hangs from top (bar goes down from y)
  */
-export function drawBarbell(ctx, x, y, w, h, isTop) {
+export function drawVerticalBarbell(ctx, x, y, w, h, isTop) {
   const cx = x + w / 2;
-  const barHeight = Math.min(12, h * 0.15);
-  const plateR = Math.min(w * 0.35, 20);
-  const plateW = 6;
+  const barLeft = cx - BAR_WIDTH / 2;
+  const barRight = cx + BAR_WIDTH / 2;
 
-  // Shadow under equipment
+  // Shadow under segment
   ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
-  ctx.ellipse(cx, y + h - 4, w * 0.6, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, y + h - 6, w * 0.55, 8, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   ctx.save();
 
-  // Bar — long steel
-  const barY = isTop ? y + barHeight : y + h - barHeight;
-  const barGrad = ctx.createLinearGradient(x, barY, x + w, barY);
-  barGrad.addColorStop(0, "#2a2a2a");
-  barGrad.addColorStop(0.2, "#5a5a5a");
-  barGrad.addColorStop(0.5, "#8a8a8a");
-  barGrad.addColorStop(0.8, "#5a5a5a");
-  barGrad.addColorStop(1, "#2a2a2a");
-  ctx.fillStyle = barGrad;
-  ctx.fillRect(x, barY - barHeight / 2, w, barHeight);
+  // Chrome shaft (vertical bar) — full height of segment
+  const shaftGrad = ctx.createLinearGradient(barLeft, y, barRight, y);
+  shaftGrad.addColorStop(0, "#1a1a1a");
+  shaftGrad.addColorStop(0.2, "#4a4a4a");
+  shaftGrad.addColorStop(0.5, "#8a8a8a");
+  shaftGrad.addColorStop(0.8, "#5a5a5a");
+  shaftGrad.addColorStop(1, "#2a2a2a");
+  ctx.fillStyle = shaftGrad;
+  ctx.fillRect(barLeft, y, BAR_WIDTH, h);
+  ctx.strokeStyle = "rgba(255,255,255,0.2)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barLeft, y, BAR_WIDTH, h);
 
-  // Plates at each end
-  const plateY = barY;
-  const plateLeft = x + w * 0.2;
-  const plateRight = x + w * 0.8;
-  drawPlate(ctx, plateLeft, plateY, plateR, PLATE_HEIGHT);
-  drawPlate(ctx, plateRight, plateY, plateR, PLATE_HEIGHT);
+  // Plates stacked along bar (side view = one side of bar). Order: 45, 25, 10.
+  const plateX = cx + BAR_WIDTH / 2 + 2;
+  const plateThick = 5;
+  const spacing = 4;
 
-  ctx.restore();
-}
+  if (isTop) {
+    let runY = y + Math.min(14, h * 0.15);
+    if (runY + PLATE_45_R < y + h - 6) drawPlate(ctx, plateX, runY, PLATE_45_R, plateThick);
+    runY += PLATE_45_R + spacing;
+    if (runY + PLATE_25_R < y + h - 6) drawPlate(ctx, plateX, runY, PLATE_25_R, plateThick);
+    runY += PLATE_25_R + spacing;
+    if (runY + PLATE_10_R < y + h - 6) drawPlate(ctx, plateX, runY, PLATE_10_R, plateThick);
+  } else {
+    let runY = y + h - Math.min(14, h * 0.15);
+    if (runY - PLATE_45_R > y + 6) drawPlate(ctx, plateX, runY, PLATE_45_R, plateThick);
+    runY -= PLATE_45_R + spacing;
+    if (runY - PLATE_25_R > y + 6) drawPlate(ctx, plateX, runY, PLATE_25_R, plateThick);
+    runY -= PLATE_25_R + spacing;
+    if (runY - PLATE_10_R > y + 6) drawPlate(ctx, plateX, runY, PLATE_10_R, plateThick);
+  }
 
-/**
- * Draw a dumbbell segment (shorter handle, thick plates).
- */
-export function drawDumbbell(ctx, x, y, w, h, isTop) {
-  const cx = x + w / 2;
-  const handleW = w * 0.4;
-  const handleH = Math.min(10, h * 0.12);
-  const plateR = Math.min(w * 0.4, 22);
-  const plateH = 10;
-
-  ctx.save();
-
-  // Shadow
-  ctx.fillStyle = "rgba(0,0,0,0.3)";
-  ctx.beginPath();
-  ctx.ellipse(cx, y + h - 5, w * 0.5, 8, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const barY = isTop ? y + handleH : y + h - handleH;
-  const hGrad = ctx.createLinearGradient(cx - handleW / 2, barY, cx + handleW / 2, barY);
-  hGrad.addColorStop(0, "#1a1a1a");
-  hGrad.addColorStop(0.5, "#6a6a6a");
-  hGrad.addColorStop(1, "#1a1a1a");
-  ctx.fillStyle = hGrad;
-  ctx.fillRect(cx - handleW / 2, barY - handleH / 2, handleW, handleH);
-
-  [cx - handleW / 2 - plateR * 0.5, cx + handleW / 2 + plateR * 0.5].forEach((px) => {
-    const pg = ctx.createRadialGradient(px - 4, barY, 0, px, barY, plateR);
-    pg.addColorStop(0, "#8a8a8a");
-    pg.addColorStop(0.4, "#5a5a5a");
-    pg.addColorStop(1, "#2a2a2a");
-    ctx.fillStyle = pg;
-    ctx.beginPath();
-    ctx.ellipse(px, barY, plateR * 0.6, plateH, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.2)";
-    ctx.stroke();
-  });
+  // Small bar section extending past plates (visible end of shaft)
+  ctx.fillStyle = shaftGrad;
+  if (isTop) {
+    ctx.fillRect(barLeft, y, BAR_WIDTH, 10);
+  } else {
+    ctx.fillRect(barLeft, y + h - 10, BAR_WIDTH, 10);
+  }
 
   ctx.restore();
 }
