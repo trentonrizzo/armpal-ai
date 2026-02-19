@@ -735,6 +735,13 @@ export default function FriendsPage() {
   <h1 style={title}>Friends</h1>
   <button
     type="button"
+    onClick={() => navigate("/groups")}
+    style={qrIconBtn}
+  >
+    Groups
+  </button>
+  <button
+    type="button"
     aria-label="Open QR"
     onClick={() => setShowQR(true)}
     style={qrIconBtn}

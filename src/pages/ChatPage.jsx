@@ -310,9 +310,10 @@ const normalized = normalizeSharedWorkout(share);
 // ============================================================
 
 export default function ChatPage() {
-  const { friendId } = useParams();
+  const { friendId, groupId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const isGroup = !!groupId;
 
   // ----------------------------------------------------------
   // CORE STATE
@@ -320,6 +321,14 @@ export default function ChatPage() {
 
   const [user, setUser] = useState(null);
   const [friend, setFriend] = useState(null);
+  const [group, setGroup] = useState(null);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [isGroupAdmin, setIsGroupAdmin] = useState(false);
+  const [showMembersPanel, setShowMembersPanel] = useState(false);
+  const [addMemberQuery, setAddMemberQuery] = useState("");
+  const [addMemberResults, setAddMemberResults] = useState([]);
+  const [addingMemberId, setAddingMemberId] = useState(null);
+  const [removingMemberId, setRemovingMemberId] = useState(null);
   const [messages, setMessages] = useState([]);
 
   const [text, setText] = useState("");
@@ -379,17 +388,21 @@ export default function ChatPage() {
   const activeMimeRef = useRef("");
 
   // ----------------------------------------------------------
-  // FRIEND STATUS
+  // FRIEND / GROUP STATUS
   // ----------------------------------------------------------
 
-  const friendName = friend?.display_name || friend?.username || "Chat";
+  const chatTitle = isGroup ? (group?.name || "Group") : (friend?.display_name || friend?.username || "Chat");
+  const friendName = chatTitle;
 
   const friendOnline =
+    !isGroup &&
     !!friend?.is_online &&
     friend?.last_seen &&
     Date.now() - new Date(friend.last_seen).getTime() < 60000;
 
-  const friendStatus = friendOnline
+  const friendStatus = isGroup
+    ? `${groupMembers.length} member${groupMembers.length !== 1 ? "s" : ""}`
+    : friendOnline
     ? "Online"
     : friend?.last_seen
     ? `Last seen ${timeAgo(friend.last_seen)}`
@@ -427,7 +440,7 @@ export default function ChatPage() {
   }, []);
 
   // ============================================================
-  // LOAD USER / FRIEND / MESSAGES
+  // LOAD USER / FRIEND or GROUP / MESSAGES
   // ============================================================
 
   useEffect(() => {
@@ -450,42 +463,102 @@ export default function ChatPage() {
 
       setUser(u);
 
-      const chatId = await getOrCreateConversation(u.id, friendId);
+      if (isGroup && groupId) {
+        const [
+          { data: groupRow },
+          { data: membersRows },
+          { data: adminRow },
+          { data: msgs, error: msgErr },
+        ] = await Promise.all([
+          supabase.from("chat_groups").select("*").eq("id", groupId).single(),
+          supabase.from("chat_group_members").select("user_id, role").eq("group_id", groupId),
+          supabase
+            .from("chat_group_members")
+            .select("id")
+            .eq("group_id", groupId)
+            .eq("user_id", u.id)
+            .eq("role", "admin")
+            .maybeSingle(),
+          supabase
+            .from("messages")
+            .select("*")
+            .eq("group_id", groupId)
+            .order("created_at", { ascending: true }),
+        ]);
+        if (!mounted) return;
+        setGroup(groupRow || null);
+        setIsGroupAdmin(!!adminRow?.id);
+        const memberIds = [...new Set((membersRows || []).map((r) => r.user_id).filter(Boolean))];
+        if (memberIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, username, display_name, avatar_url, handle")
+            .in("id", memberIds);
+          const profileMap = {};
+          (profiles || []).forEach((p) => (profileMap[p.id] = p));
+          setGroupMembers(
+            (membersRows || []).map((r) => ({
+              ...profileMap[r.user_id],
+              role: r.role,
+              user_id: r.user_id,
+            }))
+          );
+        } else {
+          setGroupMembers([]);
+        }
+        if (msgErr) {
+          setError(msgErr.message);
+          toast.error(msgErr.message);
+        }
+        setMessages(msgs || []);
+        setFriend(null);
+        setGameSessions([]);
+      } else if (friendId) {
+        const chatId = await getOrCreateConversation(u.id, friendId);
 
-      const [{ data: f }, { data: msgs, error: msgErr }, { data: sessions }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, username, display_name, is_online, last_seen")
-          .eq("id", friendId)
-          .single(),
-        supabase
-          .from("messages")
-          .select("*")
-          .or(
-            `and(sender_id.eq.${u.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${u.id})`
-          )
-          .order("created_at", { ascending: true }),
-        chatId
-          ? supabase.from("game_sessions").select("*").eq("chat_id", chatId).order("created_at", { ascending: false })
-          : Promise.resolve({ data: [] }),
-      ]);
+        const [{ data: f }, { data: msgs, error: msgErr }, { data: sessions }] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, username, display_name, is_online, last_seen")
+            .eq("id", friendId)
+            .single(),
+          supabase
+            .from("messages")
+            .select("*")
+            .or(
+              `and(sender_id.eq.${u.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${u.id})`
+            )
+            .is("group_id", null)
+            .order("created_at", { ascending: true }),
+          chatId
+            ? supabase.from("game_sessions").select("*").eq("chat_id", chatId).order("created_at", { ascending: false })
+            : Promise.resolve({ data: [] }),
+        ]);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      setFriend(f || null);
-      if (msgErr) {
-        setError(msgErr.message);
-        toast.error(msgErr.message);
+        setFriend(f || null);
+        setGroup(null);
+        setGroupMembers([]);
+        setIsGroupAdmin(false);
+        if (msgErr) {
+          setError(msgErr.message);
+          toast.error(msgErr.message);
+        }
+        setMessages(msgs || []);
+        setGameSessions(sessions || []);
+      } else {
+        setLoading(false);
+        return;
       }
-      setMessages(msgs || []);
-      setGameSessions(sessions || []);
+
       setLoading(false);
     })();
 
     return () => {
       mounted = false;
     };
-  }, [friendId]);
+  }, [friendId, groupId, isGroup]);
 
   // ============================================================
   // REALTIME INSERTS
@@ -493,31 +566,50 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!user) return;
+    if (isGroup && groupId) {
+      const channel = supabase
+        .channel(`chat-group-${groupId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "messages" },
+          (payload) => {
+            const m = payload.new;
+            if (m.group_id !== groupId) return;
+            setMessages((prev) => {
+              if (prev.some((x) => x.id === m.id)) return prev;
+              return [...prev, m];
+            });
+          }
+        )
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    }
+    if (friendId) {
+      const channel = supabase
+        .channel(`chat-${user.id}-${friendId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "messages" },
+          (payload) => {
+            const m = payload.new;
 
-    const channel = supabase
-      .channel(`chat-${user.id}-${friendId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-          const m = payload.new;
+            const valid =
+              (m.sender_id === user.id && m.receiver_id === friendId) ||
+              (m.sender_id === friendId && m.receiver_id === user.id);
 
-          const valid =
-            (m.sender_id === user.id && m.receiver_id === friendId) ||
-            (m.sender_id === friendId && m.receiver_id === user.id);
+            if (!valid) return;
 
-          if (!valid) return;
+            setMessages((prev) => {
+              if (prev.some((x) => x.id === m.id)) return prev;
+              return [...prev, m];
+            });
+          }
+        )
+        .subscribe();
 
-          setMessages((prev) => {
-            if (prev.some((x) => x.id === m.id)) return prev;
-            return [...prev, m];
-          });
-        }
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [user, friendId]);
+      return () => supabase.removeChannel(channel);
+    }
+  }, [user, friendId, groupId, isGroup]);
 
   // ============================================================
   // AUTOSCROLL
@@ -693,6 +785,8 @@ export default function ChatPage() {
   // SEND TEXT
   // ============================================================
 
+  const chatIdForStorage = isGroup ? groupId : friendId;
+
   async function sendMessage() {
     if (!user?.id) return;
     if (!text.trim()) return;
@@ -704,7 +798,8 @@ export default function ChatPage() {
     try {
       await supabase.from("messages").insert({
         sender_id: user.id,
-        receiver_id: friendId,
+        receiver_id: isGroup ? null : friendId,
+        group_id: isGroup ? groupId : null,
         text: payload,
       });
     } catch (e) {
@@ -724,7 +819,7 @@ export default function ChatPage() {
     setError("");
 
     try {
-      const path = imagePath(friendId, user.id, file.name);
+      const path = imagePath(chatIdForStorage, user.id, file.name);
 
       const { error: uploadErr } = await supabase.storage
         .from(BUCKET_IMAGES)
@@ -746,7 +841,8 @@ export default function ChatPage() {
 
       await supabase.from("messages").insert({
         sender_id: user.id,
-        receiver_id: friendId,
+        receiver_id: isGroup ? null : friendId,
+        group_id: isGroup ? groupId : null,
         image_url: data.publicUrl,
       });
     } catch (e) {
@@ -766,7 +862,7 @@ export default function ChatPage() {
     setError("");
 
     try {
-      const path = videoPath(friendId, user.id, file.name);
+      const path = videoPath(chatIdForStorage, user.id, file.name);
 
       const contentType = file.type || "video/mp4";
 
@@ -794,7 +890,8 @@ export default function ChatPage() {
       // Insert message with video_url EXACTLY like your base file expects.
       await supabase.from("messages").insert({
         sender_id: user.id,
-        receiver_id: friendId,
+        receiver_id: isGroup ? null : friendId,
+        group_id: isGroup ? groupId : null,
         video_url: data.publicUrl,
       });
     } catch (e) {
@@ -907,7 +1004,7 @@ export default function ChatPage() {
     try {
       const mime = recordedBlob.type || activeMimeRef.current || "";
       const ext = fileExtFromMime(mime);
-      const path = audioPath(friendId, user.id, ext);
+      const path = audioPath(chatIdForStorage, user.id, ext);
 
       const { error: uploadErr } = await supabase.storage
         .from(BUCKET_AUDIO)
@@ -934,7 +1031,8 @@ export default function ChatPage() {
 
       await supabase.from("messages").insert({
         sender_id: user.id,
-        receiver_id: friendId,
+        receiver_id: isGroup ? null : friendId,
+        group_id: isGroup ? groupId : null,
         audio_url: data.publicUrl,
         audio_duration: recordDuration,
       });
@@ -983,6 +1081,81 @@ export default function ChatPage() {
   }
 
   // ============================================================
+  // GROUP MEMBERS: ADD / REMOVE / ADD FRIEND
+  // ============================================================
+
+  async function searchAddMember() {
+    const q = addMemberQuery.trim().replace(/^@/, "");
+    if (!q || !user?.id) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username, display_name, handle, avatar_url")
+      .ilike("handle", `%${q}%`)
+      .limit(10);
+    setAddMemberResults(data || []);
+  }
+
+  async function addMemberToGroup(profile) {
+    if (!groupId || !user?.id || !isGroupAdmin || addingMemberId) return;
+    if (profile.id === user.id) return;
+    if (groupMembers.some((m) => m.id === profile.id)) {
+      toast.error("Already in group");
+      return;
+    }
+    setAddingMemberId(profile.id);
+    try {
+      const { error } = await supabase.from("chat_group_members").insert({
+        group_id: groupId,
+        user_id: profile.id,
+        role: "member",
+        added_by: user.id,
+      });
+      if (error) throw error;
+      setGroupMembers((prev) => [...prev, { ...profile, role: "member", user_id: profile.id }]);
+      setAddMemberQuery("");
+      setAddMemberResults([]);
+      toast.success("Member added");
+    } catch (e) {
+      toast.error(e?.message || "Could not add member");
+    }
+    setAddingMemberId(null);
+  }
+
+  async function removeMemberFromGroup(memberUserId) {
+    if (!groupId || !user?.id || !isGroupAdmin || removingMemberId) return;
+    if (memberUserId === user.id) return;
+    setRemovingMemberId(memberUserId);
+    try {
+      const { error } = await supabase
+        .from("chat_group_members")
+        .delete()
+        .eq("group_id", groupId)
+        .eq("user_id", memberUserId);
+      if (error) throw error;
+      setGroupMembers((prev) => prev.filter((m) => m.user_id !== memberUserId && m.id !== memberUserId));
+      toast.success("Member removed");
+    } catch (e) {
+      toast.error(e?.message || "Could not remove member");
+    }
+    setRemovingMemberId(null);
+  }
+
+  async function addFriendFromPanel(profile) {
+    if (!user?.id || !profile?.id || profile.id === user.id) return;
+    try {
+      const { error } = await supabase.from("friend_requests").insert({
+        sender_id: user.id,
+        receiver_id: profile.id,
+        status: "pending",
+      });
+      if (error) throw error;
+      toast.success("Friend request sent");
+    } catch (e) {
+      toast.error(e?.message || "Could not send request");
+    }
+  }
+
+  // ============================================================
   // RENDER
   // ============================================================
 
@@ -1006,19 +1179,24 @@ export default function ChatPage() {
     <div style={shell}>
       <div style={chatContainer}>
         <div style={header}>
-          <button onClick={() => navigate("/friends")} style={backBtn}>
+          <button onClick={() => navigate(isGroup ? "/groups" : "/friends")} style={backBtn}>
             <FiArrowLeft size={20} />
           </button>
           <div style={headerTextWrap}>
             <strong style={headerName}>{friendName}</strong>
             {friendStatus && <span style={friendStatusText}>{friendStatus}</span>}
           </div>
+          {isGroup && (
+            <button type="button" onClick={() => setShowMembersPanel(true)} style={membersBtn} aria-label="Members">
+              👥
+            </button>
+          )}
         </div>
 
         <div ref={listRef} style={messagesContainer}>
         {error && <div style={errBox}>{error}</div>}
 
-        {gameSessions.length > 0 && (
+        {!isGroup && gameSessions.length > 0 && (
           <div style={gameCardsWrap}>
             {gameSessions.map((s) => (
               <div key={s.id} style={gameCard}>
@@ -1215,6 +1393,101 @@ export default function ChatPage() {
         </div>
       )}
 
+      {isGroup && showMembersPanel && (
+        <div style={membersPanelBackdrop} onClick={() => setShowMembersPanel(false)}>
+          <div style={membersPanel} onClick={(e) => e.stopPropagation()}>
+            <div style={membersPanelHeader}>
+              <strong style={membersPanelTitle}>Members</strong>
+              <button type="button" onClick={() => setShowMembersPanel(false)} style={membersPanelClose}>×</button>
+            </div>
+            {isGroupAdmin && (
+              <div style={addMemberWrap}>
+                <input
+                  type="text"
+                  value={addMemberQuery}
+                  onChange={(e) => setAddMemberQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && searchAddMember()}
+                  placeholder="Search by @handle to add"
+                  style={addMemberInput}
+                />
+                <button type="button" onClick={searchAddMember} style={addMemberSearchBtn}>Search</button>
+                {addMemberResults.length > 0 && (
+                  <ul style={addMemberResultsList}>
+                    {addMemberResults.map((p) => {
+                      const inGroup = groupMembers.some((m) => (m.id || m.user_id) === p.id);
+                      return (
+                        <li key={p.id} style={addMemberResultRow}>
+                          <span style={addMemberResultName}>{p.display_name || p.username || p.handle || p.id}</span>
+                          <span style={addMemberResultHandle}>@{p.handle || p.username || ""}</span>
+                          {inGroup ? (
+                            <span style={mutedSmall}>In group</span>
+                          ) : (
+                            <button
+                              type="button"
+                              style={addMemberAddBtn}
+                              onClick={() => addMemberToGroup(p)}
+                              disabled={addingMemberId === p.id}
+                            >
+                              {addingMemberId === p.id ? "Adding…" : "Add"}
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+            <ul style={membersList}>
+              {groupMembers.map((m) => {
+                const mid = m.id || m.user_id;
+                const displayName = m.display_name || m.username || m.handle || "Member";
+                const handle = m.handle || m.username || "";
+                const isSelf = mid === user?.id;
+                return (
+                  <li key={mid} style={memberRow}>
+                    <div
+                      style={memberAvatar}
+                      onClick={() => { setShowMembersPanel(false); navigate(`/friend/${mid}`); }}
+                    >
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                      ) : (
+                        (displayName || "?").trim().charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div style={memberInfo}>
+                      <span style={memberName}>{displayName}</span>
+                      <span style={memberHandle}>@{handle}</span>
+                    </div>
+                    <div style={memberActions}>
+                      <button type="button" style={memberActionBtn} onClick={() => { setShowMembersPanel(false); navigate(`/friend/${mid}`); }}>
+                        View profile
+                      </button>
+                      {!isSelf && (
+                        <button type="button" style={memberActionBtn} onClick={() => addFriendFromPanel(m)}>
+                          Add friend
+                        </button>
+                      )}
+                      {isGroupAdmin && !isSelf && (
+                        <button
+                          type="button"
+                          style={memberRemoveBtn}
+                          onClick={() => removeMemberFromGroup(mid)}
+                          disabled={!!removingMemberId}
+                        >
+                          {removingMemberId === mid ? "…" : "Remove"}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {imageView && (
         <div style={imageOverlay} onClick={() => setImageView(null)}>
           <img src={imageView} style={imageFull} alt="" />
@@ -1326,6 +1599,21 @@ const backBtn = {
   borderStyle: "none",
   borderWidth: 0,
   color: "var(--text)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const membersBtn = {
+  marginLeft: "auto",
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  background: "rgba(255,255,255,0.2)",
+  border: "none",
+  color: "var(--text)",
+  fontSize: 18,
+  cursor: "pointer",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -1760,3 +2048,68 @@ const gameSessionCardBtn = {
   fontWeight: 700,
   cursor: "pointer",
 };
+
+const membersPanelBackdrop = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.5)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+};
+const membersPanel = {
+  background: "var(--card)",
+  borderRadius: 16,
+  padding: 16,
+  maxWidth: 400,
+  width: "100%",
+  maxHeight: "85vh",
+  overflowY: "auto",
+};
+const membersPanelHeader = { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 };
+const membersPanelTitle = { fontSize: 18, fontWeight: 800, color: "var(--text)" };
+const membersPanelClose = { background: "none", border: "none", fontSize: 24, color: "var(--text)", cursor: "pointer", padding: "0 4px" };
+const addMemberWrap = { marginBottom: 16 };
+const addMemberInput = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "8px 12px",
+  marginBottom: 8,
+  border: "1px solid var(--border)",
+  borderRadius: 10,
+  background: "var(--bg)",
+  color: "var(--text)",
+  fontSize: 14,
+};
+const addMemberSearchBtn = { padding: "6px 12px", borderRadius: 8, border: "none", background: "var(--accent)", color: "var(--text)", fontWeight: 700, cursor: "pointer", marginBottom: 8 };
+const addMemberResultsList = { listStyle: "none", margin: 0, padding: 0 };
+const addMemberResultRow = { display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--border)", flexWrap: "wrap" };
+const addMemberResultName = { fontWeight: 700, color: "var(--text)" };
+const addMemberResultHandle = { fontSize: 12, opacity: 0.8 };
+const addMemberAddBtn = { marginLeft: "auto", padding: "4px 10px", borderRadius: 8, border: "none", background: "var(--accent)", color: "var(--text)", fontSize: 12, fontWeight: 700, cursor: "pointer" };
+const mutedSmall = { fontSize: 12, opacity: 0.7 };
+const membersList = { listStyle: "none", margin: 0, padding: 0 };
+const memberRow = { display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid var(--border)" };
+const memberAvatar = {
+  width: 44,
+  height: 44,
+  borderRadius: "50%",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 18,
+  fontWeight: 800,
+  flexShrink: 0,
+  overflow: "hidden",
+  cursor: "pointer",
+};
+const memberInfo = { flex: 1, minWidth: 0 };
+const memberName = { display: "block", fontWeight: 700, color: "var(--text)", fontSize: 14 };
+const memberHandle = { display: "block", fontSize: 12, opacity: 0.8 };
+const memberActions = { display: "flex", flexWrap: "wrap", gap: 6 };
+const memberActionBtn = { padding: "4px 10px", borderRadius: 8, border: "none", background: "var(--accent)", color: "var(--text)", fontSize: 12, fontWeight: 700, cursor: "pointer" };
+const memberRemoveBtn = { padding: "4px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text-dim)", fontSize: 12, cursor: "pointer" };

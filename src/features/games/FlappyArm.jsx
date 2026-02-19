@@ -3,20 +3,25 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { updateGameStats } from "./utils/updateGameStats";
 import { useToast } from "../../components/ToastProvider";
+import { drawFlappyArmCharacter, getVisualRotation } from "./FlappyArmCharacter";
+import { drawBarbell, drawDumbbell } from "./FlappyArmObstacles";
+import { drawGymBackground } from "./FlappyArmBackground";
 
 const GRAVITY = 0.25;
 const JUMP_FORCE = -6;
 const VELOCITY_CLAMP = [-6, 6];
-const PIPE_SPEED = 1.6;
+const BASE_SCROLL_SPEED = 1.6;
+const SCROLL_SPEED_MULTIPLIER = 1.12;
+const PIPE_SPEED = BASE_SCROLL_SPEED * SCROLL_SPEED_MULTIPLIER;
 const PIPE_SPACING = 260;
 const PIPE_GAP = 220;
 const GRACE_MS = 800;
-const PLAYER = { emoji: "💪", size: 36, rotationOnJump: -15 };
+const PLAYER = { size: 36, rotationOnJump: -15 };
 const CANVAS_W = 360;
 const CANVAS_H = 520;
 const GROUND_Y = 440;
 const OBSTACLE_WIDTH = 56;
-const OBSTACLE_EMOJI = ["🏋️", "🏋"];
+const OBSTACLE_TYPES = ["barbell", "dumbbell"];
 
 export default function FlappyArm({ game }) {
   const navigate = useNavigate();
@@ -66,13 +71,13 @@ export default function FlappyArm({ game }) {
 
   const spawnObstacle = useCallback((x) => {
     const gapCenter = 120 + Math.random() * (GROUND_Y - 240);
-    const emoji = OBSTACLE_EMOJI[Math.random() > 0.5 ? 0 : 1];
     return {
       x,
       top: { y: 0, h: gapCenter - PIPE_GAP / 2 },
       bottom: { y: gapCenter + PIPE_GAP / 2, h: CANVAS_H - (gapCenter + PIPE_GAP / 2) },
       passed: false,
-      emoji,
+      topType: OBSTACLE_TYPES[Math.random() > 0.5 ? 0 : 1],
+      bottomType: OBSTACLE_TYPES[Math.random() > 0.5 ? 0 : 1],
     };
   }, []);
 
@@ -89,6 +94,11 @@ export default function FlappyArm({ game }) {
       started: false,
       obstacles: [],
       lastSpawnX: CANVAS_W + OBSTACLE_WIDTH,
+      totalScroll: 0,
+      prevY: centerY,
+      prevRot: 0,
+      particles: [],
+      shakeRemaining: 0,
     };
   }, []);
 
@@ -126,11 +136,23 @@ export default function FlappyArm({ game }) {
       s.y = Math.max(20, Math.min(GROUND_Y - PLAYER.size - 4, s.y));
 
       if (s.started) {
+        s.totalScroll = (s.totalScroll || 0) + PIPE_SPEED;
         s.obstacles.forEach((ob) => {
           ob.x -= PIPE_SPEED;
           if (!ob.passed && ob.x + OBSTACLE_WIDTH < playerCenterX - playerHalf) {
             ob.passed = true;
             setScore((prev) => prev + 1);
+            s.shakeRemaining = 8;
+            const py = s.y + playerHalf;
+            for (let i = 0; i < 6; i++) {
+              s.particles.push({
+                x: playerCenterX,
+                y: py,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                life: 0.4 + Math.random() * 0.3,
+              });
+            }
           }
         });
         s.obstacles = s.obstacles.filter((o) => o.x > -OBSTACLE_WIDTH);
@@ -140,28 +162,67 @@ export default function FlappyArm({ game }) {
         }
       }
 
-      ctx.fillStyle = "#0a0a0a";
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = "var(--card-2)";
+      const visualRot = getVisualRotation(s.vy, s.rotation);
+      const smoothFactor = 0.35;
+      s.prevY = s.prevY !== undefined ? s.prevY + (s.y - s.prevY) * smoothFactor : s.y;
+      s.prevRot = s.prevRot !== undefined ? s.prevRot + (visualRot - s.prevRot) * smoothFactor : visualRot;
+
+      let shakeX = 0;
+      let shakeY = 0;
+      if (s.shakeRemaining > 0) {
+        shakeX = (Math.random() - 0.5) * 2.5;
+        shakeY = (Math.random() - 0.5) * 2.5;
+        s.shakeRemaining--;
+      }
+
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+
+      const timeSec = now / 1000;
+      drawGymBackground(ctx, w, h, GROUND_Y, s.totalScroll || 0, PIPE_SPEED, timeSec);
+
+      ctx.fillStyle = "#1a1a1a";
       ctx.fillRect(0, GROUND_Y, w, h - GROUND_Y);
 
       s.obstacles.forEach((ob) => {
-        ctx.fillStyle = "rgba(255,255,255,0.08)";
-        ctx.fillRect(ob.x, ob.top.y, OBSTACLE_WIDTH, ob.top.h);
-        ctx.fillRect(ob.x, ob.bottom.y, OBSTACLE_WIDTH, ob.bottom.h);
-        ctx.font = "32px system-ui, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(ob.emoji, ob.x + OBSTACLE_WIDTH / 2, ob.top.h - 24);
-        ctx.fillText(ob.emoji, ob.x + OBSTACLE_WIDTH / 2, ob.bottom.y + 40);
+        const topType = ob.topType || "barbell";
+        const bottomType = ob.bottomType || "dumbbell";
+        if (topType === "barbell") drawBarbell(ctx, ob.x, ob.top.y, OBSTACLE_WIDTH, ob.top.h, true);
+        else drawDumbbell(ctx, ob.x, ob.top.y, OBSTACLE_WIDTH, ob.top.h, true);
+        if (bottomType === "barbell") drawBarbell(ctx, ob.x, ob.bottom.y, OBSTACLE_WIDTH, ob.bottom.h, false);
+        else drawDumbbell(ctx, ob.x, ob.bottom.y, OBSTACLE_WIDTH, ob.bottom.h, false);
       });
 
-      ctx.save();
-      ctx.translate(playerCenterX, s.y + playerHalf);
-      ctx.rotate((s.rotation * Math.PI) / 180);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = `${PLAYER.size}px system-ui, sans-serif`;
-      ctx.fillText(PLAYER.emoji, 0, 0);
+      const parts = s.particles || [];
+      s.particles = [];
+      parts.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.016;
+        if (p.life > 0) s.particles.push(p);
+      });
+      s.particles.forEach((p) => {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+
+      const hoverY = s.started ? 0 : Math.sin(timeSec * 2) * 2;
+      const drawY = s.prevY + playerHalf;
+
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(playerCenterX, drawY + 4, playerHalf * 0.9, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawFlappyArmCharacter(ctx, playerCenterX, drawY, s.prevRot, {
+        size: PLAYER.size,
+        hoverY,
+      });
+
       ctx.restore();
 
       const px = playerCenterX;

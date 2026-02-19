@@ -2,19 +2,44 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isUuid(value) {
+  return typeof value === "string" && UUID_REGEX.test(value);
+}
+
 export default function Leaderboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const gameId = searchParams.get("game_id");
+  const gameIdParam = searchParams.get("game_id");
+  const gameTypeParam = searchParams.get("game_type");
   const [game, setGame] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const lowerIsBetter = game?.game_type === "reaction_test" || game?.game_type === "reaction_speed";
 
+  // Resolve game: fetch by id (UUID) or by game_type from games table; never use string as game_id
+  useEffect(() => {
+    const key = gameIdParam || gameTypeParam;
+    if (!key) {
+      setLoading(false);
+      setGame(null);
+      return;
+    }
+    let alive = true;
+    const promise = isUuid(gameIdParam)
+      ? supabase.from("games").select("*").eq("id", gameIdParam).single()
+      : supabase.from("games").select("*").eq("game_type", gameTypeParam || gameIdParam).maybeSingle();
+    promise.then(({ data }) => {
+      if (alive) setGame(data || null);
+      if (alive) setLoading(false);
+    });
+    return () => { alive = false; };
+  }, [gameIdParam, gameTypeParam]);
+
+  const resolvedGameId = game?.id ?? null;
+
   const fetchLeaderboard = useCallback(async () => {
-    if (!gameId) return;
-    const effectiveGameId = game?.id || game?.game_id || gameId;
-    console.log("game_id for leaderboard:", effectiveGameId, "(game.id:", game?.id, ", gameId from URL:", gameId, ")");
+    if (!resolvedGameId) return;
     const order = lowerIsBetter ? { ascending: true } : { ascending: false };
     const { data, error } = await supabase
       .from("game_leaderboard")
@@ -25,45 +50,33 @@ export default function Leaderboard() {
         created_at,
         profiles(display_name, username)
       `)
-      .eq("game_id", effectiveGameId)
+      .eq("game_id", resolvedGameId)
       .order("score", order)
       .limit(100);
     if (error) console.error("Leaderboard fetch error:", error);
     setEntries(data ?? []);
-  }, [gameId, game?.id, game?.game_id, lowerIsBetter]);
+  }, [resolvedGameId, lowerIsBetter]);
 
   useEffect(() => {
-    if (!gameId) {
-      setLoading(false);
-      return;
-    }
-    let alive = true;
-    supabase.from("games").select("*").eq("id", gameId).single().then(({ data }) => {
-      if (alive) setGame(data || null);
-      if (alive) setLoading(false);
-    });
-    return () => { alive = false; };
-  }, [gameId]);
-
-  useEffect(() => {
-    if (!gameId) return;
+    if (!resolvedGameId) return;
     fetchLeaderboard();
-  }, [gameId, game?.game_type]);
+  }, [resolvedGameId, fetchLeaderboard]);
 
+  // Realtime: subscribe using resolved game_id UUID so leaderboard updates after new score
   useEffect(() => {
-    if (!gameId) return;
+    if (!resolvedGameId) return;
     const channel = supabase
-      .channel("leaderboard")
+      .channel(`leaderboard-${resolvedGameId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "game_leaderboard", filter: `game_id=eq.${gameId}` },
+        { event: "*", schema: "public", table: "game_leaderboard", filter: `game_id=eq.${resolvedGameId}` },
         fetchLeaderboard
       )
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [gameId, fetchLeaderboard]);
+  }, [resolvedGameId, fetchLeaderboard]);
 
-  if (!gameId) {
+  if (!gameIdParam && !gameTypeParam) {
     return (
       <div style={styles.wrap}>
         <button type="button" onClick={() => navigate("/games")} style={styles.backBtn}>← Games</button>
