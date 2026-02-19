@@ -11,7 +11,7 @@ export async function enablePush(userId) {
   console.log("Starting manual push enable");
 
   await OneSignal.init({
-    appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
+    appId: "PUT_REAL_APP_ID_HERE",
     notifyButton: { enable: false },
   });
 
