@@ -839,11 +839,12 @@ export default function ChatPage() {
             created_at: new Date().toISOString(),
           },
         ]);
-        await supabase.schema("public").from("group_messages").insert({
+        const { error: groupMsgErr } = await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           text: payload,
         });
+        if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
         await supabase.from("messages").insert({
           sender_id: user.id,
@@ -893,11 +894,12 @@ export default function ChatPage() {
       }
 
       if (isGroup && groupId) {
-        await supabase.schema("public").from("group_messages").insert({
+        const { error: groupMsgErr } = await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           image_url: data.publicUrl,
         });
+        if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
         await supabase.from("messages").insert({
           sender_id: user.id,
@@ -949,11 +951,12 @@ export default function ChatPage() {
       }
 
       if (isGroup && groupId) {
-        await supabase.schema("public").from("group_messages").insert({
+        const { error: groupMsgErr } = await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           video_url: data.publicUrl,
         });
+        if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
         await supabase.from("messages").insert({
           sender_id: user.id,
@@ -1098,12 +1101,13 @@ export default function ChatPage() {
       }
 
       if (isGroup && groupId) {
-        await supabase.schema("public").from("group_messages").insert({
+        const { error: groupMsgErr } = await supabase.schema("public").from("group_messages").insert({
           group_id: groupId,
           sender_id: user.id,
           audio_url: data.publicUrl,
           audio_duration: recordDuration,
         });
+        if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
         await supabase.from("messages").insert({
           sender_id: user.id,
