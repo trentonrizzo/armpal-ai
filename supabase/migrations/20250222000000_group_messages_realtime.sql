@@ -34,4 +34,14 @@ CREATE POLICY "Allow delete own group message"
   TO authenticated
   USING (sender_id = auth.uid());
 
-ALTER PUBLICATION supabase_realtime ADD TABLE group_messages;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+    AND tablename = 'group_messages'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE group_messages;
+  END IF;
+END $$;

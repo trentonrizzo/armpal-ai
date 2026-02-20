@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS public.arena_player_stats (
   updated_at timestamptz DEFAULT now() NOT NULL
 );
 
-CREATE OR REPLACE VIEW public.arena_leaderboard AS
+DROP VIEW IF EXISTS public.arena_leaderboard CASCADE;
+CREATE VIEW public.arena_leaderboard AS
 SELECT
   s.user_id,
   p.display_name,
