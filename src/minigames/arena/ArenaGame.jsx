@@ -29,6 +29,9 @@ import { endMatch, updateMatchPlayerKillsDeaths, persistMatchResult } from "./ar
 const ARENA_HALF = 12;
 const WALL_H = 4;
 const HEAD_HEIGHT = 1.6;
+const HEAD_HEIGHT_CROUCH = 1.0;
+const PITCH_MIN = (-80 * Math.PI) / 180;
+const PITCH_MAX = (80 * Math.PI) / 180;
 const SPAWN1 = new Vector3(-6, 0, -6);
 const SPAWN2 = new Vector3(6, 0, 6);
 const HIT_DAMAGE = 20;
@@ -41,6 +44,32 @@ const SPRINT_MULT = 1.5;
 const JUMP_FORCE = 8;
 const GRAVITY = -24;
 const REMOTE_LERP = 0.2;
+
+function createBlockCharacter(scene, name, isRemote) {
+  const body = MeshBuilder.CreateBox(name + "Body", { width: 0.5, height: 0.9, depth: 0.3 }, scene);
+  body.position.y = 0.45;
+  const head = MeshBuilder.CreateBox(name + "Head", { width: 0.4, height: 0.4, depth: 0.4 }, scene);
+  head.position.y = 1.15;
+  head.parent = body;
+  const legL = MeshBuilder.CreateBox(name + "LegL", { width: 0.2, height: 0.4, depth: 0.25 }, scene);
+  legL.position.set(-0.15, 0.2, 0);
+  legL.parent = body;
+  const legR = MeshBuilder.CreateBox(name + "LegR", { width: 0.2, height: 0.4, depth: 0.25 }, scene);
+  legR.position.set(0.15, 0.2, 0);
+  legR.parent = body;
+  const mat = new StandardMaterial(name + "Mat", scene);
+  mat.diffuseColor = isRemote ? new Color3(0.5, 0.12, 0.12) : new Color3(0.4, 0.4, 0.45);
+  if (isRemote) mat.emissiveColor = new Color3(0.12, 0, 0);
+  body.material = mat;
+  head.material = mat.clone(name + "HeadMat");
+  legL.material = mat.clone(name + "LegLMat");
+  legR.material = mat.clone(name + "LegRMat");
+  body.checkCollisions = true;
+  body.ellipsoid = new Vector3(0.35, 0.9, 0.35);
+  body.ellipsoidOffset = new Vector3(0, 0.9, 0);
+  if (!isRemote) body.isVisible = false;
+  return body;
+}
 
 const loadingStyle = {
   position: "relative",
@@ -86,9 +115,12 @@ export default function ArenaGame({
   const lastShotRef = useRef(0);
   const moveInputRef = useRef({ x: 0, z: 0 });
   const keysRef = useRef({ w: false, a: false, s: false, d: false, shift: false, space: false });
+  const crouchRef = useRef(false);
   const lookRef = useRef({ yaw: 0, pitch: 0 });
   const velocityYRef = useRef(0);
   const groundedRef = useRef(false);
+  const recoilPitchRef = useRef(0);
+  const [crosshairRecoil, setCrosshairRecoil] = useState(false);
   const remoteTargetRef = useRef({ x: 0, y: 0, z: 0, rotY: 0 });
   const killsRef = useRef(0);
   const enemyKillsRef = useRef(0);
@@ -114,11 +146,11 @@ export default function ArenaGame({
   const onLookDelta = useCallback(
     (dx, dy) => {
       const mul = touchSens * 0.003;
-      lookRef.current.yaw -= dx * mul * (sensX / 0.002);
-      const pitchDelta = dy * mul * (sensY / 0.002);
+      lookRef.current.yaw += dx * mul * (sensX / 0.002);
+      const pitchDelta = (invertY ? dy : -dy) * mul * (sensY / 0.002);
       lookRef.current.pitch = Math.max(
-        -0.85,
-        Math.min(0.85, lookRef.current.pitch + (invertY ? pitchDelta : -pitchDelta))
+        PITCH_MIN,
+        Math.min(PITCH_MAX, lookRef.current.pitch + pitchDelta)
       );
     },
     [touchSens, sensX, sensY, invertY]
@@ -194,22 +226,13 @@ export default function ArenaGame({
       platform.material = platformMat;
       platform.checkCollisions = true;
 
-      const capsuleOpts = { height: 1.8, radius: 0.35 };
-      const localCapsule = MeshBuilder.CreateCapsule("localPlayer", capsuleOpts, scene);
-      localCapsule.position.copyFrom(mySlot === 1 ? SPAWN1 : SPAWN2);
-      localCapsule.isVisible = false;
-      localCapsule.checkCollisions = true;
-      localCapsule.ellipsoid = new Vector3(0.35, 0.9, 0.35);
-      localCapsule.ellipsoidOffset = new Vector3(0, 0.9, 0);
-      localMeshRef.current = localCapsule;
+      const localPlayer = createBlockCharacter(scene, "localPlayer", false);
+      localPlayer.position.copyFrom(mySlot === 1 ? SPAWN1 : SPAWN2);
+      localMeshRef.current = localPlayer;
 
-      const remoteCapsule = MeshBuilder.CreateCapsule("remotePlayer", capsuleOpts, scene);
-      remoteCapsule.position.copyFrom(mySlot === 1 ? SPAWN2 : SPAWN1);
-      const remoteMat = new StandardMaterial("remoteMat", scene);
-      remoteMat.diffuseColor = new Color3(0.5, 0.12, 0.12);
-      remoteMat.emissiveColor = new Color3(0.12, 0, 0);
-      remoteCapsule.material = remoteMat;
-      remoteMeshRef.current = remoteCapsule;
+      const remotePlayer = createBlockCharacter(scene, "remotePlayer", true);
+      remotePlayer.position.copyFrom(mySlot === 1 ? SPAWN2 : SPAWN1);
+      remoteMeshRef.current = remotePlayer;
 
       const moveSpeed = MOVE_SPEED;
       scene.onBeforeRenderObservable.add(() => {
@@ -232,7 +255,8 @@ export default function ArenaGame({
             vz /= len;
           }
           const sprint = (sprintToggle ? k.shift : true) ? (k.shift ? SPRINT_MULT : 1) : 1;
-          const speed = moveSpeed * sprint * dt;
+          const crouchMult = crouchRef.current ? 0.8 : 1;
+          const speed = moveSpeed * sprint * crouchMult * dt;
           const yaw = lookRef.current.yaw;
           const fwd = new Vector3(Math.sin(yaw), 0, Math.cos(yaw));
           const right = new Vector3(fwd.z, 0, -fwd.x);
@@ -251,10 +275,12 @@ export default function ArenaGame({
           }
         }
 
-        const headPos = local.position.clone().add(new Vector3(0, HEAD_HEIGHT, 0));
+        recoilPitchRef.current *= 0.92;
+        const headY = crouchRef.current ? HEAD_HEIGHT_CROUCH : HEAD_HEIGHT;
+        const headPos = local.position.clone().add(new Vector3(0, headY, 0));
         cam.position.copyFrom(headPos);
         const yaw = lookRef.current.yaw;
-        const pitch = lookRef.current.pitch;
+        const pitch = lookRef.current.pitch - recoilPitchRef.current;
         const fwd = new Vector3(
           Math.sin(yaw) * Math.cos(pitch),
           -Math.sin(pitch),
@@ -274,6 +300,11 @@ export default function ArenaGame({
 
       engine.runRenderLoop(() => scene.render());
       window.addEventListener("resize", () => engine.resize());
+      setTimeout(() => {
+        if (canvasRef.current && document.pointerLockElement !== canvasRef.current) {
+          canvasRef.current.requestPointerLock();
+        }
+      }, 100);
       return () => {
         window.removeEventListener("resize", () => engine.resize());
         scene.dispose();
@@ -295,6 +326,7 @@ export default function ArenaGame({
         case "KeyD": k.d = down; break;
         case "ShiftLeft": case "ShiftRight": k.shift = down; break;
         case "Space": e.preventDefault(); k.space = down; break;
+        case "KeyC": if (down) crouchRef.current = !crouchRef.current; break;
         default: break;
       }
     };
@@ -320,11 +352,12 @@ export default function ArenaGame({
           x: dead(p.axes[0]) * gamepadSens,
           z: -dead(p.axes[1]) * gamepadSens,
         };
-        lookRef.current.yaw -= dead(p.axes[2]) * 0.02 * gamepadSens;
+        lookRef.current.yaw += dead(p.axes[2]) * 0.02 * gamepadSens;
         lookRef.current.pitch = Math.max(
-          -0.85,
-          Math.min(0.85, lookRef.current.pitch + (invertY ? -1 : 1) * dead(p.axes[3]) * 0.02 * gamepadSens)
+          PITCH_MIN,
+          Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? 1 : -1) * dead(p.axes[3]) * 0.02 * gamepadSens)
         );
+        crouchRef.current = !!p.buttons[1]?.pressed;
         if (p.buttons[7]?.pressed) {
           const now = Date.now();
           if (now - lastShotRef.current >= FIRE_COOLDOWN_MS) {
@@ -354,8 +387,46 @@ export default function ArenaGame({
     const fwd = target.subtract(origin).normalize();
     const ray = new Ray(origin, fwd, 80);
     const hit = scene.pickWithRay(ray);
-    const hitEnemy = hit?.hit && hit.pickedMesh === remote;
-    if (hitEnemy) {
+    const isRemoteHit =
+      hit?.hit &&
+      remote &&
+      (hit.pickedMesh === remote || hit.pickedMesh.parent === remote);
+    const hitPoint = hit?.hit ? hit.pickedPoint : origin.clone().add(fwd.scale(80));
+
+    recoilPitchRef.current = 0.02;
+    setCrosshairRecoil(true);
+    setTimeout(() => setCrosshairRecoil(false), 100);
+
+    const muzzlePlane = MeshBuilder.CreatePlane("muzzle", { size: 0.25 }, scene);
+    muzzlePlane.position = origin.clone().add(fwd.scale(0.4));
+    muzzlePlane.lookAt(origin);
+    const muzzleMat = new StandardMaterial("muzzleMat", scene);
+    muzzleMat.emissiveColor = new Color3(1, 0.9, 0.6);
+    muzzleMat.diffuseColor = new Color3(0, 0, 0);
+    muzzlePlane.material = muzzleMat;
+    setTimeout(() => {
+      muzzlePlane.dispose();
+      muzzleMat.dispose();
+    }, 50);
+
+    const tracerPoints = [origin, hitPoint];
+    const tracer = MeshBuilder.CreateLines("tracer", { points: tracerPoints }, scene);
+    tracer.color = new Color3(1, 0.85, 0.4);
+    setTimeout(() => tracer.dispose(), 80);
+
+    if (hit?.hit && hit.pickedPoint) {
+      const spark = MeshBuilder.CreateBox("spark", { size: 0.15 }, scene);
+      spark.position.copyFrom(hit.pickedPoint);
+      const sparkMat = new StandardMaterial("sparkMat", scene);
+      sparkMat.emissiveColor = new Color3(1, 0.7, 0.2);
+      spark.material = sparkMat;
+      setTimeout(() => {
+        spark.dispose();
+        sparkMat.dispose();
+      }, 100);
+    }
+
+    if (isRemoteHit) {
       setShowHitMarker(true);
       setTimeout(() => setShowHitMarker(false), 200);
       broadcastHit(matchId, { shooterId: myUserId, victimId: opponentUserId, damage: HIT_DAMAGE });
@@ -378,10 +449,10 @@ export default function ArenaGame({
       if (document.pointerLockElement !== canvas) return;
       const dx = e.movementX ?? 0;
       const dy = e.movementY ?? 0;
-      lookRef.current.yaw -= dx * sensX;
+      lookRef.current.yaw += dx * sensX;
       lookRef.current.pitch = Math.max(
-        -0.85,
-        Math.min(0.85, lookRef.current.pitch + (invertY ? dy : -dy) * sensY)
+        PITCH_MIN,
+        Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? dy : -dy) * sensY)
       );
     };
     const onClick = () => {
@@ -508,7 +579,7 @@ export default function ArenaGame({
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
       <HUD health={health} kills={kills} deaths={deaths} timeLeft={timeLeft} />
       <Scoreboard slot1Kills={kills} slot2Kills={enemyKills} />
-      <Crosshair style={crosshairStyle} />
+      <Crosshair style={crosshairStyle} recoil={crosshairRecoil} />
       <HitMarker show={showHitMarker} />
       <LookTouch onLookDelta={onLookDelta} />
       <Joystick onMove={onMove} />
@@ -558,6 +629,28 @@ export default function ArenaGame({
         onMouseLeave={() => { keysRef.current.space = false; }}
       >
         JUMP
+      </button>
+      <button
+        type="button"
+        style={{
+          position: "absolute",
+          right: 84,
+          bottom: 190,
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          border: "2px solid var(--border)",
+          background: "var(--card-2)",
+          color: "var(--text)",
+          fontSize: 11,
+          fontWeight: 700,
+          cursor: "pointer",
+          zIndex: 15,
+        }}
+        onTouchStart={(e) => { e.preventDefault(); crouchRef.current = !crouchRef.current; }}
+        onMouseDown={(e) => { e.preventDefault(); crouchRef.current = !crouchRef.current; }}
+      >
+        CROUCH
       </button>
       {gameEnded && <EndScreen won={won} kills={kills} deaths={deaths} onExit={onExit} />}
     </div>

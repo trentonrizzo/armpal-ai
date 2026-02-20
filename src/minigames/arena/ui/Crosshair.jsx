@@ -1,16 +1,19 @@
 /**
- * Center crosshair — dot / cross / circle from settings
+ * Center crosshair — dot / cross / circle from settings; recoil animation on shoot
  */
 import React from "react";
 
-const wrap = {
+const wrap = (recoil) => ({
   position: "absolute",
   left: "50%",
   top: "50%",
-  transform: "translate(-50%, -50%)",
+  transform: recoil
+    ? "translate(-50%, -50%) scale(1.15)"
+    : "translate(-50%, -50%) scale(1)",
+  transition: recoil ? "none" : "transform 0.08s ease-out",
   pointerEvents: "none",
   zIndex: 25,
-};
+});
 
 const dot = {
   width: 6,
@@ -42,9 +45,9 @@ const circle = {
   background: "transparent",
 };
 
-export default function Crosshair({ style: crosshairStyle = "cross" }) {
+export default function Crosshair({ style: crosshairStyle = "cross", recoil = false }) {
   return (
-    <div style={wrap}>
+    <div style={wrap(recoil)}>
       {crosshairStyle === "dot" && <div style={dot} />}
       {crosshairStyle === "cross" && (
         <div style={cross}>
