@@ -39,7 +39,7 @@ export async function createMatch(hostUserId) {
       status: "waiting",
       join_code,
     })
-    .select("id, status, slot1_user_id, slot2_user_id, join_code, created_at")
+    .select("id, status, host_user_id, slot1_user_id, slot2_user_id, join_code, created_at")
     .single();
   if (error) throw error;
   await supabase.from("arena_match_players").insert({

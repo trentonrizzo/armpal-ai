@@ -50,16 +50,35 @@ export default function ArenaPage() {
     return () => { alive = false; };
   }, []);
 
+  // Poll: keep match state in sync (e.g. slot2 filled, status active) so host sees Start button
   useEffect(() => {
     if (!match?.id || match.status === "active") return;
     const iv = setInterval(async () => {
       try {
         const updated = await getMatch(match.id);
-        if (updated?.status === "active") setMatch(updated);
+        if (updated) setMatch(updated);
       } catch (_) {}
     }, 1500);
     return () => clearInterval(iv);
   }, [match?.id, match?.status]);
+
+  // Realtime: when arena_matches row updates (guest joined, host started), sync UI immediately
+  useEffect(() => {
+    if (!match?.id) return;
+    const channel = supabase
+      .channel(`arena-match:${match.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "arena_matches", filter: `id=eq.${match.id}` },
+        (payload) => {
+          if (payload?.new) setMatch(payload.new);
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [match?.id]);
 
   const handleMatchJoined = (m) => setMatch(m);
   const handleMatchStarted = (m) => setMatch(m);

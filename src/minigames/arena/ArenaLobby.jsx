@@ -171,7 +171,8 @@ export default function ArenaLobby({ user, match: controlledMatch, onMatchJoined
               color: "var(--text)",
             }}
           >
-            {match.status === "waiting" && (hasTwo ? "Ready — start below" : "Waiting for player 2…")}
+            {match.status === "waiting" &&
+              (hasTwo ? (isHost ? "Ready — start below" : "Waiting for host to start…") : "Waiting for player 2…")}
             {match.status === "active" && "Match in progress"}
             {match.status === "ended" && "Match ended"}
           </div>
