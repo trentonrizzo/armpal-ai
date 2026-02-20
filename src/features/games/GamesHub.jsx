@@ -230,6 +230,39 @@ export default function GamesHub() {
               </div>
             )}
           </section>
+
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Arena</h2>
+            <div style={styles.grid}>
+              <div style={styles.cardWrap}>
+                <button
+                  type="button"
+                  onClick={() => navigate("/minigames/arena")}
+                  style={styles.card}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 8px 24px color-mix(in srgb, var(--accent) 25%, transparent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  <span style={styles.cardEmoji}>🎯</span>
+                  <span style={styles.cardTitle}>ArmPal Arena</span>
+                  <p style={styles.cardDesc}>1v1 arena shooter. First to 7 kills or 90s.</p>
+                  <span style={styles.multiBadge}>Multiplayer</span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); navigate("/minigames/arena"); }}
+                    style={styles.leaderboardBtn}
+                  >
+                    Play · Leaderboard
+                  </button>
+                </button>
+              </div>
+            </div>
+          </section>
         </>
       )}
 
