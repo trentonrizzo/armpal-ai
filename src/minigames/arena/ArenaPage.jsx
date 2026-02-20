@@ -126,6 +126,15 @@ export default function ArenaPage() {
   const opponentUserId =
     mySlot === 1 ? match?.slot2_user_id : mySlot === 2 ? match?.slot1_user_id : null;
 
+  console.log("Arena params:", {
+    matchId: match?.id,
+    currentUser: user?.id,
+    matchData: match ? { status: match.status, slot1: match.slot1_user_id, slot2: match.slot2_user_id } : null,
+    isActive,
+    mySlot,
+    opponentUserId,
+  });
+
   return (
     <div style={PAGE_WRAP}>
       {!match ? (
@@ -134,6 +143,10 @@ export default function ArenaPage() {
           onMatchJoined={handleMatchJoined}
           onMatchStarted={handleMatchStarted}
         />
+      ) : isActive && !mySlot ? (
+        <div style={{ padding: 24, color: "var(--text)", textAlign: "center" }}>Loading arena…</div>
+      ) : isActive && !opponentUserId ? (
+        <div style={{ padding: 24, color: "var(--text)", textAlign: "center" }}>Loading arena…</div>
       ) : isActive && mySlot && opponentUserId ? (
         <ArenaGame
           matchId={match.id}
