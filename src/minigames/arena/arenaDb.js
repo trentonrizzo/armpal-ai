@@ -194,3 +194,51 @@ export async function getArenaLeaderboard(limit = 25) {
   if (error) throw error;
   return data || [];
 }
+
+const DEFAULT_ARENA_SETTINGS = {
+  look_sensitivity_x: 0.002,
+  look_sensitivity_y: 0.002,
+  invert_y_axis: false,
+  fov: 85,
+  controller_sensitivity: 1,
+  mouse_sensitivity: 1,
+  touch_sensitivity: 1,
+  movement_smoothing: 0.2,
+  character_model: "capsule",
+  weapon_choice: "pistol",
+  crosshair_style: "cross",
+  ads_sensitivity: 0.5,
+  controller_deadzone: 0.15,
+  sprint_toggle: false,
+  control_device: "auto",
+  jump_button_position: "right",
+};
+
+export function getDefaultArenaSettings() {
+  return { ...DEFAULT_ARENA_SETTINGS };
+}
+
+export async function getArenaSettings(userId) {
+  if (!userId) return getDefaultArenaSettings();
+  const { data, error } = await supabase
+    .from("arena_settings")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return getDefaultArenaSettings();
+  return { ...DEFAULT_ARENA_SETTINGS, ...data };
+}
+
+export async function saveArenaSettings(userId, settings) {
+  if (!userId) throw new Error("User required");
+  const row = {
+    user_id: userId,
+    ...settings,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("arena_settings").upsert(row, {
+    onConflict: "user_id",
+  });
+  if (error) throw error;
+}

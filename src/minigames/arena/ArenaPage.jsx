@@ -6,7 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import ArenaLobby from "./ArenaLobby";
 import ArenaGame from "./ArenaGame";
-import { getMatch, getArenaLeaderboard } from "./arenaDb";
+import { getMatch, getArenaLeaderboard, getArenaSettings, getDefaultArenaSettings } from "./arenaDb";
+import ArenaSettingsOverlay from "./ArenaSettingsOverlay";
 
 const PAGE_WRAP = {
   minHeight: "100vh",
@@ -21,6 +22,8 @@ export default function ArenaPage() {
   const [match, setMatch] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [arenaSettings, setArenaSettings] = useState(getDefaultArenaSettings());
+  const [settingsOverlayOpen, setSettingsOverlayOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -49,6 +52,15 @@ export default function ArenaPage() {
     })();
     return () => { alive = false; };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    getArenaSettings(user.id).then((s) => {
+      if (alive) setArenaSettings(s);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [user?.id]);
 
   // Poll: keep match state in sync (e.g. slot2 filled, status active) so host sees Start button
   useEffect(() => {
@@ -140,8 +152,10 @@ export default function ArenaPage() {
       {!match ? (
         <ArenaLobby
           user={user}
+          arenaSettings={arenaSettings}
           onMatchJoined={handleMatchJoined}
           onMatchStarted={handleMatchStarted}
+          onOpenSettings={() => setSettingsOverlayOpen(true)}
         />
       ) : isActive && !mySlot ? (
         <div style={{ padding: 24, color: "var(--text)", textAlign: "center" }}>Loading arena…</div>
@@ -153,6 +167,7 @@ export default function ArenaPage() {
           myUserId={user.id}
           mySlot={mySlot}
           opponentUserId={opponentUserId}
+          settings={arenaSettings}
           onExit={handleExit}
           onMatchEnd={handleMatchEnd}
         />
@@ -160,10 +175,20 @@ export default function ArenaPage() {
         <ArenaLobby
           user={user}
           match={match}
+          arenaSettings={arenaSettings}
           onMatchJoined={handleMatchJoined}
           onMatchStarted={handleMatchStarted}
+          onOpenSettings={() => setSettingsOverlayOpen(true)}
         />
       )}
+
+      <ArenaSettingsOverlay
+        open={settingsOverlayOpen}
+        onClose={() => setSettingsOverlayOpen(false)}
+        userId={user?.id}
+        initialSettings={arenaSettings}
+        onSaved={(s) => { setArenaSettings(s); setSettingsOverlayOpen(false); }}
+      />
 
       <section style={{ maxWidth: 420, margin: "0 auto", padding: "0 16px", marginTop: 32 }}>
         <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12, color: "var(--text)" }}>

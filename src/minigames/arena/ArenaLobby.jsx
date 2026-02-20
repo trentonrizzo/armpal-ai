@@ -63,7 +63,7 @@ const statusBadge = {
   marginTop: 8,
 };
 
-export default function ArenaLobby({ user, match: controlledMatch, onMatchJoined, onMatchStarted }) {
+export default function ArenaLobby({ user, match: controlledMatch, arenaSettings, onMatchJoined, onMatchStarted, onOpenSettings }) {
   const toast = useToast();
   const [createLoading, setCreateLoading] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -126,7 +126,27 @@ export default function ArenaLobby({ user, match: controlledMatch, onMatchJoined
 
   return (
     <div style={wrap}>
-      <h1 style={title}>ArmPal Arena</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <h1 style={title}>ArmPal Arena</h1>
+        {onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+              background: "var(--card-2)",
+              color: "var(--text)",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Settings
+          </button>
+        )}
+      </div>
       <p style={sub}>1v1 arena. First to 7 kills or 90 seconds.</p>
 
       {!match ? (
