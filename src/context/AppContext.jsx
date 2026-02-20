@@ -2,6 +2,7 @@
 import React, { createContext, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap } from "../utils/usageLimits";
+import { ensureUserQR } from "../utils/ensureUserQR";
 
 export const AppContext = createContext();
 
@@ -23,6 +24,7 @@ export const AppProvider = ({ children }) => {
     async function loadUser() {
       const { data } = await supabase.auth.getUser();
       setUser(data?.user || null);
+      if (data?.user) ensureUserQR(supabase);
     }
     loadUser();
   }, []);

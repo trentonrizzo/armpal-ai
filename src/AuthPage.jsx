@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
+import { ensureUserQR } from "./utils/ensureUserQR";
 
 /*
   AuthPage – LOGIN + SIGNUP + FORGOT (RECOVERY SAFE)
@@ -98,6 +99,7 @@ export default function AuthPage({ initialMode }) {
       setMode("login");
       setPassword("");
       setConfirm("");
+      ensureUserQR(supabase);
     }
 
     setLoading(false);
