@@ -44,6 +44,10 @@ import {
   switchToSlot,
   computeDamage,
 } from "./weapons/WeaponSystem";
+import { createWeaponMesh } from "./weapons/WeaponModels";
+import { createPlayerModel, getHitPartFromMesh } from "./player/PlayerModel";
+import { updateLegWalk, getWeaponSwapProgress } from "./animations/PlayerAnimations";
+import { createHealthBar, updateHealthBarScale } from "./ui/HealthBar";
 import Joystick from "./controls/Joystick";
 import LookTouch from "./controls/LookTouch";
 import HUD from "./ui/HUD";
@@ -79,75 +83,8 @@ const REMOTE_LERP = 0.18;
 const SNAPSHOT_MS = 55;
 const INTERP_BUFFER_MS = 120;
 const OPPONENT_LEFT_DELAY_MS = 2500;
-
-function createBlockCharacter(scene, name, isRemote) {
-  const root = MeshBuilder.CreateBox(name + "Root", { width: 0.01, height: 0.01, depth: 0.01 }, scene);
-  root.isVisible = false;
-  root.isPickable = false;
-
-  const body = MeshBuilder.CreateBox(name + "Body", { width: 0.5, height: 0.9, depth: 0.3 }, scene);
-  body.position.y = 0.45;
-  body.parent = root;
-  body.metadata = { hitPart: "body" };
-
-  const head = MeshBuilder.CreateBox(name + "Head", { width: 0.4, height: 0.4, depth: 0.4 }, scene);
-  head.position.y = 1.15;
-  head.parent = body;
-  head.metadata = { hitPart: "head" };
-
-  const armL = MeshBuilder.CreateBox(name + "ArmL", { width: 0.15, height: 0.5, depth: 0.15 }, scene);
-  armL.position.set(-0.32, 0.9, 0);
-  armL.parent = body;
-  armL.metadata = { hitPart: "limb" };
-
-  const armR = MeshBuilder.CreateBox(name + "ArmR", { width: 0.15, height: 0.5, depth: 0.15 }, scene);
-  armR.position.set(0.32, 0.9, 0);
-  armR.parent = body;
-  armR.metadata = { hitPart: "limb" };
-
-  const legL = MeshBuilder.CreateBox(name + "LegL", { width: 0.2, height: 0.4, depth: 0.25 }, scene);
-  legL.position.set(-0.15, 0.2, 0);
-  legL.parent = body;
-  legL.metadata = { hitPart: "limb" };
-
-  const legR = MeshBuilder.CreateBox(name + "LegR", { width: 0.2, height: 0.4, depth: 0.25 }, scene);
-  legR.position.set(0.15, 0.2, 0);
-  legR.parent = body;
-  legR.metadata = { hitPart: "limb" };
-
-  const mat = new StandardMaterial(name + "Mat", scene);
-  mat.diffuseColor = isRemote ? new Color3(0.5, 0.12, 0.12) : new Color3(0.4, 0.4, 0.45);
-  if (isRemote) mat.emissiveColor = new Color3(0.12, 0, 0);
-  body.material = mat;
-  head.material = mat.clone(name + "HeadMat");
-  armL.material = mat.clone(name + "ArmLMat");
-  armR.material = mat.clone(name + "ArmRMat");
-  legL.material = mat.clone(name + "LegLMat");
-  legR.material = mat.clone(name + "LegRMat");
-
-  root.checkCollisions = true;
-  root.ellipsoid = new Vector3(0.35, 0.9, 0.35);
-  root.ellipsoidOffset = new Vector3(0, 0.9, 0);
-  if (!isRemote) {
-    body.isVisible = false;
-    head.isVisible = false;
-    armL.isVisible = false;
-    armR.isVisible = false;
-    legL.isVisible = false;
-    legR.isVisible = false;
-  }
-  return root;
-}
-
-function getHitPart(mesh) {
-  if (!mesh) return "body";
-  let m = mesh;
-  while (m) {
-    if (m.metadata?.hitPart) return m.metadata.hitPart;
-    m = m.parent;
-  }
-  return "body";
-}
+const FP_WEAPON_SWAY = 0.012;
+const FP_WEAPON_SWAY_SPEED = 4;
 
 const loadingStyle = {
   position: "relative",
@@ -202,6 +139,14 @@ export default function ArenaGame({
   const cameraRef = useRef(null);
   const localMeshRef = useRef(null);
   const remoteMeshRef = useRef(null);
+  const localModelRef = useRef(null);
+  const remoteModelRef = useRef(null);
+  const fpWeaponRef = useRef(null);
+  const remoteWeaponRef = useRef(null);
+  const weaponSwapStartRef = useRef(0);
+  const lastDisplayedWeaponRef = useRef(loadoutPrimary);
+  const remoteHealthBarRef = useRef(null);
+  const lastLocalPosRef = useRef({ x: 0, z: 0 });
   const lastSnapshotRef = useRef(0);
   const moveInputRef = useRef({ x: 0, z: 0 });
   const lookRef = useRef({ yaw: 0, pitch: 0 });
@@ -220,7 +165,7 @@ export default function ArenaGame({
   const weaponStateRef = useRef(weaponState);
   weaponStateRef.current = weaponState;
 
-  const remoteTargetRef = useRef({ x: 0, y: 0, z: 0, rotY: 0, health: 100 });
+  const remoteTargetRef = useRef({ x: 0, y: 0, z: 0, rotY: 0, health: 100, isCrouching: false, currentWeapon: "pistol" });
   const [gameError, setGameError] = useState(null);
   const [health, setHealth] = useState(100);
   const [kills, setKills] = useState(0);
@@ -350,18 +295,40 @@ export default function ArenaGame({
       platform.material = platformMat;
       platform.checkCollisions = true;
 
-      const localPlayer = createBlockCharacter(scene, "localPlayer", false);
-      localPlayer.position.copyFrom(mySlot === 1 ? SPAWN1 : SPAWN2);
-      localMeshRef.current = localPlayer;
+      const localModel = createPlayerModel(scene, "localPlayer", false);
+      localModel.root.position.copyFrom(mySlot === 1 ? SPAWN1 : SPAWN2);
+      localMeshRef.current = localModel.root;
+      localModelRef.current = localModel;
+      lastLocalPosRef.current = { x: localModel.root.position.x, z: localModel.root.position.z };
 
-      const remotePlayer = createBlockCharacter(scene, "remotePlayer", true);
-      remotePlayer.position.copyFrom(mySlot === 1 ? SPAWN2 : SPAWN1);
-      remoteMeshRef.current = remotePlayer;
+      const remoteModel = createPlayerModel(scene, "remotePlayer", true);
+      remoteModel.root.position.copyFrom(mySlot === 1 ? SPAWN2 : SPAWN1);
+      remoteMeshRef.current = remoteModel.root;
+      remoteModelRef.current = remoteModel;
 
+      const initialWeaponId = getCurrentWeapon(weaponStateRef.current).id;
+      const fpWeapon = createWeaponMesh(scene, initialWeaponId, "fpWeapon");
+      fpWeapon.parent = camera;
+      fpWeapon.metadata = { weaponType: initialWeaponId };
+      fpWeaponRef.current = fpWeapon;
+
+      const remoteWeapon = createWeaponMesh(scene, "pistol", "remoteWeapon");
+      remoteWeapon.metadata = { weaponType: "pistol" };
+      remoteWeapon.parent = remoteModel.arms[1];
+      remoteWeapon.position.set(0.08, 0, 0.12);
+      remoteWeapon.rotation.x = Math.PI / 2;
+      remoteWeaponRef.current = remoteWeapon;
+
+      const remoteBar = createHealthBar(scene, remoteModel.root, "remoteHealthBar");
+      remoteHealthBarRef.current = remoteBar;
+
+      const timeRef = { current: 0 };
       scene.onBeforeRenderObservable.add(() => {
         const dt = engine.getDeltaTime() / 1000;
+        timeRef.current += dt;
         const local = localMeshRef.current;
         const cam = cameraRef.current;
+        const localModel = localModelRef.current;
         if (!local || !cam) return;
 
         const now = Date.now();
@@ -370,10 +337,11 @@ export default function ArenaGame({
         if (ws !== weaponStateRef.current) setWeaponState(ws);
 
         const yaw = lookRef.current.yaw;
+        let vx = 0, vz = 0;
         if (!deadRef.current && !gameEndedRef.current) {
           const bind = bindsRef.current;
-          let vx = moveInputRef.current.x;
-          let vz = moveInputRef.current.z;
+          vx = moveInputRef.current.x;
+          vz = moveInputRef.current.z;
           const fromKeys = getMoveVectorFromKeys(bind);
           if (Math.abs(fromKeys.x) > 0.01 || Math.abs(fromKeys.z) > 0.01) {
             vx = fromKeys.x;
@@ -400,6 +368,10 @@ export default function ArenaGame({
             groundedRef.current = true;
           }
         }
+        const velX = (local.position.x - lastLocalPosRef.current.x) / Math.max(dt, 0.001);
+        const velZ = (local.position.z - lastLocalPosRef.current.z) / Math.max(dt, 0.001);
+        lastLocalPosRef.current = { x: local.position.x, z: local.position.z };
+        if (localModel) updateLegWalk(localModel, velX, velZ, timeRef.current);
 
         recoilPitchRef.current *= 0.92;
         const headY = crouchRef.current ? HEAD_HEIGHT_CROUCH : HEAD_HEIGHT;
@@ -417,13 +389,59 @@ export default function ArenaGame({
         );
         cam.setTarget(headPos.add(fwd));
 
+        const fpWeapon = fpWeaponRef.current;
+        const currentWeaponId = getCurrentWeapon(weaponStateRef.current).id;
+        if (fpWeapon) {
+          if (currentWeaponId !== lastDisplayedWeaponRef.current && weaponSwapStartRef.current === 0) {
+            weaponSwapStartRef.current = Date.now();
+          }
+          const swapStart = weaponSwapStartRef.current;
+          if (swapStart > 0) {
+            const prog = getWeaponSwapProgress(swapStart);
+            fpWeapon.position.y = prog.outOffset;
+            if (prog.done) {
+              weaponSwapStartRef.current = 0;
+              const newWeapon = createWeaponMesh(scene, currentWeaponId, "fpWeapon");
+              newWeapon.parent = camera;
+              newWeapon.metadata = { weaponType: currentWeaponId };
+              fpWeapon.dispose();
+              fpWeaponRef.current = newWeapon;
+              lastDisplayedWeaponRef.current = currentWeaponId;
+            }
+          } else {
+            const sway = Math.sin(timeRef.current * FP_WEAPON_SWAY_SPEED) * FP_WEAPON_SWAY * (Math.abs(vx) + Math.abs(vz));
+            fpWeapon.position.y = 0;
+            fpWeapon.rotation.z = sway;
+          }
+        }
+
         const remote = remoteMeshRef.current;
         const rt = remoteTargetRef.current;
+        const remoteModel = remoteModelRef.current;
         if (remote) {
           remote.position.x += (rt.x - remote.position.x) * REMOTE_LERP;
           remote.position.y += (rt.y - remote.position.y) * REMOTE_LERP;
           remote.position.z += (rt.z - remote.position.z) * REMOTE_LERP;
           remote.rotation.y += (rt.rotY - remote.rotation.y) * REMOTE_LERP;
+          if (remoteModel?.root) {
+            const crouchScale = rt.isCrouching ? 0.85 : 1;
+            remoteModel.root.scaling.y = crouchScale;
+          }
+          const rw = remoteWeaponRef.current;
+          if (rw && rt.currentWeapon && rw.metadata?.weaponType !== rt.currentWeapon) {
+            rw.dispose();
+            const newRemoteWeapon = createWeaponMesh(scene, rt.currentWeapon, "remoteWeapon");
+            newRemoteWeapon.metadata = { weaponType: rt.currentWeapon };
+            newRemoteWeapon.parent = remoteModel?.arms?.[1] || remote;
+            newRemoteWeapon.position.set(0.08, 0, 0.12);
+            newRemoteWeapon.rotation.x = Math.PI / 2;
+            remoteWeaponRef.current = newRemoteWeapon;
+          }
+          const rBar = remoteHealthBarRef.current;
+          if (rBar) {
+            rBar.setHealth((rt.health ?? 100) / 100);
+            if (rBar.mesh && cam) updateHealthBarScale(rBar.mesh, cam.position, remote.position);
+          }
         }
         if (canvasRef.current && document.pointerLockElement === canvasRef.current && getFireFromInput(bindsRef.current)) {
           fireRef.current?.();
@@ -529,7 +547,7 @@ export default function ArenaGame({
       hitPoint = hit.pickedPoint.clone();
       distance = Vector3.Distance(origin, hitPoint);
       if (hit.pickedMesh === remote || hit.pickedMesh.parent === remote || hit.pickedMesh.parent?.parent === remote) {
-        hitPart = getHitPart(hit.pickedMesh);
+        hitPart = getHitPartFromMesh(hit.pickedMesh);
       }
     }
     const isRemoteHit = hit?.hit && remote && (hit.pickedMesh === remote || hit.pickedMesh.parent === remote || hit.pickedMesh.parent?.parent === remote);
@@ -650,10 +668,13 @@ export default function ArenaGame({
             y: payload.pos[1],
             z: payload.pos[2],
             rotY: payload.rotY ?? 0,
+            isCrouching: payload.isCrouching ?? false,
+            currentWeapon: payload.currentWeapon ?? "pistol",
           };
         }
         setEnemyKills(payload.kills ?? 0);
         setEnemyHealth(payload.health ?? 100);
+        remoteHealthBarRef.current?.setHealth((payload.health ?? 100) / 100);
       }
       if (payload.type === "hit" && payload.victimId === myUserId) {
         setHealth((h) => {
@@ -711,6 +732,8 @@ export default function ArenaGame({
         health,
         kills,
         deaths,
+        isCrouching: crouchRef.current,
+        currentWeapon: getCurrentWeapon(weaponStateRef.current).id,
       });
     }, SNAPSHOT_MS);
     return () => clearInterval(t);

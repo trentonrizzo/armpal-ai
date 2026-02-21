@@ -53,6 +53,8 @@ export function broadcastSnapshot(matchId, data) {
     health: data.health,
     kills: data.kills,
     deaths: data.deaths,
+    isCrouching: data.isCrouching ?? false,
+    currentWeapon: data.currentWeapon ?? "pistol",
     ts: Date.now(),
   });
 }
