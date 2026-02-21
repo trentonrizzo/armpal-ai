@@ -30,7 +30,7 @@ export default function Joystick({ onMove, containerRef }) {
       joystickRef.current = nipple;
       nipple.on("move", (evt, data) => {
         const v = data.vector || { x: 0, y: 0 };
-        onMove(v.x, -v.y);
+        onMove(v.x, v.y);
       });
       nipple.on("end", () => onMove(0, 0));
     });

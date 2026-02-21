@@ -6,8 +6,9 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import ArenaLobby from "./ArenaLobby";
 import ArenaGame from "./ArenaGame";
-import { getMatch, getArenaLeaderboard, getArenaSettings, getDefaultArenaSettings } from "./arenaDb";
+import { getMatch, getArenaLeaderboard, getArenaSettings, getDefaultArenaSettings, getArenaBinds, getDefaultArenaBinds } from "./arenaDb";
 import ArenaSettingsOverlay from "./ArenaSettingsOverlay";
+import ArenaBindsOverlay from "./ArenaBindsOverlay";
 
 const PAGE_WRAP = {
   minHeight: "100vh",
@@ -23,7 +24,9 @@ export default function ArenaPage() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [arenaSettings, setArenaSettings] = useState(getDefaultArenaSettings());
+  const [arenaBinds, setArenaBinds] = useState(getDefaultArenaBinds());
   const [settingsOverlayOpen, setSettingsOverlayOpen] = useState(false);
+  const [bindsOverlayOpen, setBindsOverlayOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -58,6 +61,9 @@ export default function ArenaPage() {
     let alive = true;
     getArenaSettings(user.id).then((s) => {
       if (alive) setArenaSettings(s);
+    }).catch(() => {});
+    getArenaBinds(user.id).then((b) => {
+      if (alive) setArenaBinds(b);
     }).catch(() => {});
     return () => { alive = false; };
   }, [user?.id]);
@@ -138,15 +144,6 @@ export default function ArenaPage() {
   const opponentUserId =
     mySlot === 1 ? match?.slot2_user_id : mySlot === 2 ? match?.slot1_user_id : null;
 
-  console.log("Arena params:", {
-    matchId: match?.id,
-    currentUser: user?.id,
-    matchData: match ? { status: match.status, slot1: match.slot1_user_id, slot2: match.slot2_user_id } : null,
-    isActive,
-    mySlot,
-    opponentUserId,
-  });
-
   return (
     <div style={PAGE_WRAP}>
       {!match ? (
@@ -167,9 +164,11 @@ export default function ArenaPage() {
           myUserId={user.id}
           mySlot={mySlot}
           opponentUserId={opponentUserId}
-          settings={arenaSettings}
+          settings={{ ...arenaSettings, binds: arenaBinds }}
+          match={match}
           onExit={handleExit}
           onMatchEnd={handleMatchEnd}
+          onOpenSettings={() => setSettingsOverlayOpen(true)}
         />
       ) : (
         <ArenaLobby
@@ -184,10 +183,21 @@ export default function ArenaPage() {
 
       <ArenaSettingsOverlay
         open={settingsOverlayOpen}
-        onClose={() => setSettingsOverlayOpen(false)}
+        onClose={() => { setSettingsOverlayOpen(false); setBindsOverlayOpen(false); }}
         userId={user?.id}
         initialSettings={arenaSettings}
+        initialBinds={arenaBinds}
         onSaved={(s) => { setArenaSettings(s); setSettingsOverlayOpen(false); }}
+        onOpenBinds={() => setBindsOverlayOpen(true)}
+        bindsOverlayOpen={bindsOverlayOpen}
+        onBindsSaved={(b) => { setArenaBinds(b); setBindsOverlayOpen(false); }}
+      />
+      <ArenaBindsOverlay
+        open={bindsOverlayOpen}
+        onClose={() => setBindsOverlayOpen(false)}
+        userId={user?.id}
+        initialBinds={arenaBinds}
+        onSaved={(b) => { setArenaBinds(b); setBindsOverlayOpen(false); }}
       />
 
       <section style={{ maxWidth: 420, margin: "0 auto", padding: "0 16px", marginTop: 32 }}>

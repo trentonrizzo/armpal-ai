@@ -1,5 +1,5 @@
 /**
- * ArmPal Arena — full settings panel (input, visual, loadout). Saved per-user to Supabase.
+ * ArmPal Arena — full settings panel (input, visual, loadout, binds). Saved per-user to Supabase.
  */
 import React, { useState, useEffect } from "react";
 import { getArenaSettings, saveArenaSettings, getDefaultArenaSettings } from "./arenaDb";
@@ -61,7 +61,17 @@ const toggle = {
 const toggleOn = { ...toggle, background: "var(--accent)", justifyContent: "flex-end" };
 const toggleKnob = { width: 22, height: 22, borderRadius: 999, background: "#fff" };
 
-export default function ArenaSettingsOverlay({ open, onClose, userId, initialSettings, onSaved }) {
+export default function ArenaSettingsOverlay({
+  open,
+  onClose,
+  userId,
+  initialSettings,
+  initialBinds,
+  onSaved,
+  onOpenBinds,
+  bindsOverlayOpen,
+  onBindsSaved,
+}) {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -258,7 +268,44 @@ export default function ArenaSettingsOverlay({ open, onClose, userId, initialSet
               </select>
             </div>
 
-            <div style={{ ...sectionTitle, marginTop: 24 }}>LOADOUT</div>
+            <div style={{ ...sectionTitle, marginTop: 24 }}>CAMERA</div>
+            <div style={row}>
+              <span style={label}>Camera mode</span>
+              <select
+                value={settings.camera_mode || "first"}
+                onChange={(e) => update("camera_mode", e.target.value)}
+                style={input}
+              >
+                <option value="first">First person</option>
+                <option value="third">Third person</option>
+              </select>
+            </div>
+
+            <div style={{ ...sectionTitle, marginTop: 24 }}>LOADOUT (2-slot)</div>
+            <div style={row}>
+              <span style={label}>Primary</span>
+              <select
+                value={settings.loadout_primary || "pistol"}
+                onChange={(e) => update("loadout_primary", e.target.value)}
+                style={input}
+              >
+                <option value="pistol">Pistol</option>
+                <option value="shotgun">Shotgun</option>
+                <option value="sniper">Sniper</option>
+              </select>
+            </div>
+            <div style={row}>
+              <span style={label}>Secondary</span>
+              <select
+                value={settings.loadout_secondary || "shotgun"}
+                onChange={(e) => update("loadout_secondary", e.target.value)}
+                style={input}
+              >
+                <option value="pistol">Pistol</option>
+                <option value="shotgun">Shotgun</option>
+                <option value="sniper">Sniper</option>
+              </select>
+            </div>
             <div style={row}>
               <span style={label}>Character style</span>
               <select
@@ -266,19 +313,18 @@ export default function ArenaSettingsOverlay({ open, onClose, userId, initialSet
                 onChange={(e) => update("character_model", e.target.value)}
                 style={input}
               >
-                <option value="capsule">Capsule</option>
+                <option value="block">Block</option>
               </select>
             </div>
-            <div style={row}>
-              <span style={label}>Starting weapon</span>
-              <select
-                value={settings.weapon_choice}
-                onChange={(e) => update("weapon_choice", e.target.value)}
-                style={input}
-              >
-                <option value="pistol">Pistol</option>
-              </select>
-            </div>
+
+            {onOpenBinds && (
+              <div style={{ marginTop: 16 }}>
+                <div style={sectionTitle}>CONTROLS</div>
+                <button type="button" style={btnSecondary} onClick={onOpenBinds}>
+                  Edit Binds
+                </button>
+              </div>
+            )}
 
             <div style={row}>
               <span style={label}>Movement smoothing</span>

@@ -121,6 +121,28 @@ export async function endMatch(matchId, winnerUserId) {
       status: "ended",
       ended_at: new Date().toISOString(),
       winner_user_id: winnerUserId || null,
+      left_by_user_id: null,
+    })
+    .eq("id", matchId);
+  if (error) throw error;
+}
+
+/**
+ * Leave match immediately. Sets status=ended, winner=other player, left_by_user_id=userId.
+ * Opponent will see "Opponent left" and return to lobby after 2–3s.
+ */
+export async function leaveMatch(matchId, userIdWhoLeft) {
+  const match = await getMatch(matchId);
+  if (!match || match.status !== "active") return;
+  const otherUserId =
+    match.slot1_user_id === userIdWhoLeft ? match.slot2_user_id : match.slot1_user_id;
+  const { error } = await supabase
+    .from("arena_matches")
+    .update({
+      status: "ended",
+      ended_at: new Date().toISOString(),
+      winner_user_id: otherUserId || null,
+      left_by_user_id: userIdWhoLeft,
     })
     .eq("id", matchId);
   if (error) throw error;
@@ -204,7 +226,7 @@ const DEFAULT_ARENA_SETTINGS = {
   mouse_sensitivity: 1,
   touch_sensitivity: 1,
   movement_smoothing: 0.2,
-  character_model: "capsule",
+  character_model: "block",
   weapon_choice: "pistol",
   crosshair_style: "cross",
   ads_sensitivity: 0.5,
@@ -212,6 +234,9 @@ const DEFAULT_ARENA_SETTINGS = {
   sprint_toggle: false,
   control_device: "auto",
   jump_button_position: "right",
+  camera_mode: "first",
+  loadout_primary: "pistol",
+  loadout_secondary: "shotgun",
 };
 
 export function getDefaultArenaSettings() {
@@ -241,4 +266,79 @@ export async function saveArenaSettings(userId, settings) {
     onConflict: "user_id",
   });
   if (error) throw error;
+}
+
+const DEFAULT_BINDS = {
+  keyboard: {
+    move_forward: "KeyW",
+    move_back: "KeyS",
+    move_left: "KeyA",
+    move_right: "KeyD",
+    jump: "Space",
+    sprint: "ShiftLeft",
+    crouch: "KeyC",
+    crouch_hold: "ControlLeft",
+    fire: "Mouse0",
+    aim: "Mouse1",
+    reload: "KeyR",
+    weapon_1: "Digit1",
+    weapon_2: "Digit2",
+    weapon_3: "Digit3",
+    interact: "KeyF",
+    scoreboard: "Tab",
+    pause: "Escape",
+    camera_toggle: "KeyV",
+  },
+  gamepad: {
+    move_axis_x: "0",
+    move_axis_y: "1",
+    look_axis_x: "2",
+    look_axis_y: "3",
+    jump: "0",
+    crouch: "1",
+    fire: "7",
+    aim: "6",
+    reload: "2",
+    weapon_swap: "3",
+    pause: "9",
+    camera_toggle: "10",
+  },
+  mobile: { fire_pos: "right", jump_pos: "right", crouch_pos: "right", aim_pos: "right", swap_pos: "right", reload_pos: "right" },
+};
+
+export function getDefaultArenaBinds() {
+  return JSON.parse(JSON.stringify(DEFAULT_BINDS));
+}
+
+export async function getArenaBinds(userId) {
+  if (!userId) return getDefaultArenaBinds();
+  const { data, error } = await supabase
+    .from("arena_binds")
+    .select("device_type, binds_json")
+    .eq("user_id", userId);
+  if (error) throw error;
+  const out = getDefaultArenaBinds();
+  (data || []).forEach((row) => {
+    if (row.device_type && row.binds_json) {
+      out[row.device_type] = { ...out[row.device_type], ...row.binds_json };
+    }
+  });
+  return out;
+}
+
+export async function saveArenaBinds(userId, binds) {
+  if (!userId) throw new Error("User required");
+  for (const device of ["keyboard", "gamepad", "mobile"]) {
+    const payload = binds[device] != null ? binds[device] : DEFAULT_BINDS[device];
+    const { error } = await supabase.from("arena_binds").upsert(
+      {
+        user_id: userId,
+        device_type: device,
+        binds_json: payload,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,device_type" }
+    );
+    if (error) throw error;
+  }
 }

@@ -1,6 +1,6 @@
 /**
- * ArmPal Arena — gameplay rebuild: settings-driven input, first-person camera,
- * hand-built arena, hitscan shooting, health/respawn, crosshair/hit marker, sync + interpolation.
+ * ArmPal Arena — mega upgrade: pointer lock, LMB/RMB, ESC pause, weapons, hitboxes, boundaries,
+ * leave flow, camera toggle, HUD back/settings, damage numbers, kill feed, scope, enemy health bar.
  */
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
@@ -9,6 +9,7 @@ import {
   FreeCamera,
   HemisphericLight,
   Vector3,
+  Matrix,
   MeshBuilder,
   StandardMaterial,
   Color3,
@@ -16,6 +17,33 @@ import {
   DirectionalLight,
 } from "@babylonjs/core";
 import { getDefaultArenaSettings } from "./arenaDb";
+import {
+  setKeyDown,
+  setMouseButton,
+  getMoveVectorFromKeys,
+  getSprintFromKeys,
+  getJumpFromKeys,
+  getFireFromInput,
+  getAimFromInput,
+  getReloadFromKeys,
+  getWeaponSlotFromKeys,
+  getPauseFromKeys,
+  getCameraToggleFromKeys,
+  getGamepadState,
+  applyBindsKeyboard,
+} from "./input/InputManager";
+import {
+  WEAPONS,
+  createWeaponState,
+  getCurrentWeapon,
+  canFire,
+  consumeAmmo,
+  startReload,
+  tickReload,
+  swapWeapon,
+  switchToSlot,
+  computeDamage,
+} from "./weapons/WeaponSystem";
 import Joystick from "./controls/Joystick";
 import LookTouch from "./controls/LookTouch";
 import HUD from "./ui/HUD";
@@ -23,10 +51,16 @@ import Scoreboard from "./ui/Scoreboard";
 import EndScreen from "./ui/EndScreen";
 import Crosshair from "./ui/Crosshair";
 import HitMarker from "./ui/HitMarker";
-import { subscribeArena, broadcastSnapshot, broadcastHit } from "./arenaNet";
-import { endMatch, updateMatchPlayerKillsDeaths, persistMatchResult } from "./arenaDb";
+import PauseMenu from "./ui/PauseMenu";
+import ScopeOverlay from "./ui/ScopeOverlay";
+import KillFeed from "./ui/KillFeed";
+import DamageNumbers from "./ui/DamageNumbers";
+import EnemyHealthBar from "./ui/EnemyHealthBar";
+import { subscribeArena, broadcastSnapshot, broadcastHit, broadcastWeaponFire, broadcastDeath } from "./arenaNet";
+import { endMatch, updateMatchPlayerKillsDeaths, persistMatchResult, leaveMatch } from "./arenaDb";
 
 const ARENA_HALF = 12;
+const BOUNDARY = ARENA_HALF - 0.6;
 const WALL_H = 4;
 const HEAD_HEIGHT = 1.6;
 const HEAD_HEIGHT_CROUCH = 1.0;
@@ -34,8 +68,6 @@ const PITCH_MIN = (-80 * Math.PI) / 180;
 const PITCH_MAX = (80 * Math.PI) / 180;
 const SPAWN1 = new Vector3(-6, 0, -6);
 const SPAWN2 = new Vector3(6, 0, 6);
-const HIT_DAMAGE = 20;
-const FIRE_COOLDOWN_MS = 200;
 const MATCH_DURATION_S = 90;
 const KILLS_TO_WIN = 7;
 const RESPAWN_DELAY_MS = 2000;
@@ -43,32 +75,78 @@ const MOVE_SPEED = 10;
 const SPRINT_MULT = 1.5;
 const JUMP_FORCE = 8;
 const GRAVITY = -24;
-const REMOTE_LERP = 0.2;
+const REMOTE_LERP = 0.18;
+const SNAPSHOT_MS = 55;
+const INTERP_BUFFER_MS = 120;
+const OPPONENT_LEFT_DELAY_MS = 2500;
 
 function createBlockCharacter(scene, name, isRemote) {
+  const root = MeshBuilder.CreateBox(name + "Root", { width: 0.01, height: 0.01, depth: 0.01 }, scene);
+  root.isVisible = false;
+  root.isPickable = false;
+
   const body = MeshBuilder.CreateBox(name + "Body", { width: 0.5, height: 0.9, depth: 0.3 }, scene);
   body.position.y = 0.45;
+  body.parent = root;
+  body.metadata = { hitPart: "body" };
+
   const head = MeshBuilder.CreateBox(name + "Head", { width: 0.4, height: 0.4, depth: 0.4 }, scene);
   head.position.y = 1.15;
   head.parent = body;
+  head.metadata = { hitPart: "head" };
+
+  const armL = MeshBuilder.CreateBox(name + "ArmL", { width: 0.15, height: 0.5, depth: 0.15 }, scene);
+  armL.position.set(-0.32, 0.9, 0);
+  armL.parent = body;
+  armL.metadata = { hitPart: "limb" };
+
+  const armR = MeshBuilder.CreateBox(name + "ArmR", { width: 0.15, height: 0.5, depth: 0.15 }, scene);
+  armR.position.set(0.32, 0.9, 0);
+  armR.parent = body;
+  armR.metadata = { hitPart: "limb" };
+
   const legL = MeshBuilder.CreateBox(name + "LegL", { width: 0.2, height: 0.4, depth: 0.25 }, scene);
   legL.position.set(-0.15, 0.2, 0);
   legL.parent = body;
+  legL.metadata = { hitPart: "limb" };
+
   const legR = MeshBuilder.CreateBox(name + "LegR", { width: 0.2, height: 0.4, depth: 0.25 }, scene);
   legR.position.set(0.15, 0.2, 0);
   legR.parent = body;
+  legR.metadata = { hitPart: "limb" };
+
   const mat = new StandardMaterial(name + "Mat", scene);
   mat.diffuseColor = isRemote ? new Color3(0.5, 0.12, 0.12) : new Color3(0.4, 0.4, 0.45);
   if (isRemote) mat.emissiveColor = new Color3(0.12, 0, 0);
   body.material = mat;
   head.material = mat.clone(name + "HeadMat");
+  armL.material = mat.clone(name + "ArmLMat");
+  armR.material = mat.clone(name + "ArmRMat");
   legL.material = mat.clone(name + "LegLMat");
   legR.material = mat.clone(name + "LegRMat");
-  body.checkCollisions = true;
-  body.ellipsoid = new Vector3(0.35, 0.9, 0.35);
-  body.ellipsoidOffset = new Vector3(0, 0.9, 0);
-  if (!isRemote) body.isVisible = false;
-  return body;
+
+  root.checkCollisions = true;
+  root.ellipsoid = new Vector3(0.35, 0.9, 0.35);
+  root.ellipsoidOffset = new Vector3(0, 0.9, 0);
+  if (!isRemote) {
+    body.isVisible = false;
+    head.isVisible = false;
+    armL.isVisible = false;
+    armR.isVisible = false;
+    legL.isVisible = false;
+    legR.isVisible = false;
+  }
+  return root;
+}
+
+function getHitPart(mesh) {
+  if (!mesh) return "body";
+  let m = mesh;
+  while (m) {
+    if (m.metadata?.hitPart) return m.metadata.hitPart;
+    m = m.parent;
+  }
+  return "body";
 }
 
 const loadingStyle = {
@@ -91,8 +169,10 @@ export default function ArenaGame({
   mySlot,
   opponentUserId,
   settings: settingsProp,
+  match,
   onExit,
   onMatchEnd,
+  onOpenSettings,
 }) {
   const settings = { ...getDefaultArenaSettings(), ...settingsProp };
   const sensX = Number(settings.look_sensitivity_x) || 0.002;
@@ -104,6 +184,17 @@ export default function ArenaGame({
   const sprintToggle = !!settings.sprint_toggle;
   const deadzone = Math.max(0.05, Math.min(0.4, Number(settings.controller_deadzone) || 0.15));
   const gamepadSens = Number(settings.controller_sensitivity) || 1;
+  const adsSens = Math.max(0.2, Math.min(1.5, Number(settings.ads_sensitivity) || 0.5));
+  const cameraMode = settings.camera_mode || "first";
+  const loadoutPrimary = settings.loadout_primary || "pistol";
+  const loadoutSecondary = settings.loadout_secondary || "shotgun";
+  const bindsRef = useRef(settings.binds || null);
+  useEffect(() => {
+    if (settings.binds) {
+      bindsRef.current = settings.binds;
+      applyBindsKeyboard(settings.binds);
+    }
+  }, [settings.binds]);
 
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
@@ -112,32 +203,47 @@ export default function ArenaGame({
   const localMeshRef = useRef(null);
   const remoteMeshRef = useRef(null);
   const lastSnapshotRef = useRef(0);
-  const lastShotRef = useRef(0);
   const moveInputRef = useRef({ x: 0, z: 0 });
-  const keysRef = useRef({ w: false, a: false, s: false, d: false, shift: false, space: false });
-  const crouchRef = useRef(false);
   const lookRef = useRef({ yaw: 0, pitch: 0 });
   const velocityYRef = useRef(0);
-  const groundedRef = useRef(false);
+  const groundedRef = useRef(true);
   const recoilPitchRef = useRef(0);
+  const crouchRef = useRef(false);
+  const adsRef = useRef(false);
+  const remoteInterpRef = useRef([]);
   const [crosshairRecoil, setCrosshairRecoil] = useState(false);
-  const remoteTargetRef = useRef({ x: 0, y: 0, z: 0, rotY: 0 });
-  const killsRef = useRef(0);
-  const enemyKillsRef = useRef(0);
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const [cameraModeLocal, setCameraModeLocal] = useState(cameraMode);
+  const [weaponState, setWeaponState] = useState(() =>
+    createWeaponState(loadoutPrimary, loadoutSecondary)
+  );
+  const weaponStateRef = useRef(weaponState);
+  weaponStateRef.current = weaponState;
 
+  const remoteTargetRef = useRef({ x: 0, y: 0, z: 0, rotY: 0, health: 100 });
   const [gameError, setGameError] = useState(null);
   const [health, setHealth] = useState(100);
   const [kills, setKills] = useState(0);
   const [deaths, setDeaths] = useState(0);
   const [enemyKills, setEnemyKills] = useState(0);
+  const [enemyHealth, setEnemyHealth] = useState(100);
   const [timeLeft, setTimeLeft] = useState(MATCH_DURATION_S);
   const [gameEnded, setGameEnded] = useState(false);
   const [won, setWon] = useState(false);
   const [dead, setDead] = useState(false);
   const [showHitMarker, setShowHitMarker] = useState(false);
-
-  killsRef.current = kills;
-  enemyKillsRef.current = enemyKills;
+  const [killFeedEntries, setKillFeedEntries] = useState([]);
+  const [damageNumbers, setDamageNumbers] = useState([]);
+  const [enemyBarScreen, setEnemyBarScreen] = useState({ left: null, top: null, visible: false });
+  const [opponentLeft, setOpponentLeft] = useState(false);
+  const [showScoreboard, setShowScoreboard] = useState(false);
+  const countdownRef = useRef(true);
+  const matchStartTsRef = useRef(null);
+  const deadRef = useRef(false);
+  const gameEndedRef = useRef(false);
+  deadRef.current = dead;
+  gameEndedRef.current = gameEnded;
+  const projectWorldToScreenRef = useRef(null);
 
   const onMove = useCallback((x, z) => {
     moveInputRef.current = { x, z };
@@ -155,6 +261,24 @@ export default function ArenaGame({
     },
     [touchSens, sensX, sensY, invertY]
   );
+
+  const handleLeaveMatch = useCallback(() => {
+    if (!matchId || !myUserId) return;
+    leaveMatch(matchId, myUserId).catch(() => {});
+    onExit?.();
+  }, [matchId, myUserId, onExit]);
+
+  useEffect(() => {
+    if (!match?.id || match.status !== "ended") return;
+    const leftBy = match.left_by_user_id;
+    if (leftBy && leftBy === opponentUserId) {
+      setOpponentLeft(true);
+      const t = setTimeout(() => {
+        onExit?.();
+      }, OPPONENT_LEFT_DELAY_MS);
+      return () => clearTimeout(t);
+    }
+  }, [match?.id, match?.status, match?.left_by_user_id, opponentUserId, onExit]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -193,12 +317,11 @@ export default function ArenaGame({
 
       const wallMat = new StandardMaterial("wallMat", scene);
       wallMat.diffuseColor = new Color3(0.15, 0.07, 0.07);
-      const w = ARENA_HALF;
       [
-        { p: [w, WALL_H / 2, 0], s: [2, WALL_H, w * 2] },
-        { p: [-w, WALL_H / 2, 0], s: [2, WALL_H, w * 2] },
-        { p: [0, WALL_H / 2, w], s: [w * 2, WALL_H, 2] },
-        { p: [0, WALL_H / 2, -w], s: [w * 2, WALL_H, 2] },
+        { p: [ARENA_HALF, WALL_H / 2, 0], s: [2, WALL_H, ARENA_HALF * 2] },
+        { p: [-ARENA_HALF, WALL_H / 2, 0], s: [2, WALL_H, ARENA_HALF * 2] },
+        { p: [0, WALL_H / 2, ARENA_HALF], s: [ARENA_HALF * 2, WALL_H, 2] },
+        { p: [0, WALL_H / 2, -ARENA_HALF], s: [ARENA_HALF * 2, WALL_H, 2] },
       ].forEach(({ p, s }, i) => {
         const box = MeshBuilder.CreateBox(`wall_${i}`, { width: s[0], height: s[1], depth: s[2] }, scene);
         box.position.set(p[0], p[1], p[2]);
@@ -212,6 +335,8 @@ export default function ArenaGame({
         [4, 0, 4],
         [-5, 0, 5],
         [0, 0, -4],
+        [-4, 0, -5],
+        [5, 0, 0],
       ].forEach(([x, y, z], i) => {
         const box = MeshBuilder.CreateBox(`cover_${i}`, { width: 2.5, height: 1.4, depth: 2 }, scene);
         box.position.set(x, y + 0.7, z);
@@ -220,7 +345,6 @@ export default function ArenaGame({
       });
 
       const platformMat = new StandardMaterial("platformMat", scene);
-      platformMat.diffuseColor = new Color3(0.12, 0.1, 0.12);
       const platform = MeshBuilder.CreateBox("platform", { width: 6, height: 0.5, depth: 6 }, scene);
       platform.position.set(0, 0.25, 0);
       platform.material = platformMat;
@@ -234,36 +358,38 @@ export default function ArenaGame({
       remotePlayer.position.copyFrom(mySlot === 1 ? SPAWN2 : SPAWN1);
       remoteMeshRef.current = remotePlayer;
 
-      const moveSpeed = MOVE_SPEED;
       scene.onBeforeRenderObservable.add(() => {
         const dt = engine.getDeltaTime() / 1000;
         const local = localMeshRef.current;
         const cam = cameraRef.current;
         if (!local || !cam) return;
 
-        if (!dead) {
-          const k = keysRef.current;
+        const now = Date.now();
+        let ws = weaponStateRef.current;
+        ws = tickReload(ws, now);
+        if (ws !== weaponStateRef.current) setWeaponState(ws);
+
+        const yaw = lookRef.current.yaw;
+        if (!deadRef.current && !gameEndedRef.current) {
+          const bind = bindsRef.current;
           let vx = moveInputRef.current.x;
           let vz = moveInputRef.current.z;
-          if (k.w) vz += 1;
-          if (k.s) vz -= 1;
-          if (k.d) vx += 1;
-          if (k.a) vx -= 1;
-          const len = Math.sqrt(vx * vx + vz * vz);
-          if (len > 1) {
-            vx /= len;
-            vz /= len;
+          const fromKeys = getMoveVectorFromKeys(bind);
+          if (Math.abs(fromKeys.x) > 0.01 || Math.abs(fromKeys.z) > 0.01) {
+            vx = fromKeys.x;
+            vz = fromKeys.z;
           }
-          const sprint = (sprintToggle ? k.shift : true) ? (k.shift ? SPRINT_MULT : 1) : 1;
+          const sprint = (sprintToggle ? getSprintFromKeys(bind) : true) ? (getSprintFromKeys(bind) ? SPRINT_MULT : 1) : 1;
           const crouchMult = crouchRef.current ? 0.8 : 1;
-          const speed = moveSpeed * sprint * crouchMult * dt;
-          const yaw = lookRef.current.yaw;
+          const speed = MOVE_SPEED * sprint * crouchMult * dt;
           const fwd = new Vector3(Math.sin(yaw), 0, Math.cos(yaw));
           const right = new Vector3(fwd.z, 0, -fwd.x);
           const move = right.scale(vx * speed).add(fwd.scale(vz * speed));
           local.position.addInPlace(move);
+          local.position.x = Math.max(-BOUNDARY, Math.min(BOUNDARY, local.position.x));
+          local.position.z = Math.max(-BOUNDARY, Math.min(BOUNDARY, local.position.z));
           velocityYRef.current += GRAVITY * dt;
-          if (groundedRef.current && k.space) {
+          if (groundedRef.current && getJumpFromKeys(bind)) {
             velocityYRef.current = JUMP_FORCE;
             groundedRef.current = false;
           }
@@ -278,8 +404,11 @@ export default function ArenaGame({
         recoilPitchRef.current *= 0.92;
         const headY = crouchRef.current ? HEAD_HEIGHT_CROUCH : HEAD_HEIGHT;
         const headPos = local.position.clone().add(new Vector3(0, headY, 0));
-        cam.position.copyFrom(headPos);
-        const yaw = lookRef.current.yaw;
+        const isThird = cameraModeLocal === "third";
+        const camOffset = isThird ? 2.5 : 0;
+        const camBack = isThird ? new Vector3(Math.sin(yaw) * -camOffset, 0.2, Math.cos(yaw) * -camOffset) : Vector3.Zero();
+        const camPos = headPos.add(camBack);
+        cam.position.copyFrom(camPos);
         const pitch = lookRef.current.pitch - recoilPitchRef.current;
         const fwd = new Vector3(
           Math.sin(yaw) * Math.cos(pitch),
@@ -296,16 +425,28 @@ export default function ArenaGame({
           remote.position.z += (rt.z - remote.position.z) * REMOTE_LERP;
           remote.rotation.y += (rt.rotY - remote.rotation.y) * REMOTE_LERP;
         }
+        if (canvasRef.current && document.pointerLockElement === canvasRef.current && getFireFromInput(bindsRef.current)) {
+          fireRef.current?.();
+        }
       });
 
       engine.runRenderLoop(() => scene.render());
       window.addEventListener("resize", () => engine.resize());
-      setTimeout(() => {
+
+      const tryPointerLock = () => {
+        if (countdownRef.current || pauseOpen) return;
         if (canvasRef.current && document.pointerLockElement !== canvasRef.current) {
           canvasRef.current.requestPointerLock();
         }
-      }, 100);
+      };
+      setTimeout(() => {
+        countdownRef.current = false;
+        tryPointerLock();
+      }, 500);
+      canvas.addEventListener("click", tryPointerLock);
+
       return () => {
+        canvas.removeEventListener("click", tryPointerLock);
         window.removeEventListener("resize", () => engine.resize());
         scene.dispose();
         engine.dispose();
@@ -314,20 +455,21 @@ export default function ArenaGame({
       console.error("ARENA GAME CRASH:", e);
       setGameError(e);
     }
-  }, [matchId, myUserId, mySlot, fov, sprintToggle]);
+  }, [matchId, myUserId, mySlot, fov, sprintToggle, cameraModeLocal, pauseOpen]);
 
   useEffect(() => {
     const onKey = (down) => (e) => {
-      const k = keysRef.current;
-      switch (e.code) {
-        case "KeyW": k.w = down; break;
-        case "KeyS": k.s = down; break;
-        case "KeyA": k.a = down; break;
-        case "KeyD": k.d = down; break;
-        case "ShiftLeft": case "ShiftRight": k.shift = down; break;
-        case "Space": e.preventDefault(); k.space = down; break;
-        case "KeyC": if (down) crouchRef.current = !crouchRef.current; break;
-        default: break;
+      setKeyDown(e.code, down);
+      if (e.code === "KeyC" && down) crouchRef.current = !crouchRef.current;
+      if (e.code === "Escape") {
+        e.preventDefault();
+        if (down) setPauseOpen((p) => !p);
+      }
+      if (down && !e.repeat) {
+        if (e.code === "KeyR") setWeaponState((s) => startReload(s, Date.now()));
+        if (e.code === "Digit1") setWeaponState((s) => switchToSlot(s, 1));
+        if (e.code === "Digit2") setWeaponState((s) => switchToSlot(s, 2));
+        if (e.code === "KeyV") setCameraModeLocal((c) => (c === "first" ? "third" : "first"));
       }
     };
     window.addEventListener("keydown", onKey(true));
@@ -339,33 +481,24 @@ export default function ArenaGame({
   }, []);
 
   useEffect(() => {
+    if (pauseOpen && document.pointerLockElement === canvasRef.current) {
+      document.exitPointerLock?.();
+    }
+  }, [pauseOpen]);
+
+  useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
     const poll = () => {
-      const pads = navigator.getGamepads?.();
-      if (!pads) return;
-      for (let i = 0; i < pads.length; i++) {
-        const p = pads[i];
-        if (!p || !p.connected) continue;
-        const dead = (v) => (v === undefined || Math.abs(v) < deadzone ? 0 : v);
-        moveInputRef.current = {
-          x: dead(p.axes[0]) * gamepadSens,
-          z: -dead(p.axes[1]) * gamepadSens,
-        };
-        lookRef.current.yaw += dead(p.axes[2]) * 0.02 * gamepadSens;
-        lookRef.current.pitch = Math.max(
-          PITCH_MIN,
-          Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? 1 : -1) * dead(p.axes[3]) * 0.02 * gamepadSens)
-        );
-        crouchRef.current = !!p.buttons[1]?.pressed;
-        if (p.buttons[7]?.pressed) {
-          const now = Date.now();
-          if (now - lastShotRef.current >= FIRE_COOLDOWN_MS) {
-            lastShotRef.current = now;
-            fireRef.current?.();
-          }
-        }
-        break;
+      const gp = getGamepadState(0, deadzone, gamepadSens, invertY, bindsRef.current);
+      if (gp) {
+        moveInputRef.current = gp.move;
+        lookRef.current.yaw += gp.look.x;
+        lookRef.current.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, lookRef.current.pitch + gp.look.y));
+        crouchRef.current = gp.crouch;
+        adsRef.current = gp.aim;
+        if (gp.pause) setPauseOpen(true);
+        if (gp.cameraToggle) setCameraModeLocal((c) => (c === "first" ? "third" : "first"));
       }
     };
     const iv = setInterval(poll, 50);
@@ -376,8 +509,8 @@ export default function ArenaGame({
   const fire = useCallback(() => {
     if (dead || gameEnded) return;
     const now = Date.now();
-    if (now - lastShotRef.current < FIRE_COOLDOWN_MS) return;
-    lastShotRef.current = now;
+    const ws = weaponStateRef.current;
+    if (!canFire(ws, now)) return;
     const scene = sceneRef.current;
     const cam = cameraRef.current;
     const remote = remoteMeshRef.current;
@@ -385,18 +518,37 @@ export default function ArenaGame({
     const origin = cam.position.clone();
     const target = cam.getTarget();
     const fwd = target.subtract(origin).normalize();
-    const ray = new Ray(origin, fwd, 80);
+    const weapon = getCurrentWeapon(ws);
+    const range = weapon.range || 80;
+    const ray = new Ray(origin, fwd, range);
     const hit = scene.pickWithRay(ray);
-    const isRemoteHit =
-      hit?.hit &&
-      remote &&
-      (hit.pickedMesh === remote || hit.pickedMesh.parent === remote);
-    const hitPoint = hit?.hit ? hit.pickedPoint : origin.clone().add(fwd.scale(80));
+    let hitPart = "body";
+    let hitPoint = origin.clone().add(fwd.scale(range));
+    let distance = range;
+    if (hit?.hit && hit.pickedPoint) {
+      hitPoint = hit.pickedPoint.clone();
+      distance = Vector3.Distance(origin, hitPoint);
+      if (hit.pickedMesh === remote || hit.pickedMesh.parent === remote || hit.pickedMesh.parent?.parent === remote) {
+        hitPart = getHitPart(hit.pickedMesh);
+      }
+    }
+    const isRemoteHit = hit?.hit && remote && (hit.pickedMesh === remote || hit.pickedMesh.parent === remote || hit.pickedMesh.parent?.parent === remote);
 
-    recoilPitchRef.current = 0.02;
+    setWeaponState((s) => {
+      const next = consumeAmmo({ ...s });
+      next.lastShotTs = now;
+      return next;
+    });
+    recoilPitchRef.current = weapon.recoilPitch || 0.02;
     setCrosshairRecoil(true);
     setTimeout(() => setCrosshairRecoil(false), 100);
 
+    if (weapon.tracer) {
+      const tracerPoints = [origin, hitPoint];
+      const tracer = MeshBuilder.CreateLines("tracer", { points: tracerPoints }, scene);
+      tracer.color = new Color3(1, 0.85, 0.4);
+      setTimeout(() => tracer.dispose(), 80);
+    }
     const muzzlePlane = MeshBuilder.CreatePlane("muzzle", { size: 0.25 }, scene);
     muzzlePlane.position = origin.clone().add(fwd.scale(0.4));
     muzzlePlane.lookAt(origin);
@@ -409,36 +561,15 @@ export default function ArenaGame({
       muzzleMat.dispose();
     }, 50);
 
-    const tracerPoints = [origin, hitPoint];
-    const tracer = MeshBuilder.CreateLines("tracer", { points: tracerPoints }, scene);
-    tracer.color = new Color3(1, 0.85, 0.4);
-    setTimeout(() => tracer.dispose(), 80);
-
-    if (hit?.hit && hit.pickedPoint) {
-      const spark = MeshBuilder.CreateBox("spark", { size: 0.15 }, scene);
-      spark.position.copyFrom(hit.pickedPoint);
-      const sparkMat = new StandardMaterial("sparkMat", scene);
-      sparkMat.emissiveColor = new Color3(1, 0.7, 0.2);
-      spark.material = sparkMat;
-      setTimeout(() => {
-        spark.dispose();
-        sparkMat.dispose();
-      }, 100);
-    }
-
     if (isRemoteHit) {
+      const damage = computeDamage(weapon.id, hitPart, distance);
       setShowHitMarker(true);
       setTimeout(() => setShowHitMarker(false), 200);
-      broadcastHit(matchId, { shooterId: myUserId, victimId: opponentUserId, damage: HIT_DAMAGE });
-      setKills((k) => {
-        const next = k + 1;
-        if (next >= KILLS_TO_WIN) {
-          setGameEnded(true);
-          setWon(true);
-        }
-        return next;
-      });
+      setDamageNumbers((d) => [...d.slice(-5), { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z, damage, headshot: hitPart === "head" }]);
+      setTimeout(() => setDamageNumbers((d) => d.slice(0, -1)), 800);
+      broadcastHit(matchId, { shooterId: myUserId, victimId: opponentUserId, damage, hitPart });
     }
+    broadcastWeaponFire(matchId, { userId: myUserId, weapon: weapon.id, origin: [origin.x, origin.y, origin.z], dir: [fwd.x, fwd.y, fwd.z] });
   }, [matchId, myUserId, opponentUserId, dead, gameEnded]);
   fireRef.current = fire;
 
@@ -449,23 +580,64 @@ export default function ArenaGame({
       if (document.pointerLockElement !== canvas) return;
       const dx = e.movementX ?? 0;
       const dy = e.movementY ?? 0;
-      lookRef.current.yaw += dx * sensX;
+      const sens = adsRef.current ? sensX * adsSens : sensX;
+      const sensYVal = adsRef.current ? sensY * adsSens : sensY;
+      lookRef.current.yaw += dx * sens;
       lookRef.current.pitch = Math.max(
         PITCH_MIN,
-        Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? dy : -dy) * sensY)
+        Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? dy : -dy) * sensYVal)
       );
     };
-    const onClick = () => {
-      if (canvas.requestPointerLock) canvas.requestPointerLock();
+    const onMouseDown = (e) => {
+      setMouseButton(e.button, true);
+      if (e.button === 1) adsRef.current = true;
+    };
+    const onMouseUp = (e) => {
+      setMouseButton(e.button, false);
+      if (e.button === 1) adsRef.current = false;
     };
     document.addEventListener("mousemove", onMouseMove);
-    canvas.addEventListener("click", onClick);
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("mouseup", onMouseUp);
     return () => {
       document.removeEventListener("mousemove", onMouseMove);
-      canvas.removeEventListener("click", onClick);
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("mouseup", onMouseUp);
       if (document.pointerLockElement === canvas) document.exitPointerLock?.();
     };
-  }, [sensX, sensY, invertY]);
+  }, [sensX, sensY, invertY, adsSens]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const cam = cameraRef.current;
+    const remote = remoteMeshRef.current;
+    if (!scene || !cam || !remote) return;
+    const engine = scene.getEngine();
+    const viewport = { x: 0, y: 0, width: engine.getRenderWidth(), height: engine.getRenderHeight() };
+    const worldMatrix = Matrix.Identity();
+    projectWorldToScreenRef.current = (wx, wy, wz) => {
+      const world = new Vector3(wx, wy, wz);
+      const view = cam.getViewMatrix();
+      const proj = cam.getProjectionMatrix(true);
+      const transform = proj.multiply(view);
+      const screen = Vector3.Project(world, worldMatrix, transform, viewport);
+      if (screen.z < 0 || screen.z > 1) return null;
+      return { x: screen.x, y: screen.y };
+    };
+    const iv = setInterval(() => {
+      const headWorld = remote.position.clone().add(new Vector3(0, 1.15, 0));
+      const view = cam.getViewMatrix();
+      const proj = cam.getProjectionMatrix(true);
+      const transform = proj.multiply(view);
+      const scr = Vector3.Project(headWorld, worldMatrix, transform, viewport);
+      if (scr.z > 0 && scr.z < 1) {
+        setEnemyBarScreen({ left: scr.x, top: scr.y - 30, visible: true });
+      } else {
+        setEnemyBarScreen((s) => ({ ...s, visible: false }));
+      }
+    }, 100);
+    return () => clearInterval(iv);
+  }, []);
 
   useEffect(() => {
     if (!matchId || !opponentUserId) return;
@@ -473,6 +645,7 @@ export default function ArenaGame({
       if (payload.type === "snapshot" && payload.userId === opponentUserId) {
         if (payload.pos) {
           remoteTargetRef.current = {
+            ...remoteTargetRef.current,
             x: payload.pos[0],
             y: payload.pos[1],
             z: payload.pos[2],
@@ -480,24 +653,42 @@ export default function ArenaGame({
           };
         }
         setEnemyKills(payload.kills ?? 0);
+        setEnemyHealth(payload.health ?? 100);
       }
       if (payload.type === "hit" && payload.victimId === myUserId) {
         setHealth((h) => {
-          const next = Math.max(0, h - (payload.damage ?? HIT_DAMAGE));
+          const next = Math.max(0, h - (payload.damage ?? 20));
           if (next <= 0) {
+            broadcastDeath(matchId, myUserId, payload.shooterId);
             setDead(true);
             setDeaths((d) => d + 1);
+            setKillFeedEntries((e) => [...e, { youKilled: false }]);
             setTimeout(() => {
               setHealth(100);
               setDead(false);
               const local = localMeshRef.current;
-              if (local) local.position.copyFrom(mySlot === 1 ? SPAWN1 : SPAWN2);
+              if (local) {
+                local.position.copyFrom(mySlot === 1 ? SPAWN1 : SPAWN2);
+                local.rotation.x = 0;
+                local.rotation.z = 0;
+              }
               velocityYRef.current = 0;
               groundedRef.current = true;
             }, RESPAWN_DELAY_MS);
           }
           return next;
         });
+      }
+      if (payload.type === "death" && payload.victimId === opponentUserId && payload.killerId === myUserId) {
+        setKills((k) => {
+          const next = k + 1;
+          if (next >= KILLS_TO_WIN) {
+            setGameEnded(true);
+            setWon(true);
+          }
+          return next;
+        });
+        setKillFeedEntries((e) => [...e, { youKilled: true }]);
       }
     });
     return () => unsub?.();
@@ -506,12 +697,12 @@ export default function ArenaGame({
   useEffect(() => {
     if (!matchId) return;
     const t = setInterval(() => {
-      if (gameEnded) return;
+      if (gameEndedRef.current || deadRef.current) return;
       const now = Date.now();
-      if (now - lastSnapshotRef.current < 100) return;
+      if (now - lastSnapshotRef.current < SNAPSHOT_MS) return;
       lastSnapshotRef.current = now;
       const local = localMeshRef.current;
-      if (!local || dead) return;
+      if (!local) return;
       broadcastSnapshot(matchId, {
         userId: myUserId,
         pos: [local.position.x, local.position.y, local.position.z],
@@ -521,23 +712,23 @@ export default function ArenaGame({
         kills,
         deaths,
       });
-    }, 100);
+    }, SNAPSHOT_MS);
     return () => clearInterval(t);
   }, [matchId, myUserId, health, kills, deaths, dead, gameEnded]);
 
   useEffect(() => {
     if (gameEnded) return;
-    const start = Date.now();
+    if (!matchStartTsRef.current) matchStartTsRef.current = Date.now();
     const iv = setInterval(() => {
-      const left = Math.max(0, MATCH_DURATION_S - (Date.now() - start) / 1000);
+      const left = Math.max(0, MATCH_DURATION_S - (Date.now() - matchStartTsRef.current) / 1000);
       setTimeLeft(left);
       if (left <= 0) {
         setGameEnded(true);
-        setWon(killsRef.current > enemyKillsRef.current);
+        setWon(kills > enemyKills);
       }
     }, 500);
     return () => clearInterval(iv);
-  }, [gameEnded]);
+  }, [gameEnded, kills, enemyKills]);
 
   useEffect(() => {
     if (!gameEnded || !matchId) return;
@@ -553,6 +744,11 @@ export default function ArenaGame({
       }
     })();
   }, [gameEnded, matchId, won, myUserId, opponentUserId, kills, deaths, enemyKills]);
+
+  const currentWeapon = getCurrentWeapon(weaponState);
+  const mag = weaponState.mag[weaponState.current] ?? 0;
+  const reserve = weaponState.reserve[weaponState.current] ?? 0;
+  const showScope = adsRef.current && currentWeapon.scope;
 
   if (!matchId || !myUserId || mySlot == null || !opponentUserId) {
     return <div style={loadingStyle}>Loading arena…</div>;
@@ -577,10 +773,23 @@ export default function ArenaGame({
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "#0a0a0a" }}>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
-      <HUD health={health} kills={kills} deaths={deaths} timeLeft={timeLeft} />
+      <HUD
+        health={health}
+        kills={kills}
+        deaths={deaths}
+        timeLeft={timeLeft}
+        mag={mag}
+        reserve={reserve}
+        onBack={handleLeaveMatch}
+        onSettings={() => onOpenSettings?.()}
+      />
       <Scoreboard slot1Kills={kills} slot2Kills={enemyKills} />
       <Crosshair style={crosshairStyle} recoil={crosshairRecoil} />
       <HitMarker show={showHitMarker} />
+      <ScopeOverlay show={showScope} />
+      <KillFeed entries={killFeedEntries} />
+      <DamageNumbers entries={damageNumbers} project={(x, y, z) => projectWorldToScreenRef.current?.(x, y, z)} />
+      <EnemyHealthBar left={enemyBarScreen.left} top={enemyBarScreen.top} health={enemyHealth} visible={enemyBarScreen.visible} />
       <LookTouch onLookDelta={onLookDelta} />
       <Joystick onMove={onMove} />
       <button
@@ -601,7 +810,7 @@ export default function ArenaGame({
           zIndex: 15,
         }}
         onTouchStart={(e) => { e.preventDefault(); fire(); }}
-        onMouseDown={(e) => { e.preventDefault(); fire(); }}
+        onMouseDown={(e) => { e.preventDefault(); if (e.button === 0) fire(); }}
       >
         FIRE
       </button>
@@ -622,11 +831,11 @@ export default function ArenaGame({
           cursor: "pointer",
           zIndex: 15,
         }}
-        onTouchStart={(e) => { e.preventDefault(); keysRef.current.space = true; }}
-        onTouchEnd={() => { keysRef.current.space = false; }}
-        onMouseDown={() => { keysRef.current.space = true; }}
-        onMouseUp={() => { keysRef.current.space = false; }}
-        onMouseLeave={() => { keysRef.current.space = false; }}
+        onTouchStart={(e) => { e.preventDefault(); setKeyDown("Space", true); }}
+        onTouchEnd={() => setKeyDown("Space", false)}
+        onMouseDown={() => setKeyDown("Space", true)}
+        onMouseUp={() => setKeyDown("Space", false)}
+        onMouseLeave={() => setKeyDown("Space", false)}
       >
         JUMP
       </button>
@@ -652,7 +861,89 @@ export default function ArenaGame({
       >
         CROUCH
       </button>
-      {gameEnded && <EndScreen won={won} kills={kills} deaths={deaths} onExit={onExit} />}
+      <button
+        type="button"
+        style={{
+          position: "absolute",
+          right: 16,
+          bottom: 278,
+          width: 56,
+          height: 56,
+          borderRadius: "50%",
+          border: "2px solid var(--border)",
+          background: "var(--card-2)",
+          color: "var(--text)",
+          fontSize: 11,
+          fontWeight: 700,
+          cursor: "pointer",
+          zIndex: 15,
+        }}
+        onTouchStart={(e) => { e.preventDefault(); setWeaponState((s) => swapWeapon(s)); }}
+        onMouseDown={(e) => { e.preventDefault(); setWeaponState((s) => swapWeapon(s)); }}
+      >
+        SWAP
+      </button>
+      <button
+        type="button"
+        style={{
+          position: "absolute",
+          right: 84,
+          bottom: 278,
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          border: "2px solid var(--border)",
+          background: "var(--card-2)",
+          color: "var(--text)",
+          fontSize: 11,
+          fontWeight: 700,
+          cursor: "pointer",
+          zIndex: 15,
+        }}
+        onTouchStart={(e) => { e.preventDefault(); setWeaponState((s) => startReload(s, Date.now())); }}
+        onMouseDown={(e) => { e.preventDefault(); setWeaponState((s) => startReload(s, Date.now())); }}
+      >
+        RELOAD
+      </button>
+      <button
+        type="button"
+        style={{
+          position: "absolute",
+          right: 152,
+          bottom: 190,
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          border: "2px solid var(--border)",
+          background: "var(--card-2)",
+          color: "var(--text)",
+          fontSize: 11,
+          fontWeight: 700,
+          cursor: "pointer",
+          zIndex: 15,
+        }}
+        onTouchStart={(e) => { e.preventDefault(); adsRef.current = true; }}
+        onTouchEnd={() => { adsRef.current = false; }}
+        onMouseDown={(e) => { e.preventDefault(); adsRef.current = true; }}
+        onMouseUp={() => { adsRef.current = false; }}
+        onMouseLeave={() => { adsRef.current = false; }}
+      >
+        AIM
+      </button>
+      {pauseOpen && (
+        <PauseMenu
+          onResume={() => { setPauseOpen(false); setTimeout(() => canvasRef.current?.requestPointerLock(), 50); }}
+          onSettings={() => { onOpenSettings?.(); }}
+          onControls={() => { onOpenSettings?.(); }}
+          onLeaveMatch={handleLeaveMatch}
+        />
+      )}
+      {opponentLeft && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 150, color: "#fff", fontSize: 22, fontWeight: 800 }}>
+          Opponent left. Returning to lobby…
+        </div>
+      )}
+      {gameEnded && !opponentLeft && <EndScreen won={won} kills={kills} deaths={deaths} onExit={onExit} />}
     </div>
   );
 }

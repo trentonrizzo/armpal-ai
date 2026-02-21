@@ -63,6 +63,26 @@ export function broadcastHit(matchId, data) {
     shooterId: data.shooterId,
     victimId: data.victimId,
     damage: data.damage,
+    hitPart: data.hitPart,
     ts: Date.now(),
   });
+}
+
+export function broadcastWeaponFire(matchId, data) {
+  broadcast(matchId, {
+    type: "weapon_fire",
+    userId: data.userId,
+    weapon: data.weapon,
+    origin: data.origin,
+    dir: data.dir,
+    ts: Date.now(),
+  });
+}
+
+export function broadcastLeave(matchId, userId) {
+  broadcast(matchId, { type: "leave", userId, ts: Date.now() });
+}
+
+export function broadcastDeath(matchId, victimId, killerId) {
+  broadcast(matchId, { type: "death", victimId, killerId, ts: Date.now() });
 }
