@@ -38,7 +38,7 @@ export function getFlapBounceOffset(progress) {
 /**
  * Score pop scale: scale up then settle. progress 0..1.
  */
-export function getScorePopScale(progress, maxScale = 1.2) {
+export function getScorePopScale(progress, maxScale = 1.15) {
   if (progress >= 1) return 1;
   if (progress < 0.5) return 1 + (maxScale - 1) * easeOutQuad(progress * 2);
   return maxScale - (maxScale - 1) * easeInQuad((progress - 0.5) * 2);

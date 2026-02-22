@@ -17,7 +17,7 @@ export const ARM_IDLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="220"
 <path d="M150 74 C150 62 160 54 172 54 C186 54 196 64 196 76 C196 88 187 98 174 98 C161 98 150 88 150 74 Z" fill="url(#skin)"/>
 <rect x="138" y="68" width="24" height="8" rx="2" fill="#2d1f14"/>
 <rect x="140" y="70" width="8" height="4" rx="1" fill="#4a3528"/>
-<path d="M35 85 C20 75 20 55 38 45 M92 38 C92 18 116 10 140 18 M150 74 L172 54 M174 98 L196 76" fill="none" stroke="#8b6914" stroke-width="1.2" stroke-opacity="0.4"/>
+<path d="M35 85 C20 75 20 55 38 45 M92 38 C92 18 116 10 140 18 M150 74 L172 54 M174 98 L196 76" fill="none" stroke="#2d1f14" stroke-width="2" stroke-opacity="0.9"/>
 </svg>`;
 
 export const ARM_FLAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="140" viewBox="0 0 220 140">
@@ -32,11 +32,11 @@ export const ARM_FLAP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="220"
 <path d="M102 40 L128 48 L122 68 L96 60 Z" fill="url(#hl2)"/>
 <path d="M152 72 C150 60 162 52 174 52 C188 52 198 62 198 74 C198 86 188 96 174 96 C160 96 152 84 152 72 Z" fill="url(#skin2)"/>
 <rect x="140" y="66" width="24" height="8" rx="2" fill="#2d1f14"/>
-<path d="M38 82 C22 72 24 50 42 42 M94 35 C92 16 118 8 142 16 M152 72 L174 52" fill="none" stroke="#8b6914" stroke-width="1.2" stroke-opacity="0.4"/>
+<path d="M38 82 C22 72 24 50 42 42 M94 35 C92 16 118 8 142 16 M152 72 L174 52" fill="none" stroke="#2d1f14" stroke-width="2" stroke-opacity="0.9"/>
 </svg>`;
 
 export const ARM_SHADOW_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40">
-<ellipse cx="60" cy="20" rx="50" ry="12" fill="#000" opacity="0.35"/>
+<ellipse cx="60" cy="20" rx="52" ry="14" fill="#000" opacity="0.5"/>
 </svg>`;
 
 // Gym layers: far = silhouettes, mid = detail, near = streaks
@@ -65,28 +65,31 @@ export const GYM_BG_NEAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="4
 <line x1="360" y1="200" x2="400" y2="520" stroke="#2a2d34" stroke-width="1" opacity="0.2"/>
 </svg>`;
 
-// Barbell: sleeve, plates, metal gradient, top-left highlight
+// Barbell: brighter metallic gradient, outer glow edge for readability
 export const BARBELL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="520" viewBox="0 0 140 520">
 <defs>
-  <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5c5f66"/><stop offset="0.3" stop-color="#4a4d52"/><stop offset="0.5" stop-color="#3d4045"/><stop offset="0.7" stop-color="#4a4d52"/><stop offset="1" stop-color="#5c5f66"/></linearGradient>
-  <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4a4a"/><stop offset="1" stop-color="#1a1a1a"/></linearGradient>
-  <linearGradient id="spec" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.2"/><stop offset="0.4" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7a7d85"/><stop offset="0.25" stop-color="#6b6e76"/><stop offset="0.5" stop-color="#5c5f66"/><stop offset="0.75" stop-color="#6b6e76"/><stop offset="1" stop-color="#7a7d85"/></linearGradient>
+  <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a5a5a"/><stop offset="1" stop-color="#2a2a2a"/></linearGradient>
+  <linearGradient id="spec" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.4" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.15"/><stop offset="0.15" stop-color="#fff" stop-opacity="0"/></linearGradient>
 </defs>
-<rect x="58" y="0" width="24" height="28" rx="6" fill="url(#metal)"/>
+<rect x="56" y="-1" width="28" height="30" rx="6" fill="url(#metal)" stroke="#8b8f98" stroke-width="1" opacity="0.9"/>
 <rect x="64" y="0" width="12" height="520" rx="6" fill="url(#metal)"/>
-<ellipse cx="70" cy="72" rx="58" ry="18" fill="url(#plate)"/>
+<rect x="56" y="0" width="3" height="520" fill="url(#edge)"/>
+<ellipse cx="70" cy="72" rx="58" ry="18" fill="url(#plate)" stroke="#6b6e76" stroke-width="0.8"/>
 <ellipse cx="70" cy="72" rx="12" ry="4" fill="#0a0a0a"/>
-<ellipse cx="70" cy="108" rx="44" ry="14" fill="url(#plate)"/>
+<ellipse cx="70" cy="108" rx="44" ry="14" fill="url(#plate)" stroke="#6b6e76" stroke-width="0.8"/>
 <ellipse cx="70" cy="108" rx="10" ry="3.5" fill="#0a0a0a"/>
-<ellipse cx="70" cy="138" rx="34" ry="11" fill="url(#plate)"/>
+<ellipse cx="70" cy="138" rx="34" ry="11" fill="url(#plate)" stroke="#6b6e76" stroke-width="0.8"/>
 <ellipse cx="70" cy="138" rx="8" ry="3" fill="#0a0a0a"/>
 <rect x="62" y="508" width="16" height="12" rx="4" fill="url(#metal)"/>
 <rect x="64" y="0" width="4" height="80" fill="url(#spec)"/>
 </svg>`;
 
 export const BARBELL_GLOW_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="540" viewBox="0 0 160 540">
-<defs><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-<rect x="54" y="-10" width="52" height="540" rx="8" fill="#e63946" opacity="0.12" filter="url(#glow)"/>
+<defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<rect x="52" y="-10" width="56" height="540" rx="8" fill="#fff" opacity="0.08" filter="url(#glow)"/>
+<rect x="54" y="-10" width="52" height="540" rx="8" fill="#8b8f98" opacity="0.15" filter="url(#glow)"/>
 </svg>`;
 
 export const SPARK_PARTICLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8">

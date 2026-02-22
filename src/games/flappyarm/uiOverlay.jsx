@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { CANVAS_W, PALETTE } from "./constants";
+import { CANVAS_W, PALETTE } from "./constants.js";
 
 const styles = {
   wrap: {
@@ -104,13 +104,13 @@ const styles = {
     padding: 16,
   },
   overlayCard: {
-    background: "var(--card)",
+    background: "linear-gradient(165deg, var(--card) 0%, var(--card-2) 100%)",
     borderRadius: 20,
     padding: 28,
     border: "1px solid var(--border)",
     textAlign: "center",
     maxWidth: 320,
-    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.4)",
   },
   overlayTitle: { fontSize: 22, fontWeight: 900, margin: "0 0 16px", color: "var(--text)" },
   overlayScore: { fontSize: 18, fontWeight: 700, margin: "0 0 4px", color: "var(--text)" },

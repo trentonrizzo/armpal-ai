@@ -69,9 +69,13 @@ export default function FlappyArmGame({ game }) {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
       if (alive) setUser(u ?? null);
     });
-    loadAllAssets().then(() => {
-      if (alive) setAssetsReady(true);
-    });
+    loadAllAssets()
+      .then((result) => {
+        if (alive) setAssetsReady(result.ready !== false);
+      })
+      .catch(() => {
+        if (alive) setAssetsReady(true);
+      });
     return () => { alive = false; };
   }, []);
 
@@ -118,123 +122,133 @@ export default function FlappyArmGame({ game }) {
   }, []);
 
   useEffect(() => {
-    if (phase !== "playing" || !assetsReady || !canvasRef.current) return;
+    if (phase !== "playing" || !canvasRef.current) return;
 
-    const ctx = canvasRef.current.getContext("2d");
+    const canvas = canvasRef.current;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = CANVAS_W * dpr;
+    canvas.height = CANVAS_H * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
     const state = stateRef.current;
     const smoothFactor = 0.35;
 
     let rafId;
     function frame(now) {
-      const dt = Math.min(0.05, (now - lastFrameTimeRef.current) / 1000);
-      lastFrameTimeRef.current = now;
+      try {
+        const dt = Math.min(0.05, (now - lastFrameTimeRef.current) / 1000);
+        lastFrameTimeRef.current = now;
 
-      if (fpsLastTimeRef.current === 0) fpsLastTimeRef.current = now;
-      fpsFrameCountRef.current++;
-      if (now - fpsLastTimeRef.current >= 500) {
-        setFps(Math.round((fpsFrameCountRef.current * 1000) / (now - fpsLastTimeRef.current)));
-        fpsFrameCountRef.current = 0;
-        fpsLastTimeRef.current = now;
-      }
+        if (fpsLastTimeRef.current === 0) fpsLastTimeRef.current = now;
+        fpsFrameCountRef.current++;
+        if (now - fpsLastTimeRef.current >= 500) {
+          setFps(Math.round((fpsFrameCountRef.current * 1000) / (now - fpsLastTimeRef.current)));
+          fpsFrameCountRef.current = 0;
+          fpsLastTimeRef.current = now;
+        }
 
-      const freeze = freezeEnd && now < freezeEnd;
-      if (freeze) {
-        rafId = requestAnimationFrame(frame);
-        return;
-      }
+        const freeze = freezeEnd && now < freezeEnd;
+        if (freeze) {
+          rafId = requestAnimationFrame(frame);
+          return;
+        }
 
-      const result = stepPhysics(state, now, false);
-      state.prevY = state.prevY !== undefined ? state.prevY + (state.y - state.prevY) * smoothFactor : state.y;
-      state.prevRot = state.prevRot !== undefined
-        ? state.prevRot + (getVisualRotation(state.vy, state.rotation) - state.prevRot) * smoothFactor
-        : state.rotation;
+        const result = stepPhysics(state, now, false);
+        state.prevY = state.prevY !== undefined ? state.prevY + (state.y - state.prevY) * smoothFactor : state.y;
+        state.prevRot = state.prevRot !== undefined
+          ? state.prevRot + (getVisualRotation(state.vy, state.rotation) - state.prevRot) * smoothFactor
+          : state.rotation;
 
-      if (result.scored) {
-        setScore((s) => s + 1);
-        const cx = CANVAS_W / 2;
-        const py = state.y + PLAYER.size / 2;
-        particlesRef.current = particlesRef.current.concat(
-          createScoreBurstParticles(cx, py, 6)
-        );
-        setScorePopStart(Date.now());
-      }
+        if (result.scored) {
+          setScore((s) => s + 1);
+          const cx = CANVAS_W / 2;
+          const py = state.y + PLAYER.size / 2;
+          particlesRef.current = particlesRef.current.concat(
+            createScoreBurstParticles(cx, py, 6)
+          );
+          setScorePopStart(Date.now());
+        }
 
-      if (result.hitObstacle || result.hitGround) {
-        setPhase("over");
-        shakeRemainingRef.current = 12;
-        const flashEnd = Date.now() + 200;
-        setRedFlashEnd(flashEnd);
-        setFreezeEnd(Date.now() + FREEZE_FRAME_MS);
-        setTimeout(() => setRedFlashEnd(null), 220);
-        const finalScore = scoreRef.current;
-        if (user?.id) {
-          (async () => {
-            const { data } = await supabase.rpc("record_flappy_arm_score", {
-              user_id: user.id,
-              score: finalScore,
-            });
-            if (data?.is_pr === true) {
-              setShowPrInOverlay(true);
-              if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
-            }
-            if (game?.id) {
-              await supabase.from("user_game_scores").insert({
+        if (result.hitObstacle || result.hitGround) {
+          setPhase("over");
+          shakeRemainingRef.current = 12;
+          const flashEnd = Date.now() + 200;
+          setRedFlashEnd(flashEnd);
+          setFreezeEnd(Date.now() + FREEZE_FRAME_MS);
+          setTimeout(() => setRedFlashEnd(null), 220);
+          const finalScore = scoreRef.current;
+          if (user?.id) {
+            (async () => {
+              const { data } = await supabase.rpc("record_flappy_arm_score", {
                 user_id: user.id,
-                game_id: game.id,
                 score: finalScore,
               });
-              const { data: existingBest } = await supabase
-                .from("user_game_best")
-                .select("*")
-                .eq("user_id", user.id)
-                .eq("game_id", game.id)
-                .maybeSingle();
-              if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
-                await supabase.from("user_game_best").upsert(
-                  { user_id: user.id, game_id: game.id, best_score: finalScore, updated_at: new Date().toISOString() },
-                  { onConflict: "user_id,game_id" }
-                );
+              if (data?.is_pr === true) {
+                setShowPrInOverlay(true);
+                if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
               }
-            }
-            await supabase.rpc("increment_arcade_stats", {
-              p_user_id: user.id,
-              p_game_id: "flappy_arm",
-              p_score: finalScore,
-            });
-            await loadArcadeStats(user.id);
-          })();
+              if (game?.id) {
+                await supabase.from("user_game_scores").insert({
+                  user_id: user.id,
+                  game_id: game.id,
+                  score: finalScore,
+                });
+                const { data: existingBest } = await supabase
+                  .from("user_game_best")
+                  .select("*")
+                  .eq("user_id", user.id)
+                  .eq("game_id", game.id)
+                  .maybeSingle();
+                if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
+                  await supabase.from("user_game_best").upsert(
+                    { user_id: user.id, game_id: game.id, best_score: finalScore, updated_at: new Date().toISOString() },
+                    { onConflict: "user_id,game_id" }
+                  );
+                }
+              }
+              await supabase.rpc("increment_arcade_stats", {
+                p_user_id: user.id,
+                p_game_id: "flappy_arm",
+                p_score: finalScore,
+              });
+              await loadArcadeStats(user.id);
+            })();
+          }
+          rafId = requestAnimationFrame(frame);
+          return;
         }
-        rafId = requestAnimationFrame(frame);
-        return;
+
+        particlesRef.current = stepParticles(particlesRef.current, 0.016);
+
+        let shakeX = 0,
+          shakeY = 0;
+        if (shakeRemainingRef.current > 0) {
+          const s = getShakeOffset(shakeRemainingRef.current, SHAKE_ON_HIT_PX);
+          shakeX = s.x;
+          shakeY = s.y;
+          shakeRemainingRef.current--;
+        } else if (flapBounceStart && now - flapBounceStart < 120) {
+          const prog = (now - flapBounceStart) / 120;
+          const up = 1 - Math.min(1, prog * 4);
+          shakeY = -FLAP_CAMERA_BOUNCE_PX * up;
+        }
+
+        const scorePopProgress = scorePopStart ? Math.min(1, (now - scorePopStart) / SCORE_POP_MS) : 1;
+        const scorePopScale = scorePopProgress < 1 ? getScorePopScale(scorePopProgress) : 1;
+
+        drawFrame(ctx, state, particlesRef.current, shakeX, shakeY, scoreRef.current, scorePopScale);
+        if (debug) drawDebugOverlay(ctx, state);
+      } catch (e) {
+        console.error("FlappyArm frame error:", e);
       }
-
-      particlesRef.current = stepParticles(particlesRef.current, 0.016);
-
-      let shakeX = 0,
-        shakeY = 0;
-      if (shakeRemainingRef.current > 0) {
-        const s = getShakeOffset(shakeRemainingRef.current, SHAKE_ON_HIT_PX);
-        shakeX = s.x;
-        shakeY = s.y;
-        shakeRemainingRef.current--;
-      } else if (flapBounceStart && now - flapBounceStart < 120) {
-        const prog = (now - flapBounceStart) / 120;
-        const up = 1 - Math.min(1, prog * 4);
-        shakeY = -FLAP_CAMERA_BOUNCE_PX * up;
-      }
-
-      const scorePopProgress = scorePopStart ? Math.min(1, (now - scorePopStart) / SCORE_POP_MS) : 1;
-      const scorePopScale = scorePopProgress < 1 ? getScorePopScale(scorePopProgress) : 1;
-
-      drawFrame(ctx, state, particlesRef.current, shakeX, shakeY, scoreRef.current, scorePopScale);
-      if (debug) drawDebugOverlay(ctx, state);
-
       rafId = requestAnimationFrame(frame);
     }
     lastFrameTimeRef.current = performance.now();
     rafId = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafId);
-  }, [phase, score, user?.id, game?.id, toast, loadArcadeStats, debug, assetsReady, freezeEnd, flapBounceStart, scorePopStart]);
+  }, [phase, score, user?.id, game?.id, toast, loadArcadeStats, debug, freezeEnd, flapBounceStart, scorePopStart]);
 
   const bestScore = arcadeStats?.flappy_best_score ?? 0;
 

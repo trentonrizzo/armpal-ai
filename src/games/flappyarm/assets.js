@@ -1,5 +1,5 @@
 /**
- * FlappyArm — load and cache images. Uses SVG data URLs until WebP assets exist.
+ * FlappyArm — load and cache images. Safe loading: catch errors, retry once, resolve even if some fail.
  */
 
 import {
@@ -16,14 +16,22 @@ import {
 } from "./assets/svgContent.js";
 
 function dataUrl(svg) {
-  return "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg.trim())));
+  try {
+    return "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent((svg || "").trim())));
+  } catch (_) {
+    return "";
+  }
 }
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
+    if (!src) {
+      reject(new Error("empty src"));
+      return;
+    }
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => reject(new Error("load failed"));
     img.src = src;
   });
 }
@@ -56,35 +64,80 @@ const svgMap = {
 };
 
 /**
- * Load all assets. Returns { [key]: HTMLImageElement }.
+ * Load one asset with optional retry. Returns img or null.
  */
-export function loadAllAssets() {
-  const entries = keys.map((key) =>
-    loadImage(dataUrl(svgMap[key])).then((img) => {
-      cache[key] = img;
-      return [key, img];
-    })
-  );
-  return Promise.all(entries).then(() => ({ ...cache }));
+async function loadOne(key, retry = true) {
+  const svg = svgMap[key];
+  const src = dataUrl(svg);
+  try {
+    const img = await loadImage(src);
+    cache[key] = img;
+    return img;
+  } catch (e) {
+    if (retry) {
+      try {
+        const img = await loadImage(src);
+        cache[key] = img;
+        return img;
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 /**
- * Get cached image by key. May be null if not loaded yet.
+ * Load all assets. Never rejects. Returns { ready: true, assets: {...}, failed: [...] }.
+ * ready is true so the game can always start (fallbacks used for failed assets).
+ */
+export function loadAllAssets() {
+  const failed = [];
+  const promises = keys.map(async (key) => {
+    const img = await loadOne(key);
+    if (!img) failed.push(key);
+    return [key, img];
+  });
+  return Promise.all(promises)
+    .then(() => ({
+      ready: true,
+      assets: { ...cache },
+      failed: [...failed],
+    }))
+    .catch((e) => {
+      console.error("FlappyArm loadAllAssets error:", e);
+      return {
+        ready: true,
+        assets: { ...cache },
+        failed: keys.filter((k) => !cache[k]),
+      };
+    });
+}
+
+/**
+ * Get cached image by key. May be null if not loaded.
  */
 export function getAsset(key) {
   return cache[key] || null;
 }
 
 /**
+ * Return true if img is safe to draw (exists and complete).
+ */
+export function isAssetReady(img) {
+  return img != null && img.complete && typeof img.naturalWidth === "number" && img.naturalWidth > 0;
+}
+
+/**
  * Check if all assets are loaded.
  */
 export function allLoaded() {
-  return keys.every((k) => cache[k] != null);
+  return keys.every((k) => isAssetReady(cache[k]));
 }
 
 /**
  * Get load status for debug overlay.
  */
 export function getLoadStatus() {
-  return keys.reduce((acc, k) => ({ ...acc, [k]: !!cache[k] }), {});
+  return keys.reduce((acc, k) => ({ ...acc, [k]: isAssetReady(cache[k]) }), {});
 }

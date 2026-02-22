@@ -54,5 +54,5 @@ export const PALETTE = {
 export const SHAKE_ON_HIT_PX = 6;
 export const FREEZE_FRAME_MS = 80;
 export const FLAP_CAMERA_BOUNCE_PX = 2;
-export const SCORE_POP_SCALE = 1.2;
+export const SCORE_POP_SCALE = 1.15;
 export const SCORE_POP_MS = 150;
