@@ -2,7 +2,7 @@ import React from "react";
 import ReactionSpeed from "./ReactionSpeed";
 import TapStrength from "./TapStrength";
 import TicTacToe from "./TicTacToe";
-import FlappyArm from "./FlappyArm";
+import FlappyArmGame from "../../games/flappyarm/FlappyArmGame";
 
 export default function GameViewer({ game, session }) {
   if (!game) return null;
@@ -14,7 +14,7 @@ export default function GameViewer({ game, session }) {
     case "tap_strength":
       return <TapStrength game={game} />;
     case "flappy_arm":
-      return <FlappyArm game={game} />;
+      return <FlappyArmGame game={game} />;
     case "tictactoe":
     case "tic_tac_toe":
       return session ? <TicTacToe game={game} session={session} /> : (
