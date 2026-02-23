@@ -1,30 +1,206 @@
 /**
- * FlappyArm — main entry. Jetpack Joyride–level clarity. Physics + Renderer + Juice.
+ * FlappyArm — single-file canvas game. No external assets. Stable, mobile-safe.
+ *
+ * SCHEMA (existing app usage; arcade_* may exist in DB but not in repo migrations):
+ * - Best/display: arcade_user_stats (user_id, flappy_best_score, flappy_total_games, flappy_last_score).
+ * - Submit: supabase.rpc("record_flappy_arm_score", { user_id, score }) -> { is_pr };
+ *   then user_game_scores.insert({ user_id, game_id, score });
+ *   then user_game_best.upsert({ user_id, game_id, best_score, updated_at }, onConflict: "user_id,game_id");
+ *   then supabase.rpc("increment_arcade_stats", { p_user_id, p_game_id: "flappy_arm", p_score });
+ * - Leaderboard: /games/leaderboard?game_type=flappy_arm uses arcade_flappy_arm_leaderboard
+ *   (user_id, best_score, achieved_at). Profiles joined for display_name/username/handle.
+ * - Migrations in repo: games, user_game_scores, user_game_best, game_leaderboard, game_user_stats.
  */
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../../components/ToastProvider";
-import { loadAllAssets, getLoadStatus } from "./assets.js";
-import { createState, stepPhysics, applyFlap, startGame, getVisualRotation } from "./physics.js";
-import { drawFrame, drawDebugOverlay } from "./renderer.js";
-import {
-  getShakeOffset,
-  getFlapBounceOffset,
-  getScorePopScale,
-  createWhooshParticles,
-  createScoreBurstParticles,
-  stepParticles,
-} from "./juice.js";
-import { CANVAS_W, CANVAS_H, PLAYER, SHAKE_ON_HIT_PX, FREEZE_FRAME_MS, FLAP_CAMERA_BOUNCE_PX, SCORE_POP_MS, PALETTE } from "./constants.js";
-import {
-  ScoreBar,
-  GameOverOverlay,
-  IdleScreen,
-  DebugOverlay,
-  styles,
-} from "./uiOverlay.jsx";
+
+// ——— Constants ———
+const CANVAS_W = 360;
+const CANVAS_H = 520;
+const GROUND_Y = 440;
+const GRAVITY = 0.25;
+const JUMP_FORCE = -6;
+const VEL_CLAMP = 6;
+const SCROLL_SPEED = 1.8;
+const SPAWN_INTERVAL_MS = 1650;
+const PIPE_GAP_MIN = 200;
+const PIPE_GAP_MAX = 240;
+const GRACE_MS = 800;
+const OBSTACLE_WIDTH = 56;
+const PLAYER_SIZE = 36;
+const ROT_JUMP = -18;
+const ROT_FALL_MAX = 65;
+const SCORE_POP_MS = 150;
+const SCORE_POP_MAX = 1.15;
+const HIT_PAD_X = 8;
+const HIT_PAD_Y = 10;
+const DT_MAX = 0.033;
+const CEILING_Y = 0;
+const PLAYER_WIDTH = PLAYER_SIZE;
+const PLAYER_HEIGHT = PLAYER_SIZE;
+
+function rectOverlap(a, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y
+  );
+}
+
+// ——— Canvas drawing (no assets) ———
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawGameCardBackground(ctx, totalScroll, timeSec) {
+  const w = CANVAS_W;
+  const h = CANVAS_H;
+  const rad = 16;
+  roundRect(ctx, 0, 0, w, h, rad);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, "#1e2228");
+  g.addColorStop(0.4, "#181b21");
+  g.addColorStop(1, "#0f1115");
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, 0, 0, w, h, rad);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(0,0,0,0.2)";
+  roundRect(ctx, 2, 2, w - 4, h - 4, rad - 2);
+  ctx.fill();
+
+  const far = (totalScroll * 0.2) % 400;
+  ctx.fillStyle = "rgba(30,34,42,0.5)";
+  [0, 80, 200, 300].forEach((i) => ctx.fillRect((i + far) % (w + 60) - 20, 100, 22, 70));
+  const mid = (totalScroll * 0.45) % 380;
+  ctx.fillStyle = "rgba(24,28,35,0.45)";
+  [40, 160, 260].forEach((i) => ctx.fillRect((i + mid) % (w + 50) - 15, 220, 18, 55));
+
+  ctx.fillStyle = "#15171c";
+  ctx.fillRect(0, GROUND_Y, w, h - GROUND_Y);
+
+  const vig = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.75);
+  vig.addColorStop(0, "transparent");
+  vig.addColorStop(1, "rgba(0,0,0,0.4)");
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
+}
+
+function drawObstacle(ctx, x, topY, topH, bottomY, bottomH) {
+  const r = 8;
+  const metal = ctx.createLinearGradient(x, 0, x + OBSTACLE_WIDTH, 0);
+  metal.addColorStop(0, "#8a8d95");
+  metal.addColorStop(0.2, "#6e7179");
+  metal.addColorStop(0.5, "#5a5d65");
+  metal.addColorStop(0.8, "#6e7179");
+  metal.addColorStop(1, "#8a8d95");
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = metal;
+  ctx.strokeStyle = "rgba(255,255,255,0.2)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, x, topY, OBSTACLE_WIDTH, topH, r);
+  ctx.fill();
+  ctx.stroke();
+  roundRect(ctx, x, bottomY, OBSTACLE_WIDTH, bottomH, r);
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+function drawArm(ctx, centerX, drawY, rotationDeg, shadowScaleY) {
+  const rad = (rotationDeg * Math.PI) / 180;
+  ctx.save();
+  ctx.translate(centerX, drawY);
+  ctx.rotate(rad);
+
+  const sy = 16 * Math.max(0.5, Math.min(1.5, 1 + (shadowScaleY || 0) * 0.12));
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.beginPath();
+  ctx.ellipse(0, 12, 24, sy, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#2d1f14";
+  ctx.lineWidth = 2;
+  ctx.fillStyle = "#d4a574";
+  ctx.beginPath();
+  ctx.ellipse(-16, 0, 12, 16, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(6, -4, 9, 14, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#c4956a";
+  ctx.fillRect(18, -7, 10, 12);
+  ctx.strokeRect(18, -7, 10, 12);
+  ctx.fillStyle = "#4a3528";
+  ctx.fillRect(12, -5, 3, 8);
+  ctx.fillRect(17, -4, 3, 6);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.beginPath();
+  ctx.moveTo(-20, -10);
+  ctx.lineTo(-6, -12);
+  ctx.lineTo(2, -14);
+  ctx.lineTo(4, -12);
+  ctx.lineTo(-8, -8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(-2, 8, 6, 5, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawScore(ctx, score, popScale) {
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = "900 28px system-ui, sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.shadowColor = "rgba(0,0,0,0.9)";
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 2;
+  ctx.setTransform(popScale, 0, 0, popScale, CANVAS_W / 2, 24);
+  ctx.fillText(String(score), 0, 0);
+  ctx.restore();
+}
+
+function easeOutQuad(t) {
+  return 1 - (1 - t) * (1 - t);
+}
+function easeInQuad(t) {
+  return t * t;
+}
+function scorePopScale(progress) {
+  if (progress >= 1) return 1;
+  if (progress < 0.5) return 1 + (SCORE_POP_MAX - 1) * easeOutQuad(progress * 2);
+  return SCORE_POP_MAX - (SCORE_POP_MAX - 1) * easeInQuad((progress - 0.5) * 2);
+}
+
+// ——— Component ———
 
 export default function FlappyArmGame({ game }) {
   const navigate = useNavigate();
@@ -33,34 +209,36 @@ export default function FlappyArmGame({ game }) {
   const [user, setUser] = useState(null);
   const [arcadeStats, setArcadeStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [assetsReady, setAssetsReady] = useState(false);
   const [phase, setPhase] = useState("idle");
   const [score, setScore] = useState(0);
   const [showPrInOverlay, setShowPrInOverlay] = useState(false);
-  const [debug, setDebug] = useState(false);
-  const [fps, setFps] = useState(0);
   const [scorePopStart, setScorePopStart] = useState(null);
-  const [flapBounceStart, setFlapBounceStart] = useState(null);
-  const [redFlashEnd, setRedFlashEnd] = useState(null);
-  const [freezeEnd, setFreezeEnd] = useState(null);
 
-  const stateRef = useRef(createState());
-  const particlesRef = useRef([]);
-  const shakeRemainingRef = useRef(0);
-  const lastFrameTimeRef = useRef(0);
-  const fpsFrameCountRef = useRef(0);
-  const fpsLastTimeRef = useRef(0);
+  const stateRef = useRef(null);
+  const lastTimeRef = useRef(0);
+  const lastSpawnTimeRef = useRef(0);
   const scoreRef = useRef(0);
+  const rafIdRef = useRef(null);
+  const pausedRef = useRef(false);
+  const phaseRef = useRef(phase);
+  const gameOverSubmittedRef = useRef(false);
+  const finalScoreRef = useRef(0);
   scoreRef.current = score;
+  phaseRef.current = phase;
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const loadArcadeStats = useCallback(async (userId) => {
     if (!userId) return;
-    const { data } = await supabase
-      .from("arcade_user_stats")
-      .select("flappy_best_score, flappy_total_games, flappy_last_score")
-      .eq("user_id", userId)
-      .single();
-    setArcadeStats(data || null);
+    try {
+      const { data } = await supabase
+        .from("arcade_user_stats")
+        .select("flappy_best_score, flappy_total_games, flappy_last_score")
+        .eq("user_id", userId)
+        .maybeSingle();
+      setArcadeStats(data || null);
+    } catch (_) {}
     setLoadingStats(false);
   }, []);
 
@@ -69,13 +247,6 @@ export default function FlappyArmGame({ game }) {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
       if (alive) setUser(u ?? null);
     });
-    loadAllAssets()
-      .then((result) => {
-        if (alive) setAssetsReady(result.ready !== false);
-      })
-      .catch(() => {
-        if (alive) setAssetsReady(true);
-      });
     return () => { alive = false; };
   }, []);
 
@@ -87,168 +258,311 @@ export default function FlappyArmGame({ game }) {
     loadArcadeStats(user.id);
   }, [user?.id, loadArcadeStats]);
 
-  const startGameClick = useCallback(() => {
-    const state = stateRef.current;
-    startGame(state);
+  const startGame = useCallback(() => {
+    gameOverSubmittedRef.current = false;
+    const centerY = (GROUND_Y - PLAYER_SIZE) / 2;
+    stateRef.current = {
+      y: centerY,
+      vy: 0,
+      rotation: ROT_JUMP,
+      graceUntil: Date.now() + GRACE_MS,
+      obstacles: [],
+      totalScroll: 0,
+      passed: new Set(),
+    };
+    lastSpawnTimeRef.current = performance.now();
     setPhase("playing");
     setScore(0);
     setShowPrInOverlay(false);
-    particlesRef.current = [];
-    shakeRemainingRef.current = 0;
     setScorePopStart(null);
-    setFlapBounceStart(null);
-    setRedFlashEnd(null);
-    setFreezeEnd(null);
+  }, []);
+
+  const playAgain = useCallback(() => {
+    stateRef.current = null;
+    lastSpawnTimeRef.current = performance.now();
+    setScore(0);
+    setPhase("idle");
+    setShowPrInOverlay(false);
+    setScorePopStart(null);
+    gameOverSubmittedRef.current = false;
   }, []);
 
   const onTap = useCallback(() => {
-    if (phase !== "playing") return;
-    const state = stateRef.current;
-    applyFlap(state);
-    setFlapBounceStart(Date.now());
-    const cx = CANVAS_W / 2;
-    const py = state.y + PLAYER.size / 2;
-    particlesRef.current = particlesRef.current.concat(
-      createWhooshParticles(4, cx, py)
-    );
-  }, [phase]);
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.code === "KeyD" && !e.repeat) setDebug((d) => !d);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    if (phaseRef.current !== "playing") return;
+    const s = stateRef.current;
+    if (!s) return;
+    s.vy = JUMP_FORCE;
+    s.rotation = ROT_JUMP;
   }, []);
 
   useEffect(() => {
-    if (phase !== "playing" || !canvasRef.current) return;
+    const onVisibility = () => {
+      pausedRef.current = document.hidden;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
+  useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
+    let ctx;
+    try {
+      ctx = canvas.getContext("2d");
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+    if (!ctx) return;
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = CANVAS_W * dpr;
     canvas.height = CANVAS_H * dpr;
-    const ctx = canvas.getContext("2d");
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
 
-    const state = stateRef.current;
-    const smoothFactor = 0.35;
-
-    let rafId;
     function frame(now) {
+      rafIdRef.current = requestAnimationFrame(frame);
       try {
-        const dt = Math.min(0.05, (now - lastFrameTimeRef.current) / 1000);
-        lastFrameTimeRef.current = now;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-        if (fpsLastTimeRef.current === 0) fpsLastTimeRef.current = now;
-        fpsFrameCountRef.current++;
-        if (now - fpsLastTimeRef.current >= 500) {
-          setFps(Math.round((fpsFrameCountRef.current * 1000) / (now - fpsLastTimeRef.current)));
-          fpsFrameCountRef.current = 0;
-          fpsLastTimeRef.current = now;
-        }
+        const s = stateRef.current;
+        const currentPhase = phaseRef.current;
 
-        const freeze = freezeEnd && now < freezeEnd;
-        if (freeze) {
-          rafId = requestAnimationFrame(frame);
+        if (currentPhase === "idle") {
+          drawGameCardBackground(ctx, 0, now / 1000);
+          drawScore(ctx, 0, 1);
           return;
         }
 
-        const result = stepPhysics(state, now, false);
-        state.prevY = state.prevY !== undefined ? state.prevY + (state.y - state.prevY) * smoothFactor : state.y;
-        state.prevRot = state.prevRot !== undefined
-          ? state.prevRot + (getVisualRotation(state.vy, state.rotation) - state.prevRot) * smoothFactor
-          : state.rotation;
-
-        if (result.scored) {
-          setScore((s) => s + 1);
-          const cx = CANVAS_W / 2;
-          const py = state.y + PLAYER.size / 2;
-          particlesRef.current = particlesRef.current.concat(
-            createScoreBurstParticles(cx, py, 6)
+        if (currentPhase === "over") {
+          drawGameCardBackground(ctx, s?.totalScroll ?? 0, now / 1000);
+          (s?.obstacles ?? []).forEach((ob) =>
+            drawObstacle(ctx, ob.x, 0, ob.topH, ob.bottomY, ob.bottomH)
           );
-          setScorePopStart(Date.now());
-        }
-
-        if (result.hitObstacle || result.hitGround) {
-          setPhase("over");
-          shakeRemainingRef.current = 12;
-          const flashEnd = Date.now() + 200;
-          setRedFlashEnd(flashEnd);
-          setFreezeEnd(Date.now() + FREEZE_FRAME_MS);
-          setTimeout(() => setRedFlashEnd(null), 220);
-          const finalScore = scoreRef.current;
-          if (user?.id) {
-            (async () => {
-              const { data } = await supabase.rpc("record_flappy_arm_score", {
-                user_id: user.id,
-                score: finalScore,
-              });
-              if (data?.is_pr === true) {
-                setShowPrInOverlay(true);
-                if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
-              }
-              if (game?.id) {
-                await supabase.from("user_game_scores").insert({
-                  user_id: user.id,
-                  game_id: game.id,
-                  score: finalScore,
-                });
-                const { data: existingBest } = await supabase
-                  .from("user_game_best")
-                  .select("*")
-                  .eq("user_id", user.id)
-                  .eq("game_id", game.id)
-                  .maybeSingle();
-                if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
-                  await supabase.from("user_game_best").upsert(
-                    { user_id: user.id, game_id: game.id, best_score: finalScore, updated_at: new Date().toISOString() },
-                    { onConflict: "user_id,game_id" }
-                  );
-                }
-              }
-              await supabase.rpc("increment_arcade_stats", {
-                p_user_id: user.id,
-                p_game_id: "flappy_arm",
-                p_score: finalScore,
-              });
-              await loadArcadeStats(user.id);
-            })();
+          if (s) {
+            const drawY = s.y + PLAYER_SIZE / 2;
+            drawArm(ctx, CANVAS_W / 2, drawY, s.rotation, s.vy * 0.1);
           }
-          rafId = requestAnimationFrame(frame);
+          drawScore(ctx, scoreRef.current, 1);
           return;
         }
 
-        particlesRef.current = stepParticles(particlesRef.current, 0.016);
-
-        let shakeX = 0,
-          shakeY = 0;
-        if (shakeRemainingRef.current > 0) {
-          const s = getShakeOffset(shakeRemainingRef.current, SHAKE_ON_HIT_PX);
-          shakeX = s.x;
-          shakeY = s.y;
-          shakeRemainingRef.current--;
-        } else if (flapBounceStart && now - flapBounceStart < 120) {
-          const prog = (now - flapBounceStart) / 120;
-          const up = 1 - Math.min(1, prog * 4);
-          shakeY = -FLAP_CAMERA_BOUNCE_PX * up;
+        if (currentPhase !== "playing" || !s) {
+          drawGameCardBackground(ctx, s?.totalScroll ?? 0, now / 1000);
+          drawScore(ctx, scoreRef.current, 1);
+          return;
         }
 
-        const scorePopProgress = scorePopStart ? Math.min(1, (now - scorePopStart) / SCORE_POP_MS) : 1;
-        const scorePopScale = scorePopProgress < 1 ? getScorePopScale(scorePopProgress) : 1;
+        const dt = Math.min(DT_MAX, (now - lastTimeRef.current) / 1000);
+        lastTimeRef.current = now;
 
-        drawFrame(ctx, state, particlesRef.current, shakeX, shakeY, scoreRef.current, scorePopScale);
-        if (debug) drawDebugOverlay(ctx, state);
+        if (pausedRef.current) {
+          drawGameCardBackground(ctx, s.totalScroll, now / 1000);
+          s.obstacles.forEach((ob) =>
+            drawObstacle(ctx, ob.x, 0, ob.topH, ob.bottomY, ob.bottomH)
+          );
+          const drawY = s.y + PLAYER_SIZE / 2;
+          drawArm(ctx, CANVAS_W / 2, drawY, s.rotation, s.vy * 0.1);
+          const popProg = scorePopStart ? Math.min(1, (now - scorePopStart) / SCORE_POP_MS) : 1;
+          drawScore(ctx, scoreRef.current, popProg < 1 ? scorePopScale(popProg) : 1);
+          return;
+        }
+
+        s.vy += GRAVITY;
+        s.vy = Math.max(-VEL_CLAMP, Math.min(VEL_CLAMP, s.vy));
+        s.y += s.vy;
+        s.rotation = s.vy < 0 ? ROT_JUMP : Math.min(ROT_FALL_MAX, s.rotation + 3.5);
+
+        s.totalScroll += SCROLL_SPEED;
+        if (now - lastSpawnTimeRef.current >= SPAWN_INTERVAL_MS) {
+          lastSpawnTimeRef.current = now;
+          const gap = PIPE_GAP_MIN + Math.random() * (PIPE_GAP_MAX - PIPE_GAP_MIN);
+          const gapCenter = 140 + Math.random() * (GROUND_Y - 280 - gap);
+          s.obstacles.push({
+            x: CANVAS_W + OBSTACLE_WIDTH,
+            topH: gapCenter - gap / 2,
+            bottomY: gapCenter + gap / 2,
+            bottomH: CANVAS_H - (gapCenter + gap / 2),
+            id: now + Math.random(),
+          });
+        }
+        s.obstacles.forEach((ob) => {
+          ob.x -= SCROLL_SPEED;
+        });
+        s.obstacles = s.obstacles.filter((ob) => ob.x + OBSTACLE_WIDTH > 0);
+
+        const playerX = CANVAS_W / 2;
+        const playerY = s.y;
+        const inGrace = now < s.graceUntil;
+
+        if (!inGrace) {
+          if (playerY + PLAYER_HEIGHT > GROUND_Y || playerY < CEILING_Y) {
+            if (phaseRef.current === "over") { /* already triggered */ } else {
+              phaseRef.current = "over";
+              s.over = true;
+              finalScoreRef.current = scoreRef.current;
+              setPhase("over");
+              if (!gameOverSubmittedRef.current && user?.id) {
+                gameOverSubmittedRef.current = true;
+                const finalScore = finalScoreRef.current;
+                (async () => {
+                  try {
+                    const { data } = await supabase.rpc("record_flappy_arm_score", {
+                      user_id: user.id,
+                      score: finalScore,
+                    });
+                    if (data?.is_pr === true) {
+                      setShowPrInOverlay(true);
+                      if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
+                    }
+                    const gameId = game?.id;
+                    if (gameId) {
+                      await supabase.from("user_game_scores").insert({
+                        user_id: user.id,
+                        game_id: gameId,
+                        score: finalScore,
+                      });
+                      const { data: existingBest } = await supabase
+                        .from("user_game_best")
+                        .select("best_score")
+                        .eq("user_id", user.id)
+                        .eq("game_id", gameId)
+                        .maybeSingle();
+                      if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
+                        await supabase.from("user_game_best").upsert(
+                          {
+                            user_id: user.id,
+                            game_id: gameId,
+                            best_score: finalScore,
+                            updated_at: new Date().toISOString(),
+                          },
+                          { onConflict: "user_id,game_id" }
+                        );
+                      }
+                    }
+                    await supabase.rpc("increment_arcade_stats", {
+                      p_user_id: user.id,
+                      p_game_id: "flappy_arm",
+                      p_score: finalScore,
+                    });
+                    await loadArcadeStats(user.id);
+                  } catch (e) {
+                    console.error("FlappyArm score submit:", e);
+                  }
+                })();
+              }
+            }
+          } else {
+            const playerBox = {
+              x: playerX - PLAYER_WIDTH / 2,
+              y: playerY,
+              w: PLAYER_WIDTH,
+              h: PLAYER_HEIGHT,
+            };
+            for (const ob of s.obstacles) {
+              const topPipeBox = { x: ob.x, y: 0, w: OBSTACLE_WIDTH, h: ob.topH };
+              const bottomPipeBox = { x: ob.x, y: ob.bottomY, w: OBSTACLE_WIDTH, h: ob.bottomH };
+              if (rectOverlap(playerBox, topPipeBox) || rectOverlap(playerBox, bottomPipeBox)) {
+                if (phaseRef.current === "over") break;
+                phaseRef.current = "over";
+                s.over = true;
+                finalScoreRef.current = scoreRef.current;
+                setPhase("over");
+                if (!gameOverSubmittedRef.current && user?.id) {
+                  gameOverSubmittedRef.current = true;
+                  const finalScore = finalScoreRef.current;
+                  (async () => {
+                    try {
+                      const { data } = await supabase.rpc("record_flappy_arm_score", {
+                        user_id: user.id,
+                        score: finalScore,
+                      });
+                      if (data?.is_pr === true) {
+                        setShowPrInOverlay(true);
+                        if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
+                      }
+                      const gameId = game?.id;
+                      if (gameId) {
+                        await supabase.from("user_game_scores").insert({
+                          user_id: user.id,
+                          game_id: gameId,
+                          score: finalScore,
+                        });
+                        const { data: existingBest } = await supabase
+                          .from("user_game_best")
+                          .select("best_score")
+                          .eq("user_id", user.id)
+                          .eq("game_id", gameId)
+                          .maybeSingle();
+                        if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
+                          await supabase.from("user_game_best").upsert(
+                            {
+                              user_id: user.id,
+                              game_id: gameId,
+                              best_score: finalScore,
+                              updated_at: new Date().toISOString(),
+                            },
+                            { onConflict: "user_id,game_id" }
+                          );
+                        }
+                      }
+                      await supabase.rpc("increment_arcade_stats", {
+                        p_user_id: user.id,
+                        p_game_id: "flappy_arm",
+                        p_score: finalScore,
+                      });
+                      await loadArcadeStats(user.id);
+                    } catch (e) {
+                      console.error("FlappyArm score submit:", e);
+                    }
+                  })();
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        if (phaseRef.current === "over") {
+          drawGameCardBackground(ctx, s.totalScroll, now / 1000);
+          s.obstacles.forEach((ob) =>
+            drawObstacle(ctx, ob.x, 0, ob.topH, ob.bottomY, ob.bottomH)
+          );
+          const drawY = s.y + PLAYER_SIZE / 2;
+          drawArm(ctx, CANVAS_W / 2, drawY, s.rotation, s.vy * 0.1);
+          drawScore(ctx, scoreRef.current, 1);
+          return;
+        }
+
+        s.obstacles.forEach((ob) => {
+          const obstacleCenterX = ob.x + OBSTACLE_WIDTH / 2;
+          if (!s.passed.has(ob.id) && playerX > obstacleCenterX) {
+            s.passed.add(ob.id);
+            setScore((n) => n + 1);
+            setScorePopStart(now);
+          }
+        });
+
+        drawGameCardBackground(ctx, s.totalScroll, now / 1000);
+        s.obstacles.forEach((ob) =>
+          drawObstacle(ctx, ob.x, 0, ob.topH, ob.bottomY, ob.bottomH)
+        );
+        const drawY = s.y + PLAYER_SIZE / 2;
+        drawArm(ctx, CANVAS_W / 2, drawY, s.rotation, s.vy * 0.1);
+        const popProg = scorePopStart ? Math.min(1, (now - scorePopStart) / SCORE_POP_MS) : 1;
+        drawScore(ctx, scoreRef.current, popProg < 1 ? scorePopScale(popProg) : 1);
       } catch (e) {
-        console.error("FlappyArm frame error:", e);
+        console.error("FlappyArm frame:", e);
       }
-      rafId = requestAnimationFrame(frame);
     }
-    lastFrameTimeRef.current = performance.now();
-    rafId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(rafId);
-  }, [phase, score, user?.id, game?.id, toast, loadArcadeStats, debug, freezeEnd, flapBounceStart, scorePopStart]);
+
+    lastTimeRef.current = performance.now();
+    lastSpawnTimeRef.current = lastTimeRef.current;
+    rafIdRef.current = requestAnimationFrame(frame);
+    return () => {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, [phase, user?.id, game?.id, toast, loadArcadeStats, scorePopStart]);
 
   const bestScore = arcadeStats?.flappy_best_score ?? 0;
 
@@ -261,7 +575,7 @@ export default function FlappyArmGame({ game }) {
         <h2 style={styles.title}>{game?.title ?? "Flappy Arm"}</h2>
         <button
           type="button"
-          onClick={() => navigate(`/games/leaderboard?game_type=flappy_arm`)}
+          onClick={() => navigate("/games/leaderboard?game_type=flappy_arm")}
           style={styles.leaderboardBtn}
         >
           Leaderboard
@@ -269,60 +583,156 @@ export default function FlappyArmGame({ game }) {
       </div>
 
       {phase === "idle" && (
-        <>
-          {!assetsReady && <p style={{ textAlign: "center", color: "var(--text-dim)", fontSize: 14 }}>Loading assets…</p>}
-          <IdleScreen onStart={startGameClick} disabled={!assetsReady} />
-        </>
+        <div style={styles.section}>
+          <p style={styles.instruction}>Tap to raise your arm. Avoid the obstacles!</p>
+          <p style={styles.difficulty}>800ms grace after start</p>
+          <button type="button" style={styles.primaryBtn} onClick={startGame}>
+            Start
+          </button>
+        </div>
       )}
 
       {(phase === "playing" || phase === "over") && (
-        <>
-          <ScoreBar score={score} bestScore={bestScore} loadingStats={loadingStats} />
-          <div style={styles.canvasWrap}>
-            <canvas
-              ref={canvasRef}
-              width={CANVAS_W}
-              height={CANVAS_H}
-              style={{
-                display: "block",
-                width: "100%",
-                maxWidth: CANVAS_W,
-                borderRadius: 16,
-                border: "1px solid var(--border)",
-                background: PALETTE.bgBottom,
-              }}
-              onClick={onTap}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                onTap();
-              }}
-            />
-            {redFlashEnd != null && Date.now() < redFlashEnd && (
-              <div
-                key="flash"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  background: "rgba(230,57,70,0.25)",
-                  pointerEvents: "none",
-                  borderRadius: 16,
-                }}
-              />
-            )}
-            <DebugOverlay fps={fps} assetStatus={getLoadStatus()} show={debug} />
-          </div>
-        </>
+        <div style={styles.scoreBar}>
+          <span>Score: {score}</span>
+          {!loadingStats && <span>Best: {bestScore}</span>}
+        </div>
       )}
 
-      {phase === "over" && (
-        <GameOverOverlay
-          score={score}
-          bestScore={bestScore}
-          isNewRecord={showPrInOverlay}
-          onPlayAgain={startGameClick}
-          onBack={() => navigate("/games")}
+      <div style={styles.canvasWrap}>
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_W}
+          height={CANVAS_H}
+          style={styles.canvas}
+          onClick={onTap}
+          onTouchStart={(e) => {
+            e.preventDefault();
+            onTap();
+          }}
         />
+      </div>
+
+      {phase === "over" && (
+        <div style={styles.overlay}>
+          <div style={styles.overlayCard}>
+            <h3 style={styles.overlayTitle}>Game Over</h3>
+            <p style={styles.overlayScore}>Score: {score}</p>
+            <p style={styles.overlayBest}>Best: {bestScore}</p>
+            {showPrInOverlay && <p style={styles.newRecord}>NEW BEST!</p>}
+            <button type="button" style={styles.primaryBtn} onClick={playAgain}>
+              Play Again
+            </button>
+            <button type="button" style={styles.secondaryBtn} onClick={() => navigate("/games")}>
+              Back
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 }
+
+const styles = {
+  wrap: {
+    position: "relative",
+    padding: "20px 16px 90px",
+    maxWidth: "400px",
+    margin: "0 auto",
+  },
+  backBtn: {
+    marginBottom: 12,
+    padding: "8px 0",
+    background: "none",
+    border: "none",
+    color: "var(--text-dim)",
+    fontSize: 14,
+    cursor: "pointer",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  title: { fontSize: 18, fontWeight: 800, margin: 0, color: "var(--text)" },
+  leaderboardBtn: {
+    padding: "8px 12px",
+    borderRadius: 10,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  scoreBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "10px 0",
+    fontSize: 15,
+    fontWeight: 700,
+    color: "var(--text)",
+  },
+  canvasWrap: {
+    position: "relative",
+    display: "inline-block",
+    margin: "0 auto",
+    maxWidth: CANVAS_W,
+  },
+  canvas: {
+    display: "block",
+    width: "100%",
+    maxWidth: CANVAS_W,
+    borderRadius: 16,
+    border: "1px solid var(--border)",
+    background: "#0f1115",
+  },
+  section: { textAlign: "center", marginTop: 24 },
+  instruction: { color: "var(--text-dim)", fontSize: 14, margin: "0 0 8px" },
+  difficulty: { color: "var(--text-dim)", fontSize: 12, margin: "0 0 20px" },
+  primaryBtn: {
+    padding: "14px 28px",
+    borderRadius: 12,
+    border: "none",
+    background: "var(--accent)",
+    color: "#fff",
+    fontWeight: 700,
+    fontSize: 16,
+    cursor: "pointer",
+  },
+  secondaryBtn: {
+    marginTop: 10,
+    padding: "12px 20px",
+    borderRadius: 12,
+    border: "1px solid var(--border)",
+    background: "transparent",
+    color: "var(--text)",
+    fontWeight: 600,
+    fontSize: 14,
+    cursor: "pointer",
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.85)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    padding: 16,
+  },
+  overlayCard: {
+    background: "linear-gradient(165deg, var(--card) 0%, var(--card-2) 100%)",
+    borderRadius: 20,
+    padding: 28,
+    border: "1px solid var(--border)",
+    textAlign: "center",
+    maxWidth: 320,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.4)",
+  },
+  overlayTitle: { fontSize: 22, fontWeight: 900, margin: "0 0 16px", color: "var(--text)" },
+  overlayScore: { fontSize: 18, fontWeight: 700, margin: "0 0 4px", color: "var(--text)" },
+  overlayBest: { fontSize: 14, color: "var(--text-dim)", margin: "0 0 12px" },
+  newRecord: { fontSize: 16, fontWeight: 800, color: "var(--accent)", margin: "0 0 16px" },
+};
