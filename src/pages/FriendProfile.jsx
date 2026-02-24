@@ -3,6 +3,8 @@ import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate, useParams } from "react-router-dom";
+import { AiOutlineFlag } from "react-icons/ai";
+import ReportModal from "../components/reports/ReportModal";
 
 const REACTIONS = ["💪", "👊", "❤️", "🔥"];
 
@@ -38,6 +40,7 @@ export default function FriendProfile() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showImage, setShowImage] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   // Reactions (gated)
   const [reactionCounts, setReactionCounts] = useState({});
@@ -75,7 +78,7 @@ export default function FriendProfile() {
       const { data: prof } = await supabase
         .from("profiles")
         .select(
-          "id, username, handle, display_name, avatar_url, bio, last_active, last_seen, is_online"
+          "id, username, handle, display_name, avatar_url, bio, last_active, last_seen, is_online, role"
         )
         .eq("id", friendId)
         .maybeSingle();
@@ -435,7 +438,10 @@ export default function FriendProfile() {
           </div>
 
           <div style={{ flex: 1 }}>
-            <div style={name}>{displayName}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ ...name, ...(p?.role === "official" ? officialName : {}) }}>{displayName}</div>
+              {p?.role === "official" && <span style={officialPill}>Official</span>}
+            </div>
             {p?.handle && <div style={handle}>@{p.handle}</div>}
 
             <div style={status}>
@@ -454,6 +460,18 @@ export default function FriendProfile() {
               </div>
             )}
           </div>
+
+          {!isOwner && (
+            <button
+              type="button"
+              onClick={() => setShowReport(true)}
+              style={flagBtn}
+              aria-label="Report profile"
+              title="Report"
+            >
+              <AiOutlineFlag />
+            </button>
+          )}
         </div>
 
         {/* Bio (gated) */}
@@ -469,6 +487,14 @@ export default function FriendProfile() {
           />
         )}
       </div>
+
+      <ReportModal
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        targetType="user"
+        targetId={friendId}
+        targetLabel={p?.handle ? `@${p.handle}` : displayName}
+      />
 
       {/* 🔒 LOCKED NOTICE (when not allowed full view) */}
       {!canSeeFull && !isOwner && (
@@ -616,6 +642,29 @@ const name = { fontSize: 24, fontWeight: 900 };
 const handle = { fontSize: 14, opacity: 0.65, marginTop: 2 };
 const status = { fontSize: 13, marginTop: 6, opacity: 0.7 };
 const bio = { marginTop: 18, fontSize: 15, opacity: 0.85 };
+
+const officialName = { color: "#d4af37" };
+const officialPill = {
+  padding: "4px 10px",
+  borderRadius: 999,
+  border: "1px solid #d4af37",
+  background: "rgba(212,175,55,0.12)",
+  color: "#d4af37",
+  fontSize: 12,
+  fontWeight: 900,
+};
+const flagBtn = {
+  width: 38,
+  height: 38,
+  borderRadius: 12,
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+};
 
 const visPillWrap = { marginTop: 10 };
 const visPill = {

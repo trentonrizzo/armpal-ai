@@ -53,6 +53,7 @@ import NutritionPage from "./features/nutrition/NutritionPage";
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
+import NotificationsBell from "./components/notifications/NotificationsBell";
 
 import usePresence from "./hooks/usePresence";
 
@@ -203,6 +204,7 @@ function AppContent() {
         <Route path="/games/:id" element={<GamePage />} />
       </Routes>
 
+      {!isChatRoute && <NotificationsBell />}
       {!isChatRoute && <BottomNav />}
 
       {isWorkouts && (

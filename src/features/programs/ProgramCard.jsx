@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ReportModal from "../../components/reports/ReportModal";
 
 const ADMIN_CREATOR_ID =
   typeof import.meta !== "undefined" ? import.meta.env.VITE_ADMIN_CREATOR_ID : undefined;
@@ -8,6 +9,8 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
   const navigate = useNavigate();
   const meta = program?.parsed_program?.meta;
   const thumbnailStyle = meta?.thumbnail_style ?? "default";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   function handleClick() {
     if (onPreviewClick) {
@@ -24,6 +27,7 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
     null;
   const creatorHandle = creatorProfile?.handle || null;
   const isOfficial =
+    creatorProfile?.role === "official" ||
     (creatorHandle && creatorHandle.toLowerCase() === "armpal") ||
     (ADMIN_CREATOR_ID && program.creator_id === ADMIN_CREATOR_ID);
 
@@ -34,9 +38,13 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") handleClick();
+      }}
       className={`program-card ${thumbnailStyle}`}
       style={styles.card}
     >
@@ -61,6 +69,36 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
         )}
         {owned && <span style={styles.owned}>Owned</span>}
       </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuOpen((v) => !v);
+        }}
+        style={styles.menuBtn}
+        aria-label="Program options"
+        title="Options"
+      >
+        ⋯
+      </button>
+      {menuOpen && (
+        <div
+          style={styles.menu}
+          onClick={(e) => e.stopPropagation()}
+          role="menu"
+        >
+          <button
+            type="button"
+            style={styles.menuItem}
+            onClick={() => {
+              setMenuOpen(false);
+              setShowReport(true);
+            }}
+          >
+            Report
+          </button>
+        </div>
+      )}
       <div style={styles.top}>
         <span style={styles.title}>{program.title}</span>
       </div>
@@ -74,7 +112,14 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
       {(program.preview_description || meta?.description) ? (
         <p style={styles.desc}>{program.preview_description || meta.description}</p>
       ) : null}
-    </button>
+      <ReportModal
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        targetType="program"
+        targetId={program?.id}
+        targetLabel={program?.title || "Program"}
+      />
+    </div>
   );
 }
 
@@ -89,6 +134,7 @@ const styles = {
     border: "1px solid var(--border)",
     padding: 14,
     cursor: "pointer",
+    position: "relative",
   },
   badges: {
     display: "flex",
@@ -96,6 +142,42 @@ const styles = {
     alignItems: "center",
     gap: 6,
     marginBottom: 8,
+  },
+  menuBtn: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--text)",
+    cursor: "pointer",
+    lineHeight: 1,
+    fontSize: 18,
+  },
+  menu: {
+    position: "absolute",
+    top: 48,
+    right: 10,
+    borderRadius: 12,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    overflow: "hidden",
+    zIndex: 5,
+    minWidth: 140,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
+  },
+  menuItem: {
+    width: "100%",
+    textAlign: "left",
+    padding: "10px 12px",
+    border: "none",
+    background: "transparent",
+    color: "var(--text)",
+    fontWeight: 700,
+    cursor: "pointer",
   },
   creatorAttribution: {
     border: "none",

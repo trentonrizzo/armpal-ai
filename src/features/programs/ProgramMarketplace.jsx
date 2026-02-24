@@ -27,6 +27,7 @@ export default function ProgramMarketplace() {
       const { data: progs, error: progErr } = await supabase
         .from("programs")
         .select("*")
+        .eq("is_published", true)
         .order("created_at", { ascending: false });
 
       if (!alive) return;
@@ -37,7 +38,7 @@ export default function ProgramMarketplace() {
       if (creatorIds.length > 0) {
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id, display_name, username, handle")
+          .select("id, display_name, username, handle, role")
           .in("id", creatorIds);
         if (alive && profs) {
           const map = {};

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import ProgramCard from "./ProgramCard";
+import ReportModal from "../../components/reports/ReportModal";
 
 export default function ProgramPreview() {
   const { id } = useParams();
@@ -11,6 +12,8 @@ export default function ProgramPreview() {
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [user, setUser] = useState(null);
   const [creatorProfile, setCreatorProfile] = useState(null);
 
@@ -44,7 +47,7 @@ export default function ProgramPreview() {
       if (prog.creator_id) {
         const { data: creator } = await supabase
           .from("profiles")
-          .select("id, display_name, username, handle")
+          .select("id, display_name, username, handle, role")
           .eq("id", prog.creator_id)
           .maybeSingle();
         if (alive) setCreatorProfile(creator || null);
@@ -82,19 +85,9 @@ export default function ProgramPreview() {
     setOwned(true);
   }
 
-  async function handleDelete() {
+  async function handleRemoveFromMarketplace() {
     if (!user?.id || !program?.id || program.creator_id !== user.id || deleting) return;
-    // Check for purchases; creators should not delete programs others already own.
-    const { data: purchases } = await supabase
-      .from("user_programs")
-      .select("id")
-      .eq("program_id", program.id)
-      .limit(1);
-    if (purchases && purchases.length > 0) {
-      alert("This program has already been purchased and cannot be deleted.");
-      return;
-    }
-    if (!window.confirm("Delete this program? This cannot be undone.")) return;
+    if (!window.confirm("Remove this program from the marketplace?")) return;
     setDeleting(true);
     const { error } = await supabase
       .from("programs")
@@ -102,10 +95,22 @@ export default function ProgramPreview() {
       .eq("id", program.id);
     setDeleting(false);
     if (error) {
-      console.error("Delete program failed", error);
-      alert(error.message || "Could not delete program.");
+      // If hard delete is blocked (e.g., purchases), fall back to unpublish.
+      console.error("Delete program failed (falling back to unpublish)", error);
+      const { error: upErr } = await supabase
+        .from("programs")
+        .update({ is_published: false, unpublished_at: new Date().toISOString() })
+        .eq("id", program.id);
+      if (upErr) {
+        console.error("Unpublish failed", upErr);
+        alert(upErr.message || "Could not unpublish program.");
+        return;
+      }
+      alert("Program unpublished (removed from marketplace).");
+      navigate("/programs");
       return;
     }
+    alert("Program deleted.");
     navigate("/programs");
   }
 
@@ -170,18 +175,50 @@ export default function ProgramPreview() {
       )}
 
       {isCreator && (
-        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end", position: "relative" }}>
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => setMenuOpen((v) => !v)}
             disabled={deleting}
             style={styles.menuBtn}
             aria-label="Program options"
           >
             ⋯
           </button>
+          {menuOpen && (
+            <div style={styles.menuPopover} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                style={styles.menuItem}
+                onClick={() => {
+                  setMenuOpen(false);
+                  handleRemoveFromMarketplace();
+                }}
+              >
+                {deleting ? "Working…" : "Delete / Unpublish"}
+              </button>
+              <button
+                type="button"
+                style={styles.menuItem}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setShowReport(true);
+                }}
+              >
+                Report
+              </button>
+            </div>
+          )}
         </div>
       )}
+
+      <ReportModal
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        targetType="program"
+        targetId={program?.id}
+        targetLabel={program?.title || "Program"}
+      />
     </div>
   );
 }
@@ -256,6 +293,28 @@ const styles = {
     color: "var(--text)",
     fontSize: 16,
     lineHeight: 1,
+    cursor: "pointer",
+  },
+  menuPopover: {
+    position: "absolute",
+    top: 44,
+    right: 0,
+    borderRadius: 12,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    overflow: "hidden",
+    minWidth: 180,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
+    zIndex: 10,
+  },
+  menuItem: {
+    width: "100%",
+    textAlign: "left",
+    padding: "10px 12px",
+    border: "none",
+    background: "transparent",
+    color: "var(--text)",
+    fontWeight: 800,
     cursor: "pointer",
   },
 };
