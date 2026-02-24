@@ -14,6 +14,7 @@ export default function ProgramMarketplace() {
   const [difficultyFilter, setDifficultyFilter] = useState("All");
   const [activeTag, setActiveTag] = useState(null);
   const [previewProgram, setPreviewProgram] = useState(null);
+  const [creatorProfiles, setCreatorProfiles] = useState({});
 
   useEffect(() => {
     let alive = true;
@@ -31,6 +32,21 @@ export default function ProgramMarketplace() {
       if (!alive) return;
       const raw = progErr ? [] : (progs ?? []);
       setPrograms(raw);
+
+      const creatorIds = [...new Set(raw.map((p) => p.creator_id).filter(Boolean))];
+      if (creatorIds.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, display_name, username, handle")
+          .in("id", creatorIds);
+        if (alive && profs) {
+          const map = {};
+          profs.forEach((p) => {
+            map[p.id] = p;
+          });
+          setCreatorProfiles(map);
+        }
+      }
 
       if (u?.id) {
         const { data: upRows } = await supabase
@@ -100,11 +116,13 @@ export default function ProgramMarketplace() {
     });
 
   function renderCard(program) {
+    const creatorProfile = program.creator_id ? creatorProfiles[program.creator_id] : null;
     return (
       <ProgramCard
         key={program.id}
         program={program}
         owned={ownedIds.has(program.id)}
+        creatorProfile={creatorProfile}
         onPreviewClick={() => setPreviewProgram(program)}
       />
     );
@@ -130,9 +148,18 @@ export default function ProgramMarketplace() {
     <div style={styles.wrap}>
       <h1 style={styles.title}>Programs</h1>
 
-      <Link to="/programs/create" className="pill" style={styles.createLink}>
-        + Create Program
-      </Link>
+      <div style={styles.headerRow}>
+        <Link to="/programs/create" className="pill" style={styles.createLink}>
+          + Create Program
+        </Link>
+        <button
+          type="button"
+          onClick={() => navigate("/programs/my")}
+          style={styles.myProgramsBtn}
+        >
+          My Programs
+        </button>
+      </div>
 
       <input
         type="search"
@@ -142,16 +169,6 @@ export default function ProgramMarketplace() {
         style={styles.search}
         aria-label="Search programs"
       />
-
-      <div style={styles.links}>
-        <button
-          type="button"
-          onClick={() => navigate("/programs/my")}
-          style={styles.linkBtn}
-        >
-          My Programs
-        </button>
-      </div>
 
       {!loading && (
         <>
@@ -256,6 +273,13 @@ const styles = {
     margin: "0 0 16px",
     color: "var(--text)",
   },
+  headerRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
   search: {
     width: "100%",
     padding: "12px 14px",
@@ -267,15 +291,13 @@ const styles = {
     fontSize: 14,
     boxSizing: "border-box",
   },
-  links: {
-    marginBottom: 16,
-  },
-  linkBtn: {
-    padding: "8px 0",
-    background: "none",
-    border: "none",
-    color: "var(--accent)",
-    fontSize: 14,
+  myProgramsBtn: {
+    padding: "8px 12px",
+    borderRadius: 999,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    fontSize: 12,
     fontWeight: 600,
     cursor: "pointer",
   },
@@ -344,7 +366,6 @@ const styles = {
   },
   createLink: {
     display: "inline-block",
-    marginBottom: 16,
     padding: "10px 16px",
     borderRadius: 999,
     background: "var(--accent)",

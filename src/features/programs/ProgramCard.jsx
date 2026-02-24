@@ -1,7 +1,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function ProgramCard({ program, owned, onPreviewClick }) {
+const ADMIN_CREATOR_ID =
+  typeof import.meta !== "undefined" ? import.meta.env.VITE_ADMIN_CREATOR_ID : undefined;
+
+export default function ProgramCard({ program, owned, onPreviewClick, creatorProfile }) {
   const navigate = useNavigate();
   const meta = program?.parsed_program?.meta;
   const thumbnailStyle = meta?.thumbnail_style ?? "default";
@@ -12,6 +15,22 @@ export default function ProgramCard({ program, owned, onPreviewClick }) {
     } else {
       navigate(`/programs/${program.id}`);
     }
+  }
+
+  const creatorName =
+    creatorProfile?.display_name ||
+    creatorProfile?.username ||
+    creatorProfile?.handle ||
+    null;
+  const creatorHandle = creatorProfile?.handle || null;
+  const isOfficial =
+    (creatorHandle && creatorHandle.toLowerCase() === "armpal") ||
+    (ADMIN_CREATOR_ID && program.creator_id === ADMIN_CREATOR_ID);
+
+  function handleCreatorClick(e) {
+    e.stopPropagation();
+    if (!creatorProfile?.id) return;
+    navigate(`/friend/${creatorProfile.id}`);
   }
 
   return (
@@ -25,8 +44,20 @@ export default function ProgramCard({ program, owned, onPreviewClick }) {
         {meta?.difficulty && (
           <span className="badge difficulty">{meta.difficulty}</span>
         )}
-        {program.creator_id && (
-          <span className="badge creator-pro">Creator Program</span>
+        {creatorName && (
+          <button
+            type="button"
+            onClick={handleCreatorClick}
+            style={styles.creatorAttribution}
+          >
+            Created by{" "}
+            <span style={styles.creatorHandle}>
+              {creatorHandle ? `@${creatorHandle}` : creatorName}
+            </span>
+          </button>
+        )}
+        {isOfficial && (
+          <span className="badge official-pill">Official</span>
         )}
         {owned && <span style={styles.owned}>Owned</span>}
       </div>
@@ -65,6 +96,20 @@ const styles = {
     alignItems: "center",
     gap: 6,
     marginBottom: 8,
+  },
+  creatorAttribution: {
+    border: "none",
+    background: "none",
+    padding: 0,
+    margin: 0,
+    fontSize: 11,
+    color: "var(--text-dim)",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  creatorHandle: {
+    fontWeight: 700,
+    color: "var(--text)",
   },
   top: {
     display: "flex",

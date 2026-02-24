@@ -12,6 +12,7 @@ export default function ProgramPreview() {
   const [buying, setBuying] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [user, setUser] = useState(null);
+  const [creatorProfile, setCreatorProfile] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -39,6 +40,15 @@ export default function ProgramPreview() {
         return;
       }
       setProgram(prog);
+
+      if (prog.creator_id) {
+        const { data: creator } = await supabase
+          .from("profiles")
+          .select("id, display_name, username, handle")
+          .eq("id", prog.creator_id)
+          .maybeSingle();
+        if (alive) setCreatorProfile(creator || null);
+      }
 
       if (u?.id) {
         const { data: up } = await supabase
@@ -74,7 +84,16 @@ export default function ProgramPreview() {
 
   async function handleDelete() {
     if (!user?.id || !program?.id || program.creator_id !== user.id || deleting) return;
-    // Simple confirm; does not block navigation outside this page.
+    // Check for purchases; creators should not delete programs others already own.
+    const { data: purchases } = await supabase
+      .from("user_programs")
+      .select("id")
+      .eq("program_id", program.id)
+      .limit(1);
+    if (purchases && purchases.length > 0) {
+      alert("This program has already been purchased and cannot be deleted.");
+      return;
+    }
     if (!window.confirm("Delete this program? This cannot be undone.")) return;
     setDeleting(true);
     const { error } = await supabase
@@ -122,7 +141,7 @@ export default function ProgramPreview() {
         ← Back
       </button>
 
-      <ProgramCard program={program} owned={owned} />
+      <ProgramCard program={program} owned={owned} creatorProfile={creatorProfile} />
 
       <div style={styles.previewSection}>
         <h2 style={styles.previewTitle}>Preview</h2>
@@ -151,14 +170,17 @@ export default function ProgramPreview() {
       )}
 
       {isCreator && (
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={deleting}
-          style={styles.deleteBtn}
-        >
-          {deleting ? "Deleting…" : "Delete Program"}
-        </button>
+        <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            style={styles.menuBtn}
+            aria-label="Program options"
+          >
+            ⋯
+          </button>
+        </div>
       )}
     </div>
   );
@@ -226,16 +248,14 @@ const styles = {
     fontSize: 15,
     cursor: "pointer",
   },
-  deleteBtn: {
-    marginTop: 12,
-    width: "100%",
-    padding: 12,
-    borderRadius: 12,
-    border: "1px solid #c00",
-    background: "transparent",
-    color: "#c00",
-    fontWeight: 700,
-    fontSize: 14,
+  menuBtn: {
+    padding: 8,
+    borderRadius: 999,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    fontSize: 16,
+    lineHeight: 1,
     cursor: "pointer",
   },
 };

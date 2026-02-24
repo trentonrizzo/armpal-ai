@@ -10,7 +10,7 @@ export default function CreateProgram() {
   const [convertedProgram, setConvertedProgram] = useState(null);
   const [convertError, setConvertError] = useState("");
   const [isConverting, setIsConverting] = useState(false);
-  const [price, setPrice] = useState(15.99);
+  const [priceInput, setPriceInput] = useState("15.99");
 
   async function convertAI() {
     try {
@@ -25,18 +25,7 @@ export default function CreateProgram() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Convert failed");
-
-      const enrichRes = await fetch("/api/enrichProgram", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawContent, parsedProgram: data }),
-      });
-      const metadata = await enrichRes.json();
-
-      let result = data;
-      if (enrichRes.ok && metadata && !metadata.error) {
-        result = { ...data, meta: metadata };
-      }
+      const result = data;
 
       if (!result || !Array.isArray(result.days) || result.days.length === 0) {
         setConvertedProgram(null);
@@ -51,6 +40,28 @@ export default function CreateProgram() {
     } finally {
       setIsConverting(false);
     }
+  }
+
+  function handlePriceChange(e) {
+    let val = e.target.value;
+    // Allow blank while editing
+    if (val === "") {
+      setPriceInput("");
+      return;
+    }
+    // Only digits and optional single dot
+    if (!/^\d*\.?\d*$/.test(val)) {
+      return;
+    }
+    const parts = val.split(".");
+    // Remove non-meaningful leading zeros (keep single zero like "0" or "0.xxx")
+    parts[0] = parts[0].replace(/^0+(?=\d)/, "0");
+    // Collapse multiple zeros like "00" -> "0"
+    if (parts[0].length > 1 && parts[0].startsWith("0")) {
+      parts[0] = parts[0].replace(/^0+/, "0");
+    }
+    val = parts.join(".");
+    setPriceInput(val);
   }
 
   async function saveProgram() {
@@ -71,6 +82,8 @@ export default function CreateProgram() {
       alert("Sign in to save.");
       return;
     }
+
+    const price = Number(priceInput) || 0;
 
     try {
       await supabase.from("programs").insert({
@@ -113,10 +126,9 @@ export default function CreateProgram() {
       />
 
       <input
-        type="number"
-        step="0.01"
-        value={price}
-        onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+        inputMode="decimal"
+        value={priceInput}
+        onChange={handlePriceChange}
         placeholder="Price"
         style={{ width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}
       />
@@ -125,7 +137,7 @@ export default function CreateProgram() {
         const platformFeePercent = 0.20;
         const stripePercent = 0.029;
         const stripeFixed = 0.30;
-        const p = Number(price) || 0;
+        const p = Number(priceInput) || 0;
         const stripeFee = p * stripePercent + stripeFixed;
         const platformFee = p * platformFeePercent;
         const creatorEarnings = p - stripeFee - platformFee;
