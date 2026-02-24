@@ -42,7 +42,7 @@ export default function Leaderboard() {
     if (isFlappyArm) {
       const { data: rows, error } = await supabase
         .from("arcade_flappy_arm_leaderboard")
-        .select("user_id, best_score, achieved_at")
+        .select("user_id, best_score, total_games")
         .order("best_score", { ascending: false })
         .limit(50);
       if (error) {
@@ -64,7 +64,7 @@ export default function Leaderboard() {
         list.map((r) => ({
           user_id: r.user_id,
           score: r.best_score,
-          achieved_at: r.achieved_at,
+          achieved_at: null,
           profiles: profileMap[r.user_id] || null,
         }))
       );

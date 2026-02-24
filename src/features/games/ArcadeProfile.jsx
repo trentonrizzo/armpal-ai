@@ -34,12 +34,20 @@ export default function ArcadeProfile() {
     let alive = true;
     (async () => {
       const { data: arcadeRow } = await supabase
-        .from("arcade_user_stats")
-        .select("flappy_best_score, flappy_total_games, flappy_last_score")
+        .from("arcade_flappy_arm_leaderboard")
+        .select("*")
         .eq("user_id", user.id)
         .single();
       if (!alive) return;
-      setArcadeStats(arcadeRow || null);
+      setArcadeStats(
+        arcadeRow
+          ? {
+              flappy_best_score: arcadeRow.best_score ?? 0,
+              flappy_total_games: arcadeRow.total_games ?? 0,
+              flappy_last_score: "—",
+            }
+          : null
+      );
 
       const types = ["tictactoe", "tic_tac_toe", "reaction_speed"];
       const { data: statsRows } = await supabase

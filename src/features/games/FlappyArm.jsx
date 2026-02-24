@@ -53,11 +53,19 @@ export default function FlappyArm({ game }) {
   const loadArcadeStats = useCallback(async (userId) => {
     if (!userId) return;
     const { data } = await supabase
-      .from("arcade_user_stats")
-      .select("flappy_best_score, flappy_total_games, flappy_last_score")
+      .from("arcade_flappy_arm_leaderboard")
+      .select("*")
       .eq("user_id", userId)
       .single();
-    setArcadeStats(data || null);
+    setArcadeStats(
+      data
+        ? {
+            flappy_best_score: data.best_score ?? 0,
+            flappy_total_games: data.total_games ?? 0,
+            flappy_last_score: null,
+          }
+        : null
+    );
     setLoadingStats(false);
   }, []);
 

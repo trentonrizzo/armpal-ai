@@ -1,15 +1,14 @@
 /**
  * FlappyArm — single-file canvas game. No external assets. Stable, mobile-safe.
  *
- * Score saving: On game over we ONLY insert into public.arcade_flappy_arm_scores
- * (user_id, score, is_pr). Leaderboard is a view — we never write to it.
- * After insert success we refetch best from arcade_flappy_arm_leaderboard and set UI.
+ * Schema: arcade_flappy_arm_scores (id, user_id, score, created_at).
+ * View: arcade_flappy_arm_leaderboard (user_id, best_score, total_games).
+ * On game over we only INSERT into arcade_flappy_arm_scores; best is recalculated from scores.
  */
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { useToast } from "../../components/ToastProvider";
 
 // ——— Constants ———
 const CANVAS_W = 360;
@@ -196,15 +195,13 @@ function scorePopScale(progress) {
 
 export default function FlappyArmGame({ game }) {
   const navigate = useNavigate();
-  const toast = useToast();
   const canvasRef = useRef(null);
   const [bestScore, setBestScore] = useState(0);
   const [loadingStats, setLoadingStats] = useState(true);
   const [phase, setPhase] = useState("idle");
   const [score, setScore] = useState(0);
   const [scorePopStart, setScorePopStart] = useState(null);
-  const [isNewRecord, setIsNewRecord] = useState(false);
-  /** Overlay message: "login_required" | "score_sync_failed" | null */
+  /** Overlay message: "login_required" | "score_sync_failed" | null (score_sync_failed only when insert errors) */
   const [overlayError, setOverlayError] = useState(null);
 
   const stateRef = useRef(null);
@@ -221,27 +218,27 @@ export default function FlappyArmGame({ game }) {
     phaseRef.current = phase;
   }, [phase]);
 
-  // Load best score on mount from view (read-only)
+  // Load best score on mount from arcade_flappy_arm_scores (table)
   useEffect(() => {
     let alive = true;
     (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user;
       if (!alive || !user?.id) {
         if (alive) setLoadingStats(false);
         return;
       }
       const { data: row, error } = await supabase
-        .from("arcade_flappy_arm_leaderboard")
-        .select("best_score")
+        .from("arcade_flappy_arm_scores")
+        .select("score")
         .eq("user_id", user.id)
+        .order("score", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) {
         console.error("[FlappyArm] load best_score error:", error);
       }
-      if (alive) setBestScore(row?.best_score ?? 0);
+      if (alive) setBestScore(row?.score ?? 0);
       if (alive) setLoadingStats(false);
     })();
     return () => { alive = false; };
@@ -252,56 +249,36 @@ export default function FlappyArmGame({ game }) {
     submittedRef.current = true;
     setOverlayError(null);
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
 
     if (!user) {
-      console.warn("User not logged in — score not saved");
-      setOverlayError("login_required");
-      setIsNewRecord(false);
-      return;
+      return; // do not save
     }
 
-    const userId = user.id;
-
-    // Insert ONE row into public.arcade_flappy_arm_scores only. Schema: user_id (uuid), score (int), is_pr (bool).
     const { error: insertError } = await supabase
       .from("arcade_flappy_arm_scores")
       .insert({
-        user_id: userId,
+        user_id: user.id,
         score: finalScore,
-        is_pr: false,
       });
 
     if (insertError) {
       console.error("[FlappyArm] arcade_flappy_arm_scores insert error:", insertError);
       setOverlayError("score_sync_failed");
-      setIsNewRecord(false);
       return;
     }
 
-    // After insert success: refetch best from view and set UI (DB is source of truth)
-    const { data: leaderboardRow, error: fetchError } = await supabase
-      .from("arcade_flappy_arm_leaderboard")
-      .select("best_score")
-      .eq("user_id", userId)
-      .maybeSingle();
+    const { data: bestRows } = await supabase
+      .from("arcade_flappy_arm_scores")
+      .select("score")
+      .eq("user_id", user.id)
+      .order("score", { ascending: false })
+      .limit(1);
 
-    if (fetchError) {
-      console.error("[FlappyArm] arcade_flappy_arm_leaderboard fetch error:", fetchError);
-    }
-
-    const bestFromDb = leaderboardRow?.best_score != null ? Number(leaderboardRow.best_score) : finalScore;
+    const bestFromDb = bestRows?.[0]?.score != null ? Number(bestRows[0].score) : finalScore;
     setBestScore(bestFromDb);
-    const newRecord = finalScore >= bestFromDb;
-    setIsNewRecord(newRecord);
-
-    if (newRecord && toast?.success) {
-      toast.success("🔥 NEW PERSONAL RECORD");
-    }
-  }, [toast]);
+  }, []);
 
   const triggerGameOver = useCallback(() => {
     if (phaseRef.current === "over") return;
@@ -311,7 +288,6 @@ export default function FlappyArmGame({ game }) {
     if (s) s.over = true;
     setPhase("over");
     setOverlayError(null);
-    setIsNewRecord(false);
     handleGameOver(finalScore);
   }, [handleGameOver]);
 
@@ -332,7 +308,6 @@ export default function FlappyArmGame({ game }) {
     setPhase("playing");
     setScore(0);
     setScorePopStart(null);
-    setIsNewRecord(false);
     setOverlayError(null);
   }, []);
 
@@ -343,7 +318,6 @@ export default function FlappyArmGame({ game }) {
     setPhase("idle");
     setScorePopStart(null);
     submittedRef.current = false;
-    setIsNewRecord(false);
     setOverlayError(null);
   }, []);
 
@@ -522,7 +496,6 @@ export default function FlappyArmGame({ game }) {
 
   return (
     <div style={styles.wrap}>
-      <style>{`@keyframes newRecordPulse { from { transform: scale(1); } to { transform: scale(1.08); } }`}</style>
       <button type="button" onClick={() => navigate("/games")} style={styles.backBtn}>
         ← Games
       </button>
@@ -574,21 +547,8 @@ export default function FlappyArmGame({ game }) {
             <h3 style={styles.overlayTitle}>Game Over</h3>
             <p style={styles.overlayScore}>Score: {score}</p>
             <p style={styles.overlayBest}>Best: {bestScore}</p>
-            {overlayError === "login_required" && (
-              <p style={styles.overlayError}>Login required to save scores</p>
-            )}
             {overlayError === "score_sync_failed" && (
               <p style={styles.overlayError}>Score sync failed</p>
-            )}
-            {isNewRecord && !overlayError && (
-              <p
-                style={{
-                  ...styles.newRecordBadge,
-                  animation: "newRecordPulse 0.6s ease-in-out infinite alternate",
-                }}
-              >
-                NEW RECORD!
-              </p>
             )}
             <button type="button" style={styles.primaryBtn} onClick={playAgain}>
               Play Again
@@ -709,11 +669,5 @@ const styles = {
     fontWeight: 700,
     color: "#c00",
     margin: "0 0 12px",
-  },
-  newRecordBadge: {
-    fontSize: 18,
-    fontWeight: 800,
-    color: "#c00",
-    margin: "0 0 16px",
   },
 };
