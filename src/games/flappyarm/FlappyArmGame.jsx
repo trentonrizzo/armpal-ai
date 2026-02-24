@@ -28,7 +28,7 @@ const SCROLL_SPEED = 1.8;
 const SPAWN_INTERVAL_MS = 1650;
 const PIPE_GAP_MIN = 200;
 const PIPE_GAP_MAX = 240;
-const GRACE_MS = 800;
+const GRACE_MS = 400;
 const OBSTACLE_WIDTH = 56;
 const PLAYER_SIZE = 36;
 const ROT_JUMP = -18;
@@ -271,6 +271,7 @@ export default function FlappyArmGame({ game }) {
       passed: new Set(),
     };
     lastSpawnTimeRef.current = performance.now();
+    lastTimeRef.current = performance.now();
     setPhase("playing");
     setScore(0);
     setShowPrInOverlay(false);
@@ -393,7 +394,8 @@ export default function FlappyArmGame({ game }) {
 
         const playerX = CANVAS_W / 2;
         const playerY = s.y;
-        const inGrace = now < s.graceUntil;
+        const dateNow = Date.now();
+        const inGrace = dateNow < s.graceUntil;
 
         if (!inGrace) {
           if (playerY + PLAYER_HEIGHT > GROUND_Y || playerY < CEILING_Y) {
@@ -585,7 +587,7 @@ export default function FlappyArmGame({ game }) {
       {phase === "idle" && (
         <div style={styles.section}>
           <p style={styles.instruction}>Tap to raise your arm. Avoid the obstacles!</p>
-          <p style={styles.difficulty}>800ms grace after start</p>
+          <p style={styles.difficulty}>400ms grace after start</p>
           <button type="button" style={styles.primaryBtn} onClick={startGame}>
             Start
           </button>
@@ -624,7 +626,7 @@ export default function FlappyArmGame({ game }) {
               Play Again
             </button>
             <button type="button" style={styles.secondaryBtn} onClick={() => navigate("/games")}>
-              Back
+              Back to Games
             </button>
           </div>
         </div>
