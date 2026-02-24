@@ -15,8 +15,9 @@ export default function ProgramViewer({ previewProgram = null, program: programP
 
   const preview = previewProgram ?? (programProp?.parsed_program ? { ...programProp, parsed_program: programProp.parsed_program } : null);
   const logicJson = aiVariant ?? program?.parsed_program ?? logic?.logic_json ?? {};
+  const simpleDays = Array.isArray(logicJson.days) ? logicJson.days : null;
   const frequencyRange = logicJson.frequency_range ?? [];
-  const hasFrequencyRange = Array.isArray(frequencyRange) && frequencyRange.length > 0;
+  const hasFrequencyRange = !simpleDays && Array.isArray(frequencyRange) && frequencyRange.length > 0;
   const layout = hasFrequencyRange && selectedFrequency != null
     ? logicJson.layouts?.[selectedFrequency]
     : null;
@@ -168,7 +169,7 @@ export default function ProgramViewer({ previewProgram = null, program: programP
     );
   }
 
-  const workouts = layout?.days ?? layout?.workouts ?? [];
+  const workouts = simpleDays ?? layout?.days ?? layout?.workouts ?? [];
 
   return (
     <div style={styles.wrap}>

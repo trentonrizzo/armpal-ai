@@ -10,6 +10,7 @@ export default function ProgramPreview() {
   const [owned, setOwned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -71,6 +72,24 @@ export default function ProgramPreview() {
     setOwned(true);
   }
 
+  async function handleDelete() {
+    if (!user?.id || !program?.id || program.creator_id !== user.id || deleting) return;
+    // Simple confirm; does not block navigation outside this page.
+    if (!window.confirm("Delete this program? This cannot be undone.")) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from("programs")
+      .delete()
+      .eq("id", program.id);
+    setDeleting(false);
+    if (error) {
+      console.error("Delete program failed", error);
+      alert(error.message || "Could not delete program.");
+      return;
+    }
+    navigate("/programs");
+  }
+
   if (loading) {
     return (
       <div style={styles.wrap}>
@@ -89,6 +108,8 @@ export default function ProgramPreview() {
       </div>
     );
   }
+
+  const isCreator = user?.id && program?.creator_id === user.id;
 
   return (
     <div style={styles.wrap}>
@@ -126,6 +147,17 @@ export default function ProgramPreview() {
           style={styles.buyBtn}
         >
           {!user ? "Sign in to get this program" : buying ? "Adding…" : "Get this program"}
+        </button>
+      )}
+
+      {isCreator && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          style={styles.deleteBtn}
+        >
+          {deleting ? "Deleting…" : "Delete Program"}
         </button>
       )}
     </div>
@@ -192,6 +224,18 @@ const styles = {
     color: "var(--text)",
     fontWeight: 800,
     fontSize: 15,
+    cursor: "pointer",
+  },
+  deleteBtn: {
+    marginTop: 12,
+    width: "100%",
+    padding: 12,
+    borderRadius: 12,
+    border: "1px solid #c00",
+    background: "transparent",
+    color: "#c00",
+    fontWeight: 700,
+    fontSize: 14,
     cursor: "pointer",
   },
 };
