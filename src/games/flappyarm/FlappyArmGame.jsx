@@ -1,21 +1,19 @@
 /**
  * FlappyArm — single-file canvas game. No external assets. Stable, mobile-safe.
  *
- * SCHEMA (existing app usage; arcade_* may exist in DB but not in repo migrations):
- * - Best/display: arcade_user_stats (user_id, flappy_best_score, flappy_total_games, flappy_last_score).
- * - Submit: supabase.rpc("record_flappy_arm_score", { user_id, score }) -> { is_pr };
- *   then user_game_scores.insert({ user_id, game_id, score });
- *   then user_game_best.upsert({ user_id, game_id, best_score, updated_at }, onConflict: "user_id,game_id");
- *   then supabase.rpc("increment_arcade_stats", { p_user_id, p_game_id: "flappy_arm", p_score });
- * - Leaderboard: /games/leaderboard?game_type=flappy_arm uses arcade_flappy_arm_leaderboard
- *   (user_id, best_score, achieved_at). Profiles joined for display_name/username/handle.
- * - Migrations in repo: games, user_game_scores, user_game_best, game_leaderboard, game_user_stats.
+ * Leaderboard: arcade_flappy_arm_scores (all runs) + arcade_flappy_arm_leaderboard (best per user).
+ * On game over: insert run, then update leaderboard only when score > stored best; refetch best and show NEW RECORD! when applicable.
  */
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../../components/ToastProvider";
+import {
+  getFlappyBestForUser,
+  submitFlappyScore,
+  fetchFlappyLeaderboard,
+} from "./flappyArmScoreService";
 
 // ——— Constants ———
 const CANVAS_W = 360;
@@ -35,8 +33,6 @@ const ROT_JUMP = -18;
 const ROT_FALL_MAX = 65;
 const SCORE_POP_MS = 150;
 const SCORE_POP_MAX = 1.15;
-const HIT_PAD_X = 8;
-const HIT_PAD_Y = 10;
 const DT_MAX = 0.033;
 const CEILING_Y = 0;
 const PLAYER_WIDTH = PLAYER_SIZE;
@@ -207,12 +203,13 @@ export default function FlappyArmGame({ game }) {
   const toast = useToast();
   const canvasRef = useRef(null);
   const [user, setUser] = useState(null);
-  const [arcadeStats, setArcadeStats] = useState(null);
+  const [bestScore, setBestScore] = useState(0);
   const [loadingStats, setLoadingStats] = useState(true);
   const [phase, setPhase] = useState("idle");
   const [score, setScore] = useState(0);
-  const [showPrInOverlay, setShowPrInOverlay] = useState(false);
   const [scorePopStart, setScorePopStart] = useState(null);
+  /** After game over submit: { newRecord, newBest } for overlay */
+  const [gameOverResult, setGameOverResult] = useState(null);
 
   const stateRef = useRef(null);
   const lastTimeRef = useRef(0);
@@ -222,23 +219,20 @@ export default function FlappyArmGame({ game }) {
   const pausedRef = useRef(false);
   const phaseRef = useRef(phase);
   const gameOverSubmittedRef = useRef(false);
-  const finalScoreRef = useRef(0);
   scoreRef.current = score;
   phaseRef.current = phase;
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
 
-  const loadArcadeStats = useCallback(async (userId) => {
+  const loadBestScore = useCallback(async (userId) => {
     if (!userId) return;
     try {
-      const { data } = await supabase
-        .from("arcade_user_stats")
-        .select("flappy_best_score, flappy_total_games, flappy_last_score")
-        .eq("user_id", userId)
-        .maybeSingle();
-      setArcadeStats(data || null);
-    } catch (_) {}
+      const { best_score } = await getFlappyBestForUser(userId);
+      setBestScore(best_score ?? 0);
+    } catch (e) {
+      console.error("[FlappyArm] loadBestScore:", e);
+    }
     setLoadingStats(false);
   }, []);
 
@@ -255,11 +249,49 @@ export default function FlappyArmGame({ game }) {
       setLoadingStats(false);
       return;
     }
-    loadArcadeStats(user.id);
-  }, [user?.id, loadArcadeStats]);
+    loadBestScore(user.id);
+  }, [user?.id, loadBestScore]);
+
+  /** Single submission path: insert run, update leaderboard only when score > stored best; then refetch best and leaderboard list. */
+  const runGameOverSubmit = useCallback(
+    async (finalScore) => {
+      if (gameOverSubmittedRef.current) return;
+      gameOverSubmittedRef.current = true;
+      const userId = user?.id;
+      if (!userId) {
+        setGameOverResult({ newRecord: false, newBest: bestScore });
+        return;
+      }
+      try {
+        const result = await submitFlappyScore(userId, finalScore);
+        setGameOverResult({ newRecord: result.newRecord, newBest: result.newBest });
+        await loadBestScore(userId);
+        await fetchFlappyLeaderboard();
+        if (result.newRecord && toast?.success) {
+          toast.success("🔥 NEW PERSONAL RECORD");
+        }
+      } catch (e) {
+        console.error("[FlappyArm] runGameOverSubmit:", e);
+        setGameOverResult({ newRecord: false, newBest: bestScore });
+      }
+    },
+    [user?.id, bestScore, loadBestScore, toast]
+  );
+
+  const triggerGameOver = useCallback(() => {
+    if (phaseRef.current === "over") return;
+    const finalScore = scoreRef.current;
+    phaseRef.current = "over";
+    const s = stateRef.current;
+    if (s) s.over = true;
+    setPhase("over");
+    setGameOverResult(null);
+    runGameOverSubmit(finalScore);
+  }, [runGameOverSubmit]);
 
   const startGame = useCallback(() => {
     gameOverSubmittedRef.current = false;
+    setGameOverResult(null);
     const centerY = (GROUND_Y - PLAYER_SIZE) / 2;
     stateRef.current = {
       y: centerY,
@@ -274,7 +306,6 @@ export default function FlappyArmGame({ game }) {
     lastTimeRef.current = performance.now();
     setPhase("playing");
     setScore(0);
-    setShowPrInOverlay(false);
     setScorePopStart(null);
   }, []);
 
@@ -283,7 +314,7 @@ export default function FlappyArmGame({ game }) {
     lastSpawnTimeRef.current = performance.now();
     setScore(0);
     setPhase("idle");
-    setShowPrInOverlay(false);
+    setGameOverResult(null);
     setScorePopStart(null);
     gameOverSubmittedRef.current = false;
   }, []);
@@ -319,6 +350,8 @@ export default function FlappyArmGame({ game }) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = CANVAS_W * dpr;
     canvas.height = CANVAS_H * dpr;
+
+    const triggerOver = triggerGameOver;
 
     function frame(now) {
       rafIdRef.current = requestAnimationFrame(frame);
@@ -399,128 +432,21 @@ export default function FlappyArmGame({ game }) {
 
         if (!inGrace) {
           if (playerY + PLAYER_HEIGHT > GROUND_Y || playerY < CEILING_Y) {
-            if (phaseRef.current === "over") { /* already triggered */ } else {
-              phaseRef.current = "over";
-              s.over = true;
-              finalScoreRef.current = scoreRef.current;
-              setPhase("over");
-              if (!gameOverSubmittedRef.current && user?.id) {
-                gameOverSubmittedRef.current = true;
-                const finalScore = finalScoreRef.current;
-                (async () => {
-                  try {
-                    const { data } = await supabase.rpc("record_flappy_arm_score", {
-                      user_id: user.id,
-                      score: finalScore,
-                    });
-                    if (data?.is_pr === true) {
-                      setShowPrInOverlay(true);
-                      if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
-                    }
-                    const gameId = game?.id;
-                    if (gameId) {
-                      await supabase.from("user_game_scores").insert({
-                        user_id: user.id,
-                        game_id: gameId,
-                        score: finalScore,
-                      });
-                      const { data: existingBest } = await supabase
-                        .from("user_game_best")
-                        .select("best_score")
-                        .eq("user_id", user.id)
-                        .eq("game_id", gameId)
-                        .maybeSingle();
-                      if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
-                        await supabase.from("user_game_best").upsert(
-                          {
-                            user_id: user.id,
-                            game_id: gameId,
-                            best_score: finalScore,
-                            updated_at: new Date().toISOString(),
-                          },
-                          { onConflict: "user_id,game_id" }
-                        );
-                      }
-                    }
-                    await supabase.rpc("increment_arcade_stats", {
-                      p_user_id: user.id,
-                      p_game_id: "flappy_arm",
-                      p_score: finalScore,
-                    });
-                    await loadArcadeStats(user.id);
-                  } catch (e) {
-                    console.error("FlappyArm score submit:", e);
-                  }
-                })();
-              }
-            }
-          } else {
-            const playerBox = {
-              x: playerX - PLAYER_WIDTH / 2,
-              y: playerY,
-              w: PLAYER_WIDTH,
-              h: PLAYER_HEIGHT,
-            };
-            for (const ob of s.obstacles) {
-              const topPipeBox = { x: ob.x, y: 0, w: OBSTACLE_WIDTH, h: ob.topH };
-              const bottomPipeBox = { x: ob.x, y: ob.bottomY, w: OBSTACLE_WIDTH, h: ob.bottomH };
-              if (rectOverlap(playerBox, topPipeBox) || rectOverlap(playerBox, bottomPipeBox)) {
-                if (phaseRef.current === "over") break;
-                phaseRef.current = "over";
-                s.over = true;
-                finalScoreRef.current = scoreRef.current;
-                setPhase("over");
-                if (!gameOverSubmittedRef.current && user?.id) {
-                  gameOverSubmittedRef.current = true;
-                  const finalScore = finalScoreRef.current;
-                  (async () => {
-                    try {
-                      const { data } = await supabase.rpc("record_flappy_arm_score", {
-                        user_id: user.id,
-                        score: finalScore,
-                      });
-                      if (data?.is_pr === true) {
-                        setShowPrInOverlay(true);
-                        if (toast?.success) toast.success("🔥 NEW PERSONAL RECORD");
-                      }
-                      const gameId = game?.id;
-                      if (gameId) {
-                        await supabase.from("user_game_scores").insert({
-                          user_id: user.id,
-                          game_id: gameId,
-                          score: finalScore,
-                        });
-                        const { data: existingBest } = await supabase
-                          .from("user_game_best")
-                          .select("best_score")
-                          .eq("user_id", user.id)
-                          .eq("game_id", gameId)
-                          .maybeSingle();
-                        if (!existingBest || finalScore > (existingBest.best_score ?? 0)) {
-                          await supabase.from("user_game_best").upsert(
-                            {
-                              user_id: user.id,
-                              game_id: gameId,
-                              best_score: finalScore,
-                              updated_at: new Date().toISOString(),
-                            },
-                            { onConflict: "user_id,game_id" }
-                          );
-                        }
-                      }
-                      await supabase.rpc("increment_arcade_stats", {
-                        p_user_id: user.id,
-                        p_game_id: "flappy_arm",
-                        p_score: finalScore,
-                      });
-                      await loadArcadeStats(user.id);
-                    } catch (e) {
-                      console.error("FlappyArm score submit:", e);
-                    }
-                  })();
-                }
-                break;
-              }
+            triggerOver();
+            return;
+          }
+          const playerBox = {
+            x: playerX - PLAYER_WIDTH / 2,
+            y: playerY,
+            w: PLAYER_WIDTH,
+            h: PLAYER_HEIGHT,
+          };
+          for (const ob of s.obstacles) {
+            const topPipeBox = { x: ob.x, y: 0, w: OBSTACLE_WIDTH, h: ob.topH };
+            const bottomPipeBox = { x: ob.x, y: ob.bottomY, w: OBSTACLE_WIDTH, h: ob.bottomH };
+            if (rectOverlap(playerBox, topPipeBox) || rectOverlap(playerBox, bottomPipeBox)) {
+              triggerOver();
+              break;
             }
           }
         }
@@ -564,12 +490,15 @@ export default function FlappyArmGame({ game }) {
     return () => {
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     };
-  }, [phase, user?.id, game?.id, toast, loadArcadeStats, scorePopStart]);
+  }, [phase, triggerGameOver, scorePopStart]);
 
-  const bestScore = arcadeStats?.flappy_best_score ?? 0;
+  const bestScoreDisplay = phase === "over" ? (gameOverResult?.newBest ?? bestScore) : bestScore;
+  const overlayBest = gameOverResult?.newBest ?? bestScore;
+  const newRecord = gameOverResult?.newRecord === true;
 
   return (
     <div style={styles.wrap}>
+      <style>{`@keyframes newRecordPulse { from { transform: scale(1); } to { transform: scale(1.08); } }`}</style>
       <button type="button" onClick={() => navigate("/games")} style={styles.backBtn}>
         ← Games
       </button>
@@ -597,7 +526,7 @@ export default function FlappyArmGame({ game }) {
       {(phase === "playing" || phase === "over") && (
         <div style={styles.scoreBar}>
           <span>Score: {score}</span>
-          {!loadingStats && <span>Best: {bestScore}</span>}
+          {!loadingStats && <span>Best: {bestScoreDisplay}</span>}
         </div>
       )}
 
@@ -620,8 +549,17 @@ export default function FlappyArmGame({ game }) {
           <div style={styles.overlayCard}>
             <h3 style={styles.overlayTitle}>Game Over</h3>
             <p style={styles.overlayScore}>Score: {score}</p>
-            <p style={styles.overlayBest}>Best: {bestScore}</p>
-            {showPrInOverlay && <p style={styles.newRecord}>NEW BEST!</p>}
+            <p style={styles.overlayBest}>Best: {overlayBest}</p>
+            {newRecord && (
+              <p
+                style={{
+                  ...styles.newRecordBadge,
+                  animation: "newRecordPulse 0.6s ease-in-out infinite alternate",
+                }}
+              >
+                NEW RECORD!
+              </p>
+            )}
             <button type="button" style={styles.primaryBtn} onClick={playAgain}>
               Play Again
             </button>
@@ -736,5 +674,10 @@ const styles = {
   overlayTitle: { fontSize: 22, fontWeight: 900, margin: "0 0 16px", color: "var(--text)" },
   overlayScore: { fontSize: 18, fontWeight: 700, margin: "0 0 4px", color: "var(--text)" },
   overlayBest: { fontSize: 14, color: "var(--text-dim)", margin: "0 0 12px" },
-  newRecord: { fontSize: 16, fontWeight: 800, color: "var(--accent)", margin: "0 0 16px" },
+  newRecordBadge: {
+    fontSize: 18,
+    fontWeight: 800,
+    color: "#c00",
+    margin: "0 0 16px",
+  },
 };
