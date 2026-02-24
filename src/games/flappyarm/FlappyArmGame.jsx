@@ -225,15 +225,18 @@ export default function FlappyArmGame({ game }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data: { user: u } } = await supabase.auth.getUser();
-      if (!alive || !u?.id) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!alive || !user?.id) {
         if (alive) setLoadingStats(false);
         return;
       }
       const { data: row, error } = await supabase
         .from("arcade_flappy_arm_leaderboard")
         .select("best_score")
-        .eq("user_id", u.id)
+        .eq("user_id", user.id)
         .maybeSingle();
       if (error) {
         console.error("[FlappyArm] load best_score error:", error);
@@ -249,14 +252,18 @@ export default function FlappyArmGame({ game }) {
     submittedRef.current = true;
     setOverlayError(null);
 
-    const { data: { user: userData } } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
+
+    if (!user) {
+      console.warn("User not logged in — score not saved");
       setOverlayError("login_required");
       setIsNewRecord(false);
       return;
     }
 
-    const user = userData.user;
     const userId = user.id;
 
     // Insert ONE row into public.arcade_flappy_arm_scores only. Schema: user_id (uuid), score (int), is_pr (bool).
