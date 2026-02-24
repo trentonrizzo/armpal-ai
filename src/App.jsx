@@ -46,6 +46,7 @@ import SessionPage from "./features/games/SessionPage";
 import Leaderboard from "./features/games/Leaderboard";
 import ArcadeProfile from "./features/games/ArcadeProfile";
 import ArenaPage from "./minigames/arena/ArenaPage";
+import NutritionPage from "./features/nutrition/NutritionPage";
 
 import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
@@ -191,6 +192,7 @@ function AppContent() {
         <Route path="/programs/:id/view" element={<ProgramViewer />} />
         <Route path="/games" element={<GamesHub />} />
         <Route path="/minigames/arena" element={<ArenaPage />} />
+        <Route path="/nutrition" element={<NutritionPage />} />
         <Route path="/games/arcade" element={<ArcadeProfile />} />
         <Route path="/games/leaderboard" element={<Leaderboard />} />
         <Route path="/games/session/:sessionId" element={<SessionPage />} />

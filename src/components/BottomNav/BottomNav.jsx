@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import "./BottomNav.css";
 
 import { AiFillHome, AiFillTrophy, AiFillFlag } from "react-icons/ai";
-import { FaDumbbell, FaRulerVertical, FaUserAlt } from "react-icons/fa";
+import { FaDumbbell, FaRulerVertical, FaUserAlt, FaUtensils } from "react-icons/fa";
 
 const BottomNav = () => {
   return (
@@ -69,6 +69,19 @@ const BottomNav = () => {
             <AiFillFlag className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
               Goals
+            </span>
+          </div>
+        )}
+      </NavLink>
+
+      {/* Nutrition */}
+      <NavLink to="/nutrition" className="nav-item">
+        {({ isActive }) => (
+          <div className="icon-container">
+            {isActive && <div className="active-glow" />}
+            <FaUtensils className="nav-icon" />
+            <span className={`nav-label ${isActive ? "active-label" : ""}`}>
+              Nutrition
             </span>
           </div>
         )}
