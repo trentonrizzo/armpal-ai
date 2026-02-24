@@ -6,10 +6,14 @@ import {
   updateEntry,
   deleteEntry,
   calculateDailyTotals,
+  getNutritionGoals,
+  upsertNutritionGoals,
+  computeProgress,
 } from "./nutritionService";
 import NutritionDailySummary from "./NutritionDailySummary";
 import NutritionHistory from "./NutritionHistory";
 import NutritionEntryForm from "./NutritionEntryForm";
+import NutritionGoalsModal from "./NutritionGoalsModal";
 
 const PAGE = {
   minHeight: "100vh",
@@ -61,6 +65,67 @@ const BTN_PRIMARY = {
   cursor: "pointer",
 };
 
+const HEADER_ROW = {
+  display: "flex",
+  gap: 10,
+  marginBottom: 20,
+  alignItems: "center",
+};
+const DATE_INPUT = {
+  flex: 1,
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "rgba(255,255,255,0.08)",
+  color: "#fff",
+  fontSize: 15,
+};
+const HEADER_BTN = {
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "rgba(255,255,255,0.08)",
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const PROGRESS_SECTION = {
+  marginBottom: 24,
+};
+const PROGRESS_ROW = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 6,
+  gap: 12,
+};
+const PROGRESS_LABEL = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: "rgba(255,255,255,0.85)",
+  minWidth: 80,
+};
+const PROGRESS_TEXT = {
+  fontSize: 12,
+  color: "rgba(255,255,255,0.6)",
+};
+const PROGRESS_BAR_BG = {
+  height: 6,
+  borderRadius: 3,
+  background: "rgba(255,255,255,0.1)",
+  overflow: "hidden",
+  marginTop: 4,
+};
+const PROGRESS_BAR_FILL = (pct) => ({
+  width: `${Math.min(100, pct * 100)}%`,
+  height: "100%",
+  background: "var(--accent)",
+  borderRadius: 3,
+  transition: "width 0.2s ease",
+});
+
 export default function NutritionPage() {
   const [user, setUser] = useState(null);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -72,6 +137,8 @@ export default function NutritionPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [goals, setGoals] = useState(null);
+  const [goalsModalOpen, setGoalsModalOpen] = useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -94,9 +161,23 @@ export default function NutritionPage() {
     }
   }, [user?.id, selectedDate]);
 
+  const loadGoals = React.useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const g = await getNutritionGoals(user.id);
+      setGoals(g);
+    } catch (e) {
+      console.error("Load goals", e);
+    }
+  }, [user?.id]);
+
   React.useEffect(() => {
     loadEntries();
   }, [loadEntries]);
+
+  React.useEffect(() => {
+    loadGoals();
+  }, [loadGoals]);
 
   const totals = calculateDailyTotals(entries);
 
@@ -124,9 +205,62 @@ export default function NutritionPage() {
     loadEntries();
   };
 
+  const handleSaveGoals = async (goalsData) => {
+    if (!user?.id) return;
+    await upsertNutritionGoals(user.id, goalsData);
+    await loadGoals();
+  };
+
   const openEdit = (entry) => {
     setEditingId(entry.id);
   };
+
+  const showProgressBars = goals?.show_progress === true;
+  const hasAnyGoal =
+    (goals?.calories_goal != null && goals.calories_goal > 0) ||
+    (goals?.protein_goal != null && goals.protein_goal > 0) ||
+    (goals?.carbs_goal != null && goals.carbs_goal > 0) ||
+    (goals?.fat_goal != null && goals.fat_goal > 0);
+
+  const progressRows = [];
+  if (showProgressBars && hasAnyGoal) {
+    if (goals?.calories_goal != null && goals.calories_goal > 0) {
+      const p = computeProgress(totals.calories, goals.calories_goal);
+      progressRows.push({
+        label: "Calories",
+        current: totals.calories,
+        goal: goals.calories_goal,
+        progress: p,
+      });
+    }
+    if (goals?.protein_goal != null && goals.protein_goal > 0) {
+      const p = computeProgress(totals.protein, goals.protein_goal);
+      progressRows.push({
+        label: "Protein",
+        current: totals.protein,
+        goal: goals.protein_goal,
+        progress: p,
+      });
+    }
+    if (goals?.carbs_goal != null && goals.carbs_goal > 0) {
+      const p = computeProgress(totals.carbs, goals.carbs_goal);
+      progressRows.push({
+        label: "Carbs",
+        current: totals.carbs,
+        goal: goals.carbs_goal,
+        progress: p,
+      });
+    }
+    if (goals?.fat_goal != null && goals.fat_goal > 0) {
+      const p = computeProgress(totals.fat, goals.fat_goal);
+      progressRows.push({
+        label: "Fat",
+        current: totals.fat,
+        goal: goals.fat_goal,
+        progress: p,
+      });
+    }
+  }
 
   if (!user) {
     return (
@@ -173,40 +307,54 @@ export default function NutritionPage() {
       <h1 style={HEADER}>Nutrition</h1>
       <p style={SUB}>Track daily calories and macros</p>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+      <div style={HEADER_ROW}>
         <input
           type="date"
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
-          style={{
-            flex: 1,
-            padding: "12px 14px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.2)",
-            background: "rgba(255,255,255,0.08)",
-            color: "#fff",
-            fontSize: 15,
-          }}
+          style={DATE_INPUT}
         />
         <button
           type="button"
           onClick={() => setShowHistory(true)}
-          style={{
-            padding: "12px 16px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.2)",
-            background: "rgba(255,255,255,0.08)",
-            color: "#fff",
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
+          style={HEADER_BTN}
         >
           History
+        </button>
+        <button
+          type="button"
+          onClick={() => setGoalsModalOpen(true)}
+          style={HEADER_BTN}
+        >
+          Goals
         </button>
       </div>
 
       <NutritionDailySummary totals={totals} loading={loading} />
+
+      {showProgressBars && progressRows.length > 0 && (
+        <div style={PROGRESS_SECTION}>
+          {progressRows.map((row) => (
+            <div key={row.label} style={{ marginBottom: 10 }}>
+              <div style={PROGRESS_ROW}>
+                <span style={PROGRESS_LABEL}>{row.label}</span>
+                <span style={PROGRESS_TEXT}>
+                  {row.current} / {row.goal}
+                </span>
+              </div>
+              <div style={PROGRESS_BAR_BG}>
+                <div
+                  style={PROGRESS_BAR_FILL(row.progress ?? 0)}
+                  role="progressbar"
+                  aria-valuenow={row.current}
+                  aria-valuemin={0}
+                  aria-valuemax={row.goal}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={SECTION_TITLE}>Entries</div>
       <div style={CARD}>
@@ -314,6 +462,13 @@ export default function NutritionPage() {
           />
         </div>
       )}
+
+      <NutritionGoalsModal
+        open={goalsModalOpen}
+        onClose={() => setGoalsModalOpen(false)}
+        initialGoals={goals}
+        onSave={handleSaveGoals}
+      />
     </div>
   );
 }

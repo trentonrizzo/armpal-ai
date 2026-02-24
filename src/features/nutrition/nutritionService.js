@@ -114,6 +114,56 @@ export function calculateDailyTotals(entries) {
 }
 
 /**
+ * @param {string} userId
+ * @returns {Promise<{ user_id: string, calories_goal?: number | null, protein_goal?: number | null, carbs_goal?: number | null, fat_goal?: number | null, show_progress?: boolean } | null>}
+ */
+export async function getNutritionGoals(userId) {
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from("nutrition_goals")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+/**
+ * @param {string} userId
+ * @param {{ calories_goal?: number | null, protein_goal?: number | null, carbs_goal?: number | null, fat_goal?: number | null, show_progress?: boolean }} goals
+ * @returns {Promise<object>}
+ */
+export async function upsertNutritionGoals(userId, goals) {
+  if (!userId) throw new Error("User required");
+  const row = {
+    user_id: userId,
+    calories_goal: goals.calories_goal ?? null,
+    protein_goal: goals.protein_goal ?? null,
+    carbs_goal: goals.carbs_goal ?? null,
+    fat_goal: goals.fat_goal ?? null,
+    show_progress: goals.show_progress !== false,
+  };
+  const { data, error } = await supabase
+    .from("nutrition_goals")
+    .upsert(row, { onConflict: "user_id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * @param {number} current
+ * @param {number | null | undefined} goal
+ * @returns {number | null} 0..1 if goal is positive, else null
+ */
+export function computeProgress(current, goal) {
+  if (goal == null || goal <= 0) return null;
+  const p = current / goal;
+  return Math.min(1, Math.max(0, p));
+}
+
+/**
  * For future AI coach: weekly calories and protein averages.
  * @param {string} userId
  * @param {string} endDate - YYYY-MM-DD
