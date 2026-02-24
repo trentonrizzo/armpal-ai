@@ -73,7 +73,7 @@ export async function submitFlappyScore(userId, currentScore) {
     // 3) No row → insert; 4) Row exists → update only if currentScore > best_score
     if (leaderboardRow == null) {
       const { error: insertLeaderboardError } = await supabase
-        .from("arcade_flappy_arm_leaderboard")
+        .from("arcade_flappy_arm_scores")
         .insert({
           user_id: userId,
           best_score: score,
