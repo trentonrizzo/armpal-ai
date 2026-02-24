@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import ArenaLobby from "./ArenaLobby";
 import ArenaGame from "./ArenaGame";
-import { getMatch, getArenaLeaderboard, getArenaSettings, getDefaultArenaSettings, getArenaBinds, getDefaultArenaBinds } from "./arenaDb";
+import { getMatch, getArenaLeaderboard, getArenaSettings, getDefaultArenaSettings, getArenaBinds, getDefaultArenaBinds, saveArenaSettings } from "./arenaDb";
 import ArenaSettingsOverlay from "./ArenaSettingsOverlay";
 import ArenaBindsOverlay from "./ArenaBindsOverlay";
 
@@ -107,6 +107,17 @@ export default function ArenaPage() {
     setMatch(null);
   };
 
+  const handleLookSettingsSave = (look) => {
+    const updated = {
+      ...arenaSettings,
+      look_sensitivity_x: (Number(look.mouseSensitivityX) || 0.9) * 0.001,
+      look_sensitivity_y: (Number(look.mouseSensitivityY) || 0.9) * 0.001,
+      invert_y_axis: !!look.invertY,
+    };
+    setArenaSettings(updated);
+    if (user?.id) saveArenaSettings(user.id, updated).catch(() => {});
+  };
+
   if (user === null && loading) {
     return (
       <div style={PAGE_WRAP}>
@@ -169,6 +180,7 @@ export default function ArenaPage() {
           onExit={handleExit}
           onMatchEnd={handleMatchEnd}
           onOpenSettings={() => setSettingsOverlayOpen(true)}
+          onLookSettingsSave={handleLookSettingsSave}
         />
       ) : (
         <ArenaLobby

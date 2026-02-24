@@ -218,8 +218,8 @@ export async function getArenaLeaderboard(limit = 25) {
 }
 
 const DEFAULT_ARENA_SETTINGS = {
-  look_sensitivity_x: 0.002,
-  look_sensitivity_y: 0.002,
+  look_sensitivity_x: 0.0009,
+  look_sensitivity_y: 0.0009,
   invert_y_axis: false,
   fov: 85,
   controller_sensitivity: 1,

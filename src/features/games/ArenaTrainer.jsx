@@ -1,6 +1,7 @@
 /**
  * Arena Aim Trainer — single-player. Same movement + shooting as Arena, no matchmaking.
  * Targets (boxes) respawn when hit. Stats: hits, shots, accuracy %, session time.
+ * Uses unified arena look settings (arenaSettingsService); in-game overlay for Sensitivity X/Y, Invert Y.
  */
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +17,14 @@ import {
   Ray,
   DirectionalLight,
 } from "@babylonjs/core";
+import {
+  getDefaultLookSettings,
+  getArenaLookSettings,
+  saveArenaLookSettings,
+  toSensMultiplier,
+} from "./arenaSettingsService";
+import ArenaSettingsOverlay from "./ArenaSettingsOverlay";
+import { supabase } from "../../supabaseClient";
 
 const TRAINER_HALF = 10;
 const WALL_H = 4;
@@ -25,8 +34,6 @@ const PITCH_MAX = (80 * Math.PI) / 180;
 const MOVE_SPEED = 10;
 const JUMP_FORCE = 8;
 const GRAVITY = -24;
-const SENS_X = 0.002;
-const SENS_Y = 0.002;
 const RAY_LENGTH = 80;
 const TARGET_COUNT = 6;
 const TARGET_MIN_X = -TRAINER_HALF + 2;
@@ -58,12 +65,38 @@ export default function ArenaTrainer() {
   const targetsRef = useRef([]);
   const startTimeRef = useRef(null);
 
+  const [lookSettings, setLookSettings] = useState(getDefaultLookSettings);
+  const [settingsOverlayOpen, setSettingsOverlayOpen] = useState(false);
+  const [userId, setUserId] = useState(null);
   const [hits, setHits] = useState(0);
   const [shots, setShots] = useState(0);
   const [sessionTime, setSessionTime] = useState(0);
   const [error, setError] = useState(null);
 
+  const sensXRef = useRef(toSensMultiplier(lookSettings.mouseSensitivityX));
+  const sensYRef = useRef(toSensMultiplier(lookSettings.mouseSensitivityY));
+  const invertYRef = useRef(lookSettings.invertY);
+  sensXRef.current = toSensMultiplier(lookSettings.mouseSensitivityX);
+  sensYRef.current = toSensMultiplier(lookSettings.mouseSensitivityY);
+  invertYRef.current = lookSettings.invertY;
+
   const accuracy = shots > 0 ? Math.round((hits / shots) * 100) : 0;
+
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (alive) setUserId(user?.id ?? null);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    getArenaLookSettings(userId ?? null).then((s) => {
+      if (alive) setLookSettings(s);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [userId]);
 
   const addTarget = useCallback((scene) => {
     const pos = randomTargetPosition();
@@ -89,6 +122,24 @@ export default function ArenaTrainer() {
     mesh.dispose();
   }, []);
 
+  const handleSaveLookSettings = useCallback((next) => {
+    setLookSettings(next);
+    saveArenaLookSettings(userId ?? null, next).catch(() => {});
+  }, [userId]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onKeyDown = (e) => {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        setSettingsOverlayOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -103,7 +154,8 @@ export default function ArenaTrainer() {
       const camera = new FreeCamera("cam", new Vector3(0, HEAD_HEIGHT, 0), scene);
       camera.attachControl(canvas, false);
       camera.inputs.clear();
-      camera.fov = (85 * Math.PI) / 180;
+      const fovDeg = lookSettings.fov ?? 75;
+      camera.fov = (fovDeg * Math.PI) / 180;
       cameraRef.current = camera;
 
       const hemi = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
@@ -189,7 +241,10 @@ export default function ArenaTrainer() {
 
       engine.runRenderLoop(() => scene.render());
       window.addEventListener("resize", () => engine.resize());
-      setTimeout(() => canvas.requestPointerLock?.(), 100);
+      const isTouch = typeof window !== "undefined" && "ontouchstart" in window;
+      if (!isTouch && canvas.requestPointerLock) {
+        setTimeout(() => canvas.requestPointerLock(), 100);
+      }
       return () => {
         window.removeEventListener("resize", () => engine.resize());
         if (document.pointerLockElement === canvas) document.exitPointerLock?.();
@@ -200,7 +255,7 @@ export default function ArenaTrainer() {
       console.error("ArenaTrainer", e);
       setError(e);
     }
-  }, [addTarget]);
+  }, [addTarget, lookSettings.fov]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -229,14 +284,22 @@ export default function ArenaTrainer() {
     if (!canvas) return;
     const onMouseMove = (e) => {
       if (document.pointerLockElement !== canvas) return;
-      lookRef.current.yaw += (e.movementX ?? 0) * SENS_X;
+      const dx = e.movementX ?? 0;
+      const dy = e.movementY ?? 0;
+      const sensX = sensXRef.current;
+      const sensY = sensYRef.current;
+      const invertY = invertYRef.current;
+      lookRef.current.yaw += dx * sensX;
+      const deltaPitch = dy * sensY;
       lookRef.current.pitch = Math.max(
         PITCH_MIN,
-        Math.min(PITCH_MAX, lookRef.current.pitch - (e.movementY ?? 0) * SENS_Y)
+        Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? -deltaPitch : deltaPitch))
       );
     };
     const onClick = () => {
-      if (canvas.requestPointerLock) canvas.requestPointerLock();
+      if (settingsOverlayOpen) return;
+      const isTouch = typeof window !== "undefined" && "ontouchstart" in window;
+      if (!isTouch && canvas.requestPointerLock) canvas.requestPointerLock();
     };
     document.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("click", onClick);
@@ -244,7 +307,7 @@ export default function ArenaTrainer() {
       document.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("click", onClick);
     };
-  }, []);
+  }, [settingsOverlayOpen]);
 
   const fire = useCallback(() => {
     const scene = sceneRef.current;
@@ -294,6 +357,8 @@ export default function ArenaTrainer() {
     );
   }
 
+  const showCrosshair = lookSettings.showCrosshair !== false;
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "#0a0a0a" }}>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
@@ -312,23 +377,46 @@ export default function ArenaTrainer() {
           zIndex: 20,
         }}
       >
-        <button
-          type="button"
-          onClick={() => navigate("/games")}
-          style={{
-            pointerEvents: "auto",
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: "1px solid var(--border)",
-            background: "var(--card-2)",
-            color: "var(--text)",
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          ← Back to Games
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => navigate("/games")}
+            style={{
+              pointerEvents: "auto",
+              padding: "10px 16px",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+              background: "var(--card-2)",
+              color: "var(--text)",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            ← Back to Games
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOverlayOpen(true)}
+            title="Look settings"
+            style={{
+              pointerEvents: "auto",
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+              background: "rgba(0,0,0,0.5)",
+              color: "var(--text)",
+              fontSize: 18,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ⚙️
+          </button>
+        </div>
         <div style={{ display: "flex", gap: 16, fontSize: 14, fontWeight: 700, color: "#fff" }}>
           <span>Hits: {hits}</span>
           <span>Shots: {shots}</span>
@@ -336,19 +424,28 @@ export default function ArenaTrainer() {
           <span>Time: {sessionTime}s</span>
         </div>
       </div>
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.9)",
-          pointerEvents: "none",
-          zIndex: 15,
-        }}
+      {showCrosshair && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.9)",
+            pointerEvents: "none",
+            zIndex: 15,
+          }}
+        />
+      )}
+      <ArenaSettingsOverlay
+        open={settingsOverlayOpen}
+        onClose={() => setSettingsOverlayOpen(false)}
+        settings={lookSettings}
+        onSave={handleSaveLookSettings}
+        canvasRef={canvasRef}
       />
     </div>
   );

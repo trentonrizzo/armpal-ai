@@ -156,7 +156,7 @@ export function getGamepadState(index, deadzone, sens, invertY, binds) {
   const lookY = dead(p.axes[parseInt(gp.look_axis_y || "3", 10)]);
   return {
     move: { x: moveX * sens, z: -moveY * sens },
-    look: { x: lookX * sens * 0.02, y: (invertY ? 1 : -1) * lookY * sens * 0.02 },
+    look: { x: lookX * sens * 0.02, y: (invertY ? -1 : 1) * lookY * sens * 0.02 },
     jump: !!p.buttons[parseInt(gp.jump || "0", 10)]?.pressed,
     crouch: !!p.buttons[parseInt(gp.crouch || "1", 10)]?.pressed,
     fire: !!p.buttons[parseInt(gp.fire || "7", 10)]?.pressed,

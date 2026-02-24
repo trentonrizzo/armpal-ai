@@ -62,6 +62,7 @@ import DamageNumbers from "./ui/DamageNumbers";
 import EnemyHealthBar from "./ui/EnemyHealthBar";
 import { subscribeArena, broadcastSnapshot, broadcastHit, broadcastWeaponFire, broadcastDeath } from "./arenaNet";
 import { endMatch, updateMatchPlayerKillsDeaths, persistMatchResult, leaveMatch } from "./arenaDb";
+import ArenaSettingsOverlay from "../../features/games/ArenaSettingsOverlay";
 
 const ARENA_HALF = 12;
 const BOUNDARY = ARENA_HALF - 0.6;
@@ -110,10 +111,11 @@ export default function ArenaGame({
   onExit,
   onMatchEnd,
   onOpenSettings,
+  onLookSettingsSave,
 }) {
   const settings = { ...getDefaultArenaSettings(), ...settingsProp };
-  const sensX = Number(settings.look_sensitivity_x) || 0.002;
-  const sensY = Number(settings.look_sensitivity_y) || 0.002;
+  const sensX = Number(settings.look_sensitivity_x) || 0.0009;
+  const sensY = Number(settings.look_sensitivity_y) || 0.0009;
   const invertY = !!settings.invert_y_axis;
   const touchSens = Number(settings.touch_sensitivity) || 1;
   const fov = Math.max(60, Math.min(110, Number(settings.fov) || 85));
@@ -158,6 +160,7 @@ export default function ArenaGame({
   const remoteInterpRef = useRef([]);
   const [crosshairRecoil, setCrosshairRecoil] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const [lookOverlayOpen, setLookOverlayOpen] = useState(false);
   const [cameraModeLocal, setCameraModeLocal] = useState(cameraMode);
   const [weaponState, setWeaponState] = useState(() =>
     createWeaponState(loadoutPrimary, loadoutSecondary)
@@ -197,8 +200,8 @@ export default function ArenaGame({
   const onLookDelta = useCallback(
     (dx, dy) => {
       const mul = touchSens * 0.003;
-      lookRef.current.yaw += dx * mul * (sensX / 0.002);
-      const pitchDelta = (invertY ? dy : -dy) * mul * (sensY / 0.002);
+      lookRef.current.yaw += dx * mul * (sensX / 0.0009);
+      const pitchDelta = (invertY ? -dy : dy) * mul * (sensY / 0.0009);
       lookRef.current.pitch = Math.max(
         PITCH_MIN,
         Math.min(PITCH_MAX, lookRef.current.pitch + pitchDelta)
@@ -481,7 +484,7 @@ export default function ArenaGame({
       if (e.code === "KeyC" && down) crouchRef.current = !crouchRef.current;
       if (e.code === "Escape") {
         e.preventDefault();
-        if (down) setPauseOpen((p) => !p);
+        if (down) setLookOverlayOpen((o) => !o);
       }
       if (down && !e.repeat) {
         if (e.code === "KeyR") setWeaponState((s) => startReload(s, Date.now()));
@@ -499,10 +502,10 @@ export default function ArenaGame({
   }, []);
 
   useEffect(() => {
-    if (pauseOpen && document.pointerLockElement === canvasRef.current) {
+    if ((pauseOpen || lookOverlayOpen) && document.pointerLockElement === canvasRef.current) {
       document.exitPointerLock?.();
     }
-  }, [pauseOpen]);
+  }, [pauseOpen, lookOverlayOpen]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -603,7 +606,7 @@ export default function ArenaGame({
       lookRef.current.yaw += dx * sens;
       lookRef.current.pitch = Math.max(
         PITCH_MIN,
-        Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? dy : -dy) * sensYVal)
+        Math.min(PITCH_MAX, lookRef.current.pitch + (invertY ? -dy : dy) * sensYVal)
       );
     };
     const onMouseDown = (e) => {
@@ -805,6 +808,7 @@ export default function ArenaGame({
         reserve={reserve}
         onBack={handleLeaveMatch}
         onSettings={() => onOpenSettings?.()}
+        onOpenLookSettings={() => setLookOverlayOpen(true)}
       />
       <Scoreboard slot1Kills={kills} slot2Kills={enemyKills} />
       <Crosshair style={crosshairStyle} recoil={crosshairRecoil} />
@@ -961,6 +965,26 @@ export default function ArenaGame({
           onLeaveMatch={handleLeaveMatch}
         />
       )}
+      <ArenaSettingsOverlay
+        open={lookOverlayOpen}
+        onClose={() => {
+          setLookOverlayOpen(false);
+          setTimeout(() => canvasRef.current?.requestPointerLock(), 50);
+        }}
+        settings={{
+          mouseSensitivityX: (Number(settings.look_sensitivity_x) || 0.0009) / 0.001,
+          mouseSensitivityY: (Number(settings.look_sensitivity_y) || 0.0009) / 0.001,
+          invertY: !!settings.invert_y_axis,
+        }}
+        onSave={(next) => {
+          onLookSettingsSave?.({
+            mouseSensitivityX: next.mouseSensitivityX,
+            mouseSensitivityY: next.mouseSensitivityY,
+            invertY: next.invertY,
+          });
+        }}
+        canvasRef={canvasRef}
+      />
       {opponentLeft && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 150, color: "#fff", fontSize: 22, fontWeight: 800 }}>
           Opponent left. Returning to lobby…

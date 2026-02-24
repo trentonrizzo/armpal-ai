@@ -71,6 +71,7 @@ export default function HUD({
   reserve = 0,
   onBack,
   onSettings,
+  onOpenLookSettings,
 }) {
   return (
     <>
@@ -79,6 +80,11 @@ export default function HUD({
           {onBack && (
             <button type="button" style={iconBtn} onClick={onBack} title="Leave match">
               ←
+            </button>
+          )}
+          {onOpenLookSettings && (
+            <button type="button" style={iconBtn} onClick={onOpenLookSettings} title="Look settings">
+              ⚙️
             </button>
           )}
           {onSettings && (
