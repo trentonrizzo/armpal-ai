@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { supabase } from "../supabaseClient";
 
-const VAPID_KEY =
-  "BND3tLB8a6P3wE0ScU8nYJ2i2nL5qJmNYGmOK0BmtrQ3B1V4-eeyELdWr5u6N9iIQgFxWfZgFtTIw6YgZpsqNKI";
+const VAPID_PUBLIC_KEY =
+  import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+  "BI8cG9Td4RYclDiMuLH55inFeWUVFQR_fq6uYUNjh8XlWQVzsUoHAYRyRlMjCb4j6Uep5erVvDsqIf1pXZU0vDs";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -24,12 +25,26 @@ export default function useNotifications(userId) {
     if (!userId) return;
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
 
+    if (!VAPID_PUBLIC_KEY) {
+      console.error("[Push] VAPID public key is missing. Set VITE_VAPID_PUBLIC_KEY in your environment.");
+      return;
+    }
+
+    const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+    if (keyBytes.length !== 65 || keyBytes[0] !== 0x04) {
+      console.error(
+        "[Push] Invalid VAPID public key — must be 65-byte uncompressed P-256 point (0x04 prefix).",
+        "Got", keyBytes.length, "bytes, first byte:", keyBytes[0]
+      );
+      return;
+    }
+
     let cancelled = false;
 
     function bootstrap() {
       if (cancelled) return;
 
-      // Only proceed once the main PWA SW controls the page
       if (!navigator.serviceWorker.controller) {
         navigator.serviceWorker.addEventListener("controllerchange", bootstrap, { once: true });
         return;
@@ -42,7 +57,6 @@ export default function useNotifications(userId) {
       if (cancelled) return;
 
       try {
-        // Scope-isolate: /push/ ensures this SW cannot intercept root navigation
         const registration = await navigator.serviceWorker.register("/push-sw.js", {
           scope: "/push/",
         });
@@ -55,7 +69,7 @@ export default function useNotifications(userId) {
         if (!subscription) {
           subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(VAPID_KEY),
+            applicationServerKey: keyBytes,
           });
         }
 
@@ -76,11 +90,10 @@ export default function useNotifications(userId) {
             if (error) console.warn("push_subscriptions upsert:", error.message);
           });
       } catch (err) {
-        console.warn("Push registration error:", err);
+        console.error("[Push] Registration failed:", err);
       }
     }
 
-    // Defer until after page load so the main SW activates first
     if (document.readyState === "complete") {
       bootstrap();
     } else {
