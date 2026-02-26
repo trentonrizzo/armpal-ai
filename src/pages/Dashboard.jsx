@@ -8,6 +8,7 @@ import StripeTestButton from "../components/StripeTestButton";
 
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
+import useUnreadChats from "../hooks/useUnreadChats";
 
 // SMART ANALYTICS (READ-ONLY)
 import SmartAnalytics from "../components/SmartAnalytics";
@@ -48,6 +49,8 @@ export default function Dashboard() {
   const [bestPR, setBestPR] = useState(null);
   const [prDifference, setPrDifference] = useState(null);
   const [prCapMessage, setPrCapMessage] = useState("");
+
+  const unread = useUnreadChats(user?.id);
 
   // Today's Focus — rotating motivation messages (every 8s)
   const MOTIVATION_MESSAGES = [
@@ -311,6 +314,7 @@ export default function Dashboard() {
         <Link
           to="/friends"
           style={{
+            position: "relative",
             background: "var(--card-2)",
             borderRadius: "10px",
             padding: "8px",
@@ -323,6 +327,29 @@ export default function Dashboard() {
           }}
         >
           <FiUsers size={18} color="var(--text)" />
+          {unread.count > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: -6,
+                right: -6,
+                minWidth: 18,
+                height: 18,
+                padding: "0 5px",
+                borderRadius: 999,
+                background: "#f55",
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 900,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "2px solid var(--bg)",
+              }}
+            >
+              {unread.count > 99 ? "99+" : unread.count}
+            </span>
+          )}
         </Link>
       </header>
 

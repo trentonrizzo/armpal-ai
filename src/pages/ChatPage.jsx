@@ -38,6 +38,7 @@ import {
 } from "react-icons/fi";
 import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
+import useUnreadChats from "../hooks/useUnreadChats";
 import { SkeletonCard } from "../components/Skeleton";
 import { getOrCreateConversation } from "../utils/getOrCreateConversation";
 import Cropper from "react-easy-crop";
@@ -379,6 +380,17 @@ export default function ChatPage() {
   const [removingMemberId, setRemovingMemberId] = useState(null);
   const [friendIds, setFriendIds] = useState(new Set());
   const [messages, setMessages] = useState([]);
+
+  const unreadChats = useUnreadChats(user?.id);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (isGroup && groupId) {
+      unreadChats.markGroupRead(groupId);
+    } else if (friendId) {
+      unreadChats.markDmRead(friendId);
+    }
+  }, [user?.id, friendId, groupId, isGroup]);
 
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);

@@ -221,7 +221,10 @@ export default function NotificationsBell() {
                       type="button"
                       onClick={async () => {
                         await markRead(n.id);
-                        if (n.link) openLink(n.link);
+                        if (n.link) {
+                          setOpen(false);
+                          openLink(n.link);
+                        }
                       }}
                       style={{
                         ...styles.item,
@@ -230,7 +233,6 @@ export default function NotificationsBell() {
                     >
                       <div style={styles.itemTitle}>{n.title}</div>
                       <div style={styles.itemBody}>{n.body}</div>
-                      {n.link ? <div style={styles.itemLink}>{n.link}</div> : null}
                     </button>
                   );
                 })
@@ -387,6 +389,5 @@ const styles = {
   },
   itemTitle: { fontWeight: 900, fontSize: 14, marginBottom: 4 },
   itemBody: { fontSize: 13, color: "var(--text-dim)", lineHeight: 1.3 },
-  itemLink: { marginTop: 6, fontSize: 12, color: "var(--accent)" },
 };
 

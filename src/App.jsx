@@ -56,6 +56,7 @@ import { FaShare } from "react-icons/fa";
 import NotificationsBell from "./components/notifications/NotificationsBell";
 
 import usePresence from "./hooks/usePresence";
+import useNotifications from "./hooks/useNotifications";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -245,18 +246,7 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
 
   usePresence(session?.user);
-
-  // Force remove old service workers once on app load (OneSignal v16 clean register)
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        registrations.forEach((reg) => {
-          console.log("Unregistering old SW:", reg.scope);
-          reg.unregister();
-        });
-      });
-    }
-  }, []);
+  useNotifications(session?.user?.id);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
