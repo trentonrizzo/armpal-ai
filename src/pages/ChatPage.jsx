@@ -354,6 +354,24 @@ export default function ChatPage() {
   const toast = useToast();
   const isGroup = !!groupId;
 
+  function firePush(receiverId, text) {
+    try {
+      fetch("https://ewlwkasjtwsfemqnkrkp.supabase.co/functions/v1/send-push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-push-secret": "armpal_push_secret_12345",
+        },
+        body: JSON.stringify({
+          user_id: receiverId,
+          title: "New Message",
+          body: text || "New message",
+          link: "/messages",
+        }),
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
   // ----------------------------------------------------------
   // CORE STATE
   // ----------------------------------------------------------
@@ -912,6 +930,7 @@ export default function ChatPage() {
           group_id: null,
           text: payload,
         });
+        firePush(friendId, payload);
       }
     } catch (e) {
       const msg = e?.message || "Send failed";
@@ -967,6 +986,7 @@ export default function ChatPage() {
           group_id: null,
           image_url: data.publicUrl,
         });
+        firePush(friendId, "Sent an image");
       }
     } catch (e) {
       const msgImg = e?.message || "Image send failed";
@@ -1024,6 +1044,7 @@ export default function ChatPage() {
           group_id: null,
           video_url: data.publicUrl,
         });
+        firePush(friendId, "Sent a video");
       }
     } catch (e) {
       const msgVid = e?.message || "Video send failed";
@@ -1176,6 +1197,7 @@ export default function ChatPage() {
           audio_url: data.publicUrl,
           audio_duration: recordDuration,
         });
+        firePush(friendId, "Sent a voice message");
       }
 
       setRecordedBlob(null);
