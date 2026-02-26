@@ -100,11 +100,11 @@ Deno.serve(async (req) => {
     });
   }
 
-  // GET = health check (keeps the function warm)
+  // GET = health check / cron keep-alive
   if (req.method === "GET") {
     return new Response(
-      JSON.stringify({ status: "listening", ts: new Date().toISOString() }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      JSON.stringify({ status: "ok", alive: true }),
+      { headers: { "Content-Type": "application/json" } }
     );
   }
 
