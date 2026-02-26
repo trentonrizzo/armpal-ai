@@ -10,10 +10,13 @@ import {
   upsertNutritionGoals,
   computeProgress,
 } from "./nutritionService";
+import { getIsPro } from "../../utils/usageLimits";
 import NutritionDailySummary from "./NutritionDailySummary";
 import NutritionHistory from "./NutritionHistory";
 import NutritionEntryForm from "./NutritionEntryForm";
 import NutritionGoalsModal from "./NutritionGoalsModal";
+import SmartFoodScanOverlay from "./SmartFoodScanOverlay";
+import { Camera } from "lucide-react";
 
 const PAGE = {
   minHeight: "100vh",
@@ -139,6 +142,8 @@ export default function NutritionPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [goals, setGoals] = useState(null);
   const [goalsModalOpen, setGoalsModalOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [isPro, setIsPro] = useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -147,6 +152,11 @@ export default function NutritionPage() {
     });
     return () => { alive = false; };
   }, []);
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    getIsPro(user.id).then(setIsPro);
+  }, [user?.id]);
 
   const loadEntries = React.useCallback(async () => {
     if (!user?.id || !selectedDate) return;
@@ -304,7 +314,38 @@ export default function NutritionPage() {
 
   return (
     <div style={PAGE}>
-      <h1 style={HEADER}>Nutrition</h1>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h1 style={{ ...HEADER, marginBottom: 0 }}>Nutrition</h1>
+        <button
+          type="button"
+          onClick={() => setScanOpen(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.2)",
+            background: "rgba(255,255,255,0.08)",
+            color: "#fff",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <Camera size={16} />
+          <span>Scan</span>
+          <span style={{
+            fontSize: 9,
+            fontWeight: 800,
+            color: "#000",
+            background: "var(--accent)",
+            padding: "2px 5px",
+            borderRadius: 4,
+            lineHeight: 1,
+          }}>PRO</span>
+        </button>
+      </div>
       <p style={SUB}>Track daily calories and macros</p>
 
       <div style={HEADER_ROW}>
@@ -468,6 +509,15 @@ export default function NutritionPage() {
         onClose={() => setGoalsModalOpen(false)}
         initialGoals={goals}
         onSave={handleSaveGoals}
+      />
+
+      <SmartFoodScanOverlay
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        userId={user?.id}
+        selectedDate={selectedDate}
+        isPro={isPro}
+        onSaved={loadEntries}
       />
     </div>
   );
