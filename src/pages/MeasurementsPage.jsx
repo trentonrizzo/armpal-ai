@@ -52,6 +52,7 @@ import { checkUsageCap } from "../utils/usageLimits";
 import { useToast } from "../components/ToastProvider";
 import useMultiSelect from "../hooks/useMultiSelect";
 import { getSelectStyle, SelectCheck, ViewBtn, SelectionBar, DoubleConfirmModal } from "../components/MultiSelectUI";
+import BodyweightHistoryOverlay from "../components/BodyweightHistoryOverlay";
 
 /* -------------------------------------------------------
    SORTABLE ITEM — LEFT 40% = DRAG HANDLE
@@ -118,6 +119,7 @@ export default function MeasurementsPage() {
   const [bwEditWeight, setBwEditWeight] = useState("");
   const [bwEditDate, setBwEditDate] = useState("");
   const [bwDeleteId, setBwDeleteId] = useState(null);
+  const [bwOverlayOpen, setBwOverlayOpen] = useState(false);
   const [capMessage, setCapMessage] = useState("");
 
   // multi-select
@@ -389,7 +391,9 @@ export default function MeasurementsPage() {
           padding: 16,
           border: "1px solid var(--border)",
           marginBottom: 20,
+          cursor: "pointer",
         }}
+        onClick={() => setBwOverlayOpen(true)}
       >
         <h2 style={{ marginTop: 0 }}>Bodyweight</h2>
 
@@ -402,7 +406,10 @@ export default function MeasurementsPage() {
             : "No entries yet"}
         </p>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div
+          style={{ display: "flex", gap: 10, alignItems: "center" }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <input
             style={{
               ...inputStyle,
@@ -443,23 +450,44 @@ export default function MeasurementsPage() {
             {bwHistory.slice(1, 6).map((b) => (
               <div
                 key={b.id}
-                style={{ display: "flex", justifyContent: "space-between" }}
+                style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}
               >
                 <span style={{ fontSize: 13 }}>
                   {b.weight} lbs — {new Date(b.logged_at).toLocaleDateString()}
                 </span>
-                <span style={{ display: "flex", gap: 12 }}>
-                  <FaEdit onClick={() => openBodyweightEdit(b)} />
+                <span
+                  style={{ display: "flex", gap: 12 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <FaEdit
+                    style={{ cursor: "pointer" }}
+                    onClick={() => openBodyweightEdit(b)}
+                  />
                   <FaTrash
-                    style={{ color: "var(--accent)" }}
+                    style={{ color: "var(--accent)", cursor: "pointer" }}
                     onClick={() => setBwDeleteId(b.id)}
                   />
                 </span>
               </div>
             ))}
+            {bwHistory.length > 6 && (
+              <p style={{ fontSize: 12, opacity: 0.6, marginTop: 6, marginBottom: 0, textAlign: "center" }}>
+                + {bwHistory.length - 6} more entries
+              </p>
+            )}
           </div>
         )}
       </div>
+
+      <BodyweightHistoryOverlay
+        open={bwOverlayOpen}
+        onClose={() => setBwOverlayOpen(false)}
+        bwHistory={bwHistory}
+        onReload={async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) await reloadBodyweight(user.id);
+        }}
+      />
 
       {/* ADD MEASUREMENT */}
       <button style={addBtn} onClick={openNew}>

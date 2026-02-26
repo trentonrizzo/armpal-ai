@@ -1801,7 +1801,6 @@ const shell = {
   background: "var(--bg)",
   display: "flex",
   flexDirection: "column",
-  height: "100%",
   overflow: "hidden",
 };
 
@@ -1810,6 +1809,7 @@ const chatContainer = {
   flexDirection: "column",
   flex: 1,
   minHeight: 0,
+  overflow: "hidden",
 };
 
 const messagesContainer = {
@@ -1825,8 +1825,6 @@ const messagesContainer = {
 };
 
 const composerContainer = {
-  position: "sticky",
-  bottom: 0,
   zIndex: 10,
   background: "var(--background, var(--bg))",
   borderTopWidth: 1,
@@ -1957,6 +1955,7 @@ const bubbleMine = {
 const messageText = {
   fontSize: 16,
   whiteSpace: "pre-wrap",
+  overflowWrap: "break-word",
 };
 
 const timestamp = {

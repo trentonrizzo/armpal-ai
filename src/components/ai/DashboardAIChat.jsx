@@ -667,7 +667,7 @@ if (!res.ok) {
         )}
 
         {/* Chat container: header + content (full width) */}
-        <div className="chatContainer" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%" }}>
+        <div className="chatContainer" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, width: "100%", overflow: "hidden" }}>
           {/* Chat header — hamburger + title + settings/close */}
           <div
             style={{
@@ -727,7 +727,7 @@ if (!res.ok) {
           </div>
 
           {/* Chat content — full width */}
-          <div className="chatContent" style={{ flex: 1, width: "100%", minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div className="chatContent" style={{ flex: 1, width: "100%", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {error && (
           <div
             style={{
@@ -770,6 +770,7 @@ if (!res.ok) {
         <div
           style={{
             flex: 1,
+            minHeight: 0,
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
@@ -797,6 +798,7 @@ if (!res.ok) {
                 fontSize: 14,
                 lineHeight: 1.5,
                 whiteSpace: "pre-wrap",
+                overflowWrap: "break-word",
                 color: m.role === "user" ? "#fff" : "var(--text)"
               }}
             >
@@ -863,7 +865,8 @@ if (!res.ok) {
             borderTop: "1px solid var(--border)",
             padding: 10,
             display: "flex",
-            gap: 8
+            gap: 8,
+            flexShrink: 0
           }}
         >
 
