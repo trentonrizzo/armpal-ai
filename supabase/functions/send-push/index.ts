@@ -91,16 +91,16 @@ admin
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 Deno.serve(async (req) => {
   const method = req.method;
 
-  // OPTIONS — CORS preflight (no auth needed)
+  // OPTIONS — CORS preflight
   if (method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS });
+    return new Response("ok", { headers: CORS });
   }
 
   // HEAD — keep-alive probe (no auth needed, empty body)
