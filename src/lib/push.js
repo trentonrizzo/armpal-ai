@@ -1,46 +1,51 @@
+import { supabase } from "../supabaseClient";
+
+const VAPID_KEY =
+  "BND3tLB8a6P3wE0ScU8nYJ2i2nL5qJmNYGmOK0BmtrQ3B1V4-eeyELdWr5u6N9iIQgFxWfZgFtTIw6YgZpsqNKI";
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/**
+ * Request notification permission, register the push SW,
+ * subscribe to Web Push, and store the subscription in Supabase.
+ */
 export async function enablePush(userId) {
-  try {
-    // OneSignal SDK must already be loaded in index.html
-    if (!window.OneSignal) {
-      alert("OneSignal missing");
-      return;
-    }
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    console.warn("Push not supported on this device.");
+    return;
+  }
 
-    // Always use the same App ID as your OneSignal app
-    const APP_ID = "edd3f271-1b21-4f0b-ba32-8fafd9132f10";
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return;
 
-    // If OneSignal already initialized, DO NOT re-init
-    // Just login + request permission.
-    const OneSignal = window.OneSignal;
+  const registration = await navigator.serviceWorker.register("/push-sw.js", {
+    scope: "/push/",
+  });
 
-    // v16 supports deferred pattern; we use it safely once.
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
+  let subscription = await registration.pushManager.getSubscription();
 
-    window.OneSignalDeferred.push(async function (OS) {
-      try {
-        // If SDK already initialized, init() can throw; ignore and continue
-        try {
-          await OS.init({
-            appId: APP_ID,
-            notifyButton: { enable: false },
-          });
-        } catch (e) {
-          // swallow "SDK already initialized"
-        }
-
-        if (userId) {
-          try { await OS.login(userId); } catch (e) {}
-        }
-
-        await OS.Notifications.requestPermission();
-
-        const optedIn = await OS.User.PushSubscription.optedIn;
-        console.log("OneSignal optedIn:", optedIn);
-      } catch (e) {
-        alert("Push error: " + (e?.message || String(e)));
-      }
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_KEY),
     });
-  } catch (e) {
-    alert("Push fatal: " + (e?.message || String(e)));
+  }
+
+  if (userId) {
+    const subJson = subscription.toJSON();
+    const { error } = await supabase.from("push_subscriptions").upsert(
+      { user_id: userId, endpoint: subJson.endpoint, keys: subJson.keys },
+      { onConflict: "user_id,endpoint" }
+    );
+    if (error) console.warn("push_subscriptions upsert:", error.message);
   }
 }
