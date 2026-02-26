@@ -89,46 +89,57 @@ admin
 
 // ── HTTP handler: health check + manual trigger fallback ──
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
+  const method = req.method;
+
+  // OPTIONS — CORS preflight (no auth needed)
+  if (method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+
+  // HEAD — keep-alive probe (no auth needed, empty body)
+  if (method === "HEAD") {
+    return new Response(null, {
+      status: 200,
+      headers: { ...CORS, "Content-Type": "application/json" },
     });
   }
 
-  // GET = health check / cron keep-alive
-  if (req.method === "GET") {
+  // GET — health check / cron keep-alive (no auth needed)
+  if (method === "GET") {
     return new Response(
       JSON.stringify({ status: "ok", alive: true }),
-      { headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { ...CORS, "Content-Type": "application/json" } }
     );
   }
 
-  // POST = manual trigger fallback
-  if (req.method === "POST") {
+  // POST — manual trigger fallback
+  if (method === "POST") {
     try {
       const payload = await req.json();
       const record = payload.record ?? payload;
       const result = await handleNotification(record);
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 500,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...CORS, "Content-Type": "application/json" },
       });
     } catch (err) {
       console.error("send-push POST error:", err);
       return new Response(
         JSON.stringify({ error: "Internal server error" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...CORS, "Content-Type": "application/json" } }
       );
     }
   }
 
   return new Response(JSON.stringify({ error: "Method not allowed" }), {
     status: 405,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CORS, "Content-Type": "application/json" },
   });
 });
