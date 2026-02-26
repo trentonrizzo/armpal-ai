@@ -228,8 +228,8 @@ export default function NotificationsBell() {
 const styles = {
   bellBtn: {
     position: "fixed",
-    top: 14,
-    right: 14,
+    top: "calc(14px + env(safe-area-inset-top, 0px))",
+    right: 62,
     zIndex: 9998,
     width: 44,
     height: 44,

@@ -204,7 +204,7 @@ function AppContent() {
         <Route path="/games/:id" element={<GamePage />} />
       </Routes>
 
-      {!isChatRoute && <NotificationsBell />}
+      {location.pathname === "/" && <NotificationsBell />}
       {!isChatRoute && <BottomNav />}
 
       {isWorkouts && (

@@ -210,6 +210,58 @@ function confidenceColor(c) {
 }
 
 /* ============================================================
+   PORTION SCALING HELPERS
+   ============================================================ */
+const UNIT_OPTIONS = ["oz", "lb", "g", "servings"];
+const GRAMS_PER = { oz: 28.3495, lb: 453.592, g: 1 };
+
+function parseAmountUnit(str) {
+  if (!str) return { amount: 1, unit: "servings" };
+  const s = String(str).trim();
+  const m = s.match(/^([\d.]+)\s*(oz|lb|lbs|g|grams?|servings?|cups?|pieces?|slices?)?/i);
+  if (!m) return { amount: 1, unit: "servings" };
+  const amount = parseFloat(m[1]);
+  if (!amount || amount <= 0) return { amount: 1, unit: "servings" };
+  let unit = (m[2] || "servings").toLowerCase();
+  if (unit === "lbs") unit = "lb";
+  if (unit === "gram" || unit === "grams") unit = "g";
+  if (unit === "serving" || unit === "cup" || unit === "cups" || unit === "piece" || unit === "pieces" || unit === "slice" || unit === "slices") unit = "servings";
+  if (!UNIT_OPTIONS.includes(unit)) unit = "servings";
+  return { amount, unit };
+}
+
+function portionRatio(baseAmt, baseUnit, newAmt, newUnit) {
+  if (baseAmt <= 0) return 1;
+  if (baseUnit === "servings" || newUnit === "servings") return newAmt / baseAmt;
+  const baseG = baseAmt * (GRAMS_PER[baseUnit] || 1);
+  const newG = newAmt * (GRAMS_PER[newUnit] || 1);
+  if (baseG <= 0) return 1;
+  return newG / baseG;
+}
+
+const PORTION_INPUT = {
+  width: 72,
+  padding: "7px 8px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.08)",
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 600,
+  boxSizing: "border-box",
+};
+const PORTION_SELECT = {
+  padding: "7px 8px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.08)",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 600,
+  boxSizing: "border-box",
+};
+
+/* ============================================================
    COMPONENT
    ============================================================ */
 export default function SmartFoodScanOverlay({
@@ -327,14 +379,29 @@ export default function SmartFoodScanOverlay({
       const data = await res.json();
       setResults(data);
       setEditFoods(
-        (data.foods || []).map((f, i) => ({
-          ...f,
-          _key: i,
-          calories: Math.round(Number(f.calories) || 0),
-          protein: Math.round(Number(f.protein) || 0),
-          carbs: Math.round(Number(f.carbs) || 0),
-          fat: Math.round(Number(f.fat) || 0),
-        }))
+        (data.foods || []).map((f, i) => {
+          const parsed = parseAmountUnit(f.estimated_amount);
+          const cal = Math.round(Number(f.calories) || 0);
+          const pro = Math.round(Number(f.protein) || 0);
+          const carb = Math.round(Number(f.carbs) || 0);
+          const fat = Math.round(Number(f.fat) || 0);
+          return {
+            ...f,
+            _key: i,
+            base_amount: parsed.amount,
+            base_unit: parsed.unit,
+            base_calories: cal,
+            base_protein: pro,
+            base_carbs: carb,
+            base_fat: fat,
+            current_amount: String(parsed.amount),
+            current_unit: parsed.unit,
+            calories: cal,
+            protein: pro,
+            carbs: carb,
+            fat: fat,
+          };
+        })
       );
       setStep(STEP.RESULTS);
     } catch (err) {
@@ -372,6 +439,25 @@ export default function SmartFoodScanOverlay({
   }, []);
   const handleRemoveFood = useCallback((idx) => {
     setEditFoods((p) => p.filter((_, i) => i !== idx));
+  }, []);
+
+  /* ---- portion scaling (RESULTS screen) ---- */
+  const handlePortionChange = useCallback((idx, field, val) => {
+    setEditFoods((prev) => prev.map((f, i) => {
+      if (i !== idx) return f;
+      const updated = { ...f, [field]: val };
+      const amt = parseFloat(updated.current_amount);
+      if (!amt || amt <= 0 || !Number.isFinite(amt)) return updated;
+      const ratio = portionRatio(f.base_amount, f.base_unit, amt, updated.current_unit);
+      return {
+        ...updated,
+        calories: Math.round(f.base_calories * ratio),
+        protein: Math.round(f.base_protein * ratio),
+        carbs: Math.round(f.base_carbs * ratio),
+        fat: Math.round(f.base_fat * ratio),
+        estimated_amount: `${amt} ${updated.current_unit}`,
+      };
+    }));
   }, []);
 
   /* ---- save ---- */
@@ -458,7 +544,7 @@ export default function SmartFoodScanOverlay({
   /* ================================================================
      SCAN FLOW
      ================================================================ */
-  const totals = step === STEP.EDIT ? computeTotals() : results?.totals;
+  const totals = computeTotals();
 
   return createPortal(
     <>
@@ -627,16 +713,35 @@ export default function SmartFoodScanOverlay({
                 {editFoods.length === 0 && (
                   <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>No foods detected.</p>
                 )}
-                {editFoods.map((food) => (
+                {editFoods.map((food, foodIdx) => (
                   <div key={food._key} style={CARD}>
-                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2, color: "#fff" }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, color: "#fff" }}>
                       {food.name}
                     </div>
-                    {food.estimated_amount && (
-                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>
-                        {food.estimated_amount}
-                      </div>
-                    )}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 2 }}>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={food.current_amount ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/[^0-9.]/g, "");
+                          handlePortionChange(foodIdx, "current_amount", v);
+                        }}
+                        style={PORTION_INPUT}
+                      />
+                      <select
+                        value={food.current_unit || "servings"}
+                        onChange={(e) => handlePortionChange(foodIdx, "current_unit", e.target.value)}
+                        style={PORTION_SELECT}
+                      >
+                        {UNIT_OPTIONS.map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>
+                      Adjust portion to recalculate macros
+                    </div>
                     <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
                       {food.calories} cal&ensp;·&ensp;P {food.protein}g&ensp;·&ensp;C {food.carbs}g&ensp;·&ensp;F {food.fat}g
                     </div>
