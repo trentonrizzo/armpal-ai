@@ -1,12 +1,12 @@
 // src/pages/FriendProfile.jsx
 import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate, useParams } from "react-router-dom";
 import { AiOutlineFlag } from "react-icons/ai";
 import ReportModal from "../components/reports/ReportModal";
-
-const REACTIONS = ["💪", "👊", "❤️", "🔥"];
+import { useToast } from "../components/ToastProvider";
+import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
 
 /**
  * FriendProfile (Privacy + Friends View)
@@ -23,6 +23,7 @@ const REACTIONS = ["💪", "👊", "❤️", "🔥"];
 export default function FriendProfile() {
   const { friendId } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [me, setMe] = useState(null);
 
@@ -33,7 +34,7 @@ export default function FriendProfile() {
   // Access control
   const [relLoading, setRelLoading] = useState(true);
   const [isFriend, setIsFriend] = useState(false);
-  const [visibility, setVisibility] = useState("public"); // public | friends_only | private
+  const [visibility, setVisibility] = useState("public");
   const [accessLost, setAccessLost] = useState(false);
 
   // UI
@@ -41,10 +42,10 @@ export default function FriendProfile() {
   const [showImage, setShowImage] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [tappedEmoji, setTappedEmoji] = useState(null);
 
-  // Reactions (gated)
-  const [reactionCounts, setReactionCounts] = useState({});
-  const [myReaction, setMyReaction] = useState(null);
+  // Reactions via shared hook
+  const rx = useProfileReactions(friendId, me?.id);
 
 
   const mountedRef = useRef(true);
@@ -66,9 +67,6 @@ export default function FriendProfile() {
       setLoading(true);
       setRelLoading(true);
       setAccessLost(false);
-      setReactionCounts({});
-      setMyReaction(null);
-
       // 1) Current user
       const { data: auth } = await supabase.auth.getUser();
       const current = auth?.user || null;
@@ -156,13 +154,7 @@ export default function FriendProfile() {
       // We show the limited view (this is what you asked for).
       setAccessLost(false);
 
-      // 4) Load gated sections ONLY if allowed (photos loaded by ProfileMediaGallery via friendId)
-      if (canSeeFull) {
-        await loadReactions(meId, otherId);
-      } else {
-        setReactionCounts({});
-        setMyReaction(null);
-      }
+      // Reactions loaded by useProfileReactions hook automatically
     })();
 
     return () => {
@@ -231,81 +223,18 @@ export default function FriendProfile() {
     return v;
   }
 
-  // ------------------------------------------------------------
-  // Reactions (GATED) — profile_reactions: id, from_user_id, to_user_id, reaction_type, reaction_date, created_at
-  // ------------------------------------------------------------
+  // Reaction tap handler using shared hook
+  async function handleReaction(emoji) {
+    if (!me?.id || !friendId || rx.sending) return;
+    setTappedEmoji(emoji);
+    setTimeout(() => setTappedEmoji(null), 300);
 
-  async function loadReactions(meId, profileId) {
-    if (!profileId) return;
-
-    try {
-      const { data } = await supabase
-        .from("profile_reactions")
-        .select("reaction_type")
-        .eq("to_user_id", profileId);
-
-      const counts = {};
-      REACTIONS.forEach((emoji) => (counts[emoji] = 0));
-      (data || []).forEach((row) => {
-        const t = row.reaction_type;
-        if (t != null) counts[t] = (counts[t] || 0) + 1;
-      });
-
-      let mine = null;
-      const { data: myRow } = await supabase
-        .from("profile_reactions")
-        .select("reaction_type")
-        .eq("from_user_id", meId)
-        .eq("to_user_id", profileId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (myRow?.reaction_type) mine = myRow.reaction_type;
-
-      if (!mountedRef.current) return;
-      setReactionCounts(counts);
-      setMyReaction(mine);
-    } catch {
-      if (!mountedRef.current) return;
-      setReactionCounts({});
-      setMyReaction(null);
+    const result = await rx.sendReaction(emoji);
+    if (result.ok) {
+      toast.success(`${emoji} sent!`);
+    } else if (result.message === "Already reacted today") {
+      toast.error("You already reacted today");
     }
-  }
-
-  async function sendReaction(emoji) {
-    if (!me?.id || !friendId) return;
-
-    const owner = me.id === friendId;
-    const canSeeFull =
-      owner ||
-      visibility === "public" ||
-      (isFriend && (visibility === "friends_only" || visibility === "private"));
-
-    if (!canSeeFull || accessLost) return;
-
-    try {
-      const { data: existing } = await supabase
-        .from("profile_reactions")
-        .select("id")
-        .eq("from_user_id", me.id)
-        .eq("to_user_id", friendId)
-        .eq("reaction_type", emoji)
-        .maybeSingle();
-
-      if (existing) return;
-
-      await supabase.from("profile_reactions").insert({
-        from_user_id: me.id,
-        to_user_id: friendId,
-        reaction_type: emoji,
-        reaction_date: new Date().toISOString(),
-      });
-    } catch {
-      return;
-    }
-
-    setMyReaction(emoji);
-    await loadReactions(me.id, friendId);
   }
 
   // ------------------------------------------------------------
@@ -512,21 +441,26 @@ export default function FriendProfile() {
           <div style={reactionTitle}>Profile Reactions</div>
 
           <div style={reactionRow}>
-            {REACTIONS.map((emoji) => (
-              <button
-                key={emoji}
-                className="reaction-btn"
-                style={{
-                  ...reactionBtn,
-                  ...(myReaction === emoji ? reactionActive : {}),
-                }}
-                onClick={() => sendReaction(emoji)}
-                disabled={relLoading}
-              >
-                <span style={{ fontSize: 24 }}>{emoji}</span>
-                <span style={reactionCount}>{reactionCounts[emoji] || 0}</span>
-              </button>
-            ))}
+            {REACTION_KEYS.map((emoji) => {
+              const isTapped = tappedEmoji === emoji;
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  style={{
+                    ...reactionBtn,
+                    transform: isTapped ? "scale(1.15)" : "scale(1)",
+                    transition: "transform 0.15s ease, background 0.15s ease",
+                    ...(isTapped ? reactionActive : {}),
+                  }}
+                  onClick={() => handleReaction(emoji)}
+                  disabled={rx.sending || relLoading}
+                >
+                  <span style={{ fontSize: 26, display: "block" }}>{emoji}</span>
+                  <span style={reactionCount}>{rx.counts[emoji] || 0}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -743,30 +677,36 @@ const reactionTitle = {
 
 const reactionRow = {
   display: "flex",
-  justifyContent: "space-between",
+  gap: 10,
 };
 
 const reactionBtn = {
   flex: 1,
-  margin: "0 4px",
-  padding: "10px 0",
+  padding: "12px 0",
   borderRadius: 14,
-  background: "var(--border)",
+  background: "var(--card-2)",
   border: "1px solid var(--border)",
   color: "var(--text)",
   fontWeight: 900,
+  cursor: "pointer",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 68,
 };
 
 const reactionActive = {
-  background: "color-mix(in srgb, var(--accent) 20%, transparent)",
+  background: "color-mix(in srgb, var(--accent) 18%, transparent)",
   border: "1px solid color-mix(in srgb, var(--accent) 55%, transparent)",
 };
 
 const reactionCount = {
   display: "block",
-  fontSize: 12,
+  fontSize: 14,
+  fontWeight: 800,
   marginTop: 4,
-  opacity: 0.75,
+  opacity: 0.8,
 };
 
 const unaddBtn = {

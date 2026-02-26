@@ -69,6 +69,7 @@ import SettingsOverlay from "../settings/SettingsOverlay";
 import ProfileVisibilityOverlay from "../components/profile/ProfileVisibilityOverlay";
 import { useToast } from "../components/ToastProvider";
 import { SkeletonLine, SkeletonAvatar } from "../components/Skeleton";
+import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
 
 // =================================================================================================
 // 2) CONSTANTS
@@ -372,21 +373,21 @@ function ReactionPill({ emoji, count }) {
     <div
       style={{
         flex: 1,
-        height: 92,
+        height: 88,
         borderRadius: RADII.pill,
-        background: COLORS.surface,
+        background: COLORS.surface2,
         border: `1px solid ${COLORS.border2}`,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 6,
+        gap: 4,
         color: COLORS.text,
         fontWeight: 900,
       }}
     >
-      <div style={{ fontSize: 34, lineHeight: 1 }}>{emoji}</div>
-      <div style={{ fontSize: 20 }}>{count}</div>
+      <div style={{ fontSize: 30, lineHeight: 1 }}>{emoji}</div>
+      <div style={{ fontSize: 18, opacity: 0.85 }}>{count}</div>
     </div>
   );
 }
@@ -554,67 +555,8 @@ function useOnlinePresence(userId) {
 }
 
 // =================================================================================================
-// 8) REACTIONS (SAFE LOAD + UI)
+// 8) REACTIONS — now handled by useProfileReactions hook
 // =================================================================================================
-
-// We support two possible schemas:
-//  A) profiles has reaction counts columns (fire_count, flex_count, heart_count, fist_count)
-//  B) separate table profile_reactions with columns: profile_id, fire, flex, heart, fist
-// If neither exists, we default to zeros.
-
-async function fetchReactions(userId) {
-  const fallback = { fire: 0, flex: 0, heart: 0, fist: 0 };
-
-  // Try A) profiles columns
-  const fromProfiles = await safeQuery(
-    async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("fire_count, flex_count, heart_count, fist_count")
-        .eq("id", userId)
-        .single();
-
-      if (error) throw error;
-      if (!data) return null;
-
-      return {
-        fire: Number(data.fire_count || 0),
-        flex: Number(data.flex_count || 0),
-        heart: Number(data.heart_count || 0),
-        fist: Number(data.fist_count || 0),
-      };
-    },
-    null
-  );
-
-  if (fromProfiles) return fromProfiles;
-
-  // Try B) separate table
-  const fromTable = await safeQuery(
-    async () => {
-      const { data, error } = await supabase
-        .from("profile_reactions")
-        .select("fire, flex, heart, fist")
-        .eq("profile_id", userId)
-        .single();
-
-      if (error) throw error;
-      if (!data) return null;
-
-      return {
-        fire: Number(data.fire || 0),
-        flex: Number(data.flex || 0),
-        heart: Number(data.heart || 0),
-        fist: Number(data.fist || 0),
-      };
-    },
-    null
-  );
-
-  if (fromTable) return fromTable;
-
-  return fallback;
-}
 
 // =================================================================================================
 // 9) AVATAR MENU + CROPPER + UPLOAD
@@ -744,17 +686,10 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
 
   // -----------------------------------------------------------------------------------------------
-  // REACTIONS
+  // REACTIONS (via shared hook)
   // -----------------------------------------------------------------------------------------------
 
-  const [reactions, setReactions] = useState({
-    fire: 0,
-    flex: 0,
-    heart: 0,
-    fist: 0,
-  });
-
-  const [loadingReactions, setLoadingReactions] = useState(true);
+  const rx = useProfileReactions(user?.id, null);
 
   // QUICK ACTION COUNTS
   const [counts, setCounts] = useState({ workouts: 0, prs: 0, measurements: 0, goals: 0 });
@@ -831,14 +766,7 @@ useEffect(() => {
   // ✅ Fast paint
   setLoading(false);
 
-  // Non-blocking: reactions
-  (async () => {
-    setLoadingReactions(true);
-    const rx = await fetchReactions(uid);
-    if (!mountedRef.current) return;
-    setReactions(rx);
-    setLoadingReactions(false);
-  })();
+  // Reactions are loaded by useProfileReactions hook automatically
 
   // Non-blocking: counts
   (async () => {
@@ -1340,7 +1268,7 @@ useEffect(() => {
           <SectionTitle
             right={
               <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 900 }}>
-                {loadingReactions ? "Loading…" : "Reactions"}
+                {rx.loading ? "Loading…" : "Reactions"}
               </div>
             }
           >
@@ -1348,10 +1276,9 @@ useEffect(() => {
           </SectionTitle>
 
           <div style={{ display: "flex", gap: 16 }}>
-            <ReactionPill emoji="🔥" count={reactions.fire} />
-            <ReactionPill emoji="💪" count={reactions.flex} />
-            <ReactionPill emoji="❤️" count={reactions.heart} />
-            <ReactionPill emoji="👊" count={reactions.fist} />
+            {REACTION_KEYS.map((emoji) => (
+              <ReactionPill key={emoji} emoji={emoji} count={rx.counts[emoji] || 0} />
+            ))}
           </div>
           <SoftDivider />
 
