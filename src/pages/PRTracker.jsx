@@ -27,13 +27,15 @@ import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
 import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
+import useMultiSelect from "../hooks/useMultiSelect";
+import { getSelectStyle, SelectCheck, ViewBtn, SelectionBar, DoubleConfirmModal } from "../components/MultiSelectUI";
 
 /* --------------------------------------------
    SORTABLE ITEM — LEFT 40% DRAGS, RIGHT SCROLLS
 --------------------------------------------- */
-function SortableItem({ id, children }) {
+function SortableItem({ id, children, disabled }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
+    useSortable({ id, disabled });
 
   return (
     <div
@@ -44,22 +46,21 @@ function SortableItem({ id, children }) {
         position: "relative",
       }}
     >
-      {/* DRAG HANDLE on LEFT 40% */}
-      <div
-        {...attributes}
-        {...listeners}
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "40%",
-          height: "100%",
-          zIndex: 5,
-          touchAction: "none",
-        }}
-      />
-      
-      {/* CARD CONTENT (FULLY SCROLLABLE) */}
+      {!disabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "40%",
+            height: "100%",
+            zIndex: 5,
+            touchAction: "none",
+          }}
+        />
+      )}
       {children}
     </div>
   );
@@ -89,6 +90,11 @@ export default function PRTracker() {
   // Delete confirm
   const [deleteId, setDeleteId] = useState(null);
   const [capMessage, setCapMessage] = useState("");
+
+  // multi-select
+  const ms = useMultiSelect();
+  const [confirmStep, setConfirmStep] = useState(0);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Drag sensors
   const sensors = useSensors(
@@ -268,6 +274,29 @@ export default function PRTracker() {
     setDeleteId(null);
   }
 
+  async function bulkDeletePRs() {
+    if (ms.count === 0 || !user) return;
+    setBulkDeleting(true);
+    try {
+      const liftNames = [...ms.selected];
+      const { error } = await supabase
+        .from("prs")
+        .delete()
+        .eq("user_id", user.id)
+        .in("lift_name", liftNames);
+      if (error) throw error;
+      ms.cancel();
+      setConfirmStep(0);
+      await loadPRs(user.id);
+      toast.success(`Deleted ${liftNames.length} item${liftNames.length !== 1 ? "s" : ""}`);
+    } catch (e) {
+      console.error("Bulk delete PRs failed:", e);
+      toast.error("Some items failed to delete");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   /* --------------------------------------------
      PAGE UI
   --------------------------------------------- */
@@ -330,7 +359,7 @@ export default function PRTracker() {
               const isOpen = expanded[lift];
 
               return (
-                <SortableItem key={lift} id={lift}>
+                <SortableItem key={lift} id={lift} disabled={ms.active}>
                   <div
                     style={{
                       background: "var(--card)",
@@ -338,8 +367,19 @@ export default function PRTracker() {
                       padding: 14,
                       border: "1px solid var(--border)",
                       marginBottom: 10,
+                      position: "relative",
+                      userSelect: "none",
+                      WebkitUserSelect: "none",
+                      ...getSelectStyle(ms.active, ms.selected.has(lift)),
                     }}
+                    onPointerDown={(e) => { if (!ms.active && e.button === 0) ms.onPointerDown(lift, e); }}
+                    onPointerMove={ms.onPointerMove}
+                    onPointerUp={ms.endLP}
+                    onPointerCancel={ms.endLP}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={() => { if (ms.consumeLP()) return; if (ms.active) ms.toggle(lift); }}
                   >
+                    {ms.active && <SelectCheck show={ms.selected.has(lift)} />}
                     <div
                       style={{
                         display: "flex",
@@ -354,12 +394,14 @@ export default function PRTracker() {
                           cursor: "pointer",
                           userSelect: "none",
                         }}
-                        onClick={() =>
+                        onClick={(e) => {
+                          if (ms.active) return;
+                          e.stopPropagation();
                           setExpanded((prev) => ({
                             ...prev,
                             [lift]: !prev[lift],
-                          }))
-                        }
+                          }));
+                        }}
                       >
                         <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
                           {lift}
@@ -370,28 +412,35 @@ export default function PRTracker() {
                         </p>
                       </div>
 
-                      <FaEdit
-                        style={{ fontSize: 14, cursor: "pointer" }}
-                        onClick={() => openEditModal(latest)}
-                      />
-                      <FaTrash
-                        style={{
-                          fontSize: 14,
-                          cursor: "pointer",
-                          color: "var(--accent)",
-                          marginLeft: 10,
-                        }}
-                        onClick={() => setDeleteId(latest.id)}
-                      />
-
-                      {isOpen ? (
-                        <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
+                      {ms.active ? (
+                        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                          <ViewBtn onClick={() => openEditModal(latest)} />
+                        </div>
                       ) : (
-                        <FaChevronDown style={{ marginLeft: 10, opacity: 0.7 }} />
+                        <>
+                          <FaEdit
+                            style={{ fontSize: 14, cursor: "pointer" }}
+                            onClick={() => openEditModal(latest)}
+                          />
+                          <FaTrash
+                            style={{
+                              fontSize: 14,
+                              cursor: "pointer",
+                              color: "var(--accent)",
+                              marginLeft: 10,
+                            }}
+                            onClick={() => setDeleteId(latest.id)}
+                          />
+                          {isOpen ? (
+                            <FaChevronUp style={{ marginLeft: 10, opacity: 0.7 }} />
+                          ) : (
+                            <FaChevronDown style={{ marginLeft: 10, opacity: 0.7 }} />
+                          )}
+                        </>
                       )}
                     </div>
 
-                    {isOpen && (
+                    {!ms.active && isOpen && (
                       <div style={{ marginTop: 10 }}>
                         {entries.slice(1).map((entry) => (
                           <div
@@ -531,6 +580,22 @@ export default function PRTracker() {
           </div>
         </div>
       )}
+
+      {ms.active && (
+        <SelectionBar
+          count={ms.count}
+          onDelete={() => setConfirmStep(1)}
+          onCancel={ms.cancel}
+        />
+      )}
+      <DoubleConfirmModal
+        count={ms.count}
+        step={confirmStep}
+        onCancel={() => setConfirmStep(0)}
+        onContinue={() => setConfirmStep(2)}
+        onConfirm={bulkDeletePRs}
+        deleting={bulkDeleting}
+      />
     </div>
   );
 }

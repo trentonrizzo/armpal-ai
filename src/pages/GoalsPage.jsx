@@ -24,13 +24,16 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { FaEdit, FaTrash } from "react-icons/fa";
+import { useToast } from "../components/ToastProvider";
+import useMultiSelect from "../hooks/useMultiSelect";
+import { getSelectStyle, SelectCheck, ViewBtn, SelectionBar, DoubleConfirmModal } from "../components/MultiSelectUI";
 
 /* ============================================================
    SORTABLE WRAPPER (LEFT HANDLE 40% ONLY)
 ============================================================ */
-function SortableItem({ id, children }) {
+function SortableItem({ id, children, disabled }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
+    useSortable({ id, disabled });
 
   return (
     <div
@@ -41,20 +44,21 @@ function SortableItem({ id, children }) {
         position: "relative",
       }}
     >
-      {/* INVISIBLE DRAG HANDLE — LEFT 40% ONLY */}
-      <div
-        {...attributes}
-        {...listeners}
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: "40%",
-          height: "100%",
-          zIndex: 6,
-          touchAction: "none",
-        }}
-      />
+      {!disabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: "40%",
+            height: "100%",
+            zIndex: 6,
+            touchAction: "none",
+          }}
+        />
+      )}
       {children}
     </div>
   );
@@ -92,6 +96,12 @@ export default function GoalsPage() {
   // delete confirm
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  // multi-select
+  const toast = useToast();
+  const ms = useMultiSelect();
+  const [confirmStep, setConfirmStep] = useState(0);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -322,6 +332,25 @@ export default function GoalsPage() {
     if (user) await loadGoals(user.id);
   }
 
+  async function bulkDeleteGoals() {
+    if (ms.count === 0 || !user) return;
+    setBulkDeleting(true);
+    try {
+      const ids = [...ms.selected];
+      const { error } = await supabase.from("goals").delete().in("id", ids);
+      if (error) throw error;
+      ms.cancel();
+      setConfirmStep(0);
+      await loadGoals(user.id);
+      toast.success(`Deleted ${ids.length} item${ids.length !== 1 ? "s" : ""}`);
+    } catch (e) {
+      console.error("Bulk delete goals failed:", e);
+      toast.error("Some items failed to delete");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   /* ============================================================
      ORDERED GOALS
   ============================================================ */
@@ -380,7 +409,7 @@ export default function GoalsPage() {
                 : 0;
 
             return (
-              <SortableItem key={goal.id} id={goal.id}>
+              <SortableItem key={goal.id} id={goal.id} disabled={ms.active}>
                 <div
                   style={{
                     background: "var(--card)",
@@ -390,8 +419,18 @@ export default function GoalsPage() {
                     marginBottom: 14,
                     position: "relative",
                     overflow: "hidden",
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    ...getSelectStyle(ms.active, ms.selected.has(goal.id)),
                   }}
+                  onPointerDown={(e) => { if (!ms.active && e.button === 0) ms.onPointerDown(goal.id, e); }}
+                  onPointerMove={ms.onPointerMove}
+                  onPointerUp={ms.endLP}
+                  onPointerCancel={ms.endLP}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={() => { if (ms.consumeLP()) return; if (ms.active) ms.toggle(goal.id); }}
                 >
+                  {ms.active && <SelectCheck show={ms.selected.has(goal.id)} />}
                   <div
                     style={{
                       display: "flex",
@@ -499,30 +538,36 @@ export default function GoalsPage() {
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 14,
-                        paddingLeft: 10,
-                        pointerEvents: "auto",
-                      }}
-                    >
-                      <FaEdit
-                        style={{ cursor: "pointer", fontSize: 16 }}
-                        onClick={() => openModal(goal)}
-                      />
-                      <FaTrash
+                    {ms.active ? (
+                      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} style={{ paddingLeft: 10 }}>
+                        <ViewBtn onClick={() => openModal(goal)} />
+                      </div>
+                    ) : (
+                      <div
                         style={{
-                          cursor: "pointer",
-                          color: "var(--accent)",
-                          fontSize: 16,
+                          display: "flex",
+                          gap: 14,
+                          paddingLeft: 10,
+                          pointerEvents: "auto",
                         }}
-                        onClick={() => {
-                          setFormError("");
-                          setDeleteId(goal.id);
-                        }}
-                      />
-                    </div>
+                      >
+                        <FaEdit
+                          style={{ cursor: "pointer", fontSize: 16 }}
+                          onClick={() => openModal(goal)}
+                        />
+                        <FaTrash
+                          style={{
+                            cursor: "pointer",
+                            color: "var(--accent)",
+                            fontSize: 16,
+                          }}
+                          onClick={() => {
+                            setFormError("");
+                            setDeleteId(goal.id);
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* PROGRESS BAR */}
@@ -741,6 +786,22 @@ export default function GoalsPage() {
           </div>
         </div>
       )}
+
+      {ms.active && (
+        <SelectionBar
+          count={ms.count}
+          onDelete={() => setConfirmStep(1)}
+          onCancel={ms.cancel}
+        />
+      )}
+      <DoubleConfirmModal
+        count={ms.count}
+        step={confirmStep}
+        onCancel={() => setConfirmStep(0)}
+        onContinue={() => setConfirmStep(2)}
+        onConfirm={bulkDeleteGoals}
+        deleting={bulkDeleting}
+      />
 
       {/* ========================= CONFIRM DELETE ========================= */}
       {deleteId && (

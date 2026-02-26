@@ -49,13 +49,16 @@ import {
   deleteMeasurement,
 } from "../api/measurements";
 import { checkUsageCap } from "../utils/usageLimits";
+import { useToast } from "../components/ToastProvider";
+import useMultiSelect from "../hooks/useMultiSelect";
+import { getSelectStyle, SelectCheck, ViewBtn, SelectionBar, DoubleConfirmModal } from "../components/MultiSelectUI";
 
 /* -------------------------------------------------------
    SORTABLE ITEM — LEFT 40% = DRAG HANDLE
 ------------------------------------------------------- */
-function SortableItem({ id, children }) {
+function SortableItem({ id, children, disabled }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
+    useSortable({ id, disabled });
 
   return (
     <div
@@ -66,19 +69,21 @@ function SortableItem({ id, children }) {
         position: "relative",
       }}
     >
-      <div
-        {...attributes}
-        {...listeners}
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: "40%",
-          height: "100%",
-          zIndex: 5,
-          touchAction: "none",
-        }}
-      />
+      {!disabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: "40%",
+            height: "100%",
+            zIndex: 5,
+            touchAction: "none",
+          }}
+        />
+      )}
       {children}
     </div>
   );
@@ -114,6 +119,12 @@ export default function MeasurementsPage() {
   const [bwEditDate, setBwEditDate] = useState("");
   const [bwDeleteId, setBwDeleteId] = useState(null);
   const [capMessage, setCapMessage] = useState("");
+
+  // multi-select
+  const toast = useToast();
+  const ms = useMultiSelect();
+  const [confirmStep, setConfirmStep] = useState(0);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // ---------------- DND ----------------
   const sensors = useSensors(
@@ -185,6 +196,31 @@ export default function MeasurementsPage() {
     if (!ts) return new Date().toISOString().slice(0, 10);
     if (typeof ts === "string" && ts.includes("T")) return ts.slice(0, 10);
     return ts;
+  }
+
+  async function bulkDeleteMeasurements() {
+    if (ms.count === 0) return;
+    setBulkDeleting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+      const names = [...ms.selected];
+      const { error } = await supabase
+        .from("measurements")
+        .delete()
+        .eq("user_id", user.id)
+        .in("name", names);
+      if (error) throw error;
+      ms.cancel();
+      setConfirmStep(0);
+      await reloadMeasurements(user.id);
+      toast.success(`Deleted ${names.length} item${names.length !== 1 ? "s" : ""}`);
+    } catch (e) {
+      console.error("Bulk delete measurements failed:", e);
+      toast.error("Some items failed to delete");
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   // ============================================================
@@ -443,17 +479,34 @@ export default function MeasurementsPage() {
             const isOpen = expanded[groupName];
 
             return (
-              <SortableItem key={groupName} id={groupName}>
-                <div style={cardStyle}>
+              <SortableItem key={groupName} id={groupName} disabled={ms.active}>
+                <div
+                  style={{
+                    ...cardStyle,
+                    position: "relative",
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    ...getSelectStyle(ms.active, ms.selected.has(groupName)),
+                  }}
+                  onPointerDown={(e) => { if (!ms.active && e.button === 0) ms.onPointerDown(groupName, e); }}
+                  onPointerMove={ms.onPointerMove}
+                  onPointerUp={ms.endLP}
+                  onPointerCancel={ms.endLP}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={() => { if (ms.consumeLP()) return; if (ms.active) ms.toggle(groupName); }}
+                >
+                  {ms.active && <SelectCheck show={ms.selected.has(groupName)} />}
                   <div style={rowStyle}>
                     <div
                       style={{ flexBasis: "40%", cursor: "grab" }}
-                      onClick={() =>
+                      onClick={(e) => {
+                        if (ms.active) return;
+                        e.stopPropagation();
                         setExpanded((p) => ({
                           ...p,
                           [groupName]: !p[groupName],
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       <p style={{ margin: 0, fontWeight: 600 }}>
                         {groupName}
@@ -463,17 +516,23 @@ export default function MeasurementsPage() {
                       </p>
                     </div>
 
-                    <div style={{ display: "flex", gap: 12 }}>
-                      <FaEdit onClick={() => openEdit(latest)} />
-                      <FaTrash
-                        style={{ color: "var(--accent)" }}
-                        onClick={() => setDeleteId(latest.id)}
-                      />
-                      {isOpen ? <FaChevronUp /> : <FaChevronDown />}
-                    </div>
+                    {ms.active ? (
+                      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                        <ViewBtn onClick={() => openEdit(latest)} />
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 12 }}>
+                        <FaEdit onClick={() => openEdit(latest)} />
+                        <FaTrash
+                          style={{ color: "var(--accent)" }}
+                          onClick={() => setDeleteId(latest.id)}
+                        />
+                        {isOpen ? <FaChevronUp /> : <FaChevronDown />}
+                      </div>
+                    )}
                   </div>
 
-                  {isOpen && (
+                  {!ms.active && isOpen && (
                     <div style={{ marginTop: 10 }}>
                       {list.slice(1).map((entry) => (
                         <div key={entry.id} style={historyCard}>
@@ -548,6 +607,22 @@ export default function MeasurementsPage() {
           </div>
         </div>
       )}
+
+      {ms.active && (
+        <SelectionBar
+          count={ms.count}
+          onDelete={() => setConfirmStep(1)}
+          onCancel={ms.cancel}
+        />
+      )}
+      <DoubleConfirmModal
+        count={ms.count}
+        step={confirmStep}
+        onCancel={() => setConfirmStep(0)}
+        onContinue={() => setConfirmStep(2)}
+        onConfirm={bulkDeleteMeasurements}
+        deleting={bulkDeleting}
+      />
 
       {/* BODYWEIGHT DELETE */}
       {bwDeleteId && (

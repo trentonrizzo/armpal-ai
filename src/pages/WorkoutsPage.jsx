@@ -54,14 +54,16 @@ import {
 } from "react-icons/fa";
 import WorkoutConverterOverlay from "../features/workouts/WorkoutConverterOverlay";
 import { Zap } from "lucide-react";
+import useMultiSelect from "../hooks/useMultiSelect";
+import { getSelectStyle, SelectCheck, ViewBtn, SelectionBar, DoubleConfirmModal } from "../components/MultiSelectUI";
 
 // ============================================================
 // DRAGGABLE WRAPPER — LEFT drag handle only; RIGHT side scrolls
 // ============================================================
 
-function SortableItem({ id, children }) {
+function SortableItem({ id, children, disabled }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
+    useSortable({ id, disabled });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -71,21 +73,21 @@ function SortableItem({ id, children }) {
 
   return (
     <div ref={setNodeRef} style={style}>
-      {/* LEFT drag zone only */}
-      <div
-        {...attributes}
-        {...listeners}
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: "20%",
-          height: "100%",
-          zIndex: 5,
-          touchAction: "none",
-        }}
-      />
-      {/* RIGHT content: allow vertical scroll */}
+      {!disabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: "20%",
+            height: "100%",
+            zIndex: 5,
+            touchAction: "none",
+          }}
+        />
+      )}
       <div style={{ touchAction: "pan-y" }}>{children}</div>
     </div>
   );
@@ -189,6 +191,11 @@ export default function WorkoutsPage() {
   // workout converter
   const [converterOpen, setConverterOpen] = useState(false);
   const [isPro, setIsPro] = useState(false);
+
+  // multi-select bulk delete
+  const ms = useMultiSelect();
+  const [confirmStep, setConfirmStep] = useState(0);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -414,6 +421,26 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
     }
     setDeleteTarget(null);
     setDeleteModalOpen(false);
+  }
+
+  async function bulkDeleteWorkouts() {
+    if (ms.count === 0) return;
+    setBulkDeleting(true);
+    try {
+      const ids = [...ms.selected];
+      await supabase.from("exercises").delete().in("workout_id", ids);
+      const { error } = await supabase.from("workouts").delete().in("id", ids);
+      if (error) throw error;
+      ms.cancel();
+      setConfirmStep(0);
+      if (user) await loadWorkouts(user.id);
+      toast.success(`Deleted ${ids.length} item${ids.length !== 1 ? "s" : ""}`);
+    } catch (e) {
+      console.error("Bulk delete failed:", e);
+      toast.error("Some items failed to delete");
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   // ============================================================
@@ -733,7 +760,7 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
               const exercises = expandedExercises[workout.id] || null;
 
               return (
-                <SortableItem key={workout.id} id={workout.id}>
+                <SortableItem key={workout.id} id={workout.id} disabled={ms.active}>
                   <div
                     style={{
                       background: "var(--card)",
@@ -741,8 +768,19 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
                       padding: 14,
                       border: "1px solid var(--border)",
                       marginBottom: 10,
+                      position: "relative",
+                      userSelect: "none",
+                      WebkitUserSelect: "none",
+                      ...getSelectStyle(ms.active, ms.selected.has(workout.id)),
                     }}
+                    onPointerDown={(e) => { if (!ms.active && e.button === 0) ms.onPointerDown(workout.id, e); }}
+                    onPointerMove={ms.onPointerMove}
+                    onPointerUp={ms.endLP}
+                    onPointerCancel={ms.endLP}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={() => { if (ms.consumeLP()) return; if (ms.active) ms.toggle(workout.id); }}
                   >
+                    {ms.active && <SelectCheck show={ms.selected.has(workout.id)} />}
                     <div
                       style={{
                         display: "flex",
@@ -753,7 +791,7 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
                     >
                       <div
                         style={{ flex: 1, cursor: "pointer" }}
-                        onClick={() => toggleExpand(workout.id)}
+                        onClick={(e) => { if (ms.active) return; e.stopPropagation(); toggleExpand(workout.id); }}
                       >
                         <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
                           {workout.name || "Workout"}
@@ -763,40 +801,46 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
                         </p>
                       </div>
 
-                      {/* NEW: Focus Mode button (does NOT affect expand/collapse) */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openFocusForWorkout(workout);
-                        }}
-                        style={focusBtn}
-                        title="Focus Mode"
-                      >
-                        <FaExpandAlt style={{ fontSize: 14 }} />
-                      </button>
-
-                      <FaEdit
-                        style={{ fontSize: 14, cursor: "pointer" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openWorkoutModal(workout);
-                        }}
-                      />
-                      <FaTrash
-                        style={{ fontSize: 14, cursor: "pointer", color: "var(--accent)" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          askDeleteWorkout(workout.id);
-                        }}
-                      />
-                      {exercises ? (
-                        <FaChevronUp style={{ marginLeft: 6, fontSize: 12 }} />
+                      {ms.active ? (
+                        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                          <ViewBtn onClick={() => openFocusForWorkout(workout)} />
+                        </div>
                       ) : (
-                        <FaChevronDown style={{ marginLeft: 6, fontSize: 12 }} />
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openFocusForWorkout(workout);
+                            }}
+                            style={focusBtn}
+                            title="Focus Mode"
+                          >
+                            <FaExpandAlt style={{ fontSize: 14 }} />
+                          </button>
+                          <FaEdit
+                            style={{ fontSize: 14, cursor: "pointer" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openWorkoutModal(workout);
+                            }}
+                          />
+                          <FaTrash
+                            style={{ fontSize: 14, cursor: "pointer", color: "var(--accent)" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              askDeleteWorkout(workout.id);
+                            }}
+                          />
+                          {exercises ? (
+                            <FaChevronUp style={{ marginLeft: 6, fontSize: 12 }} />
+                          ) : (
+                            <FaChevronDown style={{ marginLeft: 6, fontSize: 12 }} />
+                          )}
+                        </>
                       )}
                     </div>
 
-                    {exercises && (
+                    {!ms.active && exercises && (
                       <div style={{ marginTop: 10 }}>
                         <DndContext
                           sensors={sensors}
@@ -1284,6 +1328,22 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
           )}
         </div>
       )}
+
+      {ms.active && (
+        <SelectionBar
+          count={ms.count}
+          onDelete={() => setConfirmStep(1)}
+          onCancel={ms.cancel}
+        />
+      )}
+      <DoubleConfirmModal
+        count={ms.count}
+        step={confirmStep}
+        onCancel={() => setConfirmStep(0)}
+        onContinue={() => setConfirmStep(2)}
+        onConfirm={bulkDeleteWorkouts}
+        deleting={bulkDeleting}
+      />
 
       <WorkoutConverterOverlay
         open={converterOpen}
