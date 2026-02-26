@@ -89,9 +89,9 @@ admin
 
 // ── HTTP handler: health check + manual trigger fallback ──
 
-const CORS = {
+const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -100,14 +100,14 @@ Deno.serve(async (req) => {
 
   // OPTIONS — CORS preflight
   if (method === "OPTIONS") {
-    return new Response("ok", { headers: CORS });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
 
   // HEAD — keep-alive probe (no auth needed, empty body)
   if (method === "HEAD") {
     return new Response(null, {
       status: 200,
-      headers: { ...CORS, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
   if (method === "GET") {
     return new Response(
       JSON.stringify({ status: "ok", alive: true }),
-      { status: 200, headers: { ...CORS, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
@@ -127,19 +127,19 @@ Deno.serve(async (req) => {
       const result = await handleNotification(record);
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 500,
-        headers: { ...CORS, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (err) {
       console.error("send-push POST error:", err);
       return new Response(
         JSON.stringify({ error: "Internal server error" }),
-        { status: 500, headers: { ...CORS, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
   }
 
   return new Response(JSON.stringify({ error: "Method not allowed" }), {
     status: 405,
-    headers: { ...CORS, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
