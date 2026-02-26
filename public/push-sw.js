@@ -1,3 +1,14 @@
+// Push-only service worker — must NEVER control the app.
+// Scoped to /push/ so it cannot intercept navigation or compete with the main PWA SW.
+
+self.addEventListener("install", () => {
+  // Do NOT call self.skipWaiting() — let the main SW own the app lifecycle
+});
+
+self.addEventListener("activate", () => {
+  // Do NOT call self.clients.claim() — this SW must not control pages
+});
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {

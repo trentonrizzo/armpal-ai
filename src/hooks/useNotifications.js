@@ -16,8 +16,8 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 /**
- * Registers SW, subscribes to Web Push, and stores the subscription in Supabase.
- * Call once in the app root when the user is authenticated.
+ * Registers push-sw.js with a restricted scope so it never competes
+ * with the main PWA service worker for app control.
  */
 export default function useNotifications(userId) {
   useEffect(() => {
@@ -26,9 +26,26 @@ export default function useNotifications(userId) {
 
     let cancelled = false;
 
-    async function register() {
+    function bootstrap() {
+      if (cancelled) return;
+
+      // Only proceed once the main PWA SW controls the page
+      if (!navigator.serviceWorker.controller) {
+        navigator.serviceWorker.addEventListener("controllerchange", bootstrap, { once: true });
+        return;
+      }
+
+      registerPush();
+    }
+
+    async function registerPush() {
+      if (cancelled) return;
+
       try {
-        const registration = await navigator.serviceWorker.register("/push-sw.js");
+        // Scope-isolate: /push/ ensures this SW cannot intercept root navigation
+        const registration = await navigator.serviceWorker.register("/push-sw.js", {
+          scope: "/push/",
+        });
 
         const permission = await Notification.requestPermission();
         if (permission !== "granted" || cancelled) return;
@@ -45,23 +62,35 @@ export default function useNotifications(userId) {
         if (cancelled) return;
 
         const subJson = subscription.toJSON();
-        await supabase.from("push_subscriptions").upsert(
-          {
-            user_id: userId,
-            endpoint: subJson.endpoint,
-            keys: subJson.keys,
-          },
-          { onConflict: "user_id,endpoint" }
-        ).then(({ error }) => {
-          if (error) console.warn("push_subscriptions upsert:", error.message);
-        });
+        await supabase
+          .from("push_subscriptions")
+          .upsert(
+            {
+              user_id: userId,
+              endpoint: subJson.endpoint,
+              keys: subJson.keys,
+            },
+            { onConflict: "user_id,endpoint" }
+          )
+          .then(({ error }) => {
+            if (error) console.warn("push_subscriptions upsert:", error.message);
+          });
       } catch (err) {
         console.warn("Push registration error:", err);
       }
     }
 
-    register();
+    // Defer until after page load so the main SW activates first
+    if (document.readyState === "complete") {
+      bootstrap();
+    } else {
+      window.addEventListener("load", bootstrap, { once: true });
+    }
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.removeEventListener("load", bootstrap);
+      navigator.serviceWorker.removeEventListener("controllerchange", bootstrap);
+    };
   }, [userId]);
 }
