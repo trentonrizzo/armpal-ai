@@ -17,7 +17,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { achievementBus } from "../utils/achievementBus";
-import { checkUsageCap } from "../utils/usageLimits";
+import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { supabase } from "../supabaseClient";
 import {
   DndContext,
@@ -52,6 +52,8 @@ import {
   FaCheck,
   FaTimes,
 } from "react-icons/fa";
+import WorkoutConverterOverlay from "../features/workouts/WorkoutConverterOverlay";
+import { Zap } from "lucide-react";
 
 // ============================================================
 // DRAGGABLE WRAPPER — LEFT drag handle only; RIGHT side scrolls
@@ -184,6 +186,10 @@ export default function WorkoutsPage() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [capMessage, setCapMessage] = useState("");
 
+  // workout converter
+  const [converterOpen, setConverterOpen] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
@@ -196,7 +202,10 @@ export default function WorkoutsPage() {
     (async () => {
       const { data } = await supabase.auth.getUser();
       setUser(data.user);
-      if (data.user) await loadWorkouts(data.user.id);
+      if (data.user) {
+        await loadWorkouts(data.user.id);
+        getIsPro(data.user.id).then(setIsPro);
+      }
       setLoading(false);
     })();
   }, []);
@@ -655,22 +664,47 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
         Workouts
       </h1>
 
-      <button
-        onClick={() => openWorkoutModal(null)}
-        style={{
-          padding: "10px 20px",
-          background: "var(--accent)",
-          borderRadius: "999px",
-          border: "none",
-          fontSize: 14,
-          fontWeight: 600,
-          color: "var(--text)",
-          marginBottom: 18,
-          boxShadow: "0 0 14px color-mix(in srgb, var(--accent) 90%, transparent)",
-        }}
-      >
-        + Add Workout
-      </button>
+      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+        <button
+          onClick={() => openWorkoutModal(null)}
+          style={{
+            padding: "10px 20px",
+            background: "var(--accent)",
+            borderRadius: "999px",
+            border: "none",
+            fontSize: 14,
+            fontWeight: 600,
+            color: "var(--text)",
+            boxShadow: "0 0 14px color-mix(in srgb, var(--accent) 90%, transparent)",
+          }}
+        >
+          + Add Workout
+        </button>
+        <button
+          onClick={() => setConverterOpen(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "10px 16px",
+            borderRadius: "999px",
+            border: "1px solid var(--border)",
+            background: "var(--card)",
+            color: "var(--text)",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          <Zap size={14} />
+          <span>AI Converter</span>
+          <span style={{
+            fontSize: 9, fontWeight: 800, color: "#000",
+            background: "var(--accent)", padding: "2px 5px",
+            borderRadius: 4, lineHeight: 1,
+          }}>PRO</span>
+        </button>
+      </div>
 
       {loading ? (
         <>
@@ -1250,6 +1284,14 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
           )}
         </div>
       )}
+
+      <WorkoutConverterOverlay
+        open={converterOpen}
+        onClose={() => setConverterOpen(false)}
+        userId={user?.id}
+        isPro={isPro}
+        onComplete={() => { if (user?.id) loadWorkouts(user.id); }}
+      />
     </div>
   );
 }
