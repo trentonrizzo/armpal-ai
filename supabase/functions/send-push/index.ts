@@ -89,57 +89,70 @@ admin
 
 // ── HTTP handler: health check + manual trigger fallback ──
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = [
+  "https://www.armpal.net",
+  "https://armpal.net",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Vary": "Origin",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 Deno.serve(async (req) => {
-  const method = req.method;
+  const cors = getCorsHeaders(req);
 
-  // OPTIONS — CORS preflight
-  if (method === "OPTIONS") {
-    return new Response("ok", { status: 200, headers: corsHeaders });
+  // OPTIONS — CORS preflight (must be handled first)
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 200, headers: cors });
   }
 
-  // HEAD — keep-alive probe (no auth needed, empty body)
-  if (method === "HEAD") {
+  // HEAD — keep-alive probe
+  if (req.method === "HEAD") {
     return new Response(null, {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   }
 
-  // GET — health check / cron keep-alive (no auth needed)
-  if (method === "GET") {
+  // GET — health check / cron keep-alive
+  if (req.method === "GET") {
     return new Response(
       JSON.stringify({ status: "ok", alive: true }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
     );
   }
 
   // POST — manual trigger fallback
-  if (method === "POST") {
+  if (req.method === "POST") {
     try {
       const payload = await req.json();
       const record = payload.record ?? payload;
       const result = await handleNotification(record);
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     } catch (err) {
       console.error("send-push POST error:", err);
       return new Response(
         JSON.stringify({ error: "Internal server error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
   }
 
   return new Response(JSON.stringify({ error: "Method not allowed" }), {
     status: 405,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...cors, "Content-Type": "application/json" },
   });
 });
