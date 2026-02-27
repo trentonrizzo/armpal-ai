@@ -304,7 +304,7 @@ export default function Dashboard() {
     </span>
   )}
 </h1>
-
+          <DashboardCreditsCard />
           <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
             Track your progress. Crush your PRs. Stay locked in.
           </p>
@@ -352,9 +352,6 @@ export default function Dashboard() {
           )}
         </Link>
       </header>
-
-      {/* ArmPal Credits — directly below username header */}
-      <DashboardCreditsCard />
 
       {/* Upgrade to Pro — only when NOT Pro (uses existing isPro from profiles) */}
       {!isPro && (

@@ -742,7 +742,7 @@ export default function FriendsPage() {
         <button
           type="button"
           aria-label="Back"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate("/")}
           style={backBtn}
         >
           <span style={{ fontSize: 20, lineHeight: 1 }}>‹</span>
