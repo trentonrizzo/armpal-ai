@@ -166,10 +166,10 @@ export default function DashboardAIChat({ onClose }) {
           user_id: userId,
           workout_id: workoutId,
           name: ex.name || "Exercise",
-          sets: Number(ex.sets) || null,
+          sets: ex.sets ?? null,
           reps: ex.reps ?? null,
-          weight: null,
-          position: index
+          weight: JSON.stringify(ex),
+          position: index,
         }));
 
         const { error: exerciseError } = await supabase
@@ -809,21 +809,23 @@ if (!res.ok) {
 
                   <strong>{m.content.title}</strong>
 
-                  {m.content.exercises.map((ex, idx) => (
-
-                    <div key={idx} style={{ marginTop: 6 }}>
-
-                      <div><strong>{ex.name}</strong></div>
-
-                      <div>{ex.sets} sets • {ex.reps}</div>
-
-                      {ex.notes && (
-                        <small>{ex.notes}</small>
-                      )}
-
-                    </div>
-
-                  ))}
+                  {m.content.exercises.map((ex, idx) => {
+                    const baseSkip = ["name","id","position","user_id","workout_id","created_at","updated_at","exercise","title"];
+                    const entries = Object.entries(ex).filter(([k, v]) => !baseSkip.includes(k) && v != null && v !== "");
+                    const details = entries.map(([k, v]) => {
+                      if (k === "sets") return `${v} sets`;
+                      if (k === "reps") return String(v);
+                      if (k === "rpe") return `RPE ${v}`;
+                      if (k === "tempo") return `Tempo: ${v}`;
+                      return `${k}: ${v}`;
+                    });
+                    return (
+                      <div key={idx} style={{ marginTop: 6 }}>
+                        <div><strong>{ex.name}</strong></div>
+                        {details.length > 0 && <div>{details.join(" · ")}</div>}
+                      </div>
+                    );
+                  })}
 
                   <button
                     onClick={() => saveWorkout(m.content)}

@@ -233,7 +233,26 @@ export default function ShareWorkoutsModal({ open, onClose }) {
       // Build payloads for each workout
       const payloads = [];
       for (const w of selectedWorkouts) {
-        const ex = await loadExercisesForWorkout(w.id);
+        const rawEx = await loadExercisesForWorkout(w.id);
+        const ex = rawEx.map((e) => {
+          if (e.weight && typeof e.weight === "string" && e.weight.trim().startsWith("{")) {
+            try {
+              const parsed = JSON.parse(e.weight);
+              if (parsed && typeof parsed === "object") {
+                return parsed;
+              }
+            } catch {
+              // fall through
+            }
+          }
+          return {
+            name: e.name,
+            sets: e.sets,
+            reps: e.reps,
+            weight: e.weight,
+            position: e.position,
+          };
+        });
         payloads.push({
           type: "workout_share",
           workout: { id: w.id, name: w.name },

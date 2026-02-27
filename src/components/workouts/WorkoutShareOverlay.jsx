@@ -765,13 +765,25 @@ function buildWorkoutPayload(workout, exercises) {
       name: workout.name,
       scheduled_for: workout.scheduled_for || null,
     },
-    exercises: exercises.map((ex) => ({
-      name: ex.name,
-      sets: ex.sets,
-      reps: ex.reps,
-      weight: ex.weight,
-      position: ex.position,
-    })),
+    exercises: exercises.map((ex) => {
+      if (ex.weight && typeof ex.weight === "string" && ex.weight.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(ex.weight);
+          if (parsed && typeof parsed === "object") {
+            return parsed;
+          }
+        } catch {
+          // fall through to column-based object
+        }
+      }
+      return {
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        weight: ex.weight,
+        position: ex.position,
+      };
+    }),
     sent_at: new Date().toISOString(),
   };
 }

@@ -2,15 +2,24 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 
-function buildDetailStr(ex) {
-  const parts = [];
-  if (ex.sets) parts.push(`${ex.sets} sets`);
-  if (ex.reps) parts.push(`${ex.reps} reps`);
-  if (ex.percentage) parts.push(ex.percentage);
-  if (ex.rpe) parts.push(`RPE ${ex.rpe}`);
-  if (ex.tempo) parts.push(`Tempo: ${ex.tempo}`);
-  if (ex.notes) parts.push(ex.notes);
-  return parts.join(" · ");
+function workoutsToProgramModel(workouts) {
+  // Flatten workouts into weeks/days; if no explicit week/day info,
+  // map sequentially.
+  const weeks = [];
+  let currentWeek = { weekNumber: 1, days: [] };
+  workouts.forEach((w, index) => {
+    const day = {
+      dayNumber: index + 1,
+      title: w.title || w.day_label || `Day ${index + 1}`,
+      workout_card: {
+        title: w.title || w.day_label || `Day ${index + 1}`,
+        exercises: Array.isArray(w.exercises) ? w.exercises.map((ex) => ({ ...ex })) : [],
+      },
+    };
+    currentWeek.days.push(day);
+  });
+  if (currentWeek.days.length) weeks.push(currentWeek);
+  return { weeks };
 }
 
 export default function CreateProgram() {
@@ -18,7 +27,7 @@ export default function CreateProgram() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [rawContent, setRawContent] = useState("");
-  const [convertedProgram, setConvertedProgram] = useState(null);
+  const [programModel, setProgramModel] = useState(null);
   const [convertError, setConvertError] = useState("");
   const [isConverting, setIsConverting] = useState(false);
   const [priceInput, setPriceInput] = useState("15.99");
@@ -34,7 +43,7 @@ export default function CreateProgram() {
     try {
       setIsConverting(true);
       setConvertError("");
-      setConvertedProgram(null);
+      setProgramModel(null);
 
       const res = await fetch(`${window.location.origin}/api/ai/workout-converter`, {
         method: "POST",
@@ -56,24 +65,8 @@ export default function CreateProgram() {
         setConvertError("No workouts detected. Try rephrasing your program.");
         return;
       }
-
-      const days = workouts.map((w, i) => ({
-        name: w.title || w.day_label || `Day ${i + 1}`,
-        week_number: w.week_number || null,
-        exercises: Array.isArray(w.exercises)
-          ? w.exercises.map((ex) => ({
-              name: ex.name || "Exercise",
-              sets: ex.sets || null,
-              reps: ex.reps || null,
-              percentage: ex.percentage || null,
-              rpe: ex.rpe || null,
-              tempo: ex.tempo || null,
-              notes: ex.notes || null,
-            }))
-          : [],
-      }));
-
-      setConvertedProgram({ days });
+      const model = workoutsToProgramModel(workouts);
+      setProgramModel(model);
     } catch (e) {
       console.error(e);
       setConvertError(e.message || "Conversion failed");
@@ -96,7 +89,7 @@ export default function CreateProgram() {
 
   async function saveProgram() {
     if (!title.trim()) { alert("Enter a title."); return; }
-    if (!convertedProgram || !Array.isArray(convertedProgram.days) || convertedProgram.days.length === 0) {
+    if (!programModel || !Array.isArray(programModel.weeks) || programModel.weeks.length === 0) {
       alert("Convert with AI first."); return;
     }
 
@@ -107,31 +100,35 @@ export default function CreateProgram() {
     const price = Number(priceInput) || 0;
 
     try {
-      const { error: insErr } = await supabase.from("programs").insert({
+      const { data: inserted, error: insErr } = await supabase.from("programs").insert({
         title,
         preview_description: description || null,
-        parsed_program: convertedProgram,
+        parsed_program: null,
+        program_json: programModel,
         is_ai_parsed: true,
         price,
         creator_id: uid,
-      });
+      }).select("*").single();
       if (insErr) throw insErr;
-      alert("Program created");
-      navigate("/programs");
+      // Simple toast via window event; consumed by ToastProvider
+      window.dispatchEvent(new CustomEvent("ap_toast", {
+        detail: {
+          title: "Program created",
+          body: "View in My Programs",
+          action: {
+            label: "Open",
+            href: "/programs/my",
+          },
+        },
+      }));
+      navigate("/programs/my");
     } catch (e) {
       console.error(e);
       alert(e.message || "Save failed");
     }
   }
 
-  const weeks = {};
-  if (convertedProgram?.days) {
-    convertedProgram.days.forEach((d) => {
-      const wk = d.week_number || 0;
-      if (!weeks[wk]) weeks[wk] = [];
-      weeks[wk].push(d);
-    });
-  }
+  const weeks = programModel?.weeks ?? [];
 
   return (
     <div style={{ padding: "16px 16px 90px", maxWidth: 560, margin: "0 auto" }}>
@@ -212,31 +209,24 @@ export default function CreateProgram() {
         </p>
       )}
 
-      {convertedProgram && convertedProgram.days.length > 0 && (
+      {programModel && weeks.length > 0 && (
         <div>
           <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 12px", color: "var(--text)" }}>
-            Live Preview — {convertedProgram.days.length} workout{convertedProgram.days.length !== 1 ? "s" : ""}
+            Live Preview — {weeks.reduce((acc, w) => acc + w.days.length, 0)} workout day(s)
           </h3>
 
-          {Object.entries(weeks).map(([wk, days]) => (
-            <div key={wk} style={{ marginBottom: 20 }}>
-              {wk !== "0" && (
-                <div style={S.weekLabel}>Week {wk}</div>
-              )}
-              {days.map((day, idx) => (
+          {weeks.map((week) => (
+            <div key={week.weekNumber} style={{ marginBottom: 20 }}>
+              <div style={S.weekLabel}>Week {week.weekNumber}</div>
+              {week.days.map((day, idx) => (
                 <div key={idx} style={S.dayCard}>
-                  <h4 style={S.dayTitle}>{day.name}</h4>
-                  {day.exercises.length > 0 ? (
-                    day.exercises.map((ex, i) => {
-                      const detail = buildDetailStr(ex);
-                      const isSuperset = /superset/i.test(ex.notes || "") || /superset/i.test(ex.name || "");
-                      return (
-                        <div key={i} style={{ ...S.exRow, ...(isSuperset ? S.supersetRow : {}) }}>
-                          <div style={S.exName}>{ex.name}</div>
-                          {detail && <div style={S.exDetail}>{detail}</div>}
-                        </div>
-                      );
-                    })
+                  <h4 style={S.dayTitle}>{day.title}</h4>
+                  {Array.isArray(day.workout_card?.exercises) && day.workout_card.exercises.length > 0 ? (
+                    day.workout_card.exercises.map((ex, i) => (
+                      <div key={i} style={S.exRow}>
+                        <div style={S.exName}>{ex.name || "Exercise"}</div>
+                      </div>
+                    ))
                   ) : (
                     <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>No exercises listed.</p>
                   )}

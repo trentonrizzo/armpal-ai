@@ -58,6 +58,36 @@ import useMultiSelect from "../hooks/useMultiSelect";
 import { getSelectStyle, SelectCheck, ViewBtn, SelectionBar, DoubleConfirmModal } from "../components/MultiSelectUI";
 
 // ============================================================
+// EXERCISE WEIGHT FIELD DISPLAY
+// When saved from chat, extra fields (percentage, RPE, tempo,
+// notes, custom text) are JSON-encoded in the weight column.
+// ============================================================
+
+function formatExerciseWeight(weight) {
+  if (!weight) return "";
+  if (typeof weight !== "string") return String(weight);
+  const trimmed = weight.trim();
+  if (!trimmed.startsWith("{")) return weight;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed !== "object" || parsed === null) return weight;
+    const parts = [];
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v == null || v === "" || k === "exercise" || k === "title") continue;
+      if (k === "weight") { parts.push(String(v)); continue; }
+      if (k === "percentage") { parts.push(String(v)); continue; }
+      if (k === "rpe") { parts.push(`RPE ${v}`); continue; }
+      if (k === "tempo") { parts.push(`Tempo: ${v}`); continue; }
+      if (k === "notes") { parts.push(String(v)); continue; }
+      parts.push(`${k}: ${v}`);
+    }
+    return parts.join(" · ");
+  } catch {
+    return weight;
+  }
+}
+
+// ============================================================
 // DRAGGABLE WRAPPER — LEFT drag handle only; RIGHT side scrolls
 // ============================================================
 
@@ -880,7 +910,7 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
                                         {(ex.sets ?? "-") +
                                           " x " +
                                           (ex.reps ?? "-") +
-                                          (ex.weight ? ` — ${ex.weight}` : "")}
+                                          (() => { const w = formatExerciseWeight(ex.weight); return w ? ` — ${w}` : ""; })()}
                                       </p>
                                     </div>
                                     <FaEdit
@@ -1104,7 +1134,7 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
                             {(ex.sets ?? "-") +
                               " x " +
                               (ex.reps ?? "-") +
-                              (ex.weight ? ` — ${ex.weight}` : "")}
+                              (() => { const w = formatExerciseWeight(ex.weight); return w ? ` — ${w}` : ""; })()}
                           </div>
                         </div>
 

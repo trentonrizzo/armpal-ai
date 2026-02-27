@@ -276,30 +276,35 @@ function normalizeSharedWorkout(share) {
     (Array.isArray(share?.items) && share.items) ||
     [];
 
+  // Lossless: preserve every field on the exercise object as-is
   const exercises = rawExercises
     .map((ex) => {
       if (!ex) return null;
-
       return {
+        ...ex,
         name: ex.name || ex.exercise || ex.title || "Exercise",
-        sets: ex.sets || ex.set || ex.series || null,
-        reps: ex.reps || null,
-        weight: ex.weight || null,
-        percentage: ex.percentage || null,
-        rpe: ex.rpe || null,
-        tempo: ex.tempo || null,
-        notes: ex.notes || null,
       };
     })
     .filter(Boolean);
 
-  return { name, exercises };
+  return { name, exercises, _raw: share };
 }
 
 
 // ============================================================
 // WORKOUT SHARE CARD
 // ============================================================
+
+const EXERCISE_SKIP_KEYS = new Set(["name", "exercise", "title", "id", "position", "user_id", "workout_id", "created_at", "updated_at"]);
+const EXERCISE_LABEL_MAP = { sets: "sets", reps: "reps", weight: "", percentage: "", rpe: "RPE", tempo: "Tempo", notes: "" };
+
+function formatExerciseField(key, value) {
+  if (value == null || value === "" || value === false) return null;
+  const label = EXERCISE_LABEL_MAP[key];
+  if (label === undefined) return `${key}: ${value}`;
+  if (label === "") return String(value);
+  return `${label} ${value}`;
+}
 
 function WorkoutShareCard({ share, canSave, saving, saved, onSave }) {
   const normalized = normalizeSharedWorkout(share);
@@ -313,13 +318,11 @@ function WorkoutShareCard({ share, canSave, saving, saved, onSave }) {
       <div style={workoutTitle}>📋 {workoutName}</div>
 
       {exercises.map((ex, i) => {
-        const details = [];
-        if (ex.sets) details.push(`${ex.sets} sets`);
-        if (ex.reps) details.push(`${ex.reps} reps`);
-        if (ex.weight) details.push(ex.weight);
-        if (ex.percentage) details.push(ex.percentage);
-        if (ex.rpe) details.push(`RPE ${ex.rpe}`);
-        if (ex.tempo) details.push(`Tempo: ${ex.tempo}`);
+        const details = Object.entries(ex)
+          .filter(([k]) => !EXERCISE_SKIP_KEYS.has(k))
+          .map(([k, v]) => formatExerciseField(k, v))
+          .filter(Boolean);
+
         return (
           <div key={i} style={workoutExBlock}>
             <div style={workoutRow}>
@@ -328,9 +331,6 @@ function WorkoutShareCard({ share, canSave, saving, saved, onSave }) {
                 <span style={{ opacity: 0.8, marginLeft: 4 }}>— {details.join(" · ")}</span>
               )}
             </div>
-            {ex.notes && (
-              <div style={workoutRowNote}>{ex.notes}</div>
-            )}
           </div>
         );
       })}
@@ -852,13 +852,12 @@ export default function ChatPage() {
   setError("");
 
   try {
-    const normalized = normalizeSharedWorkout(share);
-    const workoutName = normalized?.name || "Workout";
-    const exercises = Array.isArray(normalized?.exercises)
-      ? normalized.exercises
-      : [];
+  const normalized = normalizeSharedWorkout(share);
+  const workoutName = normalized?.name || "Workout";
+  const exercises = Array.isArray(normalized?.exercises)
+    ? normalized.exercises
+    : [];
 
-    // 1) Create workout row (same as AI)
     const { data: createdWorkout, error: wErr } = await supabase
       .from("workouts")
       .insert({
@@ -875,18 +874,25 @@ export default function ChatPage() {
 
     const workoutId = createdWorkout.id;
 
-    // 2) Insert exercises (MATCH AI SAVE EXACTLY)
-    if (Array.isArray(exercises) && exercises.length > 0) {
-
-      const exerciseRows = exercises.map((ex, index) => ({
-        user_id: user.id,
-        workout_id: workoutId,
-        name: ex?.name || "Exercise",
-        sets: Number(ex?.sets) || null,
-        reps: ex?.reps ?? null,
-        weight: null,
-        position: index
-      }));
+    // Lossless save: pack the full original exercise object into the
+    // weight column as JSON so no fields are ever stripped on round-trip.
+    if (exercises.length > 0) {
+      const exerciseRows = exercises.map((ex, index) => {
+        const name = ex?.name || ex?.exercise || ex?.title || "Exercise";
+        // Keep DB columns loosely typed for compatibility, but the true
+        // source of truth is the JSON stored in weight.
+        const setsVal = ex?.sets ?? null;
+        const repsVal = ex?.reps ?? null;
+        return {
+          user_id: user.id,
+          workout_id: workoutId,
+          name,
+          sets: setsVal,
+          reps: repsVal,
+          weight: JSON.stringify(ex),
+          position: index,
+        };
+      });
 
       const { error: exerciseError } = await supabase
         .from("exercises")
@@ -899,7 +905,6 @@ export default function ChatPage() {
       }
     }
 
-    // 3) Mark saved
     setSavedWorkoutByMsgId((p) => ({ ...p, [messageId]: true }));
     setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
 

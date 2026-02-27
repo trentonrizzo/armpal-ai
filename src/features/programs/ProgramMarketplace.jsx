@@ -80,37 +80,37 @@ export default function ProgramMarketplace() {
   }
   if (difficultyFilter !== "All") {
     filtered = filtered.filter(
-      (p) => p.parsed_program?.meta?.difficulty === difficultyFilter
+      (p) => p.program_json?.meta?.difficulty === difficultyFilter
     );
   }
   if (activeTag) {
     filtered = filtered.filter((p) =>
-      p.parsed_program?.meta?.tags?.includes(activeTag)
+      p.program_json?.meta?.tags?.includes(activeTag)
     );
   }
 
   const allTags = [
-    ...new Set(uniquePrograms.flatMap((p) => p.parsed_program?.meta?.tags ?? [])),
+    ...new Set(uniquePrograms.flatMap((p) => p.program_json?.meta?.tags ?? [])),
   ].sort();
 
   const trending = [...uniquePrograms].sort(
     (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
   );
   const hookFocused = uniquePrograms.filter((p) =>
-    p.parsed_program?.meta?.tags?.includes("Hook")
+    p.program_json?.meta?.tags?.includes("Hook")
   );
   const strengthPrograms = uniquePrograms.filter((p) =>
-    p.parsed_program?.meta?.tags?.includes("Strength")
+    p.program_json?.meta?.tags?.includes("Strength")
   );
   const beginnerFriendly = uniquePrograms.filter(
-    (p) => p.parsed_program?.meta?.difficulty === "Beginner"
+    (p) => p.program_json?.meta?.difficulty === "Beginner"
   );
 
   const recommended = [...uniquePrograms]
     .filter((p) => !ownedIds.has(p.id))
     .sort((a, b) => {
-      const aTags = a.parsed_program?.meta?.tags ?? [];
-      const bTags = b.parsed_program?.meta?.tags ?? [];
+      const aTags = a.program_json?.meta?.tags ?? [];
+      const bTags = b.program_json?.meta?.tags ?? [];
       const aPri = (aTags.includes("Hook") ? 2 : 0) + (aTags.includes("Strength") ? 2 : 0);
       const bPri = (bTags.includes("Hook") ? 2 : 0) + (bTags.includes("Strength") ? 2 : 0);
       return bPri - aPri;
