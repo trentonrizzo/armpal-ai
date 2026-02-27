@@ -39,6 +39,7 @@ import ProgramPreview from "./features/programs/ProgramPreview";
 import ProgramViewer from "./features/programs/ProgramViewer";
 import MyPrograms from "./features/programs/MyPrograms";
 import CreateProgram from "./features/programs/CreateProgram";
+import ProgramsErrorBoundary from "./features/programs/ProgramsErrorBoundary";
 
 import GamesHub from "./features/games/GamesHub";
 import GamePage from "./features/games/GamePage";
@@ -189,11 +190,11 @@ function AppContent() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
         <Route path="/pro" element={<ProUpgradePage />} />
-        <Route path="/programs" element={<ProgramMarketplace />} />
-        <Route path="/programs/create" element={<CreateProgram />} />
-        <Route path="/programs/my" element={<MyPrograms />} />
-        <Route path="/programs/:id" element={<ProgramPreview />} />
-        <Route path="/programs/:id/view" element={<ProgramViewer />} />
+        <Route path="/programs" element={<ProgramsErrorBoundary><ProgramMarketplace /></ProgramsErrorBoundary>} />
+        <Route path="/programs/create" element={<ProgramsErrorBoundary><CreateProgram /></ProgramsErrorBoundary>} />
+        <Route path="/programs/my" element={<ProgramsErrorBoundary><MyPrograms /></ProgramsErrorBoundary>} />
+        <Route path="/programs/:id" element={<ProgramsErrorBoundary><ProgramPreview /></ProgramsErrorBoundary>} />
+        <Route path="/programs/:id/view" element={<ProgramsErrorBoundary><ProgramViewer /></ProgramsErrorBoundary>} />
         <Route path="/games" element={<GamesHub />} />
         <Route path="/games/arena-select" element={<ArenaSelect />} />
         <Route path="/games/arena-trainer" element={<ArenaTrainer />} />

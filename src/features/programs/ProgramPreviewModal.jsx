@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 
 export default function ProgramPreviewModal({ program, owned, onClose }) {
   const navigate = useNavigate();
-  const meta = program?.parsed_program?.meta;
-  const layouts = program?.parsed_program?.layouts ?? {};
-  const firstFreq = Array.isArray(program?.parsed_program?.frequency_range) && program.parsed_program.frequency_range[0];
+  const parsed = program?.parsed_program ?? program?.program_json;
+  const meta = parsed?.meta ?? {};
+  const layouts = parsed?.layouts ?? {};
+  const firstFreq = Array.isArray(parsed?.frequency_range) && parsed.frequency_range[0];
   const firstLayout = firstFreq != null ? layouts[String(firstFreq)] : null;
   const firstDay = firstLayout?.days?.[0] ?? firstLayout?.workouts?.[0];
 

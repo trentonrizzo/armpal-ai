@@ -7,7 +7,7 @@ const ADMIN_CREATOR_ID =
 
 export default function ProgramCard({ program, owned, onPreviewClick, creatorProfile }) {
   const navigate = useNavigate();
-  const meta = program?.parsed_program?.meta;
+  const meta = program?.parsed_program?.meta ?? program?.program_json?.meta ?? {};
   const thumbnailStyle = meta?.thumbnail_style ?? "default";
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -101,6 +101,9 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
       )}
       <div style={styles.top}>
         <span style={styles.title}>{program.title}</span>
+        {program.price != null && Number(program.price) > 0 && (
+          <span style={styles.price}>${Number(program.price).toFixed(2)}</span>
+        )}
       </div>
       {meta?.tags?.length > 0 && (
         <div style={styles.tags}>
@@ -209,6 +212,11 @@ const styles = {
     color: "var(--text)",
     fontSize: 15,
     fontWeight: 800,
+  },
+  price: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "var(--accent)",
   },
   owned: {
     background: "color-mix(in srgb, var(--accent) 25%, transparent)",

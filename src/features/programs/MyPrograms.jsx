@@ -23,23 +23,28 @@ export default function MyPrograms() {
         return;
       }
 
-      const { data: upRows, error: upErr } = await supabase
-        .from("user_programs")
-        .select("program_id")
-        .eq("user_id", u.id);
+      const [createdRes, purchasedRes] = await Promise.all([
+        supabase.from("programs").select("*").eq("creator_id", u.id),
+        supabase.from("user_programs").select("program_id").eq("user_id", u.id),
+      ]);
 
       if (!alive) return;
-      if (upErr || !upRows?.length) {
+
+      const createdIds = new Set((createdRes.data ?? []).map((p) => p.id));
+      const purchasedIds = (purchasedRes.data ?? []).map((r) => r.program_id);
+      const allIds = [...createdIds, ...purchasedIds].filter(Boolean);
+      const uniqueIds = [...new Set(allIds)];
+
+      if (uniqueIds.length === 0) {
         setPrograms([]);
         setLoading(false);
         return;
       }
 
-      const programIds = upRows.map((r) => r.program_id);
       const { data: progs, error: progErr } = await supabase
         .from("programs")
         .select("*")
-        .in("id", programIds);
+        .in("id", uniqueIds);
 
       if (!alive) return;
       if (progErr) {

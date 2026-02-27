@@ -13,8 +13,27 @@ export default function ProgramViewer({ previewProgram = null, program: programP
   const [savingId, setSavingId] = useState(null);
   const [aiVariant, setAiVariant] = useState(null);
 
+  function weeksToLogicDays(programJson) {
+    const weeks = programJson?.weeks;
+    if (!Array.isArray(weeks)) return null;
+    const days = [];
+    weeks.forEach((w) => {
+      (w.days || []).forEach((d) => {
+        days.push({
+          name: d.title || d.workout_card?.title || "Workout",
+          exercises: Array.isArray(d.workout_card?.exercises) ? d.workout_card.exercises : [],
+        });
+      });
+    });
+    return days.length ? days : null;
+  }
+
   const preview = previewProgram ?? (programProp?.parsed_program ? { ...programProp, parsed_program: programProp.parsed_program } : null);
-  const logicJson = aiVariant ?? program?.parsed_program ?? logic?.logic_json ?? {};
+  const rawLogic = aiVariant ?? program?.parsed_program ?? logic?.logic_json ?? {};
+  const programJsonDays = weeksToLogicDays(program?.program_json);
+  const logicJson = programJsonDays
+    ? { days: programJsonDays }
+    : rawLogic;
   const simpleDays = Array.isArray(logicJson.days) ? logicJson.days : null;
   const frequencyRange = logicJson.frequency_range ?? [];
   const hasFrequencyRange = !simpleDays && Array.isArray(frequencyRange) && frequencyRange.length > 0;
@@ -63,13 +82,14 @@ export default function ProgramViewer({ previewProgram = null, program: programP
       setProgram(prog);
 
       if (user?.id) {
+        const isCreator = prog.creator_id === user.id;
         const { data: up } = await supabase
           .from("user_programs")
           .select("id")
           .eq("user_id", user.id)
           .eq("program_id", id)
           .maybeSingle();
-        if (alive) setOwned(!!up);
+        if (alive) setOwned(!!up || isCreator);
       }
 
       const { data: logicRow } = await supabase
@@ -79,8 +99,9 @@ export default function ProgramViewer({ previewProgram = null, program: programP
         .maybeSingle();
 
       if (!alive) return;
-      const logic = prog.parsed_program ?? logicRow?.logic_json ?? {};
-      setLogic({ logic_json: logic });
+      const logic = prog.parsed_program ?? prog.program_json ?? logicRow?.logic_json ?? {};
+      const daysFromWeeks = weeksToLogicDays(prog.program_json);
+      setLogic({ logic_json: daysFromWeeks ? { days: daysFromWeeks } : logic });
       const fr = logic?.frequency_range;
       if (Array.isArray(fr) && fr.length > 0) {
         setSelectedFrequency(fr[0]);

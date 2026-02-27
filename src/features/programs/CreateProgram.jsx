@@ -32,6 +32,9 @@ export default function CreateProgram() {
   const [isConverting, setIsConverting] = useState(false);
   const [priceInput, setPriceInput] = useState("15.99");
   const [userId, setUserId] = useState(null);
+  const [difficulty, setDifficulty] = useState("Intermediate");
+  const [saving, setSaving] = useState(false);
+  const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -87,7 +90,7 @@ export default function CreateProgram() {
     setPriceInput(parts.join("."));
   }
 
-  async function saveProgram() {
+  async function saveProgram(asPublish = false) {
     if (!title.trim()) { alert("Enter a title."); return; }
     if (!programModel || !Array.isArray(programModel.weeks) || programModel.weeks.length === 0) {
       alert("Convert with AI first."); return;
@@ -98,33 +101,37 @@ export default function CreateProgram() {
     if (!uid) { alert("Sign in to save."); return; }
 
     const price = Number(priceInput) || 0;
+    const programJsonWithMeta = {
+      ...programModel,
+      meta: { difficulty, tags: programModel.meta?.tags ?? [] },
+    };
 
+    setSaving(true);
     try {
       const { data: inserted, error: insErr } = await supabase.from("programs").insert({
         title,
         preview_description: description || null,
         parsed_program: null,
-        program_json: programModel,
+        program_json: programJsonWithMeta,
         is_ai_parsed: true,
         price,
         creator_id: uid,
+        is_published: !!asPublish,
       }).select("*").single();
       if (insErr) throw insErr;
-      // Simple toast via window event; consumed by ToastProvider
       window.dispatchEvent(new CustomEvent("ap_toast", {
         detail: {
-          title: "Program created",
+          title: asPublish ? "Program published" : "Draft saved",
           body: "View in My Programs",
-          action: {
-            label: "Open",
-            href: "/programs/my",
-          },
+          action: { label: "Open", href: "/programs/my" },
         },
       }));
       navigate("/programs/my");
     } catch (e) {
       console.error(e);
       alert(e.message || "Save failed");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -150,6 +157,21 @@ export default function CreateProgram() {
         onChange={(e) => setDescription(e.target.value)}
         style={S.input}
       />
+      <div style={S.levelRow}>
+        <span style={S.levelLabel}>Level</span>
+        <div style={S.levelOptions}>
+          {LEVELS.map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setDifficulty(l)}
+              style={{ ...S.levelBtn, ...(difficulty === l ? S.levelBtnActive : {}) }}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
       <input
         inputMode="decimal"
         value={priceInput}
@@ -191,17 +213,34 @@ export default function CreateProgram() {
           disabled={isConverting || !rawContent.trim()}
           style={{ ...S.primaryBtn, opacity: isConverting || !rawContent.trim() ? 0.6 : 1 }}
         >
-          {isConverting ? "Converting..." : "Convert With AI ⚡"}
+          {isConverting ? "Converting…" : "Convert With AI ⚡"}
         </button>
         <button
           type="button"
-          onClick={saveProgram}
-          disabled={!convertedProgram}
-          style={{ ...S.secondaryBtn, opacity: !convertedProgram ? 0.5 : 1 }}
+          onClick={() => saveProgram(false)}
+          disabled={!programModel?.weeks?.length || saving}
+          style={{ ...S.secondaryBtn, opacity: !programModel?.weeks?.length ? 0.5 : 1 }}
         >
-          Save Program
+          {saving ? "Saving…" : "Save Draft"}
+        </button>
+        <button
+          type="button"
+          onClick={() => saveProgram(true)}
+          disabled={!programModel?.weeks?.length || saving}
+          style={{ ...S.primaryBtn, opacity: !programModel?.weeks?.length ? 0.5 : 1 }}
+        >
+          {saving ? "Saving…" : "Publish"}
         </button>
       </div>
+
+      {isConverting && (
+        <div style={S.convertingOverlay}>
+          <div style={S.convertingBox}>
+            <p style={S.convertingText}>Converting…</p>
+            <p style={S.convertingSub}>AI is structuring your program</p>
+          </div>
+        </div>
+      )}
 
       {convertError && (
         <p style={{ margin: "0 0 12px", color: "var(--danger, #f55)", fontSize: 13 }}>
@@ -243,6 +282,15 @@ export default function CreateProgram() {
 const S = {
   backBtn: { marginBottom: 16, background: "none", border: "none", color: "var(--text-dim)", fontSize: 14, cursor: "pointer" },
   heading: { fontSize: 20, fontWeight: 800, margin: "0 0 16px", color: "var(--text)" },
+  levelRow: { marginBottom: 16 },
+  levelLabel: { display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-dim)", marginBottom: 8 },
+  levelOptions: { display: "flex", flexWrap: "wrap", gap: 8 },
+  levelBtn: { padding: "8px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--text)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  levelBtnActive: { background: "var(--accent)", borderColor: "var(--accent)" },
+  convertingOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 },
+  convertingBox: { background: "var(--card)", borderRadius: 16, padding: 24, border: "1px solid var(--border)", textAlign: "center", minWidth: 200 },
+  convertingText: { margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "var(--text)" },
+  convertingSub: { margin: 0, fontSize: 13, color: "var(--text-dim)" },
   input: { width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" },
   textarea: { width: "100%", padding: 10, marginBottom: 12, minHeight: 140, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box", resize: "vertical" },
   earningsBox: { marginBottom: 24, padding: 14, background: "var(--card-2)", borderRadius: 10, border: "1px solid var(--border)", fontSize: 14 },
