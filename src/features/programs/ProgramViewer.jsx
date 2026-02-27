@@ -134,13 +134,18 @@ export default function ProgramViewer({ previewProgram = null, program: programP
 
       for (let i = 0; i < workout.exercises.length; i++) {
         const ex = workout.exercises[i];
+        const weightParts = [];
+        if (ex.percentage) weightParts.push(ex.percentage);
+        if (ex.intensity) weightParts.push(ex.intensity);
+        if (ex.rpe) weightParts.push(`RPE ${ex.rpe}`);
+        if (ex.notes) weightParts.push(ex.notes);
         await supabase.from("exercises").insert({
           user_id: userId,
           workout_id: workoutId,
           name: ex.name || "Exercise",
           sets: ex.sets != null ? String(ex.sets) : null,
           reps: ex.reps != null ? String(ex.reps) : null,
-          weight: ex.intensity ?? null,
+          weight: weightParts.join(" · ") || null,
           position: i,
         });
       }
@@ -220,28 +225,47 @@ export default function ProgramViewer({ previewProgram = null, program: programP
           <div style={styles.summary}>{layout.summary}</div>
         )}
 
-        {workouts.length > 0 && workouts.map((workout) => (
-          <div key={workout.name || Math.random()} style={styles.workoutBlock}>
-            <h3 style={styles.workoutTitle}>{workout.name}</h3>
-            {workout.estimated_time && (
-              <p style={styles.estimatedTime}>{workout.estimated_time}</p>
-            )}
-            {workout.exercises?.map((exercise) => (
-              <div key={exercise.name || exercise} style={styles.exerciseRow}>
-                {exercise.name} — {exercise.sets} × {exercise.reps}
-                {exercise.intensity ? ` @ ${exercise.intensity}` : ""}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => saveProgramWorkout(workout)}
-              disabled={!!savingId || !workout.exercises?.length}
-              style={styles.saveBtn}
-            >
-              {savingId === workout.name ? "Saving…" : "Save as Workout Card"}
-            </button>
-          </div>
-        ))}
+        {workouts.length > 0 && workouts.map((workout) => {
+          const exList = Array.isArray(workout.exercises) ? workout.exercises : [];
+          return (
+            <div key={workout.name || Math.random()} style={styles.workoutBlock}>
+              <h3 style={styles.workoutTitle}>{workout.name}</h3>
+              {workout.estimated_time && (
+                <p style={styles.estimatedTime}>{workout.estimated_time}</p>
+              )}
+              {exList.map((exercise, ei) => {
+                const details = [];
+                if (exercise.sets) details.push(`${exercise.sets} sets`);
+                if (exercise.reps) details.push(`${exercise.reps} reps`);
+                if (exercise.percentage) details.push(exercise.percentage);
+                if (exercise.intensity) details.push(`@ ${exercise.intensity}`);
+                if (exercise.rpe) details.push(`RPE ${exercise.rpe}`);
+                if (exercise.tempo) details.push(`Tempo: ${exercise.tempo}`);
+                return (
+                  <div key={ei} style={styles.exerciseRow}>
+                    <span style={{ fontWeight: 600, color: "var(--text)" }}>{exercise.name || "Exercise"}</span>
+                    {details.length > 0 && (
+                      <span style={{ marginLeft: 6 }}>— {details.join(" · ")}</span>
+                    )}
+                    {exercise.notes && (
+                      <div style={{ fontSize: 11, color: "var(--text-dim)", opacity: 0.8, marginTop: 2, paddingLeft: 4 }}>
+                        {exercise.notes}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => saveProgramWorkout(workout)}
+                disabled={!!savingId || !exList.length}
+                style={styles.saveBtn}
+              >
+                {savingId === workout.name ? "Saving…" : "Save as Workout Card"}
+              </button>
+            </div>
+          );
+        })}
 
         {!layout?.summary && workouts.length === 0 && logicJson.phases?.length > 0 && (
           <div style={styles.phaseBlock}>

@@ -1,6 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+
+function buildDetailStr(ex) {
+  const parts = [];
+  if (ex.sets) parts.push(`${ex.sets} sets`);
+  if (ex.reps) parts.push(`${ex.reps} reps`);
+  if (ex.percentage) parts.push(ex.percentage);
+  if (ex.rpe) parts.push(`RPE ${ex.rpe}`);
+  if (ex.tempo) parts.push(`Tempo: ${ex.tempo}`);
+  if (ex.notes) parts.push(ex.notes);
+  return parts.join(" · ");
+}
 
 export default function CreateProgram() {
   const navigate = useNavigate();
@@ -11,6 +22,13 @@ export default function CreateProgram() {
   const [convertError, setConvertError] = useState("");
   const [isConverting, setIsConverting] = useState(false);
   const [priceInput, setPriceInput] = useState("15.99");
+  const [userId, setUserId] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.id) setUserId(user.id);
+    });
+  }, []);
 
   async function convertAI() {
     try {
@@ -18,22 +36,44 @@ export default function CreateProgram() {
       setConvertError("");
       setConvertedProgram(null);
 
-      const res = await fetch("/api/parseProgram", {
+      const res = await fetch(`${window.location.origin}/api/ai/workout-converter`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawContent }),
+        body: JSON.stringify({
+          program_text: rawContent,
+          start_date: null,
+          training_days: null,
+          max_cards: 100,
+          userId,
+        }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Convert failed");
-      const result = data;
 
-      if (!result || !Array.isArray(result.days) || result.days.length === 0) {
-        setConvertedProgram(null);
-        setConvertError("No workout detected");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || data?.message || "Convert failed");
+
+      const workouts = data?.workouts;
+      if (!Array.isArray(workouts) || workouts.length === 0) {
+        setConvertError("No workouts detected. Try rephrasing your program.");
         return;
       }
 
-      setConvertedProgram(result);
+      const days = workouts.map((w, i) => ({
+        name: w.title || w.day_label || `Day ${i + 1}`,
+        week_number: w.week_number || null,
+        exercises: Array.isArray(w.exercises)
+          ? w.exercises.map((ex) => ({
+              name: ex.name || "Exercise",
+              sets: ex.sets || null,
+              reps: ex.reps || null,
+              percentage: ex.percentage || null,
+              rpe: ex.rpe || null,
+              tempo: ex.tempo || null,
+              notes: ex.notes || null,
+            }))
+          : [],
+      }));
+
+      setConvertedProgram({ days });
     } catch (e) {
       console.error(e);
       setConvertError(e.message || "Conversion failed");
@@ -44,57 +84,38 @@ export default function CreateProgram() {
 
   function handlePriceChange(e) {
     let val = e.target.value;
-    // Allow blank while editing
-    if (val === "") {
-      setPriceInput("");
-      return;
-    }
-    // Only digits and optional single dot
-    if (!/^\d*\.?\d*$/.test(val)) {
-      return;
-    }
+    if (val === "") { setPriceInput(""); return; }
+    if (!/^\d*\.?\d*$/.test(val)) return;
     const parts = val.split(".");
-    // Remove non-meaningful leading zeros (keep single zero like "0" or "0.xxx")
     parts[0] = parts[0].replace(/^0+(?=\d)/, "0");
-    // Collapse multiple zeros like "00" -> "0"
     if (parts[0].length > 1 && parts[0].startsWith("0")) {
       parts[0] = parts[0].replace(/^0+/, "0");
     }
-    val = parts.join(".");
-    setPriceInput(val);
+    setPriceInput(parts.join("."));
   }
 
   async function saveProgram() {
-    if (!title.trim()) {
-      alert("Enter a title.");
-      return;
-    }
+    if (!title.trim()) { alert("Enter a title."); return; }
     if (!convertedProgram || !Array.isArray(convertedProgram.days) || convertedProgram.days.length === 0) {
-      alert("Convert with AI first.");
-      return;
+      alert("Convert with AI first."); return;
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
-    if (!userId) {
-      alert("Sign in to save.");
-      return;
-    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) { alert("Sign in to save."); return; }
 
     const price = Number(priceInput) || 0;
 
     try {
-      await supabase.from("programs").insert({
+      const { error: insErr } = await supabase.from("programs").insert({
         title,
         preview_description: description || null,
-        // Store structured workout layout as JSON (days/exercises)
         parsed_program: convertedProgram,
         is_ai_parsed: true,
         price,
-        creator_id: userId,
+        creator_id: uid,
       });
+      if (insErr) throw insErr;
       alert("Program created");
       navigate("/programs");
     } catch (e) {
@@ -103,34 +124,41 @@ export default function CreateProgram() {
     }
   }
 
+  const weeks = {};
+  if (convertedProgram?.days) {
+    convertedProgram.days.forEach((d) => {
+      const wk = d.week_number || 0;
+      if (!weeks[wk]) weeks[wk] = [];
+      weeks[wk].push(d);
+    });
+  }
+
   return (
     <div style={{ padding: "16px 16px 90px", maxWidth: 560, margin: "0 auto" }}>
-      <button type="button" onClick={() => navigate("/programs")} style={{ marginBottom: 16, background: "none", border: "none", color: "var(--text-dim)", fontSize: 14, cursor: "pointer" }}>
+      <button type="button" onClick={() => navigate("/programs")} style={S.backBtn}>
         ← Programs
       </button>
 
-      <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 16px", color: "var(--text)" }}>Create Program</h2>
+      <h2 style={S.heading}>Create Program</h2>
 
       <input
         placeholder="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        style={{ width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}
+        style={S.input}
       />
-
       <input
         placeholder="Description (optional)"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        style={{ width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}
+        style={S.input}
       />
-
       <input
         inputMode="decimal"
         value={priceInput}
         onChange={handlePriceChange}
         placeholder="Price"
-        style={{ width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}
+        style={S.input}
       />
 
       {(() => {
@@ -142,7 +170,7 @@ export default function CreateProgram() {
         const platformFee = p * platformFeePercent;
         const creatorEarnings = p - stripeFee - platformFee;
         return (
-          <div style={{ marginBottom: 24, padding: 14, background: "var(--card-2)", borderRadius: 10, border: "1px solid var(--border)", fontSize: 14 }}>
+          <div style={S.earningsBox}>
             <p style={{ margin: "0 0 6px", color: "var(--text)" }}>You set price: ${p.toFixed(2)}</p>
             <p style={{ margin: "0 0 6px", color: "var(--text-dim)" }}>ArmPal fee (20%): ${platformFee.toFixed(2)}</p>
             <p style={{ margin: "0 0 6px", color: "var(--text-dim)" }}>Stripe fee (est): ${stripeFee.toFixed(2)}</p>
@@ -153,10 +181,10 @@ export default function CreateProgram() {
       })()}
 
       <textarea
-        placeholder="Paste program here..."
+        placeholder={"Paste program here...\n\nSupports: rep ranges (8-12), percentages (80%), RPE, AMRAP, supersets, tempo, notes, multi-week layouts"}
         value={rawContent}
         onChange={(e) => setRawContent(e.target.value)}
-        style={{ width: "100%", padding: 10, marginBottom: 12, minHeight: 120, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box", resize: "vertical" }}
+        style={S.textarea}
       />
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
@@ -164,7 +192,7 @@ export default function CreateProgram() {
           type="button"
           onClick={convertAI}
           disabled={isConverting || !rawContent.trim()}
-          style={{ padding: "12px 18px", borderRadius: 12, border: "none", background: "var(--accent)", color: "var(--text)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+          style={{ ...S.primaryBtn, opacity: isConverting || !rawContent.trim() ? 0.6 : 1 }}
         >
           {isConverting ? "Converting..." : "Convert With AI ⚡"}
         </button>
@@ -172,7 +200,7 @@ export default function CreateProgram() {
           type="button"
           onClick={saveProgram}
           disabled={!convertedProgram}
-          style={{ padding: "12px 18px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--text)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+          style={{ ...S.secondaryBtn, opacity: !convertedProgram ? 0.5 : 1 }}
         >
           Save Program
         </button>
@@ -184,31 +212,57 @@ export default function CreateProgram() {
         </p>
       )}
 
-      {convertedProgram && Array.isArray(convertedProgram.days) && convertedProgram.days.length > 0 && (
+      {convertedProgram && convertedProgram.days.length > 0 && (
         <div>
           <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 12px", color: "var(--text)" }}>
-            Live Preview
+            Live Preview — {convertedProgram.days.length} workout{convertedProgram.days.length !== 1 ? "s" : ""}
           </h3>
-          <div style={{ borderRadius: 14, border: "1px solid var(--border)", padding: 16, background: "var(--card-2)" }}>
-            {convertedProgram.days.map((day, idx) => (
-              <div key={idx} style={{ marginBottom: 16, paddingBottom: 12, borderBottom: idx === convertedProgram.days.length - 1 ? "none" : "1px solid var(--border)" }}>
-                <h4 style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-                  {day.name || `Day ${idx + 1}`}
-                </h4>
-                {Array.isArray(day.exercises) && day.exercises.length > 0 ? (
-                  day.exercises.map((ex, i) => (
-                    <div key={i} style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 4, paddingLeft: 8 }}>
-                      {ex.name || "Exercise"} — {ex.sets ?? "?"} × {ex.reps ?? "?"}
-                    </div>
-                  ))
-                ) : (
-                  <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>No exercises listed.</p>
-                )}
-              </div>
-            ))}
-          </div>
+
+          {Object.entries(weeks).map(([wk, days]) => (
+            <div key={wk} style={{ marginBottom: 20 }}>
+              {wk !== "0" && (
+                <div style={S.weekLabel}>Week {wk}</div>
+              )}
+              {days.map((day, idx) => (
+                <div key={idx} style={S.dayCard}>
+                  <h4 style={S.dayTitle}>{day.name}</h4>
+                  {day.exercises.length > 0 ? (
+                    day.exercises.map((ex, i) => {
+                      const detail = buildDetailStr(ex);
+                      const isSuperset = /superset/i.test(ex.notes || "") || /superset/i.test(ex.name || "");
+                      return (
+                        <div key={i} style={{ ...S.exRow, ...(isSuperset ? S.supersetRow : {}) }}>
+                          <div style={S.exName}>{ex.name}</div>
+                          {detail && <div style={S.exDetail}>{detail}</div>}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>No exercises listed.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
+
+const S = {
+  backBtn: { marginBottom: 16, background: "none", border: "none", color: "var(--text-dim)", fontSize: 14, cursor: "pointer" },
+  heading: { fontSize: 20, fontWeight: 800, margin: "0 0 16px", color: "var(--text)" },
+  input: { width: "100%", padding: 10, marginBottom: 12, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box" },
+  textarea: { width: "100%", padding: 10, marginBottom: 12, minHeight: 140, background: "var(--card-2)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 14, boxSizing: "border-box", resize: "vertical" },
+  earningsBox: { marginBottom: 24, padding: 14, background: "var(--card-2)", borderRadius: 10, border: "1px solid var(--border)", fontSize: 14 },
+  primaryBtn: { padding: "12px 18px", borderRadius: 12, border: "none", background: "var(--accent)", color: "var(--text)", fontWeight: 700, fontSize: 14, cursor: "pointer" },
+  secondaryBtn: { padding: "12px 18px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--text)", fontWeight: 700, fontSize: 14, cursor: "pointer" },
+  weekLabel: { fontSize: 14, fontWeight: 800, color: "var(--accent)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
+  dayCard: { marginBottom: 12, padding: 14, borderRadius: 14, border: "1px solid var(--border)", background: "var(--card-2)" },
+  dayTitle: { margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: "var(--text)" },
+  exRow: { marginBottom: 6, paddingLeft: 8, borderLeft: "2px solid var(--border)" },
+  supersetRow: { borderLeftColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 6%, transparent)", borderRadius: 6, padding: "4px 8px", marginLeft: 0 },
+  exName: { fontSize: 14, fontWeight: 600, color: "var(--text)" },
+  exDetail: { fontSize: 12, color: "var(--text-dim)", marginTop: 2 },
+};

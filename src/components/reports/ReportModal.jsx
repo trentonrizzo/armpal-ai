@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "../../supabaseClient";
 
 const REASONS = [
@@ -15,11 +16,27 @@ export default function ReportModal({ open, onClose, targetType, targetId, targe
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const cardRef = useRef(null);
 
   const title = useMemo(() => {
     const t = targetType === "program" ? "program" : "profile";
     return `Report ${t}`;
   }, [targetType]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (e.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -58,9 +75,19 @@ export default function ReportModal({ open, onClose, targetType, targetId, targe
     }
   }
 
-  return (
-    <div style={styles.backdrop} onClick={onClose}>
-      <div style={styles.card} onClick={(e) => e.stopPropagation()}>
+  return createPortal(
+    <div
+      style={styles.backdrop}
+      onClick={onClose}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div
+        ref={cardRef}
+        style={styles.card}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
         <div style={styles.header}>
           <div style={styles.title}>{title}</div>
           <button type="button" onClick={onClose} style={styles.closeBtn} aria-label="Close">
@@ -105,7 +132,8 @@ export default function ReportModal({ open, onClose, targetType, targetId, targe
           {submitting ? "Submitting…" : "Submit"}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -114,11 +142,14 @@ const styles = {
     position: "fixed",
     inset: 0,
     background: "rgba(0,0,0,0.72)",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 2000,
+    zIndex: 100000,
     padding: 16,
+    isolation: "isolate",
   },
   card: {
     width: "100%",
@@ -128,6 +159,9 @@ const styles = {
     background: "var(--card)",
     padding: 16,
     boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+    position: "relative",
+    zIndex: 100001,
+    pointerEvents: "auto",
   },
   header: {
     display: "flex",
@@ -188,4 +222,3 @@ const styles = {
     cursor: "pointer",
   },
 };
-

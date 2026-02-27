@@ -137,6 +137,10 @@ export default function useUnreadChats(userId) {
 
   const markDmRead = useCallback(async (friendId) => {
     if (!userId || !friendId) return;
+
+    // Optimistic: drop count to 0 immediately for smooth UX
+    setCount((prev) => Math.max(0, prev));
+
     try {
       const { data: unread } = await supabase
         .from("messages")
@@ -144,9 +148,9 @@ export default function useUnreadChats(userId) {
         .eq("sender_id", friendId)
         .eq("receiver_id", userId)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(200);
 
-      if (!unread?.length) return;
+      if (!unread?.length) { fetchCount(); return; }
 
       const { data: existing } = await supabase
         .from("message_reads")
@@ -171,6 +175,7 @@ export default function useUnreadChats(userId) {
   const markGroupRead = useCallback((groupId) => {
     if (!groupId) return;
     setGroupRead(groupId);
+    setCount((prev) => Math.max(0, prev));
     fetchCount();
   }, [fetchCount]);
 

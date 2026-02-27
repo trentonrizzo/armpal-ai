@@ -272,7 +272,7 @@ function normalizeSharedWorkout(share) {
   const rawExercises =
     (Array.isArray(share?.exercises) && share.exercises) ||
     (Array.isArray(share?.workout?.exercises) && share.workout.exercises) ||
-    (Array.isArray(share?.workout?.data?.exercises) && share.workout.data.exercises) || // 🔥 added
+    (Array.isArray(share?.workout?.data?.exercises) && share.workout.data.exercises) ||
     (Array.isArray(share?.items) && share.items) ||
     [];
 
@@ -284,7 +284,11 @@ function normalizeSharedWorkout(share) {
         name: ex.name || ex.exercise || ex.title || "Exercise",
         sets: ex.sets || ex.set || ex.series || null,
         reps: ex.reps || null,
-        notes: ex.notes || null
+        weight: ex.weight || null,
+        percentage: ex.percentage || null,
+        rpe: ex.rpe || null,
+        tempo: ex.tempo || null,
+        notes: ex.notes || null,
       };
     })
     .filter(Boolean);
@@ -298,7 +302,7 @@ function normalizeSharedWorkout(share) {
 // ============================================================
 
 function WorkoutShareCard({ share, canSave, saving, saved, onSave }) {
-const normalized = normalizeSharedWorkout(share);
+  const normalized = normalizeSharedWorkout(share);
   const workoutName = normalized.name || "Workout";
   const exercises = Array.isArray(normalized.exercises)
     ? normalized.exercises
@@ -308,11 +312,28 @@ const normalized = normalizeSharedWorkout(share);
     <div style={workoutCard}>
       <div style={workoutTitle}>📋 {workoutName}</div>
 
-      {exercises.slice(0, 8).map((ex, i) => (
-        <div key={i} style={workoutRow}>
-          • {ex.name}
-        </div>
-      ))}
+      {exercises.map((ex, i) => {
+        const details = [];
+        if (ex.sets) details.push(`${ex.sets} sets`);
+        if (ex.reps) details.push(`${ex.reps} reps`);
+        if (ex.weight) details.push(ex.weight);
+        if (ex.percentage) details.push(ex.percentage);
+        if (ex.rpe) details.push(`RPE ${ex.rpe}`);
+        if (ex.tempo) details.push(`Tempo: ${ex.tempo}`);
+        return (
+          <div key={i} style={workoutExBlock}>
+            <div style={workoutRow}>
+              <span style={{ fontWeight: 700 }}>{ex.name}</span>
+              {details.length > 0 && (
+                <span style={{ opacity: 0.8, marginLeft: 4 }}>— {details.join(" · ")}</span>
+              )}
+            </div>
+            {ex.notes && (
+              <div style={workoutRowNote}>{ex.notes}</div>
+            )}
+          </div>
+        );
+      })}
 
       {exercises.length === 0 && (
         <div style={workoutRowMuted}>No exercises listed</div>
@@ -2249,16 +2270,30 @@ const closeIcon = {
 const workoutCard = {
   display: "flex",
   flexDirection: "column",
-  gap: 6,
+  gap: 4,
 };
 
 const workoutTitle = {
   fontWeight: 900,
+  marginBottom: 4,
+};
+
+const workoutExBlock = {
+  marginBottom: 4,
 };
 
 const workoutRow = {
   fontSize: 13,
-  opacity: 0.9,
+  opacity: 0.95,
+  lineHeight: 1.4,
+};
+
+const workoutRowNote = {
+  fontSize: 11,
+  opacity: 0.65,
+  paddingLeft: 8,
+  fontStyle: "italic",
+  marginTop: 1,
 };
 
 const workoutRowMuted = {

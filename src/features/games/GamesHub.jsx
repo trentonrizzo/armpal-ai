@@ -2,10 +2,120 @@
  * Games hub — exactly 4 tiles: Reaction Speed Test, Flappy Arm, Arm Power Arena (selector), Tic Tac Toe.
  * No duplicates. Arena tile goes to selector (Multiplayer | Trainer).
  */
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import MiniGameShareOverlay from "./MiniGameShareOverlay";
+
+/* ============================================================
+   PIN LOCK GATE
+   ============================================================ */
+const PIN_CODE = "1234";
+
+function PinLockOverlay({ onUnlock }) {
+  const [pin, setPin] = useState("");
+  const [shake, setShake] = useState(false);
+
+  const handleSubmit = useCallback(() => {
+    if (pin === PIN_CODE) {
+      sessionStorage.setItem("minigames_unlocked", "true");
+      onUnlock();
+    } else {
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+    }
+  }, [pin, onUnlock]);
+
+  return (
+    <div style={pinStyles.backdrop}>
+      <style>{`
+        @keyframes pinShake {
+          0%, 100% { transform: translateX(0); }
+          15%, 45%, 75% { transform: translateX(-8px); }
+          30%, 60%, 90% { transform: translateX(8px); }
+        }
+      `}</style>
+      <div
+        style={{
+          ...pinStyles.card,
+          animation: shake ? "pinShake 0.4s ease" : "none",
+        }}
+      >
+        <div style={pinStyles.lockIcon}>🔒</div>
+        <h2 style={pinStyles.title}>Mini Games Locked</h2>
+        <p style={pinStyles.sub}>Enter 4-digit PIN to access</p>
+        <input
+          type="password"
+          inputMode="numeric"
+          maxLength={4}
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          placeholder="••••"
+          autoFocus
+          style={pinStyles.input}
+        />
+        <button type="button" onClick={handleSubmit} style={pinStyles.btn}>
+          Enter
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const pinStyles = {
+  backdrop: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 10000,
+    background: "rgba(0,0,0,0.85)",
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 340,
+    background: "var(--card, #1a1a1a)",
+    border: "1px solid var(--border, #333)",
+    borderRadius: 20,
+    padding: "36px 28px",
+    textAlign: "center",
+    boxShadow: "0 16px 60px rgba(0,0,0,0.6)",
+  },
+  lockIcon: { fontSize: 44, marginBottom: 12 },
+  title: { fontSize: 20, fontWeight: 800, color: "var(--text, #fff)", margin: "0 0 6px" },
+  sub: { fontSize: 14, color: "var(--text-dim, #999)", margin: "0 0 20px" },
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "14px 16px",
+    fontSize: 24,
+    fontWeight: 700,
+    letterSpacing: 12,
+    textAlign: "center",
+    borderRadius: 12,
+    border: "1px solid var(--border, #333)",
+    background: "var(--card-2, #222)",
+    color: "var(--text, #fff)",
+    outline: "none",
+    marginBottom: 16,
+  },
+  btn: {
+    width: "100%",
+    padding: "14px 20px",
+    borderRadius: 12,
+    border: "none",
+    background: "var(--accent)",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+};
 
 const CARD_STYLE = {
   display: "block",
@@ -21,6 +131,9 @@ const CARD_STYLE = {
 
 export default function GamesHub() {
   const navigate = useNavigate();
+  const [unlocked, setUnlocked] = useState(
+    () => sessionStorage.getItem("minigames_unlocked") === "true"
+  );
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -85,6 +198,10 @@ export default function GamesHub() {
       return;
     }
     if (item.game?.id) navigate(`/games/${item.game.id}`);
+  }
+
+  if (!unlocked) {
+    return <PinLockOverlay onUnlock={() => setUnlocked(true)} />;
   }
 
   return (

@@ -150,13 +150,42 @@ export default function NotificationsBell() {
     }
   }
 
+  async function markAllRead() {
+    if (!user?.id || items.length === 0) return;
+    const unreadIds = items.filter((n) => !readSet.has(n.id)).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+
+    setReadSet((prev) => {
+      const next = new Set(prev);
+      unreadIds.forEach((id) => next.add(id));
+      return next;
+    });
+
+    try {
+      const rows = unreadIds.map((id) => ({ notification_id: id, user_id: user.id }));
+      await supabase
+        .from("notification_reads")
+        .upsert(rows, { onConflict: "notification_id,user_id" });
+    } catch (e) {
+      console.error("markAllRead failed", e);
+    }
+  }
+
+  function handleOpen() {
+    const wasOpen = open;
+    setOpen((v) => !v);
+    if (!wasOpen) {
+      markAllRead();
+    }
+  }
+
   if (!user?.id) return null;
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleOpen}
         style={styles.bellBtn}
         aria-label="Notifications"
         title="Notifications"

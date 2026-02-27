@@ -8,42 +8,51 @@ import { supabase } from "../supabaseClient";
 
 const PRO_PRICE_DISPLAY = "$7.99";
 
-const BENEFITS = [
-  {
-    title: "Unlimited measurements, goals, workouts (1,000 cap each)",
-    subPoints: [
-      "Track up to 1,000 entries per category — measurements, goals, workouts, PRs, and progress logs without hitting limits.",
-    ],
-  },
-  {
-    title: "ArmPal AI Coach (25 responses per day)",
-    subPoints: [
-      "Builds customized workouts and programs tailored to you",
-      "Generates savable workout cards instantly",
-      "Saves directly to your workout tracker",
-      "Fully editable — you stay in control",
-      "Helps guide training decisions, progression, and recovery",
-    ],
-  },
-  {
-    title: "Smart Analytics / Progress Overview",
-    subPoints: [
-      "Visualize strength progress, measurements, and performance trends so you always know what's working.",
-    ],
-  },
-  {
-    title: "15% off future programs, supplements & premium content",
-    subPoints: [
-      "Pro members receive exclusive discounts on upcoming ArmPal products and digital programs.",
-    ],
-  },
-  {
-    title: "Future Pro features as we ship them",
-    subPoints: [
-      "Automatic access to new Pro tools and upgrades as ArmPal evolves.",
-    ],
-  },
+const FREE_FEATURES = [
+  "Up to 25 workouts saved",
+  "Basic PR tracking",
+  "Basic measurements",
+  "AI chat (limited)",
+  "Messaging",
+  "Add friends",
+  "Basic dashboard",
+  "Progress photos (private)",
+  "Standard analytics",
+  "Workout sharing",
 ];
+
+const PRO_FEATURES = [
+  "Up to 1,000 saved workouts",
+  "Unlimited program creation",
+  "Advanced AI workout generator",
+  "AI structured program builder",
+  "Rep range + % + RPE support",
+  "Advanced analytics graphs",
+  "1RM prediction",
+  "Goal tracking system",
+  "Milestone celebrations",
+  "Streak tracking",
+  "Full measurement history tracking",
+  "Progress comparison charts",
+  "Workout export visuals",
+  "Shareable progress cards",
+  "AI personality modes (Coach / Savage / Science / Recovery)",
+  "Early feature access",
+  "Creator marketplace access (future)",
+  "Referral rewards system (future)",
+  "Pro badge",
+  "Exclusive premium programs",
+  "Advanced workout sharing tools",
+];
+
+function FeatureCheck({ text, accent }) {
+  return (
+    <li style={S.featureRow}>
+      <span style={{ ...S.checkIcon, color: accent ? "var(--accent)" : "#4ade80" }}>✓</span>
+      <span>{text}</span>
+    </li>
+  );
+}
 
 export default function ProUpgradePage() {
   const navigate = useNavigate();
@@ -89,149 +98,191 @@ export default function ProUpgradePage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: "24px 16px 100px",
-        maxWidth: 480,
-        margin: "0 auto",
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        style={{
-          background: "transparent",
-          border: "none",
-          color: "var(--text)",
-          opacity: 0.8,
-          fontSize: 14,
-          marginBottom: 24,
-          cursor: "pointer",
-        }}
-      >
+    <div style={S.page}>
+      <button type="button" onClick={() => navigate(-1)} style={S.backBtn}>
         ← Back
       </button>
 
-      <div
-        style={{
-          background: "var(--card)",
-          borderRadius: 20,
-          padding: 28,
-          border: "1px solid var(--border)",
-        }}
-      >
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: "0 0 8px" }}>
-          Upgrade to Pro
-        </h1>
-        <p style={{ fontSize: 14, opacity: 0.85, margin: "0 0 24px" }}>
-          Unlock the full ArmPal experience.
+      {/* Hero */}
+      <div style={S.heroCard}>
+        <div style={S.proBadge}>PRO</div>
+        <h1 style={S.heroTitle}>Upgrade to ArmPal Pro</h1>
+        <p style={S.heroSub}>
+          Unlock the full training experience — advanced AI, analytics, program creation, and more.
         </p>
+      </div>
 
-        <ul
-          style={{
-            listStyle: "none",
-            padding: 0,
-            margin: "0 0 28px",
-          }}
-        >
-          {BENEFITS.map((item, i) => (
-            <li
-              key={i}
-              style={{
-                marginBottom: 14,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  fontSize: 15,
-                  fontWeight: 700,
-                }}
-              >
-                <span style={{ color: "var(--accent)" }}>✓</span>
-                <span>{item.title}</span>
-              </div>
-              {item.subPoints && item.subPoints.length > 0 && (
-                <ul
-                  style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: "4px 0 0 28px",
-                    fontSize: 13,
-                    opacity: 0.9,
-                    fontWeight: 400,
-                  }}
-                >
-                  {item.subPoints.map((sub, j) => (
-                    <li
-                      key={j}
-                      style={{
-                        marginBottom: 4,
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                      }}
-                    >
-                      <span style={{ flexShrink: 0 }}>•</span>
-                      <span>{sub}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        <div
-          style={{
-            marginBottom: 24,
-            padding: "14px 16px",
-            background: "var(--card-2)",
-            borderRadius: 12,
-            border: "1px solid var(--border)",
-          }}
-        >
-          <span style={{ fontSize: 13, opacity: 0.8 }}>Price</span>
-          <p style={{ fontSize: 22, fontWeight: 800, margin: "4px 0 0" }}>
-            {PRO_PRICE_DISPLAY} <span style={{ fontWeight: 500, fontSize: 14 }}>/ month</span>
-          </p>
+      {/* Tier comparison */}
+      <div style={S.tierGrid}>
+        {/* Free tier */}
+        <div style={S.tierCard}>
+          <div style={S.tierHeader}>
+            <span style={S.tierLabel}>Free</span>
+            <span style={S.tierPrice}>$0</span>
+          </div>
+          <ul style={S.featureList}>
+            {FREE_FEATURES.map((f) => (
+              <FeatureCheck key={f} text={f} accent={false} />
+            ))}
+          </ul>
         </div>
 
-        {error && (
-          <p
-            style={{
-              color: "var(--accent)",
-              fontSize: 14,
-              marginBottom: 16,
-            }}
-          >
-            {error}
+        {/* Pro tier */}
+        <div style={{ ...S.tierCard, ...S.tierCardPro }}>
+          <div style={S.tierHeader}>
+            <span style={{ ...S.tierLabel, color: "var(--accent)" }}>Pro</span>
+            <span style={S.tierPrice}>
+              {PRO_PRICE_DISPLAY}
+              <span style={S.tierPriceSub}>/mo</span>
+            </span>
+          </div>
+          <ul style={S.featureList}>
+            {PRO_FEATURES.map((f) => (
+              <FeatureCheck key={f} text={f} accent />
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* Price + CTA */}
+      <div style={S.ctaSection}>
+        <div style={S.priceBox}>
+          <span style={S.priceLabel}>Monthly</span>
+          <p style={S.priceValue}>
+            {PRO_PRICE_DISPLAY}
+            <span style={S.priceUnit}> / month</span>
           </p>
-        )}
+          <p style={S.priceSub}>Cancel anytime. No commitment.</p>
+        </div>
+
+        {error && <p style={S.error}>{error}</p>}
 
         <button
           type="button"
           onClick={startCheckout}
           disabled={loading}
-          style={{
-            width: "100%",
-            padding: "14px 20px",
-            borderRadius: 12,
-            border: "none",
-            background: "var(--accent)",
-            color: "var(--text)",
-            fontWeight: 700,
-            fontSize: 16,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.8 : 1,
-          }}
+          style={{ ...S.ctaBtn, opacity: loading ? 0.8 : 1, cursor: loading ? "not-allowed" : "pointer" }}
         >
           {loading ? "Redirecting…" : "Upgrade to Pro"}
         </button>
+        <p style={S.ctaFooter}>Secure checkout via Stripe</p>
       </div>
     </div>
   );
 }
+
+const S = {
+  page: {
+    minHeight: "100vh",
+    padding: "24px 16px 120px",
+    maxWidth: 520,
+    margin: "0 auto",
+  },
+  backBtn: {
+    background: "transparent",
+    border: "none",
+    color: "var(--text)",
+    opacity: 0.8,
+    fontSize: 14,
+    marginBottom: 20,
+    cursor: "pointer",
+  },
+  heroCard: {
+    textAlign: "center",
+    padding: "32px 20px",
+    borderRadius: 20,
+    background: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 15%, var(--card)) 0%, var(--card) 100%)",
+    border: "1px solid color-mix(in srgb, var(--accent) 30%, var(--border))",
+    marginBottom: 24,
+  },
+  proBadge: {
+    display: "inline-block",
+    padding: "4px 16px",
+    borderRadius: 999,
+    background: "var(--accent)",
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: 900,
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  heroTitle: { fontSize: 26, fontWeight: 900, margin: "0 0 8px", color: "var(--text)" },
+  heroSub: { fontSize: 14, opacity: 0.8, margin: 0, lineHeight: 1.5, color: "var(--text-dim)" },
+
+  tierGrid: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+    marginBottom: 24,
+  },
+  tierCard: {
+    borderRadius: 16,
+    padding: "20px 16px",
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+  },
+  tierCardPro: {
+    border: "1.5px solid var(--accent)",
+    background: "color-mix(in srgb, var(--accent) 4%, var(--card))",
+  },
+  tierHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottom: "1px solid var(--border)",
+  },
+  tierLabel: { fontSize: 16, fontWeight: 800, color: "var(--text)" },
+  tierPrice: { fontSize: 20, fontWeight: 800, color: "var(--text)" },
+  tierPriceSub: { fontSize: 13, fontWeight: 500, opacity: 0.7 },
+
+  featureList: { listStyle: "none", padding: 0, margin: 0 },
+  featureRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: "6px 0",
+    fontSize: 14,
+    color: "var(--text)",
+    lineHeight: 1.4,
+  },
+  checkIcon: { flexShrink: 0, fontWeight: 900, fontSize: 15, marginTop: 1 },
+
+  ctaSection: {
+    textAlign: "center",
+  },
+  priceBox: {
+    padding: "18px 20px",
+    borderRadius: 14,
+    background: "var(--card-2)",
+    border: "1px solid var(--border)",
+    marginBottom: 20,
+  },
+  priceLabel: { fontSize: 13, opacity: 0.7, display: "block", marginBottom: 4 },
+  priceValue: { fontSize: 28, fontWeight: 900, margin: "0 0 4px", color: "var(--text)" },
+  priceUnit: { fontSize: 14, fontWeight: 500, opacity: 0.7 },
+  priceSub: { fontSize: 12, opacity: 0.6, margin: 0 },
+
+  error: {
+    color: "#f55",
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  ctaBtn: {
+    width: "100%",
+    padding: "16px 20px",
+    borderRadius: 14,
+    border: "none",
+    background: "var(--accent)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 17,
+    letterSpacing: 0.3,
+  },
+  ctaFooter: {
+    marginTop: 10,
+    fontSize: 12,
+    opacity: 0.5,
+  },
+};
