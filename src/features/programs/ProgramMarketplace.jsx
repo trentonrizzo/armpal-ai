@@ -147,7 +147,17 @@ export default function ProgramMarketplace() {
 
   return (
     <div style={styles.wrap}>
-      <h1 style={styles.title}>Programs</h1>
+      <header style={styles.pageHeader}>
+        <button
+          type="button"
+          aria-label="Back to dashboard"
+          onClick={() => navigate("/")}
+          style={styles.backBtn}
+        >
+          <span style={{ fontSize: 20, lineHeight: 1 }}>‹</span>
+        </button>
+        <h1 style={styles.title}>Programs</h1>
+      </header>
 
       <div style={styles.headerRow}>
         <Link to="/programs/create" className="pill" style={styles.createLink}>
@@ -268,10 +278,29 @@ const styles = {
     maxWidth: "900px",
     margin: "0 auto",
   },
+  pageHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
   title: {
     fontSize: 22,
     fontWeight: 900,
-    margin: "0 0 16px",
+    margin: 0,
     color: "var(--text)",
   },
   headerRow: {
