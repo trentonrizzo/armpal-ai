@@ -116,7 +116,7 @@ export default function CreateProgram() {
         is_ai_parsed: true,
         price,
         creator_id: uid,
-        is_published: !!asPublish,
+        is_published: asPublish === true,
       }).select("*").single();
       if (insErr) throw insErr;
       window.dispatchEvent(new CustomEvent("ap_toast", {
@@ -128,8 +128,8 @@ export default function CreateProgram() {
       }));
       navigate("/programs/my");
     } catch (e) {
-      console.error(e);
-      alert(e.message || "Save failed");
+      console.error("[CreateProgram] Save failed:", e?.message ?? e, e);
+      alert(e?.message || "Save failed");
     } finally {
       setSaving(false);
     }

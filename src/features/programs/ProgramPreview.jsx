@@ -89,29 +89,36 @@ export default function ProgramPreview() {
     if (!user?.id || !program?.id || program.creator_id !== user.id || deleting) return;
     if (!window.confirm("Remove this program from the marketplace?")) return;
     setDeleting(true);
-    const { error } = await supabase
-      .from("programs")
-      .delete()
-      .eq("id", program.id);
-    setDeleting(false);
-    if (error) {
-      // If hard delete is blocked (e.g., purchases), fall back to unpublish.
-      console.error("Delete program failed (falling back to unpublish)", error);
-      const { error: upErr } = await supabase
+    try {
+      const { error } = await supabase
         .from("programs")
-        .update({ is_published: false, unpublished_at: new Date().toISOString() })
+        .delete()
         .eq("id", program.id);
-      if (upErr) {
-        console.error("Unpublish failed", upErr);
-        alert(upErr.message || "Could not unpublish program.");
+      if (error) {
+        console.error("[ProgramPreview] Delete program failed (falling back to unpublish):", error?.message ?? error, error);
+        const { error: upErr } = await supabase
+          .from("programs")
+          .update({ is_published: false })
+          .eq("id", program.id);
+        if (upErr) {
+          console.error("[ProgramPreview] Unpublish failed:", upErr?.message ?? upErr, upErr);
+          alert(upErr?.message || "Could not unpublish program.");
+          setDeleting(false);
+          return;
+        }
+        alert("Program unpublished (removed from marketplace).");
+        navigate("/programs");
+        setDeleting(false);
         return;
       }
-      alert("Program unpublished (removed from marketplace).");
+      alert("Program deleted.");
       navigate("/programs");
-      return;
+    } catch (e) {
+      console.error("[ProgramPreview] handleRemoveFromMarketplace error:", e?.message ?? e, e);
+      alert(e?.message || "Something went wrong.");
+    } finally {
+      setDeleting(false);
     }
-    alert("Program deleted.");
-    navigate("/programs");
   }
 
   if (loading) {
