@@ -739,65 +739,23 @@ export default function FriendsPage() {
   return (
     <div style={pageWrap}>
       <div style={topHeaderRow}>
-  <h1 style={title}>Friends</h1>
-  <button
-    type="button"
-    onClick={() => navigate("/groups")}
-    style={qrIconBtn}
-  >
-    Groups
-  </button>
-  <button
-    type="button"
-    aria-label="Open QR"
-    onClick={() => setShowQR(true)}
-    style={qrIconBtn}
-  >
-    <span style={{ fontSize: 18, lineHeight: 1 }}>▦</span>
-  </button>
-</div>
-
-      <button
-        type="button"
-        onClick={() => navigate("/find-friends")}
-        style={{
-          display: "block",
-          width: "100%",
-          padding: "12px 16px",
-          marginBottom: 16,
-          borderRadius: 12,
-          border: "1px solid var(--border)",
-          background: "var(--card-2)",
-          color: "var(--text)",
-          fontSize: 15,
-          fontWeight: 700,
-          cursor: "pointer",
-          position: "relative",
-        }}
-      >
-        Find Friends Nearby
-        {recommendedCount > 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: 8,
-              right: 12,
-              width: 20,
-              height: 20,
-              borderRadius: "50%",
-              background: "var(--accent)",
-              color: "var(--text)",
-              fontSize: 11,
-              fontWeight: 800,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {recommendedCount > 99 ? "99+" : recommendedCount}
-          </span>
-        )}
-      </button>
+        <button
+          type="button"
+          aria-label="Back"
+          onClick={() => navigate(-1)}
+          style={backBtn}
+        >
+          <span style={{ fontSize: 20, lineHeight: 1 }}>‹</span>
+        </button>
+        <button
+          type="button"
+          aria-label="Open QR"
+          onClick={() => setShowQR(true)}
+          style={qrIconBtn}
+        >
+          <span style={{ fontSize: 20, lineHeight: 1 }}>▦</span>
+        </button>
+      </div>
 
       {/* ADD FRIEND */}
       <section style={card}>
@@ -930,6 +888,29 @@ export default function FriendsPage() {
         {!showAddBox && successMsg && <p style={successStyle}>{successMsg}</p>}
       </section>
 
+      {/* GROUPS + FRIEND FINDER */}
+      <div style={gridRow}>
+        <button
+          type="button"
+          onClick={() => navigate("/groups")}
+          style={gridBtn}
+        >
+          <span>Groups</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/find-friends")}
+          style={gridBtn}
+        >
+          <span>Friend Finder</span>
+          {recommendedCount > 0 && (
+            <span style={gridBadge}>
+              {recommendedCount > 99 ? "99+" : recommendedCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* PENDING REQUESTS (friend_requests sent by me) */}
       {pendingRequests.length > 0 && (
         <section style={card}>
@@ -939,12 +920,18 @@ export default function FriendsPage() {
             const name = p ? pickDisplayName(p) : "Unknown";
             return (
               <div key={req.id} style={rowBase}>
-                <div style={rowLeft}>
+                <button
+                  type="button"
+                  style={{ ...rowLeft, background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
+                  onClick={() => {
+                    if (p?.id) navigate(`/friend/${p.id}`);
+                  }}
+                >
                   <div style={avatarCircle}>
                     {p ? initialsLetter(p) : "?"}
                   </div>
                   <p style={nameText}>{name}</p>
-                </div>
+                </button>
                 <button
                   type="button"
                   style={withdrawBtn}
@@ -1153,6 +1140,19 @@ const topHeaderRow = {
   position: "relative",
 };
 
+const backBtn = {
+  width: 44,
+  height: 44,
+  borderRadius: 999,
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+};
+
 const qrIconBtn = {
   width: 44,
   height: 44,
@@ -1177,10 +1177,10 @@ const title = {
 
 const card = {
   background: "var(--card)",
-  borderRadius: 18,
+  borderRadius: 16,
   padding: 16,
   border: "1px solid var(--border)",
-  marginBottom: 20,
+  marginBottom: 16,
   boxShadow: "0 10px 30px rgba(0,0,0,0.45)",
 };
 
@@ -1295,8 +1295,46 @@ const rowBase = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: "10px 0",
+  padding: "8px 0",
   borderBottom: "1px solid var(--border)",
+};
+
+const gridRow = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+  marginBottom: 16,
+};
+
+const gridBtn = {
+  position: "relative",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const gridBadge = {
+  position: "absolute",
+  top: 6,
+  right: 8,
+  minWidth: 18,
+  height: 18,
+  borderRadius: 999,
+  background: "var(--accent)",
+  color: "var(--text)",
+  fontSize: 11,
+  fontWeight: 800,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const rowClickable = {
