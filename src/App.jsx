@@ -58,6 +58,7 @@ import NotificationsBell from "./components/notifications/NotificationsBell";
 
 import usePresence from "./hooks/usePresence";
 import useNotifications from "./hooks/useNotifications";
+import { InAppNotificationProvider, InAppNotificationRoot } from "./hooks/useInAppNotifications";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -268,7 +269,10 @@ export default function App() {
       ) : (
         <AppProvider>
           <ToastProvider>
-            <AppContent />
+            <InAppNotificationProvider>
+              <InAppNotificationRoot userId={session?.user?.id} />
+              <AppContent />
+            </InAppNotificationProvider>
           </ToastProvider>
         </AppProvider>
       )}
