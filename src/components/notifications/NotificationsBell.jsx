@@ -137,6 +137,7 @@ export default function NotificationsBell() {
         link: newLink.trim() || null,
       });
       if (error) throw error;
+      if (import.meta.env.DEV) console.log("[notify] global notification inserted");
       setNewTitle("");
       setNewBody("");
       setNewLink("");

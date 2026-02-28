@@ -88,6 +88,7 @@ export default function useNotifications(userId) {
           )
           .then(({ error }) => {
             if (error) console.warn("push_subscriptions upsert:", error.message);
+            else if (import.meta.env.DEV) console.log("[push] subscription stored for user");
           });
       } catch (err) {
         console.error("[Push] Registration failed:", err);

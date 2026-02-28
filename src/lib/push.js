@@ -63,5 +63,6 @@ export async function enablePush(userId) {
       { onConflict: "user_id,endpoint" }
     );
     if (error) console.warn("push_subscriptions upsert:", error.message);
+    else if (import.meta.env.DEV) console.log("[push] subscription stored for user");
   }
 }

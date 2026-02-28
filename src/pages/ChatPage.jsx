@@ -365,21 +365,17 @@ export default function ChatPage() {
   const toast = useToast();
   const isGroup = !!groupId;
 
-  function firePush(receiverId, text) {
+  async function notifyRecipient(receiverId, title, body, link) {
+    if (!receiverId) return;
     try {
-      fetch("https://ewlwkasjtwsfemqnkrkp.supabase.co/functions/v1/send-push", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-push-secret": "armpal_push_secret_12345",
-        },
-        body: JSON.stringify({
-          user_id: receiverId,
-          title: "New Message",
-          body: text || "New message",
-          link: "/messages",
-        }),
-      }).catch(() => {});
+      const { error } = await supabase.from("notifications").insert({
+        user_id: receiverId,
+        title: title || "New Message",
+        body: body || "New message",
+        link: link ?? "/messages",
+      });
+      if (error && import.meta.env.DEV) console.warn("[notify] insert failed:", error.message);
+      if (!error && import.meta.env.DEV) console.log("[notify] notification inserted for", receiverId);
     } catch (_) {}
   }
 
@@ -945,7 +941,7 @@ export default function ChatPage() {
           group_id: null,
           text: payload,
         });
-        firePush(friendId, payload);
+        notifyRecipient(friendId, "New Message", payload, "/messages");
       }
     } catch (e) {
       const msg = e?.message || "Send failed";
@@ -1001,7 +997,7 @@ export default function ChatPage() {
           group_id: null,
           image_url: data.publicUrl,
         });
-        firePush(friendId, "Sent an image");
+        notifyRecipient(friendId, "New Message", "Sent an image", "/messages");
       }
     } catch (e) {
       const msgImg = e?.message || "Image send failed";
@@ -1059,7 +1055,7 @@ export default function ChatPage() {
           group_id: null,
           video_url: data.publicUrl,
         });
-        firePush(friendId, "Sent a video");
+        notifyRecipient(friendId, "New Message", "Sent a video", "/messages");
       }
     } catch (e) {
       const msgVid = e?.message || "Video send failed";
@@ -1212,7 +1208,7 @@ export default function ChatPage() {
           audio_url: data.publicUrl,
           audio_duration: recordDuration,
         });
-        firePush(friendId, "Sent a voice message");
+        notifyRecipient(friendId, "New Message", "Sent a voice message", "/messages");
       }
 
       setRecordedBlob(null);

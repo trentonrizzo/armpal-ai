@@ -20,6 +20,8 @@ interface NotificationRecord {
   link?: string;
 }
 
+const isDev = Deno.env.get("DENO_ENV") === "development" || !Deno.env.get("DENO_ENV");
+
 async function handleNotification(record: NotificationRecord) {
   const { user_id, title, body, link } = record;
   if (!user_id) return { ok: false, reason: "no_user_id" };
@@ -35,8 +37,11 @@ async function handleNotification(record: NotificationRecord) {
   }
 
   if (!subscriptions || subscriptions.length === 0) {
+    if (isDev) console.log("[send-push] notification inserted, push subscription count: 0");
     return { ok: true, sent: 0, reason: "no_subscriptions" };
   }
+
+  if (isDev) console.log("[send-push] push subscription found count:", subscriptions.length);
 
   const pushPayload = JSON.stringify({
     title: title || "ArmPal",
@@ -51,12 +56,14 @@ async function handleNotification(record: NotificationRecord) {
     try {
       await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, pushPayload);
       sent++;
+      if (isDev) console.log("[send-push] push sent success for endpoint");
     } catch (err: unknown) {
       const status = (err as { statusCode?: number }).statusCode;
       if (status === 404 || status === 410) {
         staleIds.push(sub.id);
       } else {
         console.error(`Push failed for ${sub.endpoint}:`, err);
+        if (isDev) console.log("[send-push] push sent failure");
       }
     }
   }
@@ -78,9 +85,9 @@ admin
     async (payload) => {
       const row = payload.new as NotificationRecord;
       if (!row.user_id) return; // skip global notifications
-      console.log("Realtime INSERT on notifications:", row.user_id);
+      if (isDev) console.log("[send-push] notification inserted, user_id:", row.user_id);
       const result = await handleNotification(row);
-      console.log("Push result:", result);
+      if (isDev) console.log("[send-push] push result:", result);
     }
   )
   .subscribe((status) => {
@@ -103,7 +110,7 @@ function getCorsHeaders(req: Request): Record<string, string> {
     "Access-Control-Allow-Origin": allowed,
     "Vary": "Origin",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-push-secret",
     "Access-Control-Max-Age": "86400",
   };
 }
@@ -132,8 +139,16 @@ Deno.serve(async (req) => {
     );
   }
 
-  // POST — manual trigger fallback
+  // POST — manual trigger fallback (requires PUSH_SECRET)
   if (req.method === "POST") {
+    const secret = req.headers.get("x-push-secret");
+    const expected = Deno.env.get("PUSH_SECRET");
+    if (expected != null && expected !== "" && secret !== expected) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
     try {
       const payload = await req.json();
       const record = payload.record ?? payload;
