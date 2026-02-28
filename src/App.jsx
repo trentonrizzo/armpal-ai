@@ -58,7 +58,8 @@ import NotificationsBell from "./components/notifications/NotificationsBell";
 
 import usePresence from "./hooks/usePresence";
 import useNotifications from "./hooks/useNotifications";
-import { InAppNotificationProvider, InAppNotificationRoot } from "./hooks/useInAppNotifications";
+import useInAppNotifications from "./hooks/useInAppNotifications";
+import InAppNotification from "./components/notifications/InAppNotification";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -140,6 +141,25 @@ function RuntimeSplash({ show }) {
         }
       `}</style>
     </div>
+  );
+}
+
+function AuthenticatedLayout({ session }) {
+  const [notifQueue, setNotifQueue] = useState([]);
+
+  useInAppNotifications(session?.user?.id, (n) => {
+    setNotifQueue((prev) => [...prev, n]);
+  });
+
+  const removeFirstNotif = () => {
+    setNotifQueue((prev) => prev.slice(1));
+  };
+
+  return (
+    <>
+      <InAppNotification queue={notifQueue} removeFirst={removeFirstNotif} />
+      <AppContent />
+    </>
   );
 }
 
@@ -269,10 +289,7 @@ export default function App() {
       ) : (
         <AppProvider>
           <ToastProvider>
-            <InAppNotificationProvider>
-              <InAppNotificationRoot userId={session?.user?.id} />
-              <AppContent />
-            </InAppNotificationProvider>
+            <AuthenticatedLayout session={session} />
           </ToastProvider>
         </AppProvider>
       )}
