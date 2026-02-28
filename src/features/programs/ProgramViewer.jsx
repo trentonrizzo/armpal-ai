@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import { buildDisplayText, getDisplayText } from "../../utils/displayText";
 
 export default function ProgramViewer({ previewProgram = null, program: programProp = null }) {
   const { id } = useParams();
@@ -160,6 +161,7 @@ export default function ProgramViewer({ previewProgram = null, program: programP
         if (ex.intensity) weightParts.push(ex.intensity);
         if (ex.rpe) weightParts.push(`RPE ${ex.rpe}`);
         if (ex.notes) weightParts.push(ex.notes);
+        const display_text = ex.display_text ?? buildDisplayText(ex);
         await supabase.from("exercises").insert({
           user_id: userId,
           workout_id: workoutId,
@@ -167,6 +169,7 @@ export default function ProgramViewer({ previewProgram = null, program: programP
           sets: ex.sets != null ? String(ex.sets) : null,
           reps: ex.reps != null ? String(ex.reps) : null,
           weight: weightParts.join(" · ") || null,
+          display_text,
           position: i,
         });
       }
@@ -254,28 +257,11 @@ export default function ProgramViewer({ previewProgram = null, program: programP
               {workout.estimated_time && (
                 <p style={styles.estimatedTime}>{workout.estimated_time}</p>
               )}
-              {exList.map((exercise, ei) => {
-                const details = [];
-                if (exercise.sets) details.push(`${exercise.sets} sets`);
-                if (exercise.reps) details.push(`${exercise.reps} reps`);
-                if (exercise.percentage) details.push(exercise.percentage);
-                if (exercise.intensity) details.push(`@ ${exercise.intensity}`);
-                if (exercise.rpe) details.push(`RPE ${exercise.rpe}`);
-                if (exercise.tempo) details.push(`Tempo: ${exercise.tempo}`);
-                return (
-                  <div key={ei} style={styles.exerciseRow}>
-                    <span style={{ fontWeight: 600, color: "var(--text)" }}>{exercise.name || "Exercise"}</span>
-                    {details.length > 0 && (
-                      <span style={{ marginLeft: 6 }}>— {details.join(" · ")}</span>
-                    )}
-                    {exercise.notes && (
-                      <div style={{ fontSize: 11, color: "var(--text-dim)", opacity: 0.8, marginTop: 2, paddingLeft: 4 }}>
-                        {exercise.notes}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {exList.map((exercise, ei) => (
+                <div key={ei} style={styles.exerciseRow}>
+                  <span style={{ fontWeight: 600, color: "var(--text)" }}>{getDisplayText(exercise)}</span>
+                </div>
+              ))}
               <button
                 type="button"
                 onClick={() => saveProgramWorkout(workout)}

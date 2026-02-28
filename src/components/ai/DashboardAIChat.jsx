@@ -14,6 +14,7 @@ import {
 } from "../../api/aiConversations";
 import AISettingsOverlay from "./AISettingsOverlay";
 import EmptyState from "../EmptyState";
+import { buildDisplayText, getDisplayText } from "../../utils/displayText";
 
 export default function DashboardAIChat({ onClose }) {
   const navigate = useNavigate();
@@ -161,7 +162,6 @@ export default function DashboardAIChat({ onClose }) {
       const workoutId = workoutInsert.id;
 
       if (Array.isArray(workout.exercises) && workout.exercises.length > 0) {
-
         const exerciseRows = workout.exercises.map((ex, index) => ({
           user_id: userId,
           workout_id: workoutId,
@@ -169,6 +169,7 @@ export default function DashboardAIChat({ onClose }) {
           sets: ex.sets ?? null,
           reps: ex.reps ?? null,
           weight: JSON.stringify(ex),
+          display_text: ex.display_text ?? buildDisplayText(ex),
           position: index,
         }));
 
@@ -821,8 +822,7 @@ if (!res.ok) {
                     });
                     return (
                       <div key={idx} style={{ marginTop: 6 }}>
-                        <div><strong>{ex.name}</strong></div>
-                        {details.length > 0 && <div>{details.join(" · ")}</div>}
+                        <div><strong>{getDisplayText(ex)}</strong></div>
                       </div>
                     );
                   })}

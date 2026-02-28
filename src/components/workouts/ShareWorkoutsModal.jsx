@@ -151,7 +151,7 @@ export default function ShareWorkoutsModal({ open, onClose }) {
   async function loadExercisesForWorkout(workoutId) {
     const { data, error } = await supabase
       .from("exercises")
-      .select("name,sets,reps,weight,position")
+      .select("name,sets,reps,weight,position,display_text")
       .eq("workout_id", workoutId)
       .order("position", { ascending: true });
 

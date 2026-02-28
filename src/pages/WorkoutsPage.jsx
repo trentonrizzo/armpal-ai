@@ -18,6 +18,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { achievementBus } from "../utils/achievementBus";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
+import { getDisplayText, buildDisplayText } from "../utils/displayText";
 import { supabase } from "../supabaseClient";
 import {
   DndContext,
@@ -410,6 +411,12 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
       sets: exerciseSets === "" ? null : Number(exerciseSets),
       reps: exerciseReps === "" ? null : Number(exerciseReps),
       weight: exerciseWeight === "" ? null : exerciseWeight,
+      display_text: buildDisplayText({
+        name: exerciseName || "Exercise",
+        sets: exerciseSets === "" ? null : Number(exerciseSets),
+        reps: exerciseReps === "" ? null : Number(exerciseReps),
+        weight: exerciseWeight === "" ? null : exerciseWeight,
+      }),
     };
 
     if (editingExercise) {
@@ -904,13 +911,7 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
                                       <p
                                         style={{ margin: 0, fontSize: 14, fontWeight: 600 }}
                                       >
-                                        {ex.name}
-                                      </p>
-                                      <p style={{ margin: 0, fontSize: 11, opacity: 0.7 }}>
-                                        {(ex.sets ?? "-") +
-                                          " x " +
-                                          (ex.reps ?? "-") +
-                                          (() => { const w = formatExerciseWeight(ex.weight); return w ? ` — ${w}` : ""; })()}
+                                        {getDisplayText(ex)}
                                       </p>
                                     </div>
                                     <FaEdit
@@ -1129,13 +1130,7 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
                     <div key={ex.id} style={focusExerciseCard}>
                       <div style={focusExerciseTopRow}>
                         <div style={{ flex: 1 }}>
-                          <div style={focusExerciseName}>{ex.name || "Exercise"}</div>
-                          <div style={focusExerciseMeta}>
-                            {(ex.sets ?? "-") +
-                              " x " +
-                              (ex.reps ?? "-") +
-                              (() => { const w = formatExerciseWeight(ex.weight); return w ? ` — ${w}` : ""; })()}
-                          </div>
+                          <div style={focusExerciseName}>{getDisplayText(ex)}</div>
                         </div>
 
                         <div style={focusExerciseSetsPill}>

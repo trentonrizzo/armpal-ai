@@ -73,6 +73,7 @@ RULES:
 - Preserve exercise details exactly as described.
 - Do NOT invent exercises not described. Do NOT assign dates (backend handles dates).
 - For sets/reps that are ranges (e.g. 8-12), put the range string as-is in the reps field.
+- For EVERY exercise include "display_text": the exact single-line string to display (e.g. "Bench Press — 5x5 — 80%" or "Squat — 3x5 @ RPE 8"). This is the canonical display; preserve percentages, RPE, notes, parentheses exactly as written.
 
 JSON SCHEMA:
 {
@@ -88,7 +89,8 @@ JSON SCHEMA:
           "reps": "5",
           "percentage": "80%",
           "rpe": "",
-          "notes": ""
+          "notes": "",
+          "display_text": "Bench Press — 5x5 — 80%"
         }
       ]
     }

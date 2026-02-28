@@ -1,5 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { getDisplayText } from "../../utils/displayText";
 
 export default function ProgramPreviewModal({ program, owned, onClose }) {
   const navigate = useNavigate();
@@ -49,8 +50,7 @@ export default function ProgramPreviewModal({ program, owned, onClose }) {
             <h4>Preview: {firstDay.name}</h4>
             {firstDay.exercises?.slice(0, 5).map((ex, i) => (
               <div key={i} className="program-preview-modal-exercise">
-                {ex.name} — {ex.sets} × {ex.reps}
-                {ex.intensity ? ` @ ${ex.intensity}` : ""}
+                {getDisplayText(ex)}
               </div>
             ))}
             {firstDay.exercises?.length > 5 && (

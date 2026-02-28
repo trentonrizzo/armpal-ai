@@ -770,7 +770,7 @@ function buildWorkoutPayload(workout, exercises) {
         try {
           const parsed = JSON.parse(ex.weight);
           if (parsed && typeof parsed === "object") {
-            return parsed;
+            return { ...parsed, display_text: ex.display_text ?? parsed.display_text ?? null };
           }
         } catch {
           // fall through to column-based object
@@ -782,6 +782,7 @@ function buildWorkoutPayload(workout, exercises) {
         reps: ex.reps,
         weight: ex.weight,
         position: ex.position,
+        display_text: ex.display_text ?? null,
       };
     }),
     sent_at: new Date().toISOString(),

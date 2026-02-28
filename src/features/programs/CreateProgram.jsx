@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import { getDisplayText } from "../../utils/displayText";
 
 function workoutsToProgramModel(workouts) {
   // Flatten workouts into weeks/days; if no explicit week/day info,
@@ -263,7 +264,7 @@ export default function CreateProgram() {
                   {Array.isArray(day.workout_card?.exercises) && day.workout_card.exercises.length > 0 ? (
                     day.workout_card.exercises.map((ex, i) => (
                       <div key={i} style={S.exRow}>
-                        <div style={S.exName}>{ex.name || "Exercise"}</div>
+                        <div style={S.exName}>{getDisplayText(ex)}</div>
                       </div>
                     ))
                   ) : (

@@ -41,6 +41,7 @@ import EmptyState from "../components/EmptyState";
 import useUnreadChats from "../hooks/useUnreadChats";
 import { SkeletonCard } from "../components/Skeleton";
 import { getOrCreateConversation } from "../utils/getOrCreateConversation";
+import { getDisplayText, buildDisplayText } from "../utils/displayText";
 import Cropper from "react-easy-crop";
 
 // ============================================================
@@ -312,28 +313,17 @@ function WorkoutShareCard({ share, canSave, saving, saved, onSave }) {
   const exercises = Array.isArray(normalized.exercises)
     ? normalized.exercises
     : [];
-
   return (
     <div style={workoutCard}>
       <div style={workoutTitle}>📋 {workoutName}</div>
 
-      {exercises.map((ex, i) => {
-        const details = Object.entries(ex)
-          .filter(([k]) => !EXERCISE_SKIP_KEYS.has(k))
-          .map(([k, v]) => formatExerciseField(k, v))
-          .filter(Boolean);
-
-        return (
-          <div key={i} style={workoutExBlock}>
-            <div style={workoutRow}>
-              <span style={{ fontWeight: 700 }}>{ex.name}</span>
-              {details.length > 0 && (
-                <span style={{ opacity: 0.8, marginLeft: 4 }}>— {details.join(" · ")}</span>
-              )}
-            </div>
+      {exercises.map((ex, i) => (
+        <div key={i} style={workoutExBlock}>
+          <div style={workoutRow}>
+            <span style={{ fontWeight: 700 }}>{getDisplayText(ex)}</span>
           </div>
-        );
-      })}
+        </div>
+      ))}
 
       {exercises.length === 0 && (
         <div style={workoutRowMuted}>No exercises listed</div>
@@ -874,15 +864,13 @@ export default function ChatPage() {
 
     const workoutId = createdWorkout.id;
 
-    // Lossless save: pack the full original exercise object into the
-    // weight column as JSON so no fields are ever stripped on round-trip.
+    // Universal format preservation: display_text = original string exactly.
     if (exercises.length > 0) {
-      const exerciseRows = exercises.map((ex, index) => {
+          const exerciseRows = exercises.map((ex, index) => {
         const name = ex?.name || ex?.exercise || ex?.title || "Exercise";
-        // Keep DB columns loosely typed for compatibility, but the true
-        // source of truth is the JSON stored in weight.
         const setsVal = ex?.sets ?? null;
         const repsVal = ex?.reps ?? null;
+        const display_text = ex?.display_text ?? buildDisplayText(ex);
         return {
           user_id: user.id,
           workout_id: workoutId,
@@ -890,6 +878,7 @@ export default function ChatPage() {
           sets: setsVal,
           reps: repsVal,
           weight: JSON.stringify(ex),
+          display_text,
           position: index,
         };
       });

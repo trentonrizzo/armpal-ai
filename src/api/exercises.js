@@ -1,7 +1,7 @@
 import { supabase } from "../supabaseClient";
 
-// Add an exercise to a workout
-export async function addExercise({ userId, workoutId, name, sets, reps, weight }) {
+// Add an exercise to a workout. Pass display_text to preserve exact format (universal save rule).
+export async function addExercise({ userId, workoutId, name, sets, reps, weight, display_text }) {
   const { data, error } = await supabase
     .from("exercises")
     .insert([
@@ -12,6 +12,7 @@ export async function addExercise({ userId, workoutId, name, sets, reps, weight 
         sets: sets ? Number(sets) : null,
         reps: reps ? Number(reps) : null,
         weight: weight ?? "",
+        display_text: display_text ?? null,
       },
     ])
     .select();

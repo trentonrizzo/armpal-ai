@@ -1,4 +1,5 @@
 import React from "react";
+import { getDisplayText } from "../../utils/displayText";
 
 export default function AIWorkoutPreviewOverlay({
   open,
@@ -29,7 +30,7 @@ export default function AIWorkoutPreviewOverlay({
           {workout.exercises?.map((exercise, idx) => (
             <div key={idx} className="exercise-card">
               <h3>
-                {idx + 1}. {exercise.name}
+                {idx + 1}. {getDisplayText(exercise)}
               </h3>
 
               {exercise.notes && (

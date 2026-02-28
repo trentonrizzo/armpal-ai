@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { getDisplayText } from "../utils/displayText";
 import "../flames.css";
 
 export default function WorkoutModal({
@@ -51,10 +52,7 @@ export default function WorkoutModal({
                 {/* TITLE + DELETE */}
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="exercise-title">{ex.name}</h3>
-                    <p className="exercise-stats">
-                      {ex.sets} × {ex.reps} @ {ex.weight}
-                    </p>
+                    <h3 className="exercise-title">{getDisplayText(ex)}</h3>
                   </div>
 
                   <button

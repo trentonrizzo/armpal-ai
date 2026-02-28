@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import { buildDisplayText } from "../../utils/displayText";
 import { X, Check, Zap } from "lucide-react";
 
 const PHASE = { INPUT: "INPUT", GENERATING: "GENERATING", COMPLETE: "COMPLETE" };
@@ -224,6 +225,7 @@ export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, 
             sets: parseSetsNum(ex.sets),
             reps: parseRepsNum(ex.reps),
             weight: buildWeightStr(ex),
+            display_text: ex.display_text ?? buildDisplayText(ex),
             position: j,
           }));
 
