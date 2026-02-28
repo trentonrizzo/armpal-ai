@@ -1,6 +1,6 @@
 // src/App.jsx
-import React, { useEffect, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation, useParams, Navigate } from "react-router-dom";
+import React, { useCallback, useEffect, useState, lazy, Suspense } from "react";
+import { Routes, Route, useLocation, useParams, useNavigate, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
@@ -58,8 +58,8 @@ import NotificationsBell from "./components/notifications/NotificationsBell";
 
 import usePresence from "./hooks/usePresence";
 import useNotifications from "./hooks/useNotifications";
-import useInAppNotifications from "./hooks/useInAppNotifications";
-import InAppNotification from "./components/notifications/InAppNotification";
+import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
+import InAppBanner from "./components/notifications/InAppBanner";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -146,18 +146,52 @@ function RuntimeSplash({ show }) {
 
 function AuthenticatedLayout({ session }) {
   const [notifQueue, setNotifQueue] = useState([]);
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  useInAppNotifications(session?.user?.id, (n) => {
-    setNotifQueue((prev) => [...prev, n]);
-  });
+  const matchChat = location.pathname.match(/^\/chat\/([^/]+)/);
+  const currentChatFriendId = matchChat?.[1] ?? null;
 
-  const removeFirstNotif = () => {
-    setNotifQueue((prev) => prev.slice(1));
+  const isSuppressedFn = useCallback(
+    (notif) => {
+      if (!currentChatFriendId) return false;
+      if (notif.raw?.sender_id === currentChatFriendId) return true;
+      if (notif.link && notif.link.includes(currentChatFriendId)) return true;
+      return false;
+    },
+    [currentChatFriendId]
+  );
+
+  useInAppBannerNotifications(session?.user?.id, isSuppressedFn, setNotifQueue);
+
+  const handleBannerDismiss = (id) => {
+    setNotifQueue((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const handleBannerClick = (item) => {
+    handleBannerDismiss(item.id);
+    const link = (item.link || "").trim();
+    if (link && link !== "/friends") {
+      navigate(link);
+      return;
+    }
+    if (
+      (item.title === "New Message" || item.title === "New message") &&
+      item.raw?.sender_id
+    ) {
+      navigate(`/chat/${item.raw.sender_id}`);
+      return;
+    }
+    navigate(link || "/friends");
   };
 
   return (
     <>
-      <InAppNotification queue={notifQueue} removeFirst={removeFirstNotif} />
+      <InAppBanner
+        items={notifQueue}
+        onDismiss={handleBannerDismiss}
+        onClick={handleBannerClick}
+      />
       <AppContent />
     </>
   );
