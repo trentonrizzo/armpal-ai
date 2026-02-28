@@ -28,7 +28,7 @@ async function handleNotification(record: NotificationRecord) {
 
   const { data: subscriptions, error: subErr } = await admin
     .from("push_subscriptions")
-    .select("id, endpoint, keys")
+    .select("*")
     .eq("user_id", user_id);
 
   if (subErr) {
@@ -37,7 +37,7 @@ async function handleNotification(record: NotificationRecord) {
   }
 
   if (!subscriptions || subscriptions.length === 0) {
-    if (isDev) console.log("[send-push] notification inserted, push subscription count: 0");
+    console.error("[send-push] no push subscriptions for user_id:", user_id);
     return { ok: true, sent: 0, reason: "no_subscriptions" };
   }
 
@@ -56,7 +56,7 @@ async function handleNotification(record: NotificationRecord) {
     try {
       await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, pushPayload);
       sent++;
-      if (isDev) console.log("[send-push] push sent success for endpoint");
+      console.log("PUSH SENT TO:", user_id);
     } catch (err: unknown) {
       const status = (err as { statusCode?: number }).statusCode;
       if (status === 404 || status === 410) {
@@ -76,18 +76,19 @@ async function handleNotification(record: NotificationRecord) {
 }
 
 // ── Realtime subscription: listen for INSERT on public.notifications ──
-
-admin
-  .channel("push-notifications-listener")
+// Service role client is required so the listener can receive all inserts (RLS bypass).
+const channel = admin
+  .channel("notifications-listener")
   .on(
     "postgres_changes",
-    { event: "INSERT", schema: "public", table: "notifications" },
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "notifications",
+    },
     async (payload) => {
       const row = payload.new as NotificationRecord;
-      if (!row.user_id) return; // skip global notifications
-      if (isDev) console.log("[send-push] notification inserted, user_id:", row.user_id);
-      const result = await handleNotification(row);
-      if (isDev) console.log("[send-push] push result:", result);
+      await handleNotification(row);
     }
   )
   .subscribe((status) => {
