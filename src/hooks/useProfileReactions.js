@@ -141,14 +141,14 @@ export default function useProfileReactions(profileUserId, viewerUserId) {
             senderProfile?.username ||
             "Someone";
 
-          const { error: notifErr } = await supabase.from("notifications").insert({
+          const result = await supabase.from("notifications").insert({
             user_id: profileUserId,
             title: `${emoji} New Reaction`,
             body: `${senderName} reacted ${emoji} to your profile`,
             link: `/friend/${viewerUserId}`,
           });
-          if (notifErr) console.warn("Failed to create reaction notification:", notifErr);
-          if (!notifErr && typeof import.meta !== "undefined" && import.meta.env?.DEV) console.log("[notify] reaction notification inserted for", profileUserId);
+          if (import.meta.env.DEV) console.log("[NOTIFICATION INSERT RESULT]", result);
+          if (result.error) console.warn("Failed to create reaction notification:", result.error);
         } catch (notifErr) {
           console.warn("Failed to create reaction notification:", notifErr);
         }

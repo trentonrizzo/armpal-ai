@@ -26,12 +26,25 @@ export default function EnableNotifications() {
 
   async function handleEnable() {
     if (!user?.id) return;
-    await enablePush(user.id);
-    setTimeout(() => {
-      const granted = typeof Notification !== "undefined" && Notification.permission === "granted";
-      setEnabled(granted);
-      if (granted) setTimeout(() => navigate("/"), 1200);
-    }, 1500);
+    if (typeof Notification === "undefined") return;
+
+    if (Notification.permission === "granted") {
+      await enablePush(user.id);
+      setEnabled(true);
+      setTimeout(() => navigate("/"), 1200);
+      return;
+    }
+    if (Notification.permission === "denied") {
+      console.warn("Notifications blocked by browser");
+      return;
+    }
+
+    const result = await Notification.requestPermission();
+    if (result === "granted") {
+      await enablePush(user.id);
+      setEnabled(true);
+      setTimeout(() => navigate("/"), 1200);
+    }
   }
 
   if (loading) return null;

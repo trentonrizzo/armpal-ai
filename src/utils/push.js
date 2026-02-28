@@ -14,9 +14,7 @@ function urlBase64ToUint8Array(base64String) {
 
 export async function registerForPush() {
   if (!("serviceWorker" in navigator)) return;
-
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return;
+  if (typeof Notification !== "undefined" && Notification.permission !== "granted") return;
 
   const reg = await navigator.serviceWorker.ready;
 

@@ -368,14 +368,13 @@ export default function ChatPage() {
   async function notifyRecipient(receiverId, title, body, link) {
     if (!receiverId) return;
     try {
-      const { error } = await supabase.from("notifications").insert({
+      const result = await supabase.from("notifications").insert({
         user_id: receiverId,
         title: title || "New Message",
         body: body || "New message",
         link: link ?? "/messages",
       });
-      if (error && import.meta.env.DEV) console.warn("[notify] insert failed:", error.message);
-      if (!error && import.meta.env.DEV) console.log("[notify] notification inserted for", receiverId);
+      if (import.meta.env.DEV) console.log("[NOTIFICATION INSERT RESULT]", result);
     } catch (_) {}
   }
 

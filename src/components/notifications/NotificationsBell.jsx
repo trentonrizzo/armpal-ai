@@ -130,14 +130,14 @@ export default function NotificationsBell() {
     if (!newTitle.trim() || !newBody.trim()) return;
     setPosting(true);
     try {
-      const { error } = await supabase.from("notifications").insert({
+      const result = await supabase.from("notifications").insert({
         user_id: null,
         title: newTitle.trim(),
         body: newBody.trim(),
         link: newLink.trim() || null,
       });
-      if (error) throw error;
-      if (import.meta.env.DEV) console.log("[notify] global notification inserted");
+      if (result.error) throw result.error;
+      if (import.meta.env.DEV) console.log("[NOTIFICATION INSERT RESULT]", result);
       setNewTitle("");
       setNewBody("");
       setNewLink("");

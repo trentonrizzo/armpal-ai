@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { enablePush } from "../lib/push";
+import { enablePush, disablePush } from "../lib/push";
 import { useTheme } from "../context/ThemeContext";
 
 /* ============================
@@ -59,13 +59,23 @@ export default function SettingsOverlay({ open, onClose }) {
   useEffect(() => {
     if (!open) return;
 
-    supabase.auth.getUser().then(({ data }) => setUser(data?.user));
-
-    const supported = typeof Notification !== "undefined";
-    setNotifSupported(supported);
-    if (supported) {
-      setNotifEnabled(Notification.permission === "granted");
-    }
+    supabase.auth.getUser().then(async ({ data }) => {
+      const u = data?.user;
+      setUser(u);
+      const supported = typeof Notification !== "undefined";
+      setNotifSupported(supported);
+      if (supported && u?.id) {
+        const perm = Notification.permission === "granted";
+        const { data: subs } = await supabase
+          .from("push_subscriptions")
+          .select("id")
+          .eq("user_id", u.id)
+          .limit(1);
+        setNotifEnabled(perm && subs?.length > 0);
+      } else if (supported) {
+        setNotifEnabled(Notification.permission === "granted");
+      }
+    });
   }, [open]);
 
   function toggleTheme() {
@@ -79,8 +89,25 @@ export default function SettingsOverlay({ open, onClose }) {
 
     setNotifBusy(true);
     try {
-      await enablePush(user.id);
-      setNotifEnabled(Notification.permission === "granted");
+      if (notifEnabled) {
+        await disablePush(user.id);
+        setNotifEnabled(false);
+      } else {
+        if (Notification.permission === "granted") {
+          await enablePush(user.id);
+          setNotifEnabled(true);
+          return;
+        }
+        if (Notification.permission === "denied") {
+          console.warn("Notifications blocked by browser");
+          return;
+        }
+        const result = await Notification.requestPermission();
+        if (result === "granted") {
+          await enablePush(user.id);
+          setNotifEnabled(true);
+        }
+      }
     } catch (err) {
       alert(err?.message || "Notification error");
     } finally {

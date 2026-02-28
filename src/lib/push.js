@@ -16,12 +16,17 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 /**
- * Request notification permission, register the push SW,
- * subscribe to Web Push, and store the subscription in Supabase.
+ * Register push SW, subscribe to Web Push, and store the subscription in Supabase.
+ * Call only when Notification.permission === "granted". Permission must be requested
+ * only from a user gesture (e.g. settings toggle or Enable Notifications button).
  */
 export async function enablePush(userId) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     console.warn("Push not supported on this device.");
+    return;
+  }
+
+  if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
     return;
   }
 
@@ -39,9 +44,6 @@ export async function enablePush(userId) {
     );
     return;
   }
-
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return;
 
   const registration = await navigator.serviceWorker.register("/push-sw.js", {
     scope: "/push/",
@@ -64,5 +66,26 @@ export async function enablePush(userId) {
     );
     if (error) console.warn("push_subscriptions upsert:", error.message);
     else if (import.meta.env.DEV) console.log("[push] subscription stored for user");
+  }
+}
+
+/**
+ * Unsubscribe from push and remove user's rows from push_subscriptions.
+ * Does not change browser permission (cannot be done programmatically).
+ */
+export async function disablePush(userId) {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !userId) return;
+
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    const pushReg = regs.find((r) => r.scope?.includes("/push/") || r.active?.scriptURL?.includes("push-sw"));
+    if (pushReg?.pushManager) {
+      const subscription = await pushReg.pushManager.getSubscription();
+      if (subscription) await subscription.unsubscribe();
+    }
+    await supabase.from("push_subscriptions").delete().eq("user_id", userId);
+    if (import.meta.env.DEV) console.log("[push] subscription removed for user");
+  } catch (err) {
+    console.warn("[push] disable error:", err);
   }
 }

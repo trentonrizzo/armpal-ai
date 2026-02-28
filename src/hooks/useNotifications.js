@@ -61,8 +61,7 @@ export default function useNotifications(userId) {
           scope: "/push/",
         });
 
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted" || cancelled) return;
+        if (Notification.permission !== "granted" || cancelled) return;
 
         let subscription = await registration.pushManager.getSubscription();
 
