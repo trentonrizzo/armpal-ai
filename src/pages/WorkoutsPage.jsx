@@ -255,30 +255,25 @@ export default function WorkoutsPage() {
       .eq("user_id", uid)
       .order("position", { ascending: true })
       .order("created_at", { ascending: true });
-    setWorkouts(data || []);
-  }
-
-  async function loadExercises(workoutId) {
-    const { data } = await supabase
-      .from("exercises")
-      .select("*")
-      .eq("workout_id", workoutId)
-      .order("position", { ascending: true })
-      .order("created_at", { ascending: true });
-    return data || [];
+    const list = (data || []).map((w) => ({
+      ...w,
+      exercises: Array.isArray(w.exercises) ? w.exercises : [],
+    }));
+    setWorkouts(list);
   }
 
   // ============================================================
   // EXPAND / COLLAPSE
   // ============================================================
 
-  async function toggleExpand(workoutId) {
+  function toggleExpand(workoutId) {
     if (expandedExercises[workoutId]) {
       const copy = { ...expandedExercises };
       delete copy[workoutId];
       setExpandedExercises(copy);
     } else {
-      const ex = await loadExercises(workoutId);
+      const workout = workouts.find((w) => w.id === workoutId);
+      const ex = Array.isArray(workout?.exercises) ? workout.exercises : [];
       setExpandedExercises((p) => ({ ...p, [workoutId]: ex }));
     }
   }
@@ -312,16 +307,20 @@ export default function WorkoutsPage() {
     const oldIndex = list.findIndex((e) => e.id === active.id);
     const newIndex = list.findIndex((e) => e.id === over.id);
     const reordered = arrayMove(list, oldIndex, newIndex);
-achievementBus.emit({ type: "FIRST_WORKOUT" });
+    achievementBus.emit({ type: "FIRST_WORKOUT" });
 
-    for (let i = 0; i < reordered.length; i++) {
-      await supabase
-        .from("exercises")
-        .update({ position: i })
-        .eq("id", reordered[i].id);
+    const { error } = await supabase
+      .from("workouts")
+      .update({ exercises: reordered })
+      .eq("id", workoutId);
+    if (error) {
+      toast.error("Failed to reorder exercises");
+      return;
     }
-
     setExpandedExercises((p) => ({ ...p, [workoutId]: reordered }));
+    setWorkouts((p) =>
+      p.map((w) => (w.id === workoutId ? { ...w, exercises: reordered } : w))
+    );
   }
 
   // ============================================================
@@ -404,39 +403,72 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
     if (!user || !exerciseWorkoutId) return;
 
     const list = expandedExercises[exerciseWorkoutId] || [];
-    const payload = {
-      user_id: user.id,
-      workout_id: exerciseWorkoutId,
+    const displayText = buildDisplayText({
       name: exerciseName || "Exercise",
       sets: exerciseSets === "" ? null : Number(exerciseSets),
       reps: exerciseReps === "" ? null : Number(exerciseReps),
       weight: exerciseWeight === "" ? null : exerciseWeight,
-      display_text: buildDisplayText({
-        name: exerciseName || "Exercise",
-        sets: exerciseSets === "" ? null : Number(exerciseSets),
-        reps: exerciseReps === "" ? null : Number(exerciseReps),
-        weight: exerciseWeight === "" ? null : exerciseWeight,
-      }),
+    });
+    const exercisePayload = {
+      name: exerciseName || "Exercise",
+      sets: exerciseSets === "" ? null : Number(exerciseSets),
+      reps: exerciseReps === "" ? null : Number(exerciseReps),
+      weight: exerciseWeight === "" ? null : exerciseWeight,
+      display_text: displayText,
     };
 
+    let updatedExercises;
     if (editingExercise) {
-      await supabase.from("exercises").update(payload).eq("id", editingExercise.id);
+      updatedExercises = list.map((e) =>
+        e.id === editingExercise.id ? { ...e, ...exercisePayload } : e
+      );
     } else {
-      payload.position = list.length;
-      await supabase.from("exercises").insert(payload);
+      updatedExercises = [
+        ...list,
+        { id: `e-${Date.now()}`, ...exercisePayload },
+      ];
     }
 
-    const ex = await loadExercises(exerciseWorkoutId);
-    setExpandedExercises((p) => ({ ...p, [exerciseWorkoutId]: ex }));
+    const { error } = await supabase
+      .from("workouts")
+      .update({ exercises: updatedExercises })
+      .eq("id", exerciseWorkoutId);
+
+    if (error) {
+      console.error("saveExercise failed", error);
+      toast.error("Failed to save exercise");
+      return;
+    }
+
+    setWorkouts((p) =>
+      p.map((w) =>
+        w.id === exerciseWorkoutId ? { ...w, exercises: updatedExercises } : w
+      )
+    );
+    setExpandedExercises((p) => ({ ...p, [exerciseWorkoutId]: updatedExercises }));
 
     setExerciseModalOpen(false);
     setEditingExercise(null);
+    toast.success("Saved");
   }
 
   async function deleteExercise(id, workoutId) {
-    await supabase.from("exercises").delete().eq("id", id);
-    const ex = await loadExercises(workoutId);
-    setExpandedExercises((p) => ({ ...p, [workoutId]: ex }));
+    const list = expandedExercises[workoutId] || [];
+    const updatedExercises = list.filter((e) => e.id !== id);
+    const { error } = await supabase
+      .from("workouts")
+      .update({ exercises: updatedExercises })
+      .eq("id", workoutId);
+    if (error) {
+      toast.error("Failed to delete exercise");
+      return;
+    }
+    setWorkouts((p) =>
+      p.map((w) =>
+        w.id === workoutId ? { ...w, exercises: updatedExercises } : w
+      )
+    );
+    setExpandedExercises((p) => ({ ...p, [workoutId]: updatedExercises }));
   }
 
   function askDeleteWorkout(id) {
@@ -499,8 +531,8 @@ achievementBus.emit({ type: "FIRST_WORKOUT" });
   // FOCUS MODE: OPEN / CLOSE
   // ============================================================
 
-  async function openFocusForWorkout(workout) {
-    const ex = await loadExercises(workout.id);
+  function openFocusForWorkout(workout) {
+    const ex = Array.isArray(workout.exercises) ? workout.exercises : [];
 
     setFocusWorkout(workout);
     setFocusExercises(ex);
