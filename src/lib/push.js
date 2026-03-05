@@ -54,7 +54,7 @@ export async function enablePush(userId) {
   }
 
   const registration = await navigator.serviceWorker.register("/push-sw.js", {
-    scope: "/",
+    scope: "/push/",
   });
 
   let subscription = await registration.pushManager.getSubscription();
@@ -103,7 +103,7 @@ export async function disablePush(userId) {
 
   try {
     const regs = await navigator.serviceWorker.getRegistrations();
-    const pushReg = regs.find((r) => r.active?.scriptURL?.includes("push-sw"));
+    const pushReg = regs.find((r) => r.scope?.includes("/push/") || r.active?.scriptURL?.includes("push-sw"));
     if (pushReg?.pushManager) {
       const subscription = await pushReg.pushManager.getSubscription();
       if (subscription) await subscription.unsubscribe();
