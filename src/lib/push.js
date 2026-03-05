@@ -45,9 +45,7 @@ export async function enablePush(userId) {
     return;
   }
 
-  const registration = await navigator.serviceWorker.register("/push-sw.js", {
-    scope: "/push/",
-  });
+  const registration = await navigator.serviceWorker.register("/push-sw.js");
 
   let subscription = await registration.pushManager.getSubscription();
 

@@ -57,9 +57,7 @@ export default function useNotifications(userId) {
       if (cancelled) return;
 
       try {
-        const registration = await navigator.serviceWorker.register("/push-sw.js", {
-          scope: "/push/",
-        });
+        const registration = await navigator.serviceWorker.register("/push-sw.js");
 
         if (Notification.permission !== "granted" || cancelled) return;
 
