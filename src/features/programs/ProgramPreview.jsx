@@ -92,26 +92,15 @@ export default function ProgramPreview() {
     try {
       const { error } = await supabase
         .from("programs")
-        .delete()
+        .update({ deleted: true })
         .eq("id", program.id);
       if (error) {
-        console.error("[ProgramPreview] Delete program failed (falling back to unpublish):", error?.message ?? error, error);
-        const { error: upErr } = await supabase
-          .from("programs")
-          .update({ is_published: false })
-          .eq("id", program.id);
-        if (upErr) {
-          console.error("[ProgramPreview] Unpublish failed:", upErr?.message ?? upErr, upErr);
-          alert(upErr?.message || "Could not unpublish program.");
-          setDeleting(false);
-          return;
-        }
-        alert("Program unpublished (removed from marketplace).");
-        navigate("/programs");
+        console.error("[ProgramPreview] Soft delete program failed:", error?.message ?? error, error);
+        alert(error?.message || "Could not remove program.");
         setDeleting(false);
         return;
       }
-      alert("Program deleted.");
+      alert("Program removed from marketplace.");
       navigate("/programs");
     } catch (e) {
       console.error("[ProgramPreview] handleRemoveFromMarketplace error:", e?.message ?? e, e);

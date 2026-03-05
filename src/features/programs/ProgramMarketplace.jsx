@@ -28,6 +28,7 @@ export default function ProgramMarketplace() {
         .from("programs")
         .select("*")
         .eq("is_published", true)
+        .eq("deleted", false)
         .order("created_at", { ascending: false });
 
       if (!alive) return;
