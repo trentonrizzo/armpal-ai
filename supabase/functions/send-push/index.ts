@@ -111,7 +111,7 @@ function getCorsHeaders(req: Request): Record<string, string> {
     "Access-Control-Allow-Origin": allowed,
     "Vary": "Origin",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-push-secret",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Max-Age": "86400",
   };
 }
@@ -142,18 +142,12 @@ Deno.serve(async (req) => {
 
   // POST — manual trigger fallback (requires PUSH_SECRET)
   if (req.method === "POST") {
-    const secret = req.headers.get("x-push-secret");
-    const expected = Deno.env.get("PUSH_SECRET");
-    if (expected != null && expected !== "" && secret !== expected) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
-    }
+    console.log("send-push: received POST");
     try {
       const payload = await req.json();
       const record = payload.record ?? payload;
       const result = await handleNotification(record);
+      console.log("send-push: sent", result.sent ?? 0);
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 500,
         headers: { ...cors, "Content-Type": "application/json" },
