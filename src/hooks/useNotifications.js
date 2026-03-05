@@ -57,7 +57,17 @@ export default function useNotifications(userId) {
       if (cancelled) return;
 
       try {
-        const registration = await navigator.serviceWorker.register("/push-sw.js");
+        if (navigator.serviceWorker.controller?.scriptURL?.includes("push-sw.js")) {
+          await navigator.serviceWorker.getRegistrations().then((regs) =>
+            regs.forEach((r) => {
+              if (r.active?.scriptURL?.includes("push-sw.js")) r.unregister();
+            })
+          );
+        }
+
+        const registration = await navigator.serviceWorker.register("/push-sw.js", {
+          scope: "/push/",
+        });
 
         if (Notification.permission !== "granted" || cancelled) return;
 
