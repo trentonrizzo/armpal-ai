@@ -39,7 +39,7 @@ export default function ProgramMarketplace() {
       if (creatorIds.length > 0) {
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id, display_name, username, handle, role")
+          .select("id, display_name, username, handle, role, verified")
           .in("id", creatorIds);
         if (alive && profs) {
           const map = {};

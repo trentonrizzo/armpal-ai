@@ -62,6 +62,9 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
             <span style={styles.creatorHandle}>
               {creatorHandle ? `@${creatorHandle}` : creatorName}
             </span>
+            {creatorProfile?.verified && (
+              <span style={styles.verifiedBadge}>⭐</span>
+            )}
           </button>
         )}
         {isOfficial && (
@@ -195,6 +198,11 @@ const styles = {
   creatorHandle: {
     fontWeight: 700,
     color: "var(--text)",
+  },
+  verifiedBadge: {
+    color: "gold",
+    marginLeft: 4,
+    fontSize: 12,
   },
   top: {
     display: "flex",

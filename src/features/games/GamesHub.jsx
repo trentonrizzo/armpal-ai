@@ -26,8 +26,18 @@ function PinLockOverlay({ onUnlock }) {
     }
   }, [pin, onUnlock]);
 
+  const navigate = useNavigate();
+
   return (
     <div style={pinStyles.backdrop}>
+      <button
+        type="button"
+        onClick={() => navigate("/")}
+        aria-label="Back to home"
+        style={pinStyles.backBtn}
+      >
+        ←
+      </button>
       <style>{`
         @keyframes pinShake {
           0%, 100% { transform: translateX(0); }
@@ -85,6 +95,23 @@ const pinStyles = {
     padding: "36px 28px",
     textAlign: "center",
     boxShadow: "0 16px 60px rgba(0,0,0,0.6)",
+  },
+  backBtn: {
+    position: "fixed",
+    top: 16,
+    left: 16,
+    zIndex: 10001,
+    width: 40,
+    height: 40,
+    borderRadius: "50%",
+    border: "1px solid var(--border, #333)",
+    background: "var(--card, #1a1a1a)",
+    color: "var(--text, #fff)",
+    fontSize: 20,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
   },
   lockIcon: { fontSize: 44, marginBottom: 12 },
   title: { fontSize: 20, fontWeight: 800, color: "var(--text, #fff)", margin: "0 0 6px" },
@@ -206,6 +233,14 @@ export default function GamesHub() {
 
   return (
     <div style={styles.wrap}>
+      <button
+        type="button"
+        onClick={() => navigate("/")}
+        aria-label="Back to home"
+        style={styles.backArrow}
+      >
+        ←
+      </button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         <h1 style={styles.title}>Mini Games</h1>
         <button type="button" onClick={() => navigate("/games/arcade")} style={styles.arcadeStatsBtn}>
@@ -285,6 +320,23 @@ export default function GamesHub() {
 }
 
 const styles = {
+  backArrow: {
+    position: "fixed",
+    top: 16,
+    left: 16,
+    zIndex: 1000,
+    width: 40,
+    height: 40,
+    borderRadius: "50%",
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    fontSize: 20,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+  },
   wrap: { padding: "16px 16px 90px", maxWidth: "100%", margin: "0 auto" },
   title: { fontSize: 22, fontWeight: 900, margin: "0 0 16px", color: "var(--text)" },
   section: { marginBottom: 24 },
