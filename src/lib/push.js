@@ -72,8 +72,25 @@ export async function enablePush(userId) {
       { user_id: userId, endpoint: subJson.endpoint, keys: subJson.keys },
       { onConflict: "user_id,endpoint" }
     );
-    if (error) console.warn("push_subscriptions upsert:", error.message);
-    else if (import.meta.env.DEV) console.log("[push] subscription stored for user");
+    if (error) {
+      console.warn("push_subscriptions upsert:", error.message);
+      return;
+    }
+    if (import.meta.env.DEV) console.log("[push] subscription stored for user");
+
+    const functionsUrl = import.meta.env.VITE_SUPABASE_URL
+      ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`
+      : "https://ewlwkasjtwsfemqnkrkp.supabase.co/functions/v1/send-push";
+    await fetch(functionsUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        title: "ArmPal",
+        body: "Notifications are working",
+        link: "/"
+      })
+    });
   }
 }
 

@@ -56,12 +56,6 @@ Deno.serve(async (req) => {
     });
   }
 
-  const payload = JSON.stringify({
-    title,
-    body: message,
-    link
-  });
-
   let sent = 0;
 
   for (const sub of subs) {
@@ -71,7 +65,11 @@ Deno.serve(async (req) => {
           endpoint: sub.endpoint,
           keys: sub.keys
         },
-        payload
+        JSON.stringify({
+          title: "ArmPal",
+          body: message,
+          link: link || "/"
+        })
       );
       sent++;
     } catch (e) {
