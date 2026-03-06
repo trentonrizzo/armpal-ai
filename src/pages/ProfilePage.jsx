@@ -70,6 +70,7 @@ import ProfileVisibilityOverlay from "../components/profile/ProfileVisibilityOve
 import { useToast } from "../components/ToastProvider";
 import { SkeletonLine, SkeletonAvatar } from "../components/Skeleton";
 import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 
 // =================================================================================================
 // 2) CONSTANTS
@@ -482,7 +483,7 @@ async function fetchProfileRow(userId) {
     async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name, handle, bio, avatar_url, age, city, state, interests")
+        .select("id, display_name, handle, bio, avatar_url, age, city, state, interests, is_official")
         .eq("id", userId)
         .single();
 
@@ -668,6 +669,7 @@ export default function ProfilePage() {
   const [discoverySaving, setDiscoverySaving] = useState(false);
 
   const [isPublic, setIsPublic] = useState(true);
+  const [isOfficial, setIsOfficial] = useState(false);
 
   // snapshot for cancel
   const [orig, setOrig] = useState({
@@ -745,6 +747,7 @@ useEffect(() => {
   setHandle(row.handle || "");
   setBio(row.bio || "");
   setAvatarUrl(row.avatar_url || "");
+  setIsOfficial(!!row.is_official);
 
   setDiscoveryAge(row.age != null ? String(row.age) : "");
   setDiscoveryCity(row.city || "");
@@ -1053,7 +1056,7 @@ useEffect(() => {
                 color: COLORS.text,
               }}
             >
-              {headerName}
+              <span style={isOfficial ? OFFICIAL_NAME_STYLE : undefined}>{headerName}</span>
             </div>
 
             {headerHandle && (
@@ -1065,7 +1068,7 @@ useEffect(() => {
                   color: COLORS.subtext,
                 }}
               >
-                {headerHandle}
+                <span style={isOfficial ? OFFICIAL_NAME_STYLE : undefined}>{headerHandle}</span>
               </div>
             )}
           </div>

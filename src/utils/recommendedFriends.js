@@ -86,7 +86,7 @@ export async function getRecommended(userId) {
 
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, display_name, username, avatar_url")
+      .select("id, display_name, username, avatar_url, is_official")
       .in("id", userIds);
 
     const profileMap = {};
@@ -97,6 +97,7 @@ export async function getRecommended(userId) {
       display_name: profileMap[r.user_id]?.display_name,
       username: profileMap[r.user_id]?.username,
       avatar_url: profileMap[r.user_id]?.avatar_url,
+      is_official: profileMap[r.user_id]?.is_official,
     }));
 
     return { list, count: list.length };

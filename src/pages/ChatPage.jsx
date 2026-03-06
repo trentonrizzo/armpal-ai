@@ -42,6 +42,7 @@ import useUnreadChats from "../hooks/useUnreadChats";
 import { SkeletonCard } from "../components/Skeleton";
 import { getOrCreateConversation } from "../utils/getOrCreateConversation";
 import { getDisplayText, buildDisplayText } from "../utils/displayText";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 import Cropper from "react-easy-crop";
 
 // ============================================================
@@ -579,7 +580,7 @@ export default function ChatPage() {
         if (memberIds.length > 0) {
           const { data: profiles } = await supabase
             .from("profiles")
-            .select("id, username, display_name, avatar_url, handle")
+            .select("id, username, display_name, avatar_url, handle, is_official")
             .in("id", memberIds);
           const profileMap = {};
           (profiles || []).forEach((p) => (profileMap[p.id] = p));
@@ -623,7 +624,7 @@ export default function ChatPage() {
         const [{ data: f }, { data: msgs, error: msgErr }, { data: sessions }] = await Promise.all([
           supabase
             .from("profiles")
-            .select("id, username, display_name, is_online, last_seen")
+            .select("id, username, display_name, is_online, last_seen, handle, is_official")
             .eq("id", friendId)
             .single(),
           supabase
@@ -1266,7 +1267,7 @@ export default function ChatPage() {
     if (!q || !user?.id) return;
     const { data } = await supabase
       .from("profiles")
-      .select("id, username, display_name, handle, avatar_url")
+      .select("id, username, display_name, handle, avatar_url, is_official")
       .ilike("handle", `%${q}%`)
       .limit(10);
     setAddMemberResults(data || []);
@@ -1428,7 +1429,7 @@ export default function ChatPage() {
             <FiArrowLeft size={20} />
           </button>
           <div style={headerTextWrap}>
-            <strong style={headerName}>{friendName}</strong>
+            <strong style={headerName}>{!isGroup && friend?.is_official ? <span style={OFFICIAL_NAME_STYLE}>{friendName}</span> : friendName}</strong>
             {friendStatus && <span style={friendStatusText}>{friendStatus}</span>}
           </div>
           {isGroup && group?.created_by === user?.id && (
@@ -1667,8 +1668,8 @@ export default function ChatPage() {
                       const inGroup = groupMembers.some((m) => (m.id || m.user_id) === p.id);
                       return (
                         <li key={p.id} style={addMemberResultRow}>
-                          <span style={addMemberResultName}>{p.display_name || p.username || p.handle || p.id}</span>
-                          <span style={addMemberResultHandle}>@{p.handle || p.username || ""}</span>
+                          <span style={p.is_official ? { ...addMemberResultName, ...OFFICIAL_NAME_STYLE } : addMemberResultName}>{p.display_name || p.username || p.handle || p.id}</span>
+                          <span style={p.is_official ? { ...addMemberResultHandle, ...OFFICIAL_NAME_STYLE } : addMemberResultHandle}>@{p.handle || p.username || ""}</span>
                           {inGroup ? (
                             <span style={mutedSmall}>In group</span>
                           ) : (
@@ -1708,8 +1709,8 @@ export default function ChatPage() {
                       )}
                     </div>
                     <div style={memberInfo}>
-                      <span style={memberName}>{displayName}</span>
-                      <span style={memberHandle}>@{handle}</span>
+                      <span style={m.is_official ? { ...memberName, ...OFFICIAL_NAME_STYLE } : memberName}>{displayName}</span>
+                      <span style={m.is_official ? { ...memberHandle, ...OFFICIAL_NAME_STYLE } : memberHandle}>@{handle}</span>
                     </div>
                     {mid !== user?.id && (
                       <div style={memberActions}>

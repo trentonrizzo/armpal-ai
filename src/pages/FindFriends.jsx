@@ -5,6 +5,7 @@ import { supabase } from "../supabaseClient";
 import EmptyState from "../components/EmptyState";
 import { getRecommended } from "../utils/recommendedFriends";
 import { useToast } from "../components/ToastProvider";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 
 const INTERESTS = [
   "Arm Wrestling",
@@ -235,7 +236,7 @@ export default function FindFriends() {
     try {
       let query = supabase
         .from("profiles")
-        .select("id, display_name, username, avatar_url, age, city, state, interests")
+        .select("id, display_name, username, avatar_url, age, city, state, interests, is_official")
         .neq("id", user.id);
 
       if (ageMin != null) query = query.gte("age", ageMin);
@@ -330,7 +331,7 @@ export default function FindFriends() {
                       </div>
                     )}
                     <div style={cardBody}>
-                      <span style={cardName}>{r.display_name || r.username || "User"}</span>
+                      <span style={r.is_official ? { ...cardName, ...OFFICIAL_NAME_STYLE } : cardName}>{r.display_name || r.username || "User"}</span>
                       <span style={cardLocation}>
                         {[r.city, r.state].filter(Boolean).join(", ") || "—"}
                       </span>
@@ -445,7 +446,7 @@ export default function FindFriends() {
                   </div>
                 )}
                 <div style={cardBody}>
-                  <span style={cardName}>{r.display_name || r.username || "User"}</span>
+                  <span style={r.is_official ? { ...cardName, ...OFFICIAL_NAME_STYLE } : cardName}>{r.display_name || r.username || "User"}</span>
                   <span style={cardLocation}>
                     {[r.city, r.state].filter(Boolean).join(", ") || "—"}
                   </span>

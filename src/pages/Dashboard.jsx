@@ -288,7 +288,7 @@ export default function Dashboard() {
         <div>
           <p style={{ fontSize: 14, opacity: 0.8, margin: 0 }}>Welcome back,</p>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0", display: "flex", alignItems: "center", gap: "8px" }}>
-  <span style={isOfficial ? { color: "#FFD700", fontWeight: "bold" } : undefined}>{displayName}</span>
+  <span style={isOfficial ? { color: "#FFD700", fontWeight: "bold", textTransform: "uppercase" } : undefined}>{displayName}</span>
 
   {isPro && (
     <span style={{

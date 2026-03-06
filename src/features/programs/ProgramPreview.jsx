@@ -47,7 +47,7 @@ export default function ProgramPreview() {
       if (prog.creator_id) {
         const { data: creator } = await supabase
           .from("profiles")
-          .select("id, display_name, username, handle, role")
+          .select("id, display_name, username, handle, role, is_official")
           .eq("id", prog.creator_id)
           .maybeSingle();
         if (alive) setCreatorProfile(creator || null);

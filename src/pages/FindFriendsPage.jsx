@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 
 const INTEREST_OPTIONS = [
   "Arm Wrestling",
@@ -145,7 +146,16 @@ export default function FindFriendsPage() {
         p_interests: selectedInterests.length > 0 ? selectedInterests : null,
       });
       if (error) throw error;
-      setResults(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      if (list.length > 0) {
+        const ids = list.map((r) => r.id).filter(Boolean);
+        const { data: profs } = await supabase.from("profiles").select("id, is_official").in("id", ids);
+        const officialMap = {};
+        (profs || []).forEach((p) => { officialMap[p.id] = !!p.is_official; });
+        setResults(list.map((r) => ({ ...r, is_official: officialMap[r.id] })));
+      } else {
+        setResults(list);
+      }
     } catch (e) {
       toast.error(e?.message || "Search failed");
       setResults([]);
@@ -266,7 +276,7 @@ export default function FindFriendsPage() {
                 </div>
               )}
               <div style={cardBody}>
-                <span style={cardName}>{r.display_name || r.username || "User"}</span>
+                <span style={r.is_official ? { ...cardName, ...OFFICIAL_NAME_STYLE } : cardName}>{r.display_name || r.username || "User"}</span>
                 <span style={cardLocation}>
                   {[r.city, r.state, r.country].filter(Boolean).join(", ") || "—"}
                 </span>

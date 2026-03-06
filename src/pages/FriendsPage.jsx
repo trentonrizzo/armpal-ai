@@ -13,6 +13,7 @@ import FriendQRModal from "../components/friends/FriendQRModal";
 import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
 import { getRecommended } from "../utils/recommendedFriends";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
@@ -86,7 +87,7 @@ export default function FriendsPage() {
       const receiverIds = [...new Set(list.map((r) => r.receiver_id).filter(Boolean))];
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, display_name, username, handle")
+        .select("id, display_name, username, handle, is_official")
         .in("id", receiverIds);
       const profileMap = {};
       (profiles || []).forEach((p) => (profileMap[p.id] = p));
@@ -112,7 +113,7 @@ export default function FriendsPage() {
       const meId = authUser?.user?.id;
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name, handle, avatar_url")
+        .select("id, display_name, handle, avatar_url, is_official")
         .ilike("handle", `%${q}%`)
         .limit(10);
       if (cancelled) return;
@@ -394,7 +395,7 @@ export default function FriendsPage() {
         const { data: profData, error: profErr } = await supabase
           .from("profiles")
           .select(
-            "id, username, handle, display_name, avatar_url, bio, is_online, last_seen"
+            "id, username, handle, display_name, avatar_url, bio, is_online, last_seen, is_official"
           )
           .in("id", Array.from(profileIds));
 
@@ -820,8 +821,8 @@ export default function FriendsPage() {
                           )}
                         </div>
                         <div>
-                          <p style={nameText}>{pickDisplayName(p)}</p>
-                          <p style={subText}>@{p.handle || p.username || ""}</p>
+                          <p style={nameText}><span style={p.is_official ? OFFICIAL_NAME_STYLE : undefined}>{pickDisplayName(p)}</span></p>
+                          <p style={subText}><span style={p.is_official ? OFFICIAL_NAME_STYLE : undefined}>@{p.handle || p.username || ""}</span></p>
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
@@ -930,7 +931,7 @@ export default function FriendsPage() {
                   <div style={avatarCircle}>
                     {p ? initialsLetter(p) : "?"}
                   </div>
-                  <p style={nameText}>{name}</p>
+                  <p style={nameText}><span style={p?.is_official ? OFFICIAL_NAME_STYLE : undefined}>{name}</span></p>
                 </button>
                 <button
                   type="button"
@@ -968,7 +969,7 @@ export default function FriendsPage() {
                     {online && <span style={onlineDot} />}
                   </div>
                   <div>
-                    <p style={nameText}>{pickDisplayName(p)}</p>
+                    <p style={nameText}><span style={p?.is_official ? OFFICIAL_NAME_STYLE : undefined}>{pickDisplayName(p)}</span></p>
                     <p style={subText}>Wants to add you · {status}</p>
                   </div>
                 </div>
@@ -1010,7 +1011,7 @@ export default function FriendsPage() {
                     {online && <span style={onlineDot} />}
                   </div>
                   <div>
-                    <p style={nameText}>{pickDisplayName(p)}</p>
+                    <p style={nameText}><span style={p?.is_official ? OFFICIAL_NAME_STYLE : undefined}>{pickDisplayName(p)}</span></p>
                     <p style={subText}>Pending · {status}</p>
                   </div>
                 </div>
@@ -1110,7 +1111,7 @@ function FriendRow({
       </div>
 
       <div style={{ minWidth: 0 }}>
-        <p style={nameText}>{displayName}</p>
+        <p style={nameText}><span style={friend?.is_official ? OFFICIAL_NAME_STYLE : undefined}>{displayName}</span></p>
         <p style={subText}>{preview}</p>
       </div>
 

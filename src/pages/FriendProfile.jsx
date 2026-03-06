@@ -7,6 +7,7 @@ import { AiOutlineFlag } from "react-icons/ai";
 import ReportModal from "../components/reports/ReportModal";
 import { useToast } from "../components/ToastProvider";
 import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 
 /**
  * FriendProfile (Privacy + Friends View)
@@ -76,7 +77,7 @@ export default function FriendProfile() {
       const { data: prof } = await supabase
         .from("profiles")
         .select(
-          "id, username, handle, display_name, avatar_url, bio, last_active, last_seen, is_online, role"
+          "id, username, handle, display_name, avatar_url, bio, last_active, last_seen, is_online, role, is_official"
         )
         .eq("id", friendId)
         .maybeSingle();
@@ -368,10 +369,10 @@ export default function FriendProfile() {
 
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ ...name, ...(p?.role === "official" ? officialName : {}) }}>{displayName}</div>
-              {p?.role === "official" && <span style={officialPill}>Official</span>}
+<div style={{ ...name, ...(p?.is_official ? OFFICIAL_NAME_STYLE : {}) }}>{displayName}</div>
+            {p?.is_official && <span style={officialPill}>Official</span>}
             </div>
-            {p?.handle && <div style={handle}>@{p.handle}</div>}
+            {p?.handle && <div style={{ ...handle, ...(p?.is_official ? OFFICIAL_NAME_STYLE : {}) }}>@{p.handle}</div>}
 
             <div style={status}>
               {online ? "Online" : `Offline${lastAgo ? ` · ${lastAgo}` : ""}`}
@@ -577,7 +578,6 @@ const handle = { fontSize: 14, opacity: 0.65, marginTop: 2 };
 const status = { fontSize: 13, marginTop: 6, opacity: 0.7 };
 const bio = { marginTop: 18, fontSize: 15, opacity: 0.85 };
 
-const officialName = { color: "#d4af37" };
 const officialPill = {
   padding: "4px 10px",
   borderRadius: 999,

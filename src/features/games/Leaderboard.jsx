@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
+import { OFFICIAL_NAME_STYLE } from "../../utils/officialStyle";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(value) {
@@ -56,7 +57,7 @@ export default function Leaderboard() {
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
-          .select("id, display_name, username, handle")
+          .select("id, display_name, username, handle, is_official")
           .in("id", userIds);
         (profiles || []).forEach((p) => (profileMap[p.id] = p));
       }
@@ -79,7 +80,7 @@ export default function Leaderboard() {
         user_id,
         score,
         created_at,
-        profiles(display_name, username)
+        profiles(display_name, username, handle, is_official)
       `)
       .eq("game_id", resolvedGameId)
       .order("score", order)
@@ -137,7 +138,7 @@ export default function Leaderboard() {
             return (
               <li key={e.id || e.user_id || i} style={rowStyle}>
                 <span style={rankStyle}>{rank}</span>
-                <span style={styles.name}>{e.profiles?.display_name || e.profiles?.username || e.profiles?.handle || "Player"}</span>
+                <span style={e.profiles?.is_official ? { ...styles.name, ...OFFICIAL_NAME_STYLE } : styles.name}>{e.profiles?.display_name || e.profiles?.username || e.profiles?.handle || "Player"}</span>
                 <span style={styles.score}>{displayScore(e)}</span>
               </li>
             );

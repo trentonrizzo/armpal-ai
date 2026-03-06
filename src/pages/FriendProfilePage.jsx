@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 
 function timeAgoNoMonths(dateStr) {
   if (!dateStr) return "";
@@ -64,7 +65,7 @@ export default function FriendProfilePage() {
       // Load profile (best-effort; will not crash if schema changes)
       const { data: p } = await supabase
         .from("profiles")
-        .select("id, username, handle, display_name, avatar_url, bio, last_active, profile_visibility, visibility, is_private")
+        .select("id, username, handle, display_name, avatar_url, bio, last_active, profile_visibility, visibility, is_private, is_official")
         .eq("id", id)
         .maybeSingle();
 
@@ -228,8 +229,8 @@ export default function FriendProfilePage() {
           </div>
 
           <div style={{ flex: 1 }}>
-            <div style={name}>{label}</div>
-            <div style={handleStyle}>@{handle}</div>
+            <div style={profile.is_official ? { ...name, ...OFFICIAL_NAME_STYLE } : name}>{label}</div>
+            <div style={profile.is_official ? { ...handleStyle, ...OFFICIAL_NAME_STYLE } : handleStyle}>@{handle}</div>
             <div style={last}>{lastText}</div>
 
             {!owner && (

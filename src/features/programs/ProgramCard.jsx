@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ReportModal from "../../components/reports/ReportModal";
+import { OFFICIAL_NAME_STYLE } from "../../utils/officialStyle";
 
 const ADMIN_CREATOR_ID =
   typeof import.meta !== "undefined" ? import.meta.env.VITE_ADMIN_CREATOR_ID : undefined;
@@ -26,10 +27,8 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
     creatorProfile?.handle ||
     null;
   const creatorHandle = creatorProfile?.handle || null;
-  const isOfficial =
-    creatorProfile?.role === "official" ||
-    (creatorHandle && creatorHandle.toLowerCase() === "armpal") ||
-    (ADMIN_CREATOR_ID && program.creator_id === ADMIN_CREATOR_ID);
+  const isOfficial = !!creatorProfile?.is_official;
+  const officialStyle = isOfficial ? OFFICIAL_NAME_STYLE : undefined;
 
   function handleCreatorClick(e) {
     e.stopPropagation();
@@ -59,7 +58,7 @@ export default function ProgramCard({ program, owned, onPreviewClick, creatorPro
             style={styles.creatorAttribution}
           >
             Created by{" "}
-            <span style={styles.creatorHandle}>
+            <span style={{ ...styles.creatorHandle, ...officialStyle }}>
               {creatorHandle ? `@${creatorHandle}` : creatorName}
             </span>
             {creatorProfile?.verified && (
