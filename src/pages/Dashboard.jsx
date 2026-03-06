@@ -29,7 +29,8 @@ export default function Dashboard() {
 
   const [isPro, setIsPro] = useState(false);
   const [user, setUser] = useState(null);
-  const [displayName, setDisplayName] = useState("Athlete");
+  const [displayName, setDisplayName] = useState("User");
+  const [isOfficial, setIsOfficial] = useState(false);
   const [goals, setGoals] = useState([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
 
@@ -87,12 +88,13 @@ export default function Dashboard() {
       if (!uid) return;
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username, is_pro")
+        .select("display_name, handle, is_official, is_pro")
         .eq("id", uid)
         .single();
       setUser(data?.user ?? null);
       setIsPro(!!profile?.is_pro);
-      setDisplayName(profile?.username || data?.user?.email?.split("@")[0] || "Athlete");
+      setIsOfficial(!!profile?.is_official);
+      setDisplayName(profile?.handle || profile?.display_name || "User");
       getIsPro(uid).then(setAnalyticsPro);
       setSearchParams({}, { replace: true });
     })();
@@ -110,25 +112,22 @@ export default function Dashboard() {
     const currentUser = data?.user || null;
     setUser(currentUser);
 
-    let name =
-      currentUser?.user_metadata?.username ||
-      (currentUser?.email ? currentUser.email.split("@")[0] : "Athlete");
-
     if (currentUser?.id) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("username, is_pro")
+        .select("display_name, handle, is_official, is_pro")
         .eq("id", currentUser.id)
         .single();
 
-      if (profile?.username) name = profile.username;
+      setDisplayName(profile?.handle || profile?.display_name || "User");
+      setIsOfficial(!!profile?.is_official);
       setIsPro(!!profile?.is_pro);
 
       await loadGoals(currentUser.id);
       await loadUpcomingWorkout(currentUser.id);
+    } else {
+      setDisplayName("User");
     }
-
-    setDisplayName(name);
   }
 
   async function loadGoals(uid) {
@@ -289,7 +288,7 @@ export default function Dashboard() {
         <div>
           <p style={{ fontSize: 14, opacity: 0.8, margin: 0 }}>Welcome back,</p>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0", display: "flex", alignItems: "center", gap: "8px" }}>
-  {displayName}
+  <span style={isOfficial ? { color: "#FFD700", fontWeight: "bold" } : undefined}>{displayName}</span>
 
   {isPro && (
     <span style={{
