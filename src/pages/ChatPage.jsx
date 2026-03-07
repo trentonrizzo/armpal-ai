@@ -41,7 +41,7 @@ import EmptyState from "../components/EmptyState";
 import useUnreadChats from "../hooks/useUnreadChats";
 import { SkeletonCard } from "../components/Skeleton";
 import { getOrCreateConversation } from "../utils/getOrCreateConversation";
-import { getDisplayText, buildDisplayText } from "../utils/displayText";
+import { getDisplayText, normalizeExerciseToFlexible } from "../utils/displayText";
 import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 import Cropper from "react-easy-crop";
 
@@ -860,33 +860,37 @@ export default function ChatPage() {
 
     const workoutId = createdWorkout.id;
 
-    // Universal format preservation: display_text = original string exactly.
+    // Flexible format: { name, input }. Save to exercises table and populate workout.exercises.
     if (exercises.length > 0) {
-          const exerciseRows = exercises.map((ex, index) => {
-        const name = ex?.name || ex?.exercise || ex?.title || "Exercise";
-        const setsVal = ex?.sets ?? null;
-        const repsVal = ex?.reps ?? null;
-        const display_text = ex?.display_text ?? buildDisplayText(ex);
-        return {
-          user_id: user.id,
-          workout_id: workoutId,
-          name,
-          sets: setsVal,
-          reps: repsVal,
-          weight: JSON.stringify(ex),
-          display_text,
-          position: index,
-        };
-      });
+      const normalized = exercises.map(normalizeExerciseToFlexible).filter(Boolean);
+      const exerciseRows = normalized.map((ex, index) => ({
+        user_id: user.id,
+        workout_id: workoutId,
+        name: ex.name,
+        sets: null,
+        reps: null,
+        weight: "",
+        display_text: ex.input || null,
+        position: index,
+      }));
 
-      const { error: exerciseError } = await supabase
+      const { data: insertedRows, error: exerciseError } = await supabase
         .from("exercises")
-        .insert(exerciseRows);
+        .insert(exerciseRows)
+        .select("id, name, display_text");
 
       if (exerciseError) {
         console.error("SAVE EXERCISE ERROR:", exerciseError);
         setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
         return;
+      }
+      if (insertedRows?.length) {
+        const exercisesColumn = insertedRows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          input: r.display_text ?? "",
+        }));
+        await supabase.from("workouts").update({ exercises: exercisesColumn }).eq("id", workoutId);
       }
     }
 

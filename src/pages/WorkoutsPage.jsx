@@ -249,16 +249,39 @@ export default function WorkoutsPage() {
   }, []);
 
   async function loadWorkouts(uid) {
-    const { data } = await supabase
+    const { data: workoutRows } = await supabase
       .from("workouts")
       .select("*")
       .eq("user_id", uid)
       .order("position", { ascending: true })
       .order("created_at", { ascending: true });
-    const list = (data || []).map((w) => ({
-      ...w,
-      exercises: Array.isArray(w.exercises) ? w.exercises : [],
-    }));
+    const workoutsList = workoutRows || [];
+    const workoutIds = workoutsList.map((w) => w.id).filter(Boolean);
+    let exercisesByWorkout = {};
+    if (workoutIds.length > 0) {
+      const { data: exerciseRows } = await supabase
+        .from("exercises")
+        .select("id, workout_id, name, display_text")
+        .eq("user_id", uid)
+        .in("workout_id", workoutIds)
+        .order("position", { ascending: true })
+        .order("created_at", { ascending: true });
+      (exerciseRows || []).forEach((r) => {
+        if (!exercisesByWorkout[r.workout_id]) exercisesByWorkout[r.workout_id] = [];
+        exercisesByWorkout[r.workout_id].push({
+          id: r.id,
+          name: r.name,
+          input: r.display_text ?? "",
+          display_text: r.display_text,
+        });
+      });
+    }
+    const list = workoutsList.map((w) => {
+      const fromColumn = Array.isArray(w.exercises) && w.exercises.length > 0 ? w.exercises : null;
+      const fromTable = exercisesByWorkout[w.id];
+      const exercises = fromColumn ?? (fromTable || []).map((e) => ({ id: e.id, name: e.name, input: e.input ?? e.display_text ?? "" }));
+      return { ...w, exercises };
+    });
     setWorkouts(list);
   }
 

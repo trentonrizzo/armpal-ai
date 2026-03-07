@@ -72,8 +72,7 @@ RULES:
 - If the program specifies weeks, group workouts by week and label them.
 - Preserve exercise details exactly as described.
 - Do NOT invent exercises not described. Do NOT assign dates (backend handles dates).
-- For sets/reps that are ranges (e.g. 8-12), put the range string as-is in the reps field.
-- For EVERY exercise include "display_text": the exact single-line string to display (e.g. "Bench Press — 5x5 — 80%" or "Squat — 3x5 @ RPE 8"). This is the canonical display; preserve percentages, RPE, notes, parentheses exactly as written.
+- For EVERY exercise use ONLY "name" and "input". The first part of the line is the exercise name; everything else (sets, reps, %, RPE, notes) goes in "input" as a single string.
 
 JSON SCHEMA:
 {
@@ -83,19 +82,15 @@ JSON SCHEMA:
       "week_number": 1,
       "day_label": "Day 1",
       "exercises": [
-        {
-          "name": "Bench Press",
-          "sets": "5",
-          "reps": "5",
-          "percentage": "80%",
-          "rpe": "",
-          "notes": "",
-          "display_text": "Bench Press — 5x5 — 80%"
-        }
+        { "name": "Bench Press", "input": "82.5% (275 lbs) 5x5" },
+        { "name": "Incline Bench Press", "input": "72.5% (190 lbs) 3x8" }
       ]
     }
   ]
-}`,
+}
+
+Example: "Bench Press 80% 5x5" → { "name": "Bench Press", "input": "80% 5x5" }
+Example: "Squat 3x5 @ RPE 8" → { "name": "Squat", "input": "3x5 @ RPE 8" }`,
         },
         {
           role: "user",
@@ -125,7 +120,25 @@ JSON SCHEMA:
         .json({ error: "Unexpected AI response structure" });
     }
 
-    let workouts = result.workouts.slice(0, cardLimit);
+    // Normalize exercises to flexible format { name, input } only
+    function normalizeExercise(ex) {
+      if (!ex || typeof ex !== "object") return null;
+      const name = ex.name ?? ex.exercise ?? ex.title ?? "Exercise";
+      const trimmedName = String(name).trim();
+      if (ex.input != null && String(ex.input).trim() !== "") {
+        return { name: trimmedName, input: String(ex.input).trim() };
+      }
+      // Legacy: build input from display_text or sets/reps/percentage/etc.
+      const display = ex.display_text ?? [ex.percentage, ex.sets && ex.reps ? `${ex.sets}x${ex.reps}` : ex.sets || ex.reps, ex.rpe ? `RPE ${ex.rpe}` : "", ex.notes].filter(Boolean).join(" ").trim();
+      return { name: trimmedName, input: display || trimmedName };
+    }
+
+    let workouts = result.workouts.slice(0, cardLimit).map((w) => ({
+      ...w,
+      exercises: Array.isArray(w.exercises)
+        ? w.exercises.map(normalizeExercise).filter(Boolean)
+        : [],
+    }));
 
     if (
       start_date &&

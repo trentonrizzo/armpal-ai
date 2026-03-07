@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { buildDisplayText } from "../../utils/displayText";
 import { X, Check, Zap } from "lucide-react";
 
 const PHASE = { INPUT: "INPUT", GENERATING: "GENERATING", COMPLETE: "COMPLETE" };
@@ -92,23 +91,20 @@ const ICON_CIRCLE = {
 };
 const BTN_STACK = { display: "flex", flexDirection: "column", gap: 10, width: "100%", marginTop: 20 };
 
-function buildWeightStr(ex) {
-  const parts = [];
-  if (ex.percentage) parts.push(ex.percentage);
-  if (ex.rpe) parts.push(`RPE ${ex.rpe}`);
-  if (ex.notes) parts.push(ex.notes);
-  return parts.join(" · ");
-}
-
-function parseSetsNum(v) {
-  const n = parseInt(String(v), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function parseRepsNum(v) {
-  const s = String(v || "");
-  const n = parseInt(s, 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
+// Flexible exercise format: { name, input }. Map to DB row and to workout.exercises display shape.
+function exerciseToRow(ex, userId, workoutId, position) {
+  const name = ex.name ?? "Exercise";
+  const input = ex.input ?? ex.display_text ?? "";
+  return {
+    user_id: userId,
+    workout_id: workoutId,
+    name: String(name).trim(),
+    sets: null,
+    reps: null,
+    weight: "",
+    display_text: String(input).trim() || null,
+    position,
+  };
 }
 
 /* ============================================================
@@ -218,19 +214,26 @@ export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, 
         }
 
         if (Array.isArray(w.exercises) && w.exercises.length > 0) {
-          const rows = w.exercises.map((ex, j) => ({
-            user_id: userId,
-            workout_id: inserted.id,
-            name: ex.name || "Exercise",
-            sets: parseSetsNum(ex.sets),
-            reps: parseRepsNum(ex.reps),
-            weight: buildWeightStr(ex),
-            display_text: ex.display_text ?? buildDisplayText(ex),
-            position: j,
-          }));
-
-          const { error: exErr } = await supabase.from("exercises").insert(rows);
-          if (exErr) console.error("Exercises insert error:", exErr);
+          const rows = w.exercises.map((ex, j) =>
+            exerciseToRow(ex, userId, inserted.id, j)
+          );
+          const { data: insertedRows, error: exErr } = await supabase
+            .from("exercises")
+            .insert(rows)
+            .select("id, name, display_text");
+          if (exErr) {
+            console.error("Exercises insert error:", exErr);
+          } else if (insertedRows?.length) {
+            const exercisesColumn = insertedRows.map((r) => ({
+              id: r.id,
+              name: r.name,
+              input: r.display_text ?? "",
+            }));
+            await supabase
+              .from("workouts")
+              .update({ exercises: exercisesColumn })
+              .eq("id", inserted.id);
+          }
         }
 
         saved++;

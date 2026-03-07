@@ -14,7 +14,7 @@ import {
 } from "../../api/aiConversations";
 import AISettingsOverlay from "./AISettingsOverlay";
 import EmptyState from "../EmptyState";
-import { buildDisplayText, getDisplayText } from "../../utils/displayText";
+import { getDisplayText, normalizeExerciseToFlexible } from "../../utils/displayText";
 
 export default function DashboardAIChat({ onClose }) {
   const navigate = useNavigate();
@@ -162,22 +162,32 @@ export default function DashboardAIChat({ onClose }) {
       const workoutId = workoutInsert.id;
 
       if (Array.isArray(workout.exercises) && workout.exercises.length > 0) {
-        const exerciseRows = workout.exercises.map((ex, index) => ({
+        const normalized = workout.exercises.map(normalizeExerciseToFlexible).filter(Boolean);
+        const exerciseRows = normalized.map((ex, index) => ({
           user_id: userId,
           workout_id: workoutId,
-          name: ex.name || "Exercise",
-          sets: ex.sets ?? null,
-          reps: ex.reps ?? null,
-          weight: JSON.stringify(ex),
-          display_text: ex.display_text ?? buildDisplayText(ex),
+          name: ex.name,
+          sets: null,
+          reps: null,
+          weight: "",
+          display_text: ex.input || null,
           position: index,
         }));
 
-        const { error: exerciseError } = await supabase
+        const { data: insertedRows, error: exerciseError } = await supabase
           .from("exercises")
-          .insert(exerciseRows);
+          .insert(exerciseRows)
+          .select("id, name, display_text");
 
         if (exerciseError) throw exerciseError;
+        if (insertedRows?.length) {
+          const exercisesColumn = insertedRows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            input: r.display_text ?? "",
+          }));
+          await supabase.from("workouts").update({ exercises: exercisesColumn }).eq("id", workoutId);
+        }
       }
 
       alert("Workout saved successfully! 💪");

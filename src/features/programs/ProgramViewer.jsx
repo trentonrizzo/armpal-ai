@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { buildDisplayText, getDisplayText } from "../../utils/displayText";
+import { getDisplayText, normalizeExerciseToFlexible } from "../../utils/displayText";
 
 export default function ProgramViewer({ previewProgram = null, program: programProp = null }) {
   const { id } = useParams();
@@ -154,24 +154,29 @@ export default function ProgramViewer({ previewProgram = null, program: programP
         return;
       }
 
-      for (let i = 0; i < workout.exercises.length; i++) {
-        const ex = workout.exercises[i];
-        const weightParts = [];
-        if (ex.percentage) weightParts.push(ex.percentage);
-        if (ex.intensity) weightParts.push(ex.intensity);
-        if (ex.rpe) weightParts.push(`RPE ${ex.rpe}`);
-        if (ex.notes) weightParts.push(ex.notes);
-        const display_text = ex.display_text ?? buildDisplayText(ex);
-        await supabase.from("exercises").insert({
-          user_id: userId,
-          workout_id: workoutId,
-          name: ex.name || "Exercise",
-          sets: ex.sets != null ? String(ex.sets) : null,
-          reps: ex.reps != null ? String(ex.reps) : null,
-          weight: weightParts.join(" · ") || null,
-          display_text,
-          position: i,
-        });
+      const normalized = workout.exercises.map(normalizeExerciseToFlexible).filter(Boolean);
+      const rows = normalized.map((ex, i) => ({
+        user_id: userId,
+        workout_id: workoutId,
+        name: ex.name,
+        sets: null,
+        reps: null,
+        weight: "",
+        display_text: ex.input || null,
+        position: i,
+      }));
+      const { data: insertedRows, error: exErr } = await supabase
+        .from("exercises")
+        .insert(rows)
+        .select("id, name, display_text");
+      if (exErr) throw exErr;
+      if (insertedRows?.length) {
+        const exercisesColumn = insertedRows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          input: r.display_text ?? "",
+        }));
+        await supabase.from("workouts").update({ exercises: exercisesColumn }).eq("id", workoutId);
       }
     } catch (e) {
       console.error("saveProgramWorkout failed", e);

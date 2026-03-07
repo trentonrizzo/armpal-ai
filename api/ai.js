@@ -160,8 +160,11 @@ ${JSON.stringify(databaseContext).slice(0, 6000)}
 
 RULES:
 
-If user asks to CREATE or MODIFY workouts,
-respond ONLY with valid JSON.
+If user asks to CREATE or MODIFY workouts, respond ONLY with valid JSON in this exact shape:
+{ "type": "create_workout", "title": "Workout name", "exercises": [ { "name": "Exercise Name", "input": "82.5% 5x5" }, ... ] }
+- "exercises" must be an array of objects with ONLY "name" (exercise name) and "input" (everything else on the line: sets, reps, %, RPE, weight, notes as one string).
+- Example: { "name": "Bench Press", "input": "82.5% (275 lbs) 5x5" }
+- Do NOT use sets, reps, weight, percentage, display_text. Use only name and input.
 `;
 
     const completion = await openai.chat.completions.create({

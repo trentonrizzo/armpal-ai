@@ -32,11 +32,27 @@ export function buildDisplayText(ex) {
 
 /**
  * Canonical display string for an exercise. Use this everywhere in UI.
- * Prefer stored display_text; otherwise build from name/sets/reps/percentage/weight/notes.
+ * Flexible format: prefer input (or display_text); otherwise build from name/sets/reps/percentage/weight/notes.
  */
 export function getDisplayText(exercise) {
   if (!exercise) return "";
+  const input = exercise.input ?? exercise.display_text ?? null;
+  if (input != null && String(input).trim() !== "") return String(input).trim();
   const text = exercise.display_text ?? null;
   if (text != null && String(text).trim() !== "") return String(text).trim();
   return buildDisplayText(exercise);
+}
+
+/**
+ * Normalize any exercise shape to flexible format { name, input } for AI-generated workouts.
+ */
+export function normalizeExerciseToFlexible(ex) {
+  if (!ex || typeof ex !== "object") return null;
+  const name = ex.name ?? ex.exercise ?? ex.title ?? "Exercise";
+  const trimmedName = String(name).trim();
+  if (ex.input != null && String(ex.input).trim() !== "") {
+    return { name: trimmedName, input: String(ex.input).trim() };
+  }
+  const display = ex.display_text ?? buildDisplayText(ex);
+  return { name: trimmedName, input: display?.trim() || trimmedName };
 }
