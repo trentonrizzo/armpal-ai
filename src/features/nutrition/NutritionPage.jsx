@@ -16,6 +16,7 @@ import NutritionHistory from "./NutritionHistory";
 import NutritionEntryForm from "./NutritionEntryForm";
 import NutritionGoalsModal from "./NutritionGoalsModal";
 import SmartFoodScanOverlay from "./SmartFoodScanOverlay";
+import ConfirmDeleteModal from "../../components/ui/ConfirmDeleteModal";
 import { Camera } from "lucide-react";
 
 const PAGE = {
@@ -144,6 +145,7 @@ export default function NutritionPage() {
   const [goalsModalOpen, setGoalsModalOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [isPro, setIsPro] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -209,9 +211,9 @@ export default function NutritionPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this entry?")) return;
     await deleteEntry(id);
     setEditingId(null);
+    setDeleteTarget(null);
     loadEntries();
   };
 
@@ -465,7 +467,7 @@ export default function NutritionPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(entry.id)}
+                        onClick={() => setDeleteTarget(entry.id)}
                         style={{
                           padding: "6px 12px",
                           borderRadius: 8,
@@ -518,6 +520,14 @@ export default function NutritionPage() {
         selectedDate={selectedDate}
         isPro={isPro}
         onSaved={loadEntries}
+      />
+
+      <ConfirmDeleteModal
+        open={deleteTarget != null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => handleDelete(deleteTarget)}
+        title="Delete Entry?"
+        body="This will permanently remove the entry."
       />
     </div>
   );
