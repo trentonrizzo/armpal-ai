@@ -19,6 +19,11 @@ const RECENT_BODYWEIGHT_LIMIT = 14;
 const RECENT_NUTRITION_DAYS = 1;
 const CONTEXT_JSON_MAX = 8000;
 
+/** Truncation limits for full context (keep token size reasonable) */
+const FULL_CONTEXT_WORKOUTS_LIMIT = 50;
+const FULL_CONTEXT_NUTRITION_LIMIT = 50;
+const FULL_CONTEXT_MESSAGES_LIMIT = 50;
+
 /** Canonical lift key -> display name for PR summary */
 const CANONICAL_LIFT_DISPLAY = {
   bench_press: "Bench Press",
@@ -104,6 +109,171 @@ function buildPRSummary(prs) {
     });
   }
   return result;
+}
+
+/**
+ * Fetch full user context from Supabase for AI awareness across the app.
+ * Returns a single structured object. Large arrays are truncated (workouts, nutrition, messages).
+ */
+async function fetchFullUserContext(userId) {
+  if (!userId) {
+    return {
+      profile: {},
+      prs: [],
+      workouts: [],
+      bodyweight: [],
+      measurements: [],
+      goals: [],
+      nutrition: {},
+      food_scans: [],
+      friends: [],
+      games: {},
+      economy: {},
+      interactions: {},
+      stats: {},
+    };
+  }
+
+  const [
+    profileRes,
+    prsRes,
+    workoutsRes,
+    bodyweightRes,
+    measurementsRes,
+    goalsRes,
+    nutritionEntriesRes,
+    nutritionGoalsRes,
+    foodScansRes,
+    friendsRes,
+    friendRequestsRes,
+    conversationsRes,
+    messagesRes,
+    flappyRes,
+    arenaRes,
+    gameLeaderboardRes,
+    userGameBestRes,
+    userGameScoresRes,
+    pointsWalletRes,
+    pointsTransactionsRes,
+    referralRewardsRes,
+    profileReactionsRes,
+    profileCountsRes,
+  ] = await Promise.all([
+    supabase.from("profiles").select("id, username, handle, bio, display_name, avatar_url, created_at").eq("id", userId).maybeSingle(),
+    supabase.from("prs").select("lift_name, weight, reps, unit, date, notes").eq("user_id", userId).order("date", { ascending: false }),
+    supabase.from("workouts").select("id, name, scheduled_for, created_at, exercises").eq("user_id", userId).order("created_at", { ascending: false }).limit(FULL_CONTEXT_WORKOUTS_LIMIT),
+    supabase.from("bodyweight_logs").select("weight, unit, logged_at").eq("user_id", userId).order("logged_at", { ascending: false }),
+    supabase.from("measurements").select("name, value, unit, date").eq("user_id", userId).order("date", { ascending: false }),
+    supabase.from("goals").select("title, type, current_value, target_value, unit").eq("user_id", userId),
+    supabase.from("nutrition_entries").select("date, food_name, calories, protein, carbs, fat").eq("user_id", userId).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(FULL_CONTEXT_NUTRITION_LIMIT),
+    supabase.from("nutrition_goals").select("calories_goal, protein_goal, carbs_goal, fat_goal").eq("user_id", userId).maybeSingle(),
+    supabase.from("food_scans").select("meal_date, total_calories, total_protein, total_carbs, total_fat, confidence").eq("user_id", userId).order("meal_date", { ascending: false }),
+    supabase.from("friends").select("friend_id, created_at").eq("user_id", userId),
+    supabase.from("friend_requests").select("sender_id, receiver_id, status").or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
+    supabase.from("conversations").select("*").or(`user1_id.eq.${userId},user2_id.eq.${userId}`),
+    supabase.from("messages").select("created_at").or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order("created_at", { ascending: false }).limit(FULL_CONTEXT_MESSAGES_LIMIT),
+    supabase.from("arcade_flappy_arm_leaderboard").select("best_score, total_games").eq("user_id", userId).maybeSingle(),
+    supabase.from("arena_leaderboard").select("rating, wins, losses, kills, deaths").eq("user_id", userId).maybeSingle(),
+    supabase.from("game_leaderboard").select("game_id, score").eq("user_id", userId),
+    supabase.from("user_game_best").select("game_id, best_score").eq("user_id", userId),
+    supabase.from("user_game_scores").select("score").eq("user_id", userId).order("created_at", { ascending: false }).limit(20),
+    supabase.from("points_wallet").select("balance, lifetime_earned").eq("user_id", userId).maybeSingle(),
+    supabase.from("points_transactions").select("amount, reason").eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("referral_rewards").select("reward_type").eq("referrer_user_id", userId),
+    supabase.from("profile_reactions").select("reaction_type").eq("to_user_id", userId),
+    supabase.from("my_profile_counts").select("pr_count, measurement_count, workout_count, goal_count").eq("user_id", userId).maybeSingle(),
+  ]);
+
+  const profile = profileRes.data || {};
+  const prs = prsRes.data || [];
+  let workouts = workoutsRes.data || [];
+  const bodyweight = bodyweightRes.data || [];
+  const measurements = measurementsRes.data || [];
+  const goals = goalsRes.data || [];
+  let nutritionEntries = nutritionEntriesRes.data || [];
+  const nutritionGoals = nutritionGoalsRes.data || null;
+  const foodScansRaw = foodScansRes.data || [];
+  const friends = friendsRes.data || [];
+  const friendRequests = friendRequestsRes.data || [];
+  const conversations = conversationsRes.data || [];
+  let messages = messagesRes.data || [];
+  const flappy = flappyRes.data;
+  const arena = arenaRes.data;
+  const gameLeaderboard = gameLeaderboardRes.data || [];
+  const userGameBest = userGameBestRes.data || [];
+  const userGameScores = userGameScoresRes.data || [];
+  const pointsWallet = pointsWalletRes.data || null;
+  const pointsTransactions = pointsTransactionsRes.data || [];
+  const referralRewards = referralRewardsRes.data || [];
+  const profileReactions = profileReactionsRes.data || [];
+  let stats = profileCountsRes.data || null;
+
+  workouts = workouts.slice(0, FULL_CONTEXT_WORKOUTS_LIMIT);
+  nutritionEntries = nutritionEntries.slice(0, FULL_CONTEXT_NUTRITION_LIMIT);
+  messages = messages.slice(0, FULL_CONTEXT_MESSAGES_LIMIT);
+
+  const food_scans = foodScansRaw.map((row) => ({
+    meal_date: row.meal_date,
+    totals: {
+      calories: row.total_calories,
+      protein: row.total_protein,
+      carbs: row.total_carbs,
+      fat: row.total_fat,
+    },
+    confidence: row.confidence,
+  }));
+
+  const interactions = {
+    profile_reactions: profileReactions.reduce((acc, r) => {
+      const t = r.reaction_type;
+      if (t != null) acc[t] = (acc[t] || 0) + 1;
+      return acc;
+    }, {}),
+  };
+
+  if (!stats && (prs.length || measurements.length || workouts.length || goals.length)) {
+    stats = {
+      pr_count: prs.length,
+      measurement_count: measurements.length,
+      workout_count: workouts.length,
+      goal_count: goals.length,
+    };
+  }
+  if (!stats) stats = {};
+
+  return {
+    profile: profile || {},
+    prs,
+    workouts,
+    bodyweight,
+    measurements,
+    goals,
+    nutrition: {
+      entries: nutritionEntries,
+      goals: nutritionGoals ? { calories_goal: nutritionGoals.calories_goal, protein_goal: nutritionGoals.protein_goal, carbs_goal: nutritionGoals.carbs_goal, fat_goal: nutritionGoals.fat_goal } : null,
+    },
+    food_scans,
+    friends,
+    games: {
+      arcade_flappy_arm_leaderboard: flappy ? { best_score: flappy.best_score, total_games: flappy.total_games } : null,
+      arena_leaderboard: arena ? { rating: arena.rating, wins: arena.wins, losses: arena.losses, kills: arena.kills, deaths: arena.deaths } : null,
+      game_leaderboard: gameLeaderboard.map((r) => ({ score: r.score })),
+      user_game_best: userGameBest.map((r) => ({ best_value: r.best_score })),
+      user_game_scores: userGameScores.map((r) => ({ score: r.score })),
+    },
+    economy: {
+      points_wallet: pointsWallet ? { balance: pointsWallet.balance, lifetime_earned: pointsWallet.lifetime_earned } : null,
+      points_transactions: pointsTransactions.map((t) => ({ amount: t.amount, reason: t.reason })),
+      referral_rewards: referralRewards.map((r) => ({ reward_type: r.reward_type })),
+    },
+    interactions: {
+      ...interactions,
+      friend_requests: friendRequests,
+      conversations: conversations.map((c) => ({ last_message_at: c.last_message_at ?? c.updated_at ?? c.created_at })),
+      messages: messages.map((m) => ({ created_at: m.created_at })),
+    },
+    stats,
+  };
 }
 
 /**
@@ -371,9 +541,11 @@ export default async function handler(req, res) {
       .maybeSingle();
     if (settings?.personality) personality = settings.personality;
 
-    const userContext = await fetchUserContext(userId);
+    const fullContext = await fetchFullUserContext(userId);
+    let contextStr = JSON.stringify(fullContext);
+    if (contextStr.length > CONTEXT_JSON_MAX) contextStr = contextStr.slice(0, CONTEXT_JSON_MAX) + "…";
 
-    const systemPrompt = `You are ArmPal AI, an in-app strength coach. You have access to the signed-in user's live app data below. Use it to answer questions about their workouts, PRs, measurements, goals, and recent activity. Answer from real data when the user asks about "my" data.
+    const systemPrompt = `You are ArmPal AI, an in-app strength coach. You have full awareness of the signed-in user's app data below. Use it to answer questions about their profile, workouts, PRs, bodyweight, measurements, goals, nutrition, food scans, friends, games (e.g. Flappy Arm score), economy, and activity. Answer from real data when the user asks about "my" data.
 
 CURRENT PERSONALITY: ${personality}
 - coach: elite strength coach, structured, confident, professional
@@ -383,8 +555,8 @@ CURRENT PERSONALITY: ${personality}
 - science: analytical, numbers-focused
 - vulgar: unhinged hardcore coach, profanity expected, raw gym energy
 
-USER'S LIVE APP DATA (use this to answer questions about their workouts, PRs, measurements, goals, bodyweight):
-${userContext}
+USER'S FULL APP DATA (use this to answer questions like "What are my PRs?", "What is my bodyweight?", "What is in my bio?", "What is my flappy arm score?", "How many workouts have I logged?", "What did I eat today?"):
+${contextStr}
 
 INTENT RULES:
 1) WORKOUT CREATION: If the user asks you to CREATE or BUILD a workout (e.g. "build me a chest workout", "make me a bench day", "create a shoulder day", "give me a push workout", "make me a leg day", "workout for Monday", "based on my bench max"), you MUST respond with ONLY a single valid JSON object—no other text, no markdown, no code fence. Use this exact shape:
@@ -393,7 +565,7 @@ INTENT RULES:
 - "exercises": array of objects with ONLY "name" and "input". Example: {"name":"Bench Press","input":"85% 5x5"}
 - If the user said "don't save it", "just an example", "just type it out", or "don't make a card", respond in normal conversational text instead of JSON.
 
-2) LOOKUP / QUESTIONS: If the user asks about their data ("Do you see my March 9 workout?", "What are my PRs?", "What should I train today?", "Did I train chest this week?"), answer using the USER'S LIVE APP DATA above. Be specific and cite their actual workouts, dates, PRs, etc.
+2) LOOKUP / QUESTIONS: If the user asks about their data ("Do you see my March 9 workout?", "What are my PRs?", "What is my bodyweight?", "What did I eat today?", "What is my flappy arm score?", "How many workouts have I logged?"), answer using the USER'S FULL APP DATA above. Be specific and cite their actual workouts, dates, PRs, nutrition, games, etc.
 
 3) GENERAL CHAT: For motivation, form, nutrition, or other conversation, respond in normal text.
 
