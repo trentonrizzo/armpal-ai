@@ -13,17 +13,120 @@ const supabase = createClient(
 );
 
 const RECENT_WORKOUTS_LIMIT = 25;
-const RECENT_PRS_LIMIT = 30;
+const RECENT_PRS_LIMIT = 50;
 const RECENT_MEASUREMENTS_LIMIT = 20;
 const RECENT_BODYWEIGHT_LIMIT = 14;
+const RECENT_NUTRITION_DAYS = 1;
 const CONTEXT_JSON_MAX = 8000;
+
+/** Canonical lift key -> display name for PR summary */
+const CANONICAL_LIFT_DISPLAY = {
+  bench_press: "Bench Press",
+  shoulder_press: "Shoulder Press",
+  deadlift: "Deadlift",
+  squat: "Squat",
+  curl: "Curl",
+  row: "Row",
+  pullup: "Pull-up",
+  dip: "Dip",
+  other: "Other",
+};
+
+/** Normalize raw lift name to canonical category for grouping and lookup */
+function normalizeLiftName(raw) {
+  if (!raw || typeof raw !== "string") return "other";
+  const lower = raw.toLowerCase().trim();
+  const normalized = lower.replace(/\s+/g, " ").replace(/[^a-z0-9\s]/g, "");
+
+  const rules = [
+    [/^(bench|bench press|bench pr|flat bench|barbell bench|bb bench|bp)\b/, "bench_press"],
+    [/^(overhead press|ohp|shoulder press|barbell shoulder|strict press|military press)\b/, "shoulder_press"],
+    [/^(deadlift|sumo deadlift|conventional deadlift|dl|dead)\b/, "deadlift"],
+    [/^(squat|back squat|barbell squat|low bar|high bar|bs)\b/, "squat"],
+    [/^(curl|barbell curl|cheat curl|bicep curl|hammer curl)\b/, "curl"],
+    [/^(row|barbell row|bent over row|pendlay|db row)\b/, "row"],
+    [/^(pull.?up|pullup|chin.?up|chinup)\b/, "pullup"],
+    [/^(dip|dips)\b/, "dip"],
+  ];
+
+  for (const [pattern, canonical] of rules) {
+    if (pattern.test(normalized)) return canonical;
+  }
+  return "other";
+}
+
+/**
+ * Group PRs by normalized lift and take best weight per category.
+ * Returns array of { canonical, displayName, weight, unit, date, reps }.
+ */
+function buildPRSummary(prs) {
+  const byCanonical = new Map();
+
+  for (const p of prs) {
+    const canonical = normalizeLiftName(p.lift_name);
+    const weight = Number(p.weight);
+    if (!Number.isFinite(weight) || weight <= 0) continue;
+
+    const existing = byCanonical.get(canonical);
+    const better =
+      !existing ||
+      weight > existing.weight ||
+      (weight === existing.weight && (p.reps != null && (existing.reps == null || Number(p.reps) > existing.reps)));
+
+    if (better) {
+      byCanonical.set(canonical, {
+        canonical,
+        weight,
+        unit: p.unit || "lb",
+        date: p.date,
+        reps: p.reps,
+        raw_lift: p.lift_name,
+      });
+    }
+  }
+
+  const order = ["bench_press", "squat", "deadlift", "shoulder_press", "row", "curl", "pullup", "dip", "other"];
+  const result = [];
+  for (const key of order) {
+    const entry = byCanonical.get(key);
+    if (!entry) continue;
+    const displayName = CANONICAL_LIFT_DISPLAY[key] || entry.raw_lift || key;
+    result.push({
+      displayName,
+      weight: entry.weight,
+      unit: entry.unit,
+      date: entry.date,
+      reps: entry.reps,
+    });
+  }
+  for (const [key, entry] of byCanonical) {
+    if (order.includes(key)) continue;
+    result.push({
+      displayName: entry.raw_lift || key,
+      weight: entry.weight,
+      unit: entry.unit,
+      date: entry.date,
+      reps: entry.reps,
+    });
+  }
+  return result;
+}
 
 /**
  * Fetch live user context from Supabase for context-aware AI chat.
- * Returns a compact summary for the system prompt.
+ * Builds normalized PR summary, nutrition today, and a short athlete profile.
  */
 async function fetchUserContext(userId) {
-  const [workoutsRes, prsRes, measurementsRes, goalsRes, bodyweightRes] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [
+    workoutsRes,
+    prsRes,
+    measurementsRes,
+    goalsRes,
+    bodyweightRes,
+    nutritionRes,
+  ] = await Promise.all([
     supabase
       .from("workouts")
       .select("id, name, scheduled_for, created_at, exercises")
@@ -52,6 +155,11 @@ async function fetchUserContext(userId) {
       .eq("user_id", userId)
       .order("logged_at", { ascending: false })
       .limit(RECENT_BODYWEIGHT_LIMIT),
+    supabase
+      .from("nutrition_entries")
+      .select("date, calories, protein, carbs, fat")
+      .eq("user_id", userId)
+      .eq("date", today),
   ]);
 
   const workouts = workoutsRes.data || [];
@@ -59,42 +167,92 @@ async function fetchUserContext(userId) {
   const measurements = measurementsRes.data || [];
   const goals = goalsRes.data || [];
   const bodyweight = bodyweightRes.data || [];
+  const nutritionEntries = nutritionRes.data || [];
 
-  const summary = {
-    workouts: workouts.map((w) => ({
+  const prSummary = buildPRSummary(prs);
+
+  let todayCalories = 0;
+  let todayProtein = 0;
+  let todayCarbs = 0;
+  let todayFat = 0;
+  for (const e of nutritionEntries) {
+    todayCalories += Number(e.calories) || 0;
+    todayProtein += Number(e.protein) || 0;
+    todayCarbs += Number(e.carbs) || 0;
+    todayFat += Number(e.fat) || 0;
+  }
+
+  const latestBw = bodyweight[0];
+  const primaryGoal = goals[0];
+  const recentWorkouts = workouts.slice(0, 7).map((w) => ({
+    name: w.name,
+    date: w.scheduled_for || w.created_at,
+    exercise_count: Array.isArray(w.exercises) ? w.exercises.length : 0,
+  }));
+  const now = new Date();
+  const inEightDays = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+  const upcomingWorkouts = workouts.filter((w) => {
+    if (!w.scheduled_for) return false;
+    const scheduled = new Date(w.scheduled_for);
+    return !isNaN(scheduled.getTime()) && scheduled >= now && scheduled <= inEightDays;
+  }).slice(0, 5).map((w) => ({ name: w.name, scheduled_for: w.scheduled_for }));
+
+  const prSummaryLines = prSummary.length
+    ? prSummary.map((p) => `${p.displayName}: ${p.weight} ${p.unit}${p.reps != null ? ` (${p.reps} reps)` : ""}`).join("\n")
+    : "No PRs logged.";
+
+  const athleteProfile = [
+    "--- ATHLETE PROFILE ---",
+    `Bodyweight: ${latestBw ? `${latestBw.weight} ${latestBw.unit || "lb"}` : "Not logged"}`,
+    `Primary goal: ${primaryGoal ? `${primaryGoal.title} (${primaryGoal.type || ""}) ${primaryGoal.target_value != null ? primaryGoal.target_value : ""} ${primaryGoal.unit || ""}`.trim() : "None set"}`,
+    "",
+    "PR Summary (best per lift):",
+    prSummaryLines,
+    "",
+    "Today's nutrition:",
+    nutritionEntries.length
+      ? `Calories ${todayCalories}, Protein ${todayProtein}g, Carbs ${todayCarbs}g, Fat ${todayFat}g`
+      : "No entries today",
+    "",
+    "Recent workouts (last 7):",
+    recentWorkouts.length
+      ? recentWorkouts.map((w) => `- ${w.name}${w.date ? ` (${String(w.date).slice(0, 10)})` : ""} [${w.exercise_count} exercises]`).join("\n")
+      : "None",
+    "",
+    "Upcoming (next 7 days):",
+    upcomingWorkouts.length
+      ? upcomingWorkouts.map((w) => `- ${w.name} (${String(w.scheduled_for).slice(0, 10)})`).join("\n")
+      : "None scheduled",
+    "---",
+  ].join("\n");
+
+  const detail = {
+    pr_summary: prSummary,
+    pr_summary_text: prSummaryLines,
+    nutrition_today: { calories: todayCalories, protein: todayProtein, carbs: todayCarbs, fat: todayFat },
+    workouts: workouts.slice(0, 15).map((w) => ({
       name: w.name,
       scheduled_for: w.scheduled_for,
       created_at: w.created_at,
       exercise_count: Array.isArray(w.exercises) ? w.exercises.length : 0,
       exercises: Array.isArray(w.exercises)
-        ? w.exercises.slice(0, 15).map((e) => ({ name: e.name, input: e.input ?? e.display_text ?? "" }))
+        ? w.exercises.slice(0, 12).map((e) => ({ name: e.name, input: e.input ?? e.display_text ?? "" }))
         : [],
     })),
-    prs: prs.map((p) => ({
+    measurements: measurements.slice(0, 10).map((m) => ({ name: m.name, value: m.value, unit: m.unit, logged_at: m.logged_at })),
+    goals: goals.map((g) => ({ title: g.title, target_value: g.target_value, target_date: g.target_date, type: g.type, unit: g.unit })),
+    bodyweight: bodyweight.slice(0, 5).map((b) => ({ weight: b.weight, unit: b.unit || "lb", logged_at: b.logged_at })),
+    raw_prs_for_dates: prs.slice(0, 20).map((p) => ({
       lift: p.lift_name,
+      normalized: normalizeLiftName(p.lift_name),
       weight: p.weight,
       unit: p.unit || "lb",
       date: p.date,
       reps: p.reps,
-      notes: p.notes,
     })),
-    measurements: measurements.map((m) => ({
-      name: m.name,
-      value: m.value,
-      unit: m.unit,
-      logged_at: m.logged_at,
-    })),
-    goals: goals.map((g) => ({
-      title: g.title,
-      target_value: g.target_value,
-      target_date: g.target_date,
-      type: g.type,
-      unit: g.unit,
-    })),
-    bodyweight: bodyweight.map((b) => ({ weight: b.weight, unit: b.unit || "lb", logged_at: b.logged_at })),
   };
 
-  const contextStr = JSON.stringify(summary);
+  const contextStr = athleteProfile + "\n\nDETAIL (for lookups):\n" + JSON.stringify(detail);
   return contextStr.length > CONTEXT_JSON_MAX ? contextStr.slice(0, CONTEXT_JSON_MAX) + "…" : contextStr;
 }
 
