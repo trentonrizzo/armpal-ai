@@ -1,24 +1,15 @@
 /*
   POST /api/ai/food-scan
-  Accepts { imagePath, userId, mealDate } where imagePath is a Supabase
-  Storage key inside the "food_scan_images" bucket.
+  Food scan AI only — uses GPT-4o vision. Completely separate from other AI endpoints.
 
-  REQUIRED SETUP:
-  1. Supabase Storage bucket "food_scan_images" (can be private).
-  2. (Optional) Supabase table "food_scans" for scan history & rate-limiting:
-       id uuid primary key default gen_random_uuid(),
-       user_id uuid references auth.users(id),
-       created_at timestamptz default now(),
-       meal_date date,
-       image_path text,
-       ai_result_json jsonb,
-       total_calories int default 0,
-       total_protein int default 0,
-       total_carbs int default 0,
-       total_fat int default 0,
-       confidence text,
-       status text default 'completed'
-     + RLS policy: user can select/insert own rows.
+  Request body:
+    imageUrl: string  — URL of the food image (https or data: URI), OR
+    imagePath: string + userId: string — Supabase storage key in "food_scan_images"; backend creates signed URL
+    userText: string | null — optional context (e.g. "pork under gravy")
+
+  Returns:
+    { foods: [ { name: string, estimated_weight_g: number }, ... ] }
+  No macros — only foods and estimated weight in grams.
 */
 
 import OpenAI from "openai";
@@ -41,89 +32,98 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { imagePath, userId, mealDate } = req.body || {};
+    const { imageUrl, imagePath, userText, userId, mealDate } = req.body || {};
 
-    if (!imagePath || !userId) {
-      return res.status(400).json({ error: "Missing imagePath or userId" });
+    let imageUrlToUse = imageUrl;
+
+    if (!imageUrlToUse && imagePath && userId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_pro")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!profile?.is_pro) {
+        return res.status(403).json({
+          error: "PRO_REQUIRED",
+          message: "Smart Food Scan is a Pro feature.",
+        });
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const { count: scanCount, error: countErr } = await supabase
+        .from("food_scans")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .gte("created_at", today + "T00:00:00Z");
+
+      if (!countErr && scanCount >= DAILY_SCAN_LIMIT) {
+        return res.status(429).json({
+          error: "SCAN_LIMIT_REACHED",
+          message: `Daily scan limit (${DAILY_SCAN_LIMIT}) reached. Try again tomorrow.`,
+        });
+      }
+
+      const { data: signedData, error: signErr } = await supabase.storage
+        .from("food_scan_images")
+        .createSignedUrl(imagePath, 300);
+
+      if (signErr || !signedData?.signedUrl) {
+        return res.status(500).json({
+          error: "Failed to access uploaded image",
+          details: signErr?.message,
+        });
+      }
+      imageUrlToUse = signedData.signedUrl;
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_pro")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!profile?.is_pro) {
-      return res.status(403).json({
-        error: "PRO_REQUIRED",
-        message: "Smart Food Scan is a Pro feature.",
+    if (!imageUrlToUse) {
+      return res.status(400).json({
+        error: "Missing image",
+        message: "Provide imageUrl or imagePath with userId.",
       });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-
-    const { count: scanCount, error: countErr } = await supabase
-      .from("food_scans")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("created_at", today + "T00:00:00Z");
-
-    if (!countErr && scanCount >= DAILY_SCAN_LIMIT) {
-      return res.status(429).json({
-        error: "SCAN_LIMIT_REACHED",
-        message: `Daily scan limit (${DAILY_SCAN_LIMIT}) reached. Try again tomorrow.`,
-      });
-    }
-
-    const { data: signedData, error: signErr } = await supabase.storage
-      .from("food_scan_images")
-      .createSignedUrl(imagePath, 300);
-
-    if (signErr || !signedData?.signedUrl) {
-      return res.status(500).json({
-        error: "Failed to access uploaded image",
-        details: signErr?.message,
-      });
-    }
+    const contextLine = userText && String(userText).trim()
+      ? `\nThe user provided this context: "${String(userText).trim()}". Use it to refine identification (e.g. "pork under gravy").`
+      : "";
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       temperature: 0.3,
       response_format: { type: "json_object" },
       max_tokens: 1024,
       messages: [
         {
           role: "system",
-          content: `You are a precise food nutrition analysis AI. Analyze the food image and return nutritional estimates.
+          content: `You are a food recognition AI. Analyze the image and identify all foods. Return ONLY valid JSON.
 
 RULES:
-- Return ONLY valid JSON matching the schema below.
-- Identify ALL visible food items individually.
-- Estimate portions from visual cues (plate size, utensils, hands for scale).
-- Round macros to whole numbers.
-- Be conservative with estimates.
-- confidence: "low" if blurry/ambiguous, "medium" if decent, "high" if clearly identifiable.
+- Identify ALL visible food items.
+- Use the user's optional text context when provided to refine identification (e.g. "pork under gravy").
+- Estimate weight in grams per food item. Be conservative; use visual cues (plate size, typical portions).
+- Do NOT calculate or return calories, protein, carbs, or fat. Only food name and estimated_weight_g.
+- Return exactly this structure:
 
-JSON SCHEMA:
 {
   "foods": [
-    { "name": "string", "estimated_amount": "string", "calories": int, "protein": int, "carbs": int, "fat": int }
-  ],
-  "totals": { "calories": int, "protein": int, "carbs": int, "fat": int },
-  "confidence": "low|medium|high",
-  "notes": "one-line disclaimer about estimate accuracy"
-}`,
+    { "name": "short lowercase description", "estimated_weight_g": number },
+    ...
+  ]
+}
+
+Example: { "foods": [ { "name": "grilled chicken breast", "estimated_weight_g": 180 }, { "name": "white rice", "estimated_weight_g": 150 } ] }`,
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Analyze all food in this image. Return nutritional estimates as JSON.",
+              text: `Identify all foods in this image and estimate weight in grams for each. Return JSON only.${contextLine}`,
             },
             {
               type: "image_url",
-              image_url: { url: signedData.signedUrl, detail: "high" },
+              image_url: { url: imageUrlToUse, detail: "high" },
             },
           ],
         },
@@ -143,29 +143,37 @@ JSON SCHEMA:
       return res.status(500).json({ error: "Invalid JSON from AI", raw });
     }
 
-    if (!Array.isArray(result.foods) || !result.totals) {
+    if (!Array.isArray(result.foods)) {
       return res.status(500).json({ error: "Unexpected AI response structure" });
     }
 
-    // Persist scan metadata (graceful — table may not exist yet)
-    await supabase
-      .from("food_scans")
-      .insert({
-        user_id: userId,
-        meal_date: mealDate || today,
-        image_path: imagePath,
-        ai_result_json: result,
-        total_calories: result.totals.calories || 0,
-        total_protein: result.totals.protein || 0,
-        total_carbs: result.totals.carbs || 0,
-        total_fat: result.totals.fat || 0,
-        confidence: result.confidence || "medium",
-        status: "completed",
-      })
-      .then(() => {})
-      .catch(() => {});
+    const normalized = {
+      foods: result.foods.map((f) => ({
+        name: String(f?.name ?? "unknown").trim() || "unknown",
+        estimated_weight_g: Math.max(0, Math.round(Number(f?.estimated_weight_g) || 0)),
+      })),
+    };
 
-    return res.status(200).json(result);
+    if (imagePath && userId) {
+      await supabase
+        .from("food_scans")
+        .insert({
+          user_id: userId,
+          meal_date: mealDate || new Date().toISOString().slice(0, 10),
+          image_path: imagePath,
+          ai_result_json: normalized,
+          total_calories: 0,
+          total_protein: 0,
+          total_carbs: 0,
+          total_fat: 0,
+          confidence: "medium",
+          status: "completed",
+        })
+        .then(() => {})
+        .catch(() => {});
+    }
+
+    return res.status(200).json(normalized);
   } catch (err) {
     console.error("FOOD SCAN ERROR:", err);
     return res.status(500).json({

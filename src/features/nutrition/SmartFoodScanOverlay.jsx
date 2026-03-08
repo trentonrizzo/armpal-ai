@@ -282,6 +282,7 @@ export default function SmartFoodScanOverlay({
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [analysisIdx, setAnalysisIdx] = useState(0);
+  const [userText, setUserText] = useState("");
   const cameraRef = useRef(null);
   const libraryRef = useRef(null);
 
@@ -298,6 +299,7 @@ export default function SmartFoodScanOverlay({
     setError(null);
     setSaving(false);
     setAnalysisIdx(0);
+    setUserText("");
     if (prev) URL.revokeObjectURL(prev);
   }, [open]);
 
@@ -367,7 +369,12 @@ export default function SmartFoodScanOverlay({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imagePath: path, userId, mealDate: selectedDate }),
+          body: JSON.stringify({
+            imagePath: path,
+            userId,
+            mealDate: selectedDate,
+            userText: userText?.trim() || null,
+          }),
         }
       );
 
@@ -378,8 +385,22 @@ export default function SmartFoodScanOverlay({
 
       const data = await res.json();
       setResults(data);
+      const foods = data.foods || [];
+      const normalized = foods.map((f) => {
+        if (f.estimated_weight_g != null && (f.estimated_amount == null || f.estimated_amount === "")) {
+          return {
+            ...f,
+            estimated_amount: `${f.estimated_weight_g} g`,
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+          };
+        }
+        return f;
+      });
       setEditFoods(
-        (data.foods || []).map((f, i) => {
+        normalized.map((f, i) => {
           const parsed = parseAmountUnit(f.estimated_amount);
           const cal = Math.round(Number(f.calories) || 0);
           const pro = Math.round(Number(f.protein) || 0);
@@ -409,7 +430,7 @@ export default function SmartFoodScanOverlay({
       setError(err.message || "Something went wrong. Please try again.");
       setStep(STEP.PREVIEW);
     }
-  }, [imageFile, userId, selectedDate, imagePath]);
+  }, [imageFile, userId, selectedDate, imagePath, userText]);
 
   /* ---- choose different ---- */
   const handleChooseDifferent = useCallback(() => {
@@ -604,6 +625,26 @@ export default function SmartFoodScanOverlay({
                   <img src={imagePreview} alt="Food preview" style={IMG_STYLE} />
                 </div>
               )}
+              <label style={{ display: "block", width: "100%", marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.6)" }}>
+                Optional context (e.g. &quot;pork under gravy&quot;)
+              </label>
+              <input
+                type="text"
+                value={userText}
+                onChange={(e) => setUserText(e.target.value)}
+                placeholder="Add context to help identify foods…"
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "#fff",
+                  fontSize: 14,
+                  marginBottom: 8,
+                }}
+              />
               {error && <div style={ERROR_BOX}>{error}</div>}
               <div style={BTN_STACK}>
                 <button style={PRIMARY_BTN} onClick={handleUsePhoto}>
