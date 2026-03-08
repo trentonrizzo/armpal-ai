@@ -32,14 +32,16 @@ export function buildDisplayText(ex) {
 
 /**
  * Canonical display string for an exercise. Use this everywhere in UI.
- * Flexible format: prefer input (or display_text); otherwise build from name/sets/reps/percentage/weight/notes.
+ * Flexible format: "Name — input"; falls back to display_text, then buildDisplayText.
  */
 export function getDisplayText(exercise) {
   if (!exercise) return "";
-  const input = exercise.input ?? exercise.display_text ?? null;
-  if (input != null && String(input).trim() !== "") return String(input).trim();
-  const text = exercise.display_text ?? null;
-  if (text != null && String(text).trim() !== "") return String(text).trim();
+  const name = (exercise.name ?? exercise.exercise ?? exercise.title ?? "").trim();
+  const input = (exercise.input ?? "").trim();
+  if (name && input) return `${name} — ${input}`;
+  if (input) return input;
+  const text = (exercise.display_text ?? "").trim();
+  if (text) return text;
   return buildDisplayText(exercise);
 }
 

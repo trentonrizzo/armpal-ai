@@ -138,45 +138,57 @@ export default function ProgramViewer({ previewProgram = null, program: programP
 
     setSavingId(workout.name);
     try {
+      const normalized = Array.isArray(workout.exercises)
+        ? workout.exercises.map(normalizeExerciseToFlexible).filter(Boolean)
+        : [];
+      const flexExercises = normalized.map((ex, i) => ({
+        id: `temp-${i}`,
+        name: ex.name,
+        input: ex.input,
+      }));
+
       const { data: newWorkout, error: wErr } = await supabase
         .from("workouts")
         .insert({
           user_id: userId,
           name: workout.name,
+          exercises: flexExercises,
         })
         .select("id")
         .single();
 
       if (wErr) throw wErr;
       const workoutId = newWorkout?.id;
-      if (!workoutId || !Array.isArray(workout.exercises)) {
-        setSavingId(null);
-        return;
-      }
+      if (!workoutId) { setSavingId(null); return; }
 
-      const normalized = workout.exercises.map(normalizeExerciseToFlexible).filter(Boolean);
-      const rows = normalized.map((ex, i) => ({
-        user_id: userId,
-        workout_id: workoutId,
-        name: ex.name,
-        sets: null,
-        reps: null,
-        weight: "",
-        display_text: ex.input || null,
-        position: i,
-      }));
-      const { data: insertedRows, error: exErr } = await supabase
-        .from("exercises")
-        .insert(rows)
-        .select("id, name, display_text");
-      if (exErr) throw exErr;
-      if (insertedRows?.length) {
-        const exercisesColumn = insertedRows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          input: r.display_text ?? "",
+      // Also insert into exercises table; upgrade JSONB with real IDs if possible
+      if (normalized.length > 0) {
+        const rows = normalized.map((ex, i) => ({
+          user_id: userId,
+          workout_id: workoutId,
+          name: ex.name,
+          sets: null,
+          reps: null,
+          weight: "",
+          display_text: ex.input || null,
+          position: i,
         }));
-        await supabase.from("workouts").update({ exercises: exercisesColumn }).eq("id", workoutId);
+        try {
+          const { data: insertedRows } = await supabase
+            .from("exercises")
+            .insert(rows)
+            .select("id, name, display_text");
+          if (insertedRows?.length) {
+            const withRealIds = insertedRows.map((r) => ({
+              id: r.id,
+              name: r.name,
+              input: r.display_text ?? "",
+            }));
+            await supabase.from("workouts").update({ exercises: withRealIds }).eq("id", workoutId);
+          }
+        } catch (exErr) {
+          console.error("Exercise table insert failed (workout still has exercises):", exErr);
+        }
       }
     } catch (e) {
       console.error("saveProgramWorkout failed", e);

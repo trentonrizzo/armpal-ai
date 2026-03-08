@@ -16,8 +16,8 @@ Schema (REQUIRED):
     {
       "name": "Day 1 - Upper",
       "exercises": [
-        { "name": "Bench Press", "sets": 4, "reps": 6 },
-        { "name": "Incline DB Press", "sets": 3, "reps": 10 }
+        { "name": "Bench Press", "input": "4x6 @ 80%" },
+        { "name": "Incline DB Press", "input": "3x10" }
       ]
     }
   ]
@@ -26,40 +26,41 @@ Schema (REQUIRED):
 Rules:
 - Always return an object with a "days" array.
 - If the user does not specify days explicitly, create "Day 1" and group all exercises there.
-- Parse obvious patterns like "4x6", "4 x 6", "4 sets of 6" as sets=4, reps=6.
-- If you cannot confidently determine sets or reps for an exercise, set that property to null.
+- Every exercise must have ONLY "name" and "input". The exercise name goes in "name"; everything else (sets, reps, weight, %, RPE, tempo, notes) goes in "input" as one string.
+- Example: "Bench Press 4x6 @ 80%" -> { "name": "Bench Press", "input": "4x6 @ 80%" }
+- Example: "Squat 3x5 RPE 8" -> { "name": "Squat", "input": "3x5 RPE 8" }
+- Do NOT use sets, reps, weight, percentage, display_text fields. Only name and input.
 - Do NOT include any other top-level keys besides "days".
 - If truly no exercises can be detected, return { "days": [] }.
 `;
 
+function normalizeExercise(ex) {
+  if (!ex || typeof ex !== "object") return null;
+  const name = String(ex.name ?? ex.exercise ?? ex.title ?? "Exercise").trim();
+  if (ex.input != null && String(ex.input).trim() !== "") {
+    return { name, input: String(ex.input).trim() };
+  }
+  const parts = [
+    ex.percentage,
+    ex.sets != null && ex.reps != null ? `${ex.sets}x${ex.reps}` : (ex.sets ?? ex.reps ?? null),
+    ex.rpe ? `RPE ${ex.rpe}` : null,
+    ex.notes,
+  ].filter(Boolean).join(" ").trim();
+  return { name, input: parts || name };
+}
+
 function normalizeDays(parsed) {
-  // Already in desired shape
   if (parsed && Array.isArray(parsed.days)) {
     return {
       days: parsed.days.map((day, i) => ({
         name: day?.name || `Day ${i + 1}`,
         exercises: Array.isArray(day?.exercises)
-          ? day.exercises.map((ex) => ({
-              name: ex?.name || "Exercise",
-              sets:
-                typeof ex?.sets === "number"
-                  ? ex.sets
-                  : ex?.sets != null && !isNaN(Number(ex.sets))
-                  ? Number(ex.sets)
-                  : null,
-              reps:
-                typeof ex?.reps === "number"
-                  ? ex.reps
-                  : ex?.reps != null && !isNaN(Number(ex.reps))
-                  ? Number(ex.reps)
-                  : null,
-            }))
+          ? day.exercises.map(normalizeExercise).filter(Boolean)
           : [],
       })),
     };
   }
 
-  // Fallback: try to map from legacy ArmPal layout schema if present
   const layouts = parsed?.layouts;
   const layoutKeys = layouts && typeof layouts === "object" ? Object.keys(layouts) : [];
   if (layoutKeys.length > 0) {
@@ -73,28 +74,13 @@ function normalizeDays(parsed) {
     const days = sourceDays.map((day, i) => ({
       name: day?.name || `Day ${i + 1}`,
       exercises: Array.isArray(day?.exercises)
-        ? day.exercises.map((ex) => ({
-            name: ex?.name || "Exercise",
-            sets:
-              typeof ex?.sets === "number"
-                ? ex.sets
-                : ex?.sets != null && !isNaN(Number(ex.sets))
-                ? Number(ex.sets)
-                : null,
-            reps:
-              typeof ex?.reps === "number"
-                ? ex.reps
-                : ex?.reps != null && !isNaN(Number(ex.reps))
-                ? Number(ex.reps)
-                : null,
-          }))
+        ? day.exercises.map(normalizeExercise).filter(Boolean)
         : [],
     }));
 
     return { days };
   }
 
-  // Last resort: no structure we recognize
   return { days: [] };
 }
 

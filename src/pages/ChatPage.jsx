@@ -844,11 +844,20 @@ export default function ChatPage() {
     ? normalized.exercises
     : [];
 
+    // Build exercises upfront so the JSONB column is never empty
+    const normalizedEx = exercises.map(normalizeExerciseToFlexible).filter(Boolean);
+    const flexExercises = normalizedEx.map((ex, i) => ({
+      id: `temp-${i}`,
+      name: ex.name,
+      input: ex.input,
+    }));
+
     const { data: createdWorkout, error: wErr } = await supabase
       .from("workouts")
       .insert({
         user_id: user.id,
         name: workoutName,
+        exercises: flexExercises,
       })
       .select()
       .single();
@@ -860,10 +869,9 @@ export default function ChatPage() {
 
     const workoutId = createdWorkout.id;
 
-    // Flexible format: { name, input }. Save to exercises table and populate workout.exercises.
-    if (exercises.length > 0) {
-      const normalized = exercises.map(normalizeExerciseToFlexible).filter(Boolean);
-      const exerciseRows = normalized.map((ex, index) => ({
+    // Also insert into exercises table; upgrade JSONB with real IDs if possible
+    if (normalizedEx.length > 0) {
+      const exerciseRows = normalizedEx.map((ex, index) => ({
         user_id: user.id,
         workout_id: workoutId,
         name: ex.name,
@@ -874,23 +882,21 @@ export default function ChatPage() {
         position: index,
       }));
 
-      const { data: insertedRows, error: exerciseError } = await supabase
-        .from("exercises")
-        .insert(exerciseRows)
-        .select("id, name, display_text");
-
-      if (exerciseError) {
-        console.error("SAVE EXERCISE ERROR:", exerciseError);
-        setSavingWorkoutByMsgId((p) => ({ ...p, [messageId]: false }));
-        return;
-      }
-      if (insertedRows?.length) {
-        const exercisesColumn = insertedRows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          input: r.display_text ?? "",
-        }));
-        await supabase.from("workouts").update({ exercises: exercisesColumn }).eq("id", workoutId);
+      try {
+        const { data: insertedRows } = await supabase
+          .from("exercises")
+          .insert(exerciseRows)
+          .select("id, name, display_text");
+        if (insertedRows?.length) {
+          const withRealIds = insertedRows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            input: r.display_text ?? "",
+          }));
+          await supabase.from("workouts").update({ exercises: withRealIds }).eq("id", workoutId);
+        }
+      } catch (exErr) {
+        console.error("Exercise table insert failed (workout still has exercises):", exErr);
       }
     }
 
