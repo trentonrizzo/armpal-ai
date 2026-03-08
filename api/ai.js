@@ -32,26 +32,20 @@ const CANONICAL_LIFT_DISPLAY = {
   other: "Other",
 };
 
-/** Normalize raw lift name to canonical category for grouping and lookup */
+/** Normalize raw lift name to canonical category using fuzzy substring detection */
 function normalizeLiftName(raw) {
-  if (!raw || typeof raw !== "string") return "other";
-  const lower = raw.toLowerCase().trim();
-  const normalized = lower.replace(/\s+/g, " ").replace(/[^a-z0-9\s]/g, "");
+  const name = (raw || "").toLowerCase().trim();
+  if (!name) return "other";
 
-  const rules = [
-    [/^(bench|bench press|bench pr|flat bench|barbell bench|bb bench|bp)\b/, "bench_press"],
-    [/^(overhead press|ohp|shoulder press|barbell shoulder|strict press|military press)\b/, "shoulder_press"],
-    [/^(deadlift|sumo deadlift|conventional deadlift|dl|dead)\b/, "deadlift"],
-    [/^(squat|back squat|barbell squat|low bar|high bar|bs)\b/, "squat"],
-    [/^(curl|barbell curl|cheat curl|bicep curl|hammer curl)\b/, "curl"],
-    [/^(row|barbell row|bent over row|pendlay|db row)\b/, "row"],
-    [/^(pull.?up|pullup|chin.?up|chinup)\b/, "pullup"],
-    [/^(dip|dips)\b/, "dip"],
-  ];
+  if (name.includes("bench")) return "bench_press";
+  if (name.includes("deadlift")) return "deadlift";
+  if (name.includes("squat")) return "squat";
+  if (name.includes("shoulder") || name.includes("overhead") || name.includes("ohp")) return "shoulder_press";
+  if (name.includes("curl")) return "curl";
+  if (name.includes("row")) return "row";
+  if (name.includes("pull")) return "pullup";
+  if (name.includes("dip")) return "dip";
 
-  for (const [pattern, canonical] of rules) {
-    if (pattern.test(normalized)) return canonical;
-  }
   return "other";
 }
 
@@ -198,7 +192,7 @@ async function fetchUserContext(userId) {
   }).slice(0, 5).map((w) => ({ name: w.name, scheduled_for: w.scheduled_for }));
 
   const prSummaryLines = prSummary.length
-    ? prSummary.map((p) => `${p.displayName}: ${p.weight} ${p.unit}${p.reps != null ? ` (${p.reps} reps)` : ""}`).join("\n")
+    ? prSummary.map((p) => `${p.displayName}: ${p.weight} ${p.unit}${p.reps != null ? ` x${p.reps}` : ""}`).join("\n")
     : "No PRs logged.";
 
   const athleteProfile = [
