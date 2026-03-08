@@ -163,6 +163,7 @@ export default function DashboardAIChat({ onClose }) {
         .insert({
           user_id: userId,
           name: workout.title,
+          scheduled_for: workout.scheduled_date ?? workout.scheduled_for ?? null,
           exercises: flexExercises,
         })
         .select()
@@ -308,43 +309,39 @@ if (!res.ok) {
       const reply = json?.reply;
       if (!reply) throw new Error("AI returned no reply");
 
-      let parsed = null;
-      try {
-        parsed = JSON.parse(reply);
-      } catch {
-        parsed = null;
+      // Prefer create_workout from API so we never show raw JSON in chat
+      let workoutPayload = json?.create_workout ?? null;
+      if (!workoutPayload && typeof reply === "string") {
+        try {
+          const parsed = JSON.parse(reply);
+          if (parsed?.type === "create_workout") workoutPayload = parsed;
+        } catch {
+          // not JSON — will show as text
+        }
       }
 
-      if (parsed?.type === "create_workout") {
-
+      if (workoutPayload?.type === "create_workout") {
         setMessages(prev => [
           ...prev,
           {
             role: "assistant",
-            content: parsed,
-            isWorkoutCard: true
-          }
+            content: workoutPayload,
+            isWorkoutCard: true,
+          },
         ]);
-
         await supabase.from("ai_messages").insert({
           user_id: userId,
           conversation_id: activeConversationId,
           role: "assistant",
-          content: JSON.stringify(parsed)
+          content: JSON.stringify(workoutPayload),
         });
-
       } else {
-
-        setMessages(prev => [
-          ...prev,
-          { role: "assistant", content: reply }
-        ]);
-
+        setMessages(prev => [...prev, { role: "assistant", content: reply }]);
         await supabase.from("ai_messages").insert({
           user_id: userId,
           conversation_id: activeConversationId,
           role: "assistant",
-          content: reply
+          content: reply,
         });
       }
 
@@ -830,26 +827,12 @@ if (!res.ok) {
               {m.isWorkoutCard ? (
 
                 <div>
-
-                  <strong>{m.content.title}</strong>
-
-                  {m.content.exercises.map((ex, idx) => {
-                    const baseSkip = ["name","id","position","user_id","workout_id","created_at","updated_at","exercise","title"];
-                    const entries = Object.entries(ex).filter(([k, v]) => !baseSkip.includes(k) && v != null && v !== "");
-                    const details = entries.map(([k, v]) => {
-                      if (k === "sets") return `${v} sets`;
-                      if (k === "reps") return String(v);
-                      if (k === "rpe") return `RPE ${v}`;
-                      if (k === "tempo") return `Tempo: ${v}`;
-                      return `${k}: ${v}`;
-                    });
-                    return (
-                      <div key={idx} style={{ marginTop: 6 }}>
-                        <div><strong>{getDisplayText(ex)}</strong></div>
-                      </div>
-                    );
-                  })}
-
+                  <strong>{m.content?.title ?? "Workout"}</strong>
+                  {(Array.isArray(m.content?.exercises) ? m.content.exercises : []).map((ex, idx) => (
+                    <div key={idx} style={{ marginTop: 6 }}>
+                      <div><strong>{getDisplayText(ex)}</strong></div>
+                    </div>
+                  ))}
                   <button
                     onClick={() => saveWorkout(m.content)}
                     style={{
@@ -859,12 +842,11 @@ if (!res.ok) {
                       borderRadius: 8,
                       padding: "6px 12px",
                       color: "#fff",
-                      cursor: "pointer"
+                      cursor: "pointer",
                     }}
                   >
                     Save Workout
                   </button>
-
                 </div>
 
               ) : m.content}
