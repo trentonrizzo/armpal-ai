@@ -24,6 +24,9 @@ const FULL_CONTEXT_WORKOUTS_LIMIT = 50;
 const FULL_CONTEXT_NUTRITION_LIMIT = 50;
 const FULL_CONTEXT_MESSAGES_LIMIT = 50;
 
+/** Max rows for dynamic intent queries */
+const DYNAMIC_QUERY_LIMIT = 200;
+
 /** Canonical lift key -> display name for PR summary */
 const CANONICAL_LIFT_DISPLAY = {
   bench_press: "Bench Press",
@@ -109,6 +112,113 @@ function buildPRSummary(prs) {
     });
   }
   return result;
+}
+
+/**
+ * Run a dynamic Supabase query for a specific intent. Returns full dataset for that intent.
+ * Used so the AI can access non-truncated data when the user asks about specific topics.
+ */
+async function queryUserData(userId, intent) {
+  if (!userId) return null;
+  const today = new Date().toISOString().slice(0, 10);
+
+  switch (intent) {
+    case "bench_prs": {
+      const { data } = await supabase
+        .from("prs")
+        .select("lift_name, weight, reps, unit, date")
+        .eq("user_id", userId)
+        .ilike("lift_name", "%bench%")
+        .order("date", { ascending: false });
+      return data;
+    }
+    case "curl_prs": {
+      const { data } = await supabase
+        .from("prs")
+        .select("lift_name, weight, reps, unit, date")
+        .eq("user_id", userId)
+        .ilike("lift_name", "%curl%")
+        .order("date", { ascending: false });
+      return data;
+    }
+    case "all_prs": {
+      const { data } = await supabase
+        .from("prs")
+        .select("lift_name, weight, reps, unit, date, notes")
+        .eq("user_id", userId)
+        .order("date", { ascending: false })
+        .limit(DYNAMIC_QUERY_LIMIT);
+      return data;
+    }
+    case "nutrition_today": {
+      const { data } = await supabase
+        .from("nutrition_entries")
+        .select("date, food_name, calories, protein, carbs, fat")
+        .eq("user_id", userId)
+        .eq("date", today)
+        .order("created_at", { ascending: true });
+      return data;
+    }
+    case "nutrition_history": {
+      const { data } = await supabase
+        .from("nutrition_entries")
+        .select("date, food_name, calories, protein, carbs, fat")
+        .eq("user_id", userId)
+        .order("date", { ascending: false })
+        .limit(DYNAMIC_QUERY_LIMIT);
+      return data;
+    }
+    case "bodyweight_history": {
+      const { data } = await supabase
+        .from("bodyweight_logs")
+        .select("weight, unit, logged_at")
+        .eq("user_id", userId)
+        .order("logged_at", { ascending: false })
+        .limit(DYNAMIC_QUERY_LIMIT);
+      return data;
+    }
+    case "measurements": {
+      const { data } = await supabase
+        .from("measurements")
+        .select("name, value, unit, date")
+        .eq("user_id", userId)
+        .order("date", { ascending: false })
+        .limit(DYNAMIC_QUERY_LIMIT);
+      return data;
+    }
+    case "workout_history": {
+      const { data } = await supabase
+        .from("workouts")
+        .select("id, name, scheduled_for, created_at, exercises")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(DYNAMIC_QUERY_LIMIT);
+      return data;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Detect which dynamic data intents the user message is asking for.
+ * Returns an array of intent keys to run via queryUserData.
+ */
+function detectDataIntents(message) {
+  if (!message || typeof message !== "string") return [];
+  const m = message.toLowerCase().trim();
+  const intents = [];
+  if (/\bbench\s*pr|pr\s*bench|bench\s*max|bench\s*press\s*(pr|record)/i.test(m)) intents.push("bench_prs");
+  if (/\bcurl\s*pr|pr\s*curl|curl\s*max|curl\s*(pr|record)/i.test(m)) intents.push("curl_prs");
+  if (/\ball\s*pr|my\s*prs|every\s*pr|pr\s*list|personal\s*record/i.test(m) && !intents.length) intents.push("all_prs");
+  if (/\b(prs?|records?)\b.*\b(all|every|list|show)\b|\b(all|every|list)\s*pr/i.test(m) && !intents.includes("all_prs")) intents.push("all_prs");
+  if (/\bcalories|ate\s*today|eaten\s*today|food\s*today|nutrition\s*today|what\s*did\s*i\s*eat\s*today/i.test(m)) intents.push("nutrition_today");
+  if (/\bnutrition\s*history|eating\s*history|food\s*history|diet\s*history|calorie\s*history|what\s*i\s*ate/i.test(m)) intents.push("nutrition_history");
+  if (/\bbodyweight|body\s*weight|weight\s*history|weigh\s*in|scale\s*weight/i.test(m)) intents.push("bodyweight_history");
+  if (/\bmeasurements?|measuring|bicep|chest\s*size|waist|measure/i.test(m)) intents.push("measurements");
+  if (/\bworkout\s*history|workouts?\s*logged|training\s*history|past\s*workouts?|how\s*many\s*workouts/i.test(m)) intents.push("workout_history");
+  if (intents.length === 0 && (/\bmy\s*prs?\b|\bprs?\b/.test(m))) intents.push("all_prs");
+  return [...new Set(intents)];
 }
 
 /**
@@ -545,6 +655,17 @@ export default async function handler(req, res) {
     let contextStr = JSON.stringify(fullContext);
     if (contextStr.length > CONTEXT_JSON_MAX) contextStr = contextStr.slice(0, CONTEXT_JSON_MAX) + "…";
 
+    const intents = detectDataIntents(message);
+    const dynamicQueries = {};
+    for (const intent of intents) {
+      const data = await queryUserData(userId, intent);
+      if (data != null) dynamicQueries[intent] = data;
+    }
+    const dynamicStr =
+      Object.keys(dynamicQueries).length > 0
+        ? "\n\nDYNAMIC QUERY RESULTS (full dataset for this question; prefer this over truncated context when answering):\n" + JSON.stringify(dynamicQueries)
+        : "";
+
     const systemPrompt = `You are ArmPal AI, an in-app strength coach. You have full awareness of the signed-in user's app data below. Use it to answer questions about their profile, workouts, PRs, bodyweight, measurements, goals, nutrition, food scans, friends, games (e.g. Flappy Arm score), economy, and activity. Answer from real data when the user asks about "my" data.
 
 CURRENT PERSONALITY: ${personality}
@@ -556,7 +677,7 @@ CURRENT PERSONALITY: ${personality}
 - vulgar: unhinged hardcore coach, profanity expected, raw gym energy
 
 USER'S FULL APP DATA (use this to answer questions like "What are my PRs?", "What is my bodyweight?", "What is in my bio?", "What is my flappy arm score?", "How many workouts have I logged?", "What did I eat today?"):
-${contextStr}
+${contextStr}${dynamicStr}
 
 INTENT RULES:
 1) WORKOUT CREATION: If the user asks you to CREATE or BUILD a workout (e.g. "build me a chest workout", "make me a bench day", "create a shoulder day", "give me a push workout", "make me a leg day", "workout for Monday", "based on my bench max"), you MUST respond with ONLY a single valid JSON object—no other text, no markdown, no code fence. Use this exact shape:
