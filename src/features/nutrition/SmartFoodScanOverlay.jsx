@@ -387,25 +387,28 @@ export default function SmartFoodScanOverlay({
       setResults(data);
       const foods = data.foods || [];
       const normalized = foods.map((f) => {
-        if (f.estimated_weight_g != null && (f.estimated_amount == null || f.estimated_amount === "")) {
-          return {
-            ...f,
-            estimated_amount: `${f.estimated_weight_g} g`,
-            calories: 0,
-            protein: 0,
-            carbs: 0,
-            fat: 0,
-          };
-        }
-        return f;
+        const estimated_amount =
+          f.estimated_amount && String(f.estimated_amount).trim()
+            ? f.estimated_amount
+            : f.estimated_weight_g != null
+              ? `${f.estimated_weight_g} g`
+              : "1 servings";
+        return {
+          ...f,
+          estimated_amount,
+          calories: f.calories != null ? Math.round(Number(f.calories)) : 0,
+          protein: f.protein != null ? Number(f.protein) : 0,
+          carbs: f.carbs != null ? Number(f.carbs) : 0,
+          fat: f.fat != null ? Number(f.fat) : 0,
+        };
       });
       setEditFoods(
         normalized.map((f, i) => {
           const parsed = parseAmountUnit(f.estimated_amount);
           const cal = Math.round(Number(f.calories) || 0);
-          const pro = Math.round(Number(f.protein) || 0);
-          const carb = Math.round(Number(f.carbs) || 0);
-          const fat = Math.round(Number(f.fat) || 0);
+          const pro = Number(f.protein) || 0;
+          const carb = Number(f.carbs) || 0;
+          const fat = Number(f.fat) || 0;
           return {
             ...f,
             _key: i,
@@ -756,8 +759,13 @@ export default function SmartFoodScanOverlay({
                 )}
                 {editFoods.map((food, foodIdx) => (
                   <div key={food._key} style={CARD}>
-                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, color: "#fff" }}>
-                      {food.name}
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, color: "#fff", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span>{food.name}</span>
+                      {food.needs_review && (
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4, background: "rgba(255,152,0,0.2)", color: "#ff9800" }}>
+                          Estimate — edit to correct
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 2 }}>
                       <input
