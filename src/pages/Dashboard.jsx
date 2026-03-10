@@ -21,8 +21,7 @@ import DashboardAIChat from "../components/ai/DashboardAIChat";
 import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
 import EmptyState from "../components/EmptyState";
 import DashboardCreditsCard from "../components/credits/DashboardCreditsCard";
-
-
+import { useProfileGate } from "../context/ProfileGateContext";
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,6 +51,7 @@ export default function Dashboard() {
   const [prCapMessage, setPrCapMessage] = useState("");
 
   const unread = useUnreadChats(user?.id);
+  const gate = useProfileGate ? useProfileGate() : null;
 
   // Today's Focus — rotating motivation messages (every 8s)
   const MOTIVATION_MESSAGES = [
@@ -94,7 +94,7 @@ export default function Dashboard() {
       setUser(data?.user ?? null);
       setIsPro(!!profile?.is_pro);
       setIsOfficial(!!profile?.is_official);
-      setDisplayName(profile?.handle || profile?.display_name || "User");
+      setDisplayName(profile?.display_name || profile?.handle || "User");
       getIsPro(uid).then(setAnalyticsPro);
       setSearchParams({}, { replace: true });
     })();
@@ -119,7 +119,7 @@ export default function Dashboard() {
         .eq("id", currentUser.id)
         .single();
 
-      setDisplayName(profile?.handle || profile?.display_name || "User");
+      setDisplayName(profile?.display_name || profile?.handle || "User");
       setIsOfficial(!!profile?.is_official);
       setIsPro(!!profile?.is_pro);
 
@@ -288,7 +288,18 @@ export default function Dashboard() {
         <div>
           <p style={{ fontSize: 14, opacity: 0.8, margin: 0 }}>Welcome back,</p>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: "2px 0 0", display: "flex", alignItems: "center", gap: "8px" }}>
-  <span style={isOfficial ? { color: "#FFD700", fontWeight: "bold", textTransform: "uppercase" } : undefined}>{displayName}</span>
+            <span
+              style={
+                isOfficial
+                  ? { color: "#FFD700", fontWeight: "bold", textTransform: "uppercase" }
+                  : undefined
+              }
+            >
+              {(gate?.profile?.display_name ||
+                gate?.profile?.handle ||
+                displayName ||
+                "User")}
+            </span>
 
   {isPro && (
     <span style={{

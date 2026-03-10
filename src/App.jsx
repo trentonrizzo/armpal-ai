@@ -5,6 +5,7 @@ import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
 import { ToastProvider } from "./components/ToastProvider";
+import { ProfileGateProvider } from "./context/ProfileGateContext";
 import AuthPage from "./AuthPage";
 
 import Dashboard from "./pages/Dashboard";
@@ -348,7 +349,9 @@ export default function App() {
       ) : (
         <AppProvider>
           <ToastProvider>
-            <AuthenticatedLayout session={session} />
+            <ProfileGateProvider>
+              <AuthenticatedLayout session={session} />
+            </ProfileGateProvider>
           </ToastProvider>
         </AppProvider>
       )}

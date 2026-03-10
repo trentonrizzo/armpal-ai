@@ -71,6 +71,7 @@ import { useToast } from "../components/ToastProvider";
 import { SkeletonLine, SkeletonAvatar } from "../components/Skeleton";
 import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
 import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
+import { useProfileGate } from "../context/ProfileGateContext";
 // =================================================================================================
 // 2) CONSTANTS
 // =================================================================================================
@@ -646,6 +647,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
+  const gate = useProfileGate ? useProfileGate() : null;
 
   // -----------------------------------------------------------------------------------------------
   // CORE STATE
@@ -721,66 +723,74 @@ export default function ProfilePage() {
   // -----------------------------------------------------------------------------------------------
 
   // Boot once; allow fast first paint and avoid setting state after unmount
-const mountedRef = useRef(true);
-useEffect(() => {
-  mountedRef.current = true;
-  boot();
-  return () => {
-    mountedRef.current = false;
-  };
-}, []);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    boot();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function boot() {
-  setLoading(true);
+    setLoading(true);
 
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user) {
-    setLoading(false);
-    return;
-  }
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) {
+      setLoading(false);
+      return;
+    }
 
-  const uid = auth.user.id;
-  setUser(auth.user);
+    const uid = auth.user.id;
+    setUser(auth.user);
 
-  // Critical path: profile row only (fast first paint)
-  const row = await fetchProfileRow(uid);
-  if (!mountedRef.current) return;
-
-  setDisplayName(row.display_name || "");
-  setHandle(row.handle || "");
-  setBio(row.bio || "");
-  setAvatarUrl(row.avatar_url || "");
-  setIsOfficial(!!row.is_official);
-
-  setDiscoveryAge(row.age != null ? String(row.age) : "");
-  setDiscoveryCity(row.city || "");
-  setDiscoveryState(row.state || "");
-  setDiscoveryInterests(Array.isArray(row.interests) ? [...row.interests] : []);
-
-  setIsPublic(row.is_public !== false);
-
-  setOrig({
-    display_name: row.display_name || "",
-    handle: row.handle || "",
-    bio: row.bio || "",
-    avatar_url: row.avatar_url || "",
-  });
-
-  setEditMode(false);
-  setDirty(false);
-
-  // ✅ Fast paint
-  setLoading(false);
-
-  // Reactions are loaded by useProfileReactions hook automatically
-
-  // Non-blocking: counts
-  (async () => {
-    const nextCounts = await loadQuickActionCounts(uid);
+    // Critical path: profile row only (fast first paint)
+    const row = await fetchProfileRow(uid);
     if (!mountedRef.current) return;
-    setCounts(nextCounts);
-  })();
-}
+
+    // Sync shared profile context so other screens (Dashboard) see latest values
+    if (gate && gate.setProfile) {
+      gate.setProfile((prev) => ({
+        ...(prev || {}),
+        ...row,
+      }));
+    }
+
+    setDisplayName(row.display_name || "");
+    setHandle(row.handle || "");
+    setBio(row.bio || "");
+    setAvatarUrl(row.avatar_url || "");
+    setIsOfficial(!!row.is_official);
+
+    setDiscoveryAge(row.age != null ? String(row.age) : "");
+    setDiscoveryCity(row.city || "");
+    setDiscoveryState(row.state || "");
+    setDiscoveryInterests(Array.isArray(row.interests) ? [...row.interests] : []);
+
+    setIsPublic(row.is_public !== false);
+
+    setOrig({
+      display_name: row.display_name || "",
+      handle: row.handle || "",
+      bio: row.bio || "",
+      avatar_url: row.avatar_url || "",
+    });
+
+    setEditMode(false);
+    setDirty(false);
+
+    // ✅ Fast paint
+    setLoading(false);
+
+    // Reactions are loaded by useProfileReactions hook automatically
+
+    // Non-blocking: counts
+    (async () => {
+      const nextCounts = await loadQuickActionCounts(uid);
+      if (!mountedRef.current) return;
+      setCounts(nextCounts);
+    })();
+  }
 
   // -----------------------------------------------------------------------------------------------
   // ONLINE PRESENCE
@@ -911,6 +921,15 @@ useEffect(() => {
       setDirty(false);
       setEditMode(false);
       toast.success("Saved");
+
+      // Immediately update shared profile context so other screens (Dashboard) see latest name/handle
+      if (gate && gate.setProfile) {
+        gate.setProfile((prev) => ({
+          ...(prev || {}),
+          handle: handleValue,
+          display_name: displayNameValue,
+        }));
+      }
 
       if (isNewUserOnboarding) {
         if (typeof window !== "undefined") {
@@ -1137,7 +1156,7 @@ useEffect(() => {
             <FiSettings size={20} />
           </button>
 
-          <ProfileVisibilityOverlay userId={user?.id} />
+          {!isNewUserOnboarding && <ProfileVisibilityOverlay userId={user?.id} />}
         </div>
 
         {/* =========================================================================================
@@ -1157,7 +1176,7 @@ useEffect(() => {
               textAlign: "center",
             }}
           >
-            Create your handle and display name to continue.
+            Create your name and handle to start using ArmPal. You can edit the rest later.
           </div>
         )}
 
@@ -1224,9 +1243,14 @@ useEffect(() => {
 
               {/* avatar edit button */}
               <button
-                onClick={() => setAvatarMenuOpen(true)}
-                style={styles.avatarEditBtn}
+                onClick={isNewUserOnboarding ? undefined : () => setAvatarMenuOpen(true)}
+                style={{
+                  ...styles.avatarEditBtn,
+                  opacity: isNewUserOnboarding ? 0.4 : 1,
+                  cursor: isNewUserOnboarding ? "not-allowed" : "pointer",
+                }}
                 aria-label="Edit avatar"
+                disabled={isNewUserOnboarding}
               >
                 <FiEdit2 size={16} />
               </button>
@@ -1323,6 +1347,7 @@ useEffect(() => {
                   <TextArea
                     value={bio}
                     onChange={(e) => {
+                      if (isNewUserOnboarding) return;
                       const next = e.target.value.slice(0, MAX_BIO_LENGTH);
                       setBio(next);
                       recomputeDirty({
@@ -1334,6 +1359,7 @@ useEffect(() => {
                     }}
                     placeholder="Tell people what you’re training for…"
                     rows={6}
+                    disabled={isNewUserOnboarding}
                   />
 
                   <div
