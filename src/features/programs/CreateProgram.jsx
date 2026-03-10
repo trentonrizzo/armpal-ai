@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { getDisplayText } from "../../utils/displayText";
 
@@ -39,13 +39,166 @@ export default function CreateProgram() {
   const [errorModal, setErrorModal] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState(null);
   const [daysPerWeek, setDaysPerWeek] = useState(3);
+  const [programJson, setProgramJson] = useState({ splits: {} });
   const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
+  const location = useLocation();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.id) setUserId(user.id);
     });
   }, []);
+
+  // Load an existing program for edit when navigated with { state: { programId } }
+  useEffect(() => {
+    const state = location.state || {};
+    const editProgramId = state.programId;
+    if (!editProgramId) return;
+
+    let alive = true;
+
+    (async () => {
+      const { data: prog, error } = await supabase
+        .from("programs")
+        .select("*")
+        .eq("id", editProgramId)
+        .maybeSingle();
+
+      if (!alive) return;
+      if (error || !prog) {
+        console.error("[CreateProgram] Failed to load program for edit", error);
+        return;
+      }
+
+      setProgramId(prog.id);
+      setTitle(prog.title || "");
+      setDescription(
+        prog.preview_description || prog.program_json?.meta?.description || ""
+      );
+      setPriceInput(
+        prog.price != null && !Number.isNaN(Number(prog.price))
+          ? String(Number(prog.price).toFixed(2))
+          : "0.00"
+      );
+
+      const meta = prog.program_json?.meta || {};
+      if (meta.difficulty && LEVELS.includes(meta.difficulty)) {
+        setDifficulty(meta.difficulty);
+      }
+
+      const existingJson = prog.program_json || {};
+      let splits = existingJson.splits;
+
+      if (!splits || typeof splits !== "object") {
+        const legacyWeeks = Array.isArray(existingJson.weeks)
+          ? existingJson.weeks
+          : [];
+        const inferredDays =
+          legacyWeeks[0]?.days?.length ||
+          existingJson.meta?.days_per_week ||
+          daysPerWeek ||
+          3;
+
+        splits = {
+          [String(inferredDays)]: {
+            title: existingJson.meta?.title || `${inferredDays}-Day Split`,
+            weeks:
+              legacyWeeks.length > 0
+                ? legacyWeeks
+                : [
+                    {
+                      weekNumber: 1,
+                      days: Array.from({ length: inferredDays }, (_v, i) => {
+                        const dayNum = i + 1;
+                        const name = `Day ${dayNum}`;
+                        return {
+                          dayNumber: dayNum,
+                          title: name,
+                          workout_card: { title: name, exercises: [] },
+                        };
+                      }),
+                    },
+                  ],
+          },
+        };
+      }
+
+      setProgramJson({
+        ...existingJson,
+        splits,
+      });
+
+      const splitKeys = Object.keys(splits);
+      if (splitKeys.length) {
+        const primary = Number(splitKeys[0]) || 3;
+        setDaysPerWeek(primary);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [location.state, LEVELS, daysPerWeek]);
+
+  function hasAnyContent(json) {
+    const splits = json?.splits || {};
+    return Object.values(splits).some(
+      (split) =>
+        Array.isArray(split.weeks) &&
+        split.weeks.some(
+          (w) => Array.isArray(w.days) && w.days.length > 0
+        )
+    );
+  }
+
+  function ensureSplit(days) {
+    const key = String(days);
+    setProgramJson((prev) => {
+      const prevSplits = prev?.splits || {};
+      if (prevSplits[key]) return prev;
+
+      const newWeek = {
+        weekNumber: 1,
+        days: Array.from({ length: days }, (_v, i) => {
+          const dayNum = i + 1;
+          const name = `Day ${dayNum}`;
+          return {
+            dayNumber: dayNum,
+            title: name,
+            workout_card: { title: name, exercises: [] },
+          };
+        }),
+      };
+
+      return {
+        ...prev,
+        splits: {
+          ...prevSplits,
+          [key]: {
+            title: `${days}-Day Split`,
+            weeks: [newWeek],
+          },
+        },
+      };
+    });
+  }
+
+  function updateSplit(splitKey, updater) {
+    setProgramJson((prev) => {
+      if (!prev) return prev;
+      const prevSplits = prev.splits || {};
+      const existing = prevSplits[splitKey];
+      if (!existing) return prev;
+      const updated = updater(existing);
+      return {
+        ...prev,
+        splits: {
+          ...prevSplits,
+          [splitKey]: updated,
+        },
+      };
+    });
+  }
 
   async function convertAI() {
     try {
@@ -74,7 +227,29 @@ export default function CreateProgram() {
         return;
       }
       const model = workoutsToProgramModel(workouts);
-      setProgramModel(model);
+      const weeks = Array.isArray(model.weeks) ? model.weeks : [];
+      if (!weeks.length) {
+        setConvertError("AI did not return any structured weeks.");
+        return;
+      }
+      const inferredDays = weeks[0]?.days?.length || daysPerWeek || 3;
+      const splitKey = String(inferredDays);
+
+      setProgramJson((prev) => {
+        const prevSplits = prev?.splits || {};
+        return {
+          ...prev,
+          splits: {
+            ...prevSplits,
+            [splitKey]: {
+              title: prevSplits[splitKey]?.title || `${inferredDays}-Day Split`,
+              weeks,
+            },
+          },
+        };
+      });
+      setDaysPerWeek(inferredDays);
+      setConvertError("");
     } catch (e) {
       console.error(e);
       setConvertError(e.message || "Conversion failed");
