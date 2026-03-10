@@ -71,6 +71,7 @@ import { useToast } from "../components/ToastProvider";
 import { SkeletonLine, SkeletonAvatar } from "../components/Skeleton";
 import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
 import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
+import { useProfileGate } from "../context/ProfileGateContext";
 
 // =================================================================================================
 // 2) CONSTANTS
@@ -126,9 +127,10 @@ function formatHandle(h) {
 }
 
 function stripHandle(h) {
-  const s = safeString(h);
-  if (!s) return "";
-  return s.startsWith("@") ? s.slice(1) : s;
+  const raw = safeString(h);
+  if (!raw) return "";
+  const noAt = raw.startsWith("@") ? raw.slice(1) : raw;
+  return noAt.toLowerCase().replace(/[^a-z0-9_]/g, "");
 }
 
 function nowIso() {
@@ -643,6 +645,7 @@ async function loadQuickActionCounts(userId) {
 export default function ProfilePage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const gate = useProfileGate ? useProfileGate() : null;
 
   // -----------------------------------------------------------------------------------------------
   // CORE STATE
@@ -792,6 +795,10 @@ useEffect(() => {
   const headerName = useMemo(() => displayNameFallback(displayName), [displayName]);
   const headerHandle = useMemo(() => formatHandle(handle), [handle]);
 
+  const profileIncomplete =
+    !loading &&
+    (!safeString(displayName) || !safeString(handle));
+
   // -----------------------------------------------------------------------------------------------
   // DIRTY CHECK HELPERS
   // -----------------------------------------------------------------------------------------------
@@ -837,15 +844,40 @@ useEffect(() => {
       setSaving(true);
 
       const displayNameValue = safeString(displayName);
+      const handleValue = stripHandle(handle);
       const bioValue = safeString(bio);
       const avatarUrlValue = avatarUrl || "";
       const visibilityValue = isPublic ? "public" : "private";
+
+      if (!handleValue || !displayNameValue) {
+        toast.error("Handle and display name are required to continue.");
+        setSaving(false);
+        return;
+      }
+
+      // Handle uniqueness (exclude current user)
+      if (handleValue && safeString(orig.handle) !== handleValue) {
+        const { data: existing, error: handleErr } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("handle", handleValue)
+          .neq("id", user.id)
+          .maybeSingle();
+
+        if (handleErr) throw handleErr;
+        if (existing) {
+          toast.error("Handle already taken.");
+          setSaving(false);
+          return;
+        }
+      }
 
       const { error } = await supabase
         .from("profiles")
         .update({
           bio: bioValue,
           display_name: displayNameValue,
+          handle: handleValue,
           avatar_url: avatarUrlValue,
           profile_visibility: visibilityValue,
         })
@@ -855,7 +887,7 @@ useEffect(() => {
 
       setOrig({
         display_name: displayNameValue,
-        handle: orig.handle,
+        handle: handleValue,
         bio: bioValue,
         avatar_url: avatarUrlValue,
       });
@@ -863,6 +895,18 @@ useEffect(() => {
       setDirty(false);
       setEditMode(false);
       toast.success("Saved");
+
+      // Immediately inform profile gate so navigation unlocks without refetch
+      if (gate && gate.setProfile) {
+        gate.setProfile((prev) => ({
+          ...(prev || {}),
+          handle: handleValue,
+          display_name: displayNameValue,
+        }));
+      }
+
+      // If this was forced onboarding (missing fields), send user back to Dashboard
+      navigate("/", { replace: true });
     } catch (e) {
       console.error("saveProfile failed", e);
       toast.error("Failed to save profile");
@@ -1087,6 +1131,23 @@ useEffect(() => {
         {/* =========================================================================================
             PROFILE CARD
         ========================================================================================= */}
+
+        {profileIncomplete && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: 12,
+              borderRadius: 10,
+              background: COLORS.accentSoft,
+              color: COLORS.bg,
+              fontSize: TYPE.small,
+              fontWeight: 800,
+              textAlign: "center",
+            }}
+          >
+            Complete your profile to continue using ArmPal.
+          </div>
+        )}
 
         <BigCard>
           <SectionTitle

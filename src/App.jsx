@@ -4,6 +4,7 @@ import { Routes, Route, useLocation, useParams, useNavigate, Navigate } from "re
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
+import { ProfileGateProvider, useProfileGate } from "./context/ProfileGateContext";
 import { ToastProvider } from "./components/ToastProvider";
 import AuthPage from "./AuthPage";
 
@@ -26,7 +27,6 @@ import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
 import ResetPassword from "./pages/ResetPassword";
-import ProfileSetupPage from "./pages/ProfileSetupPage";
 import CreditsPage from "./pages/CreditsPage";
 import RedeemPage from "./pages/RedeemPage";
 import ReferralsPage from "./pages/ReferralsPage";
@@ -150,7 +150,7 @@ function RuntimeSplash({ show }) {
 ============================ */
 function ProfileGate({ session, children }) {
   const location = useLocation();
-  const [profile, setProfile] = useState(null);
+  const { profile, setProfile } = useProfileGate() || {};
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -167,7 +167,9 @@ function ProfileGate({ session, children }) {
         .eq("id", uid)
         .maybeSingle();
       if (!alive) return;
-      setProfile(data ?? null);
+      if (setProfile) {
+        setProfile(data ?? null);
+      }
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -178,7 +180,7 @@ function ProfileGate({ session, children }) {
     (!profile ||
       !String(profile.handle ?? "").trim() ||
       !String(profile.display_name ?? "").trim());
-  const onSetupPage = location.pathname === "/profile-setup";
+  const onProfilePage = location.pathname === "/profile";
 
   if (loading) {
     return (
@@ -195,8 +197,8 @@ function ProfileGate({ session, children }) {
       </div>
     );
   }
-  if (incomplete && !onSetupPage) {
-    return <Navigate to="/profile-setup" replace />;
+  if (incomplete && !onProfilePage) {
+    return <Navigate to="/profile" replace />;
   }
   return children;
 }
@@ -260,6 +262,11 @@ function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
   const isWorkouts = location.pathname === "/workouts";
+  const { profile } = useProfileGate() || {};
+  const profileIncomplete =
+    !profile ||
+    !String(profile.handle ?? "").trim() ||
+    !String(profile.display_name ?? "").trim();
   const [openShare, setOpenShare] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -272,12 +279,17 @@ function AppContent() {
     if (document.body) document.body.setAttribute("data-theme", savedMode);
   }, []);
 
-  const isProfileSetup = location.pathname === "/profile-setup";
-
   return (
-    <div className={isChatRoute ? "h-screen overflow-hidden" : isProfileSetup ? "min-h-screen" : "min-h-screen pb-20"}>
+    <div
+      className={
+        isChatRoute
+          ? "h-screen overflow-hidden"
+          : profileIncomplete
+          ? "min-h-screen"
+          : "min-h-screen pb-20"
+      }
+    >
       <Routes>
-        <Route path="/profile-setup" element={<ProfileSetupPage />} />
         <Route path="/" element={<Dashboard />} />
         <Route path="/signup" element={<Navigate to="/" replace />} />
         <Route path="/home" element={<HomePage />} />
@@ -326,7 +338,7 @@ function AppContent() {
       </Routes>
 
       {location.pathname === "/" && <NotificationsBell />}
-      {!isChatRoute && !isProfileSetup && <BottomNav />}
+      {!isChatRoute && !profileIncomplete && <BottomNav />}
 
       {isWorkouts && (
         <button
