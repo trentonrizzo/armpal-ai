@@ -900,36 +900,43 @@ export default function ProfilePage() {
 
       const { error } = await supabase
         .from("profiles")
-        .update({
-          bio: bioValue,
-          display_name: displayNameValue,
-          handle: handleValue,
-          avatar_url: avatarUrlValue,
-          profile_visibility: visibilityValue,
-        })
-        .eq("id", user.id);
+        .upsert(
+          {
+            id: user.id,
+            display_name: displayNameValue,
+            handle: handleValue,
+            bio: bioValue,
+            avatar_url: avatarUrlValue,
+            profile_visibility: visibilityValue,
+          },
+          { onConflict: "id" }
+        );
 
       if (error) throw error;
 
-      setOrig({
-        display_name: displayNameValue,
-        handle: handleValue,
-        bio: bioValue,
-        avatar_url: avatarUrlValue,
-      });
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (profileData) {
+        setDisplayName(profileData.display_name || "");
+        setHandle(profileData.handle || "");
+        setOrig({
+          display_name: profileData.display_name || "",
+          handle: profileData.handle || "",
+          bio: profileData.bio || "",
+          avatar_url: profileData.avatar_url || "",
+        });
+        if (gate && gate.setProfile) {
+          gate.setProfile(profileData);
+        }
+      }
 
       setDirty(false);
       setEditMode(false);
       toast.success("Saved");
-
-      // Immediately update shared profile context so other screens (Dashboard) see latest name/handle
-      if (gate && gate.setProfile) {
-        gate.setProfile((prev) => ({
-          ...(prev || {}),
-          handle: handleValue,
-          display_name: displayNameValue,
-        }));
-      }
 
       if (isNewUserOnboarding) {
         if (typeof window !== "undefined") {

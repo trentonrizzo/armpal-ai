@@ -9,14 +9,13 @@ import { supabase } from "../supabaseClient";
 const PRO_PRICE_DISPLAY = "$7.99";
 
 const FREE_FEATURES = [
-  "AI Chat — limited to 5 responses/day",
-  "AI Workout Converter — limited to 2 uses/day",
-  "AI Food Scan — limited to 2 scans/day",
+  "Strength calculator",
   "Up to 5 workouts saved",
   "Up to 5 bodyweight logs",
   "Up to 5 measurement logs",
   "Up to 5 PR logs",
-  "Up to 5 nutrition entries/day",
+  "Unlimited nutrition entries",
+  "Profiles + friends",
 ];
 
 const PRO_FEATURES = [
