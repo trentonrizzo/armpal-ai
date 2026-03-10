@@ -26,6 +26,7 @@ import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import FriendProfile from "./pages/FriendProfile";
 import ResetPassword from "./pages/ResetPassword";
+import ProfileSetupPage from "./pages/ProfileSetupPage";
 import CreditsPage from "./pages/CreditsPage";
 import RedeemPage from "./pages/RedeemPage";
 import ReferralsPage from "./pages/ReferralsPage";
@@ -144,6 +145,62 @@ function RuntimeSplash({ show }) {
   );
 }
 
+/* ============================
+   PROFILE GATE (forced setup)
+============================ */
+function ProfileGate({ session, children }) {
+  const location = useLocation();
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const uid = session?.user?.id;
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("handle, display_name")
+        .eq("id", uid)
+        .maybeSingle();
+      if (!alive) return;
+      setProfile(data ?? null);
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [session?.user?.id]);
+
+  const incomplete =
+    !loading &&
+    (!profile ||
+      !String(profile.handle ?? "").trim() ||
+      !String(profile.display_name ?? "").trim());
+  const onSetupPage = location.pathname === "/profile-setup";
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "var(--bg)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span style={{ color: "var(--text-dim)" }}>Loading…</span>
+      </div>
+    );
+  }
+  if (incomplete && !onSetupPage) {
+    return <Navigate to="/profile-setup" replace />;
+  }
+  return children;
+}
+
 function AuthenticatedLayout({ session }) {
   const [notifQueue, setNotifQueue] = useState([]);
   const location = useLocation();
@@ -192,7 +249,9 @@ function AuthenticatedLayout({ session }) {
         onDismiss={handleBannerDismiss}
         onClick={handleBannerClick}
       />
-      <AppContent />
+      <ProfileGate session={session}>
+        <AppContent />
+      </ProfileGate>
     </>
   );
 }
@@ -213,9 +272,12 @@ function AppContent() {
     if (document.body) document.body.setAttribute("data-theme", savedMode);
   }, []);
 
+  const isProfileSetup = location.pathname === "/profile-setup";
+
   return (
-    <div className={isChatRoute ? "h-screen overflow-hidden" : "min-h-screen pb-20"}>
+    <div className={isChatRoute ? "h-screen overflow-hidden" : isProfileSetup ? "min-h-screen" : "min-h-screen pb-20"}>
       <Routes>
+        <Route path="/profile-setup" element={<ProfileSetupPage />} />
         <Route path="/" element={<Dashboard />} />
         <Route path="/signup" element={<Navigate to="/" replace />} />
         <Route path="/home" element={<HomePage />} />
@@ -264,7 +326,7 @@ function AppContent() {
       </Routes>
 
       {location.pathname === "/" && <NotificationsBell />}
-      {!isChatRoute && <BottomNav />}
+      {!isChatRoute && !isProfileSetup && <BottomNav />}
 
       {isWorkouts && (
         <button
