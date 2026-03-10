@@ -153,6 +153,17 @@ function safeNum(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// Parse patterns like "5x5", "3 x 12" from arbitrary text
+function parseSetsReps(text) {
+  if (!text) return { sets: "", reps: "" };
+  const match = text.match(/(\d+)\s*x\s*(\d+)/i);
+  if (!match) return { sets: "", reps: "" };
+  return {
+    sets: match[1],
+    reps: match[2],
+  };
+}
+
 function nowMs() {
   return Date.now();
 }
@@ -435,6 +446,22 @@ export default function WorkoutsPage() {
       exercise?.weight != null && exercise?.weight !== ""
         ? String(exercise.weight)
         : "";
+
+    // If sets/reps are missing, try to parse from display_text/input (e.g. "82.5% (275 lbs) 5x5")
+    if (!setsVal || !repsVal) {
+      const textSource = (
+        exercise?.display_text ??
+        exercise?.input ??
+        ""
+      )
+        .toString()
+        .trim();
+      if (textSource) {
+        const parsed = parseSetsReps(textSource);
+        if (!setsVal && parsed.sets) setsVal = parsed.sets;
+        if (!repsVal && parsed.reps) repsVal = parsed.reps;
+      }
+    }
 
     // Flexible format fallback: if no structured fields, hydrate from input/display_text
     if (!setsVal && !repsVal && !weightVal) {
