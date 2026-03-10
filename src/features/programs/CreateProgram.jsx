@@ -35,6 +35,8 @@ export default function CreateProgram() {
   const [userId, setUserId] = useState(null);
   const [difficulty, setDifficulty] = useState("Intermediate");
   const [saving, setSaving] = useState(false);
+  const [programId, setProgramId] = useState(null);
+  const [errorModal, setErrorModal] = useState(null);
   const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
 
   useEffect(() => {
@@ -92,14 +94,30 @@ export default function CreateProgram() {
   }
 
   async function saveProgram(asPublish = false) {
-    if (!title.trim()) { alert("Enter a title."); return; }
+    if (!title.trim()) {
+      setErrorModal({
+        title: "Missing title",
+        message: "Enter a program title before saving.",
+      });
+      return;
+    }
     if (!programModel || !Array.isArray(programModel.weeks) || programModel.weeks.length === 0) {
-      alert("Convert with AI first."); return;
+      setErrorModal({
+        title: "No workouts yet",
+        message: "Run Convert With AI and review the workouts before saving.",
+      });
+      return;
     }
 
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) { alert("Sign in to save."); return; }
+    if (!uid) {
+      setErrorModal({
+        title: "Sign in required",
+        message: "Sign in to save or publish your program.",
+      });
+      return;
+    }
 
     const price = Number(priceInput) || 0;
     const programJsonWithMeta = {
@@ -109,17 +127,54 @@ export default function CreateProgram() {
 
     setSaving(true);
     try {
-      const { data: inserted, error: insErr } = await supabase.from("programs").insert({
-        title,
-        preview_description: description || null,
-        parsed_program: null,
-        program_json: programJsonWithMeta,
-        is_ai_parsed: true,
-        price,
-        creator_id: uid,
-        is_published: asPublish === true,
-      }).select("*").single();
-      if (insErr) throw insErr;
+      let result;
+      if (!programId) {
+        // First save: insert row
+        const { data, error: insErr } = await supabase
+          .from("programs")
+          .insert({
+            title,
+            preview_description: description || null,
+            parsed_program: null,
+            program_json: programJsonWithMeta,
+            is_ai_parsed: true,
+            price,
+            creator_id: uid,
+            is_published: asPublish === true,
+            is_draft: !asPublish,
+          })
+          .select("*")
+          .single();
+        if (insErr) throw insErr;
+        result = data;
+      } else {
+        // Subsequent saves: update existing program
+        const payload = {
+          title,
+          preview_description: description || null,
+          program_json: programJsonWithMeta,
+          price,
+        };
+        if (asPublish) {
+          payload.is_draft = false;
+          payload.is_published = true;
+        } else {
+          payload.is_draft = true;
+        }
+        const { data, error: updErr } = await supabase
+          .from("programs")
+          .update(payload)
+          .eq("id", programId)
+          .select("*")
+          .single();
+        if (updErr) throw updErr;
+        result = data;
+      }
+
+      if (result?.id && !programId) {
+        setProgramId(result.id);
+      }
+
       window.dispatchEvent(new CustomEvent("ap_toast", {
         detail: {
           title: asPublish ? "Program published" : "Draft saved",
@@ -130,7 +185,10 @@ export default function CreateProgram() {
       navigate("/programs/my");
     } catch (e) {
       console.error("[CreateProgram] Save failed:", e?.message ?? e, e);
-      alert(e?.message || "Save failed");
+      setErrorModal({
+        title: "Save failed",
+        message: e?.message || "Something went wrong while saving your program.",
+      });
     } finally {
       setSaving(false);
     }
@@ -255,25 +313,229 @@ export default function CreateProgram() {
             Live Preview — {weeks.reduce((acc, w) => acc + w.days.length, 0)} workout day(s)
           </h3>
 
-          {weeks.map((week) => (
+          {weeks.map((week, wIdx) => (
             <div key={week.weekNumber} style={{ marginBottom: 20 }}>
               <div style={S.weekLabel}>Week {week.weekNumber}</div>
-              {week.days.map((day, idx) => (
-                <div key={idx} style={S.dayCard}>
+              {week.days.map((day, dIdx) => (
+                <div key={dIdx} style={S.dayCard}>
                   <h4 style={S.dayTitle}>{day.title}</h4>
                   {Array.isArray(day.workout_card?.exercises) && day.workout_card.exercises.length > 0 ? (
-                    day.workout_card.exercises.map((ex, i) => (
-                      <div key={i} style={S.exRow}>
+                    day.workout_card.exercises.map((ex, eIdx) => (
+                      <div key={eIdx} style={S.exRow}>
                         <div style={S.exName}>{getDisplayText(ex)}</div>
+                        <div style={S.editRow}>
+                          <input
+                            style={S.smallInput}
+                            value={ex.name ?? ""}
+                            placeholder="Exercise name"
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setProgramModel((prev) => {
+                                if (!prev) return prev;
+                                const weeksCopy = prev.weeks.map((w, wi) => {
+                                  if (wi !== wIdx) return w;
+                                  const days = w.days.map((d, di) => {
+                                    if (di !== dIdx) return d;
+                                    const exercises = Array.isArray(d.workout_card?.exercises)
+                                      ? d.workout_card.exercises.map((ex2, xi) =>
+                                          xi === eIdx ? { ...ex2, name: value } : ex2
+                                        )
+                                      : [];
+                                    return {
+                                      ...d,
+                                      workout_card: { ...(d.workout_card || {}), exercises },
+                                    };
+                                  });
+                                  return { ...w, days };
+                                });
+                                return { ...prev, weeks: weeksCopy };
+                              });
+                            }}
+                          />
+                          <input
+                            type="number"
+                            style={S.smallInput}
+                            value={ex.sets ?? ""}
+                            placeholder="Sets"
+                            onChange={(e) => {
+                              const value = e.target.value === "" ? null : Number(e.target.value);
+                              setProgramModel((prev) => {
+                                if (!prev) return prev;
+                                const weeksCopy = prev.weeks.map((w, wi) => {
+                                  if (wi !== wIdx) return w;
+                                  const days = w.days.map((d, di) => {
+                                    if (di !== dIdx) return d;
+                                    const exercises = Array.isArray(d.workout_card?.exercises)
+                                      ? d.workout_card.exercises.map((ex2, xi) =>
+                                          xi === eIdx ? { ...ex2, sets: value } : ex2
+                                        )
+                                      : [];
+                                    return {
+                                      ...d,
+                                      workout_card: { ...(d.workout_card || {}), exercises },
+                                    };
+                                  });
+                                  return { ...w, days };
+                                });
+                                return { ...prev, weeks: weeksCopy };
+                              });
+                            }}
+                          />
+                          <input
+                            type="number"
+                            style={S.smallInput}
+                            value={ex.reps ?? ""}
+                            placeholder="Reps"
+                            onChange={(e) => {
+                              const value = e.target.value === "" ? null : Number(e.target.value);
+                              setProgramModel((prev) => {
+                                if (!prev) return prev;
+                                const weeksCopy = prev.weeks.map((w, wi) => {
+                                  if (wi !== wIdx) return w;
+                                  const days = w.days.map((d, di) => {
+                                    if (di !== dIdx) return d;
+                                    const exercises = Array.isArray(d.workout_card?.exercises)
+                                      ? d.workout_card.exercises.map((ex2, xi) =>
+                                          xi === eIdx ? { ...ex2, reps: value } : ex2
+                                        )
+                                      : [];
+                                    return {
+                                      ...d,
+                                      workout_card: { ...(d.workout_card || {}), exercises },
+                                    };
+                                  });
+                                  return { ...w, days };
+                                });
+                                return { ...prev, weeks: weeksCopy };
+                              });
+                            }}
+                          />
+                          <button
+                            type="button"
+                            style={S.smallDangerBtn}
+                            onClick={() => {
+                              setProgramModel((prev) => {
+                                if (!prev) return prev;
+                                const weeksCopy = prev.weeks.map((w, wi) => {
+                                  if (wi !== wIdx) return w;
+                                  const days = w.days.map((d, di) => {
+                                    if (di !== dIdx) return d;
+                                    const exercises = Array.isArray(d.workout_card?.exercises)
+                                      ? d.workout_card.exercises.filter((_, xi) => xi !== eIdx)
+                                      : [];
+                                    return {
+                                      ...d,
+                                      workout_card: { ...(d.workout_card || {}), exercises },
+                                    };
+                                  });
+                                  return { ...w, days };
+                                });
+                                return { ...prev, weeks: weeksCopy };
+                              });
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     ))
                   ) : (
                     <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>No exercises listed.</p>
                   )}
+                  <button
+                    type="button"
+                    style={S.smallAddBtn}
+                    onClick={() => {
+                      setProgramModel((prev) => {
+                        if (!prev) return prev;
+                        const weeksCopy = prev.weeks.map((w, wi) => {
+                          if (wi !== wIdx) return w;
+                          const days = w.days.map((d, di) => {
+                            if (di !== dIdx) return d;
+                            const exercises = Array.isArray(d.workout_card?.exercises)
+                              ? [...d.workout_card.exercises]
+                              : [];
+                            exercises.push({
+                              name: "New Exercise",
+                              sets: null,
+                              reps: null,
+                              weight: null,
+                              input: "",
+                            });
+                            return {
+                              ...d,
+                              workout_card: { ...(d.workout_card || {}), exercises },
+                            };
+                          });
+                          return { ...w, days };
+                        });
+                        return { ...prev, weeks: weeksCopy };
+                      });
+                    }}
+                  >
+                    + Add Exercise
+                  </button>
+                  <button
+                    type="button"
+                    style={S.smallDangerOutlineBtn}
+                    onClick={() => {
+                      setProgramModel((prev) => {
+                        if (!prev) return prev;
+                        const weeksCopy = prev.weeks.map((w, wi) => {
+                          if (wi !== wIdx) return w;
+                          const days = w.days.filter((_, di) => di !== dIdx);
+                          return { ...w, days };
+                        });
+                        return { ...prev, weeks: weeksCopy };
+                      });
+                    }}
+                  >
+                    Delete Day
+                  </button>
                 </div>
               ))}
+              <button
+                type="button"
+                style={S.smallAddBtn}
+                onClick={() => {
+                  setProgramModel((prev) => {
+                    if (!prev) return prev;
+                    const weeksCopy = prev.weeks.map((w, wi) => {
+                      if (wi !== wIdx) return w;
+                      const nextDayNumber =
+                        (w.days[w.days.length - 1]?.dayNumber || w.days.length) + 1;
+                      const title = `Day ${nextDayNumber}`;
+                      const newDay = {
+                        dayNumber: nextDayNumber,
+                        title,
+                        workout_card: { title, exercises: [] },
+                      };
+                      return { ...w, days: [...w.days, newDay] };
+                    });
+                    return { ...prev, weeks: weeksCopy };
+                  });
+                }}
+              >
+                + Add Workout Day
+              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {errorModal && (
+        <div style={S.modalBackdrop} onClick={() => setErrorModal(null)}>
+          <div style={S.modalCard} onClick={(e) => e.stopPropagation()}>
+            <h3 style={S.modalTitle}>{errorModal.title}</h3>
+            <p style={S.modalBody}>{errorModal.message}</p>
+            <button
+              type="button"
+              style={S.primaryBtn}
+              onClick={() => setErrorModal(null)}
+            >
+              Got it
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -304,4 +566,13 @@ const S = {
   supersetRow: { borderLeftColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 6%, transparent)", borderRadius: 6, padding: "4px 8px", marginLeft: 0 },
   exName: { fontSize: 14, fontWeight: 600, color: "var(--text)" },
   exDetail: { fontSize: 12, color: "var(--text-dim)", marginTop: 2 },
+  editRow: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  smallInput: { flex: "1 0 80px", minWidth: 80, padding: 6, borderRadius: 8, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--text)", fontSize: 12 },
+  smallAddBtn: { marginTop: 8, padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--text)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
+  smallDangerBtn: { padding: "6px 10px", borderRadius: 999, border: "1px solid var(--accent)", background: "transparent", color: "var(--accent)", fontSize: 12, fontWeight: 700, cursor: "pointer" },
+  smallDangerOutlineBtn: { marginTop: 8, padding: "6px 10px", borderRadius: 999, border: "1px solid var(--accent)", background: "transparent", color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
+  modalBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 10001 },
+  modalCard: { background: "var(--card-2)", borderRadius: 16, border: "1px solid var(--border)", padding: 20, maxWidth: 360, width: "100%", boxShadow: "0 18px 40px rgba(0,0,0,0.6)" },
+  modalTitle: { margin: "0 0 8px", fontSize: 16, fontWeight: 800, color: "var(--text)" },
+  modalBody: { margin: "0 0 14px", fontSize: 13, color: "var(--text-dim)" },
 };
