@@ -164,6 +164,63 @@ function parseSetsReps(text) {
   };
 }
 
+// Normalize any exercise shape into modal-friendly fields
+function normalizeExerciseForModal(exercise) {
+  if (!exercise || typeof exercise !== "object") {
+    return { name: "", sets: "", reps: "", weight: "", rawText: "" };
+  }
+
+  const name =
+    (exercise.name ??
+      exercise.exercise ??
+      exercise.title ??
+      "")?.toString().trim() || "";
+
+  const structuredSets =
+    exercise.sets != null && exercise.sets !== ""
+      ? String(exercise.sets)
+      : "";
+  const structuredReps =
+    exercise.reps != null && exercise.reps !== ""
+      ? String(exercise.reps)
+      : "";
+  const structuredWeight =
+    exercise.weight != null && exercise.weight !== ""
+      ? String(exercise.weight)
+      : "";
+
+  const textSource = (
+    exercise.display_text ??
+    exercise.input ??
+    ""
+  )
+    .toString()
+    .trim();
+
+  let parsed = { sets: "", reps: "" };
+  if (textSource) {
+    parsed = parseSetsReps(textSource);
+  }
+
+  const sets = structuredSets || parsed.sets || "";
+  const reps = structuredReps || parsed.reps || "";
+
+  const rawText = textSource || structuredWeight || "";
+
+  const weight =
+    structuredSets || structuredReps
+      ? structuredWeight
+      : rawText;
+
+  return {
+    name,
+    sets,
+    reps,
+    weight,
+    rawText,
+  };
+}
+
 function nowMs() {
   return Date.now();
 }
@@ -427,60 +484,12 @@ export default function WorkoutsPage() {
     setExerciseWorkoutId(workoutId);
     setEditingExercise(exercise);
 
-    const baseName =
-      (exercise?.name ??
-        exercise?.exercise ??
-        exercise?.title ??
-        "") || "";
+    const normalized = normalizeExerciseForModal(exercise);
 
-    const setsVal =
-      exercise?.sets != null && exercise?.sets !== ""
-        ? String(exercise.sets)
-        : "";
-    const repsVal =
-      exercise?.reps != null && exercise?.reps !== ""
-        ? String(exercise.reps)
-        : "";
-
-    let weightVal =
-      exercise?.weight != null && exercise?.weight !== ""
-        ? String(exercise.weight)
-        : "";
-
-    // If sets/reps are missing, try to parse from display_text/input (e.g. "82.5% (275 lbs) 5x5")
-    if (!setsVal || !repsVal) {
-      const textSource = (
-        exercise?.display_text ??
-        exercise?.input ??
-        ""
-      )
-        .toString()
-        .trim();
-      if (textSource) {
-        const parsed = parseSetsReps(textSource);
-        if (!setsVal && parsed.sets) setsVal = parsed.sets;
-        if (!repsVal && parsed.reps) repsVal = parsed.reps;
-      }
-    }
-
-    // Flexible format fallback: if no structured fields, hydrate from input/display_text
-    if (!setsVal && !repsVal && !weightVal) {
-      const flexibleInput = (
-        exercise?.input ??
-        exercise?.display_text ??
-        ""
-      )
-        .toString()
-        .trim();
-      if (flexibleInput) {
-        weightVal = flexibleInput;
-      }
-    }
-
-    setExerciseName(baseName);
-    setExerciseSets(setsVal);
-    setExerciseReps(repsVal);
-    setExerciseWeight(weightVal);
+    setExerciseName(normalized.name);
+    setExerciseSets(normalized.sets);
+    setExerciseReps(normalized.reps);
+    setExerciseWeight(normalized.weight);
     setExerciseModalOpen(true);
   }
 
