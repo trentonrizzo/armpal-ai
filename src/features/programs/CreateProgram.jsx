@@ -38,6 +38,7 @@ export default function CreateProgram() {
   const [programId, setProgramId] = useState(null);
   const [errorModal, setErrorModal] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState(null);
+  const [daysPerWeek, setDaysPerWeek] = useState(3);
   const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
 
   useEffect(() => {
@@ -123,7 +124,11 @@ export default function CreateProgram() {
     const price = Number(priceInput) || 0;
     const programJsonWithMeta = {
       ...programModel,
-      meta: { difficulty, tags: programModel.meta?.tags ?? [] },
+      meta: {
+        difficulty,
+        tags: programModel.meta?.tags ?? [],
+        days_per_week: daysPerWeek,
+      },
     };
 
     setSaving(true);
@@ -143,6 +148,7 @@ export default function CreateProgram() {
             creator_id: uid,
             is_published: asPublish === true,
             is_draft: !asPublish,
+            deleted: false,
           })
           .select("*")
           .single();
@@ -228,6 +234,24 @@ export default function CreateProgram() {
               style={{ ...S.levelBtn, ...(difficulty === l ? S.levelBtnActive : {}) }}
             >
               {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={S.levelRow}>
+        <span style={S.levelLabel}>Days per week</span>
+        <div style={S.levelOptions}>
+          {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDaysPerWeek(d)}
+              style={{
+                ...S.levelBtn,
+                ...(daysPerWeek === d ? S.levelBtnActive : {}),
+              }}
+            >
+              {d} {d === 1 ? "Day" : "Days"}
             </button>
           ))}
         </div>
@@ -435,6 +459,64 @@ export default function CreateProgram() {
                               });
                             }}
                           />
+                          <input
+                            type="text"
+                            style={S.smallInput}
+                            value={ex.percentage ?? ""}
+                            placeholder="%"
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setProgramModel((prev) => {
+                                if (!prev) return prev;
+                                const weeksCopy = prev.weeks.map((w, wi) => {
+                                  if (wi !== wIdx) return w;
+                                  const days = w.days.map((d, di) => {
+                                    if (di !== dIdx) return d;
+                                    const exercises = Array.isArray(d.workout_card?.exercises)
+                                      ? d.workout_card.exercises.map((ex2, xi) =>
+                                          xi === eIdx ? { ...ex2, percentage: value } : ex2
+                                        )
+                                      : [];
+                                    return {
+                                      ...d,
+                                      workout_card: { ...(d.workout_card || {}), exercises },
+                                    };
+                                  });
+                                  return { ...w, days };
+                                });
+                                return { ...prev, weeks: weeksCopy };
+                              });
+                            }}
+                          />
+                          <input
+                            type="text"
+                            style={S.smallInput}
+                            value={ex.rpe ?? ""}
+                            placeholder="RPE"
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setProgramModel((prev) => {
+                                if (!prev) return prev;
+                                const weeksCopy = prev.weeks.map((w, wi) => {
+                                  if (wi !== wIdx) return w;
+                                  const days = w.days.map((d, di) => {
+                                    if (di !== dIdx) return d;
+                                    const exercises = Array.isArray(d.workout_card?.exercises)
+                                      ? d.workout_card.exercises.map((ex2, xi) =>
+                                          xi === eIdx ? { ...ex2, rpe: value } : ex2
+                                        )
+                                      : [];
+                                    return {
+                                      ...d,
+                                      workout_card: { ...(d.workout_card || {}), exercises },
+                                    };
+                                  });
+                                  return { ...w, days };
+                                });
+                                return { ...prev, weeks: weeksCopy };
+                              });
+                            }}
+                          />
                           <button
                             type="button"
                       style={S.smallDangerBtn}
@@ -488,7 +570,7 @@ export default function CreateProgram() {
                               ? [...d.workout_card.exercises]
                               : [];
                             exercises.push({
-                              name: "New Exercise",
+                              name: "",
                               sets: null,
                               reps: null,
                               weight: null,
