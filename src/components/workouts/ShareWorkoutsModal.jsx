@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import EmptyState from "../EmptyState";
 import { normalizeWorkoutForShare } from "../../utils/workoutShare";
+import { useToast } from "../ToastProvider";
 
 /**
  * ShareWorkoutsModal (WORKING UI + WORKING SEND)
@@ -17,6 +18,7 @@ import { normalizeWorkoutForShare } from "../../utils/workoutShare";
  */
 
 export default function ShareWorkoutsModal({ open, onClose }) {
+  const toast = useToast();
   const [step, setStep] = useState("workouts"); // workouts | friends
   const [workouts, setWorkouts] = useState([]);
   const [friends, setFriends] = useState([]);
@@ -269,11 +271,13 @@ export default function ShareWorkoutsModal({ open, onClose }) {
         idx++;
       }
 
-      // Close on success
+      // Close on success + toast
+      if (toast?.success) toast.success("Workout sent");
       close();
     } catch (e) {
       console.error("WORKOUT SHARE SEND ERROR:", e);
       setErrorText(e?.message || "Failed to send workouts.");
+      if (toast?.error) toast.error("Failed to send workout");
     } finally {
       setSending(false);
     }

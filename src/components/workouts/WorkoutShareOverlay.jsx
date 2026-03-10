@@ -4,6 +4,7 @@ import { supabase } from "../../supabaseClient";
 import { FaShare, FaTimes, FaChevronRight } from "react-icons/fa";
 import EmptyState from "../EmptyState";
 import { normalizeWorkoutForShare } from "../../utils/workoutShare";
+import { useToast } from "../ToastProvider";
 
 /* =====================================================================================
    ARMPAL — WORKOUT SHARE OVERLAY (DOES NOT MODIFY WorkoutsPage.jsx)
@@ -269,6 +270,8 @@ export default function WorkoutShareOverlay() {
   // DOM control
   const observerRef = useRef(null);
   const wiredNodesRef = useRef(new WeakSet());
+
+  const toast = useToast();
 
   /* ---------------------------------------
      Load user + workouts when on /workouts
@@ -765,7 +768,7 @@ function buildWorkoutPayload(workout) {
 /* ---------------------------------------
    SEND SELECTED WORKOUTS TO SELECTED FRIENDS
 ---------------------------------------- */
-async function sendSelectedWorkouts() {
+async function sendSelectedWorkouts(toast, exitShareMode, workouts, userId, selectedFriendIds) {
   if (!userId) return;
   if (selectedWorkoutIds.size === 0) return;
   if (selectedFriendIds.size === 0) return;
@@ -799,10 +802,11 @@ async function sendSelectedWorkouts() {
 
   if (error) {
     console.error("Workout share failed:", error);
-    alert("Failed to send workouts. Try again.");
+    if (toast?.error) toast.error("Failed to send workout");
     return;
   }
 
+  if (toast?.success) toast.success("Workout sent");
   // CLEAN EXIT
   exitShareMode();
 }
@@ -819,7 +823,7 @@ useEffect(() => {
   if (!btn) return;
 
   const onClick = () => {
-    sendSelectedWorkouts();
+    sendSelectedWorkouts(toast, exitShareMode, workouts, userId, selectedFriendIds);
   };
 
   btn.addEventListener("click", onClick);
