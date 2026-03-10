@@ -230,23 +230,38 @@ export default function CreateProgram() {
         setConvertError("AI did not return any structured weeks.");
         return;
       }
-      const inferredDays = weeks[0]?.days?.length || daysPerWeek || 3;
-      const splitKey = String(inferredDays);
+
+      // Decide target split for AI output:
+      // - If splits exist, prefer the one matching current daysPerWeek.
+      // - Otherwise use the first enabled split.
+      // - If none exist, create one for daysPerWeek and target that.
+      let targetKey = null;
+      const enabledKeys = Object.keys(programJson.splits || {});
+      const daysKey = String(daysPerWeek || 3);
+      if (enabledKeys.length > 0) {
+        targetKey = enabledKeys.includes(daysKey) ? daysKey : enabledKeys[0];
+      } else {
+        targetKey = daysKey;
+        ensureSplit(daysPerWeek || 3);
+      }
 
       setProgramJson((prev) => {
         const prevSplits = prev?.splits || {};
+        const existing = prevSplits[targetKey] || {
+          title: `${Number(targetKey) || 3}-Day Split`,
+          weeks: [],
+        };
         return {
           ...prev,
           splits: {
             ...prevSplits,
-            [splitKey]: {
-              title: prevSplits[splitKey]?.title || `${inferredDays}-Day Split`,
+            [targetKey]: {
+              ...existing,
               weeks,
             },
           },
         };
       });
-      setDaysPerWeek(inferredDays);
       setConvertError("");
     } catch (e) {
       console.error(e);
