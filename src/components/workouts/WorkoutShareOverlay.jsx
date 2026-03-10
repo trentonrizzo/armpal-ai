@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { FaShare, FaTimes, FaChevronRight } from "react-icons/fa";
 import EmptyState from "../EmptyState";
+import { normalizeWorkoutForShare } from "../../utils/workoutShare";
 
 /* =====================================================================================
    ARMPAL — WORKOUT SHARE OVERLAY (DOES NOT MODIFY WorkoutsPage.jsx)
@@ -284,7 +285,7 @@ export default function WorkoutShareOverlay() {
 
       const { data: ws } = await supabase
         .from("workouts")
-        .select("id,name,position,scheduled_for")
+        .select("id,name,position,scheduled_for,exercises")
         .eq("user_id", uid)
         .order("position", { ascending: true });
 
@@ -747,44 +748,16 @@ function toggleFriend(id) {
 /* ---------------------------------------
    Helpers
 ---------------------------------------- */
-async function loadExercisesForWorkout(workoutId) {
-  const { data } = await supabase
-    .from("exercises")
-    .select("*")
-    .eq("workout_id", workoutId)
-    .order("position", { ascending: true });
-
-  return data || [];
-}
-
-function buildWorkoutPayload(workout, exercises) {
+function buildWorkoutPayload(workout) {
+  const shareWorkout = normalizeWorkoutForShare(workout);
   return {
     type: "workout_share",
     workout: {
-      id: workout.id,
-      name: workout.name,
-      scheduled_for: workout.scheduled_for || null,
+      id: shareWorkout.id,
+      name: shareWorkout.name,
+      scheduled_for: shareWorkout.scheduled_for || null,
     },
-    exercises: exercises.map((ex) => {
-      if (ex.weight && typeof ex.weight === "string" && ex.weight.trim().startsWith("{")) {
-        try {
-          const parsed = JSON.parse(ex.weight);
-          if (parsed && typeof parsed === "object") {
-            return { ...parsed, display_text: ex.display_text ?? parsed.display_text ?? null };
-          }
-        } catch {
-          // fall through to column-based object
-        }
-      }
-      return {
-        name: ex.name,
-        sets: ex.sets,
-        reps: ex.reps,
-        weight: ex.weight,
-        position: ex.position,
-        display_text: ex.display_text ?? null,
-      };
-    }),
+    exercises: shareWorkout.exercises,
     sent_at: new Date().toISOString(),
   };
 }
@@ -797,17 +770,12 @@ async function sendSelectedWorkouts() {
   if (selectedWorkoutIds.size === 0) return;
   if (selectedFriendIds.size === 0) return;
 
-  // Build all workout payloads first
+  // Build all workout payloads first from current workouts.exercises JSON
   const selectedWorkouts = workouts.filter((w) =>
     selectedWorkoutIds.has(w.id)
   );
 
-  const payloads = [];
-
-  for (const w of selectedWorkouts) {
-    const exercises = await loadExercisesForWorkout(w.id);
-    payloads.push(buildWorkoutPayload(w, exercises));
-  }
+  const payloads = selectedWorkouts.map((w) => buildWorkoutPayload(w));
 
   // Send messages (one message per workout per friend)
   const inserts = [];

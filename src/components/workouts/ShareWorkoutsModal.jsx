@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import EmptyState from "../EmptyState";
-import { getDisplayText } from "../../utils/displayText";
+import { normalizeWorkoutForShare } from "../../utils/workoutShare";
 
 /**
  * ShareWorkoutsModal (WORKING UI + WORKING SEND)
@@ -59,7 +59,7 @@ export default function ShareWorkoutsModal({ open, onClose }) {
 
     const { data, error } = await supabase
       .from("workouts")
-      .select("id,name,position")
+      .select("id,name,position,scheduled_for,exercises")
       .eq("user_id", uid)
       .order("position", { ascending: true });
 
@@ -149,17 +149,6 @@ export default function ShareWorkoutsModal({ open, onClose }) {
     onClose?.();
   }
 
-  async function loadExercisesForWorkout(workoutId) {
-    const { data, error } = await supabase
-      .from("exercises")
-      .select("name,sets,reps,weight,position,input")
-      .eq("workout_id", workoutId)
-      .order("position", { ascending: true });
-
-    if (error) throw error;
-    return data || [];
-  }
-
   /**
    * ✅ The actual fix:
    * Your messages table does NOT have `content` OR `message_text`.
@@ -231,48 +220,20 @@ export default function ShareWorkoutsModal({ open, onClose }) {
       if (!selectedWorkouts.length) throw new Error("No workouts selected.");
       if (!selectedFriendIds.size) throw new Error("No friends selected.");
 
-      // Build payloads for each workout
-      const payloads = [];
-      for (const w of selectedWorkouts) {
-        const rawEx = await loadExercisesForWorkout(w.id);
-        const ex = rawEx.map((e) => {
-          if (e.weight && typeof e.weight === "string" && e.weight.trim().startsWith("{")) {
-            try {
-              const parsed = JSON.parse(e.weight);
-              if (parsed && typeof parsed === "object") {
-                return parsed;
-              }
-            } catch {
-              // fall through
-            }
-          }
-          const base = {
-            name: e.name,
-            sets: e.sets,
-            reps: e.reps,
-            weight: e.weight,
-            position: e.position,
-          };
-          const display_text = getDisplayText({
-            name: e.name,
-            sets: e.sets,
-            reps: e.reps,
-            weight: e.weight,
-            input: e.input,
-          });
-          return {
-            ...base,
-            input: e.input ?? null,
-            display_text,
-          };
-        });
-        payloads.push({
+      // Build payloads for each workout from current workouts.exercises JSON
+      const payloads = selectedWorkouts.map((w) => {
+        const shareWorkout = normalizeWorkoutForShare(w);
+        return {
           type: "workout_share",
-          workout: { id: w.id, name: w.name },
-          exercises: ex,
+          workout: {
+            id: shareWorkout.id,
+            name: shareWorkout.name,
+            scheduled_for: shareWorkout.scheduled_for,
+          },
+          exercises: shareWorkout.exercises,
           sent_at: new Date().toISOString(),
-        });
-      }
+        };
+      });
 
       // Base message rows (schema-agnostic)
       // Most chat schemas have sender_id/receiver_id and created_at default; we keep it minimal.
