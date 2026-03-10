@@ -4,7 +4,6 @@ import { Routes, Route, useLocation, useParams, useNavigate, Navigate } from "re
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
-import { ProfileGateProvider, useProfileGate } from "./context/ProfileGateContext";
 import { ToastProvider } from "./components/ToastProvider";
 import AuthPage from "./AuthPage";
 
@@ -145,64 +144,6 @@ function RuntimeSplash({ show }) {
   );
 }
 
-/* ============================
-   PROFILE GATE (forced setup)
-============================ */
-function ProfileGate({ session, children }) {
-  const location = useLocation();
-  const { profile, setProfile } = useProfileGate() || {};
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let alive = true;
-    const uid = session?.user?.id;
-    if (!uid) {
-      setLoading(false);
-      return;
-    }
-    (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("handle, display_name")
-        .eq("id", uid)
-        .maybeSingle();
-      if (!alive) return;
-      if (setProfile) {
-        setProfile(data ?? null);
-      }
-      setLoading(false);
-    })();
-    return () => { alive = false; };
-  }, [session?.user?.id]);
-
-  const incomplete =
-    !loading &&
-    (!profile ||
-      !String(profile.handle ?? "").trim() ||
-      !String(profile.display_name ?? "").trim());
-  const onProfilePage = location.pathname === "/profile";
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <span style={{ color: "var(--text-dim)" }}>Loading…</span>
-      </div>
-    );
-  }
-  if (incomplete && !onProfilePage) {
-    return <Navigate to="/profile" replace />;
-  }
-  return children;
-}
-
 function AuthenticatedLayout({ session }) {
   const [notifQueue, setNotifQueue] = useState([]);
   const location = useLocation();
@@ -222,6 +163,14 @@ function AuthenticatedLayout({ session }) {
   );
 
   useInAppBannerNotifications(session?.user?.id, isSuppressedFn, setNotifQueue);
+
+  // New-signup only: redirect to Profile once so they can set handle + display name
+  useEffect(() => {
+    if (!session?.user?.id || typeof window === "undefined") return;
+    if (sessionStorage.getItem("armpal_needs_profile_setup") === "1" && location.pathname !== "/profile") {
+      navigate("/profile", { replace: true });
+    }
+  }, [session?.user?.id, location.pathname, navigate]);
 
   const handleBannerDismiss = (id) => {
     setNotifQueue((prev) => prev.filter((n) => n.id !== id));
@@ -251,24 +200,24 @@ function AuthenticatedLayout({ session }) {
         onDismiss={handleBannerDismiss}
         onClick={handleBannerClick}
       />
-      <ProfileGate session={session}>
-        <AppContent />
-      </ProfileGate>
+      <AppContent />
     </>
   );
 }
+
+const NEW_USER_PROFILE_FLAG = "armpal_needs_profile_setup";
 
 function AppContent() {
   const location = useLocation();
   const isChatRoute = location.pathname.startsWith("/chat");
   const isWorkouts = location.pathname === "/workouts";
-  const { profile } = useProfileGate() || {};
-  const profileIncomplete =
-    !profile ||
-    !String(profile.handle ?? "").trim() ||
-    !String(profile.display_name ?? "").trim();
   const [openShare, setOpenShare] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  const hideNavForNewUserOnProfile =
+    location.pathname === "/profile" &&
+    typeof window !== "undefined" &&
+    sessionStorage.getItem(NEW_USER_PROFILE_FLAG) === "1";
 
   useEffect(() => {
     setMounted(true);
@@ -284,7 +233,7 @@ function AppContent() {
       className={
         isChatRoute
           ? "h-screen overflow-hidden"
-          : profileIncomplete
+          : hideNavForNewUserOnProfile
           ? "min-h-screen"
           : "min-h-screen pb-20"
       }
@@ -338,7 +287,7 @@ function AppContent() {
       </Routes>
 
       {location.pathname === "/" && <NotificationsBell />}
-      {!isChatRoute && !profileIncomplete && <BottomNav />}
+      {!isChatRoute && !hideNavForNewUserOnProfile && <BottomNav />}
 
       {isWorkouts && (
         <button

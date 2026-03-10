@@ -92,6 +92,9 @@ export default function AuthPage({ initialMode }) {
     if (error) {
       setMsg({ type: "error", text: error.message });
     } else {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("armpal_needs_profile_setup", "1");
+      }
       setMsg({
         type: "success",
         text: "Account created! Check your email to verify.",

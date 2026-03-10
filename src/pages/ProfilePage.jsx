@@ -47,7 +47,7 @@ import React, {
   useRef,
 } from "react";
 
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
 
@@ -71,8 +71,6 @@ import { useToast } from "../components/ToastProvider";
 import { SkeletonLine, SkeletonAvatar } from "../components/Skeleton";
 import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
 import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
-import { useProfileGate } from "../context/ProfileGateContext";
-
 // =================================================================================================
 // 2) CONSTANTS
 // =================================================================================================
@@ -642,10 +640,12 @@ async function loadQuickActionCounts(userId) {
   };
 }
 
+const NEW_USER_PROFILE_FLAG = "armpal_needs_profile_setup";
+
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
-  const gate = useProfileGate ? useProfileGate() : null;
 
   // -----------------------------------------------------------------------------------------------
   // CORE STATE
@@ -795,9 +795,25 @@ useEffect(() => {
   const headerName = useMemo(() => displayNameFallback(displayName), [displayName]);
   const headerHandle = useMemo(() => formatHandle(handle), [handle]);
 
-  const profileIncomplete =
-    !loading &&
-    (!safeString(displayName) || !safeString(handle));
+  // New-signup only: show onboarding banner and lock nav until they save handle + display name
+  const [isNewUserOnboarding, setIsNewUserOnboarding] = useState(() =>
+    typeof window !== "undefined" ? sessionStorage.getItem(NEW_USER_PROFILE_FLAG) === "1" : false
+  );
+
+  useEffect(() => {
+    if (location.state?.needsProfileSetup && typeof window !== "undefined") {
+      sessionStorage.setItem(NEW_USER_PROFILE_FLAG, "1");
+      setIsNewUserOnboarding(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state?.needsProfileSetup, location.pathname, navigate]);
+
+  // Auto-enter edit mode for new users so handle and display name are visible
+  useEffect(() => {
+    if (isNewUserOnboarding && !loading && !editMode) {
+      setEditMode(true);
+    }
+  }, [isNewUserOnboarding, loading, editMode]);
 
   // -----------------------------------------------------------------------------------------------
   // DIRTY CHECK HELPERS
@@ -896,17 +912,13 @@ useEffect(() => {
       setEditMode(false);
       toast.success("Saved");
 
-      // Immediately inform profile gate so navigation unlocks without refetch
-      if (gate && gate.setProfile) {
-        gate.setProfile((prev) => ({
-          ...(prev || {}),
-          handle: handleValue,
-          display_name: displayNameValue,
-        }));
+      if (isNewUserOnboarding) {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem(NEW_USER_PROFILE_FLAG);
+        }
+        setIsNewUserOnboarding(false);
+        navigate("/", { replace: true });
       }
-
-      // If this was forced onboarding (missing fields), send user back to Dashboard
-      navigate("/", { replace: true });
     } catch (e) {
       console.error("saveProfile failed", e);
       toast.error("Failed to save profile");
@@ -1132,7 +1144,7 @@ useEffect(() => {
             PROFILE CARD
         ========================================================================================= */}
 
-        {profileIncomplete && (
+        {isNewUserOnboarding && (
           <div
             style={{
               marginBottom: 16,
@@ -1145,7 +1157,7 @@ useEffect(() => {
               textAlign: "center",
             }}
           >
-            Complete your profile to continue using ArmPal.
+            Create your handle and display name to continue.
           </div>
         )}
 
@@ -1259,37 +1271,51 @@ useEffect(() => {
                 </div>
               ) : (
                 <>
-                  <FieldLabel>Display name</FieldLabel>
-                  <TextInput
-                    value={displayName}
-                    onChange={(e) => {
-                      setDisplayName(e.target.value);
-                      recomputeDirty({
-                        display_name: e.target.value,
-                        handle,
-                        bio,
-                        avatar_url: avatarUrl,
-                      });
-                    }}
-                    placeholder="Your name"
-                  />
+                  <div
+                    style={
+                      isNewUserOnboarding
+                        ? {
+                            padding: 12,
+                            borderRadius: 10,
+                            border: "2px solid var(--accent)",
+                            marginBottom: 16,
+                            background: "rgba(224, 0, 0, 0.06)",
+                          }
+                        : undefined
+                    }
+                  >
+                    <FieldLabel>Display name</FieldLabel>
+                    <TextInput
+                      value={displayName}
+                      onChange={(e) => {
+                        setDisplayName(e.target.value);
+                        recomputeDirty({
+                          display_name: e.target.value,
+                          handle,
+                          bio,
+                          avatar_url: avatarUrl,
+                        });
+                      }}
+                      placeholder="Your name"
+                    />
 
-                  <div style={{ height: 16 }} />
+                    <div style={{ height: 16 }} />
 
-                  <FieldLabel>Handle</FieldLabel>
-                  <TextInput
-                    value={formatHandle(handle)}
-                    onChange={(e) => {
-                      setHandle(stripHandle(e.target.value));
-                      recomputeDirty({
-                        display_name: displayName,
-                        handle: stripHandle(e.target.value),
-                        bio,
-                        avatar_url: avatarUrl,
-                      });
-                    }}
-                    placeholder="@yourhandle"
-                  />
+                    <FieldLabel>Handle</FieldLabel>
+                    <TextInput
+                      value={formatHandle(handle)}
+                      onChange={(e) => {
+                        setHandle(stripHandle(e.target.value));
+                        recomputeDirty({
+                          display_name: displayName,
+                          handle: stripHandle(e.target.value),
+                          bio,
+                          avatar_url: avatarUrl,
+                        });
+                      }}
+                      placeholder="@yourhandle"
+                    />
+                  </div>
 
                   <div style={{ height: 16 }} />
 
