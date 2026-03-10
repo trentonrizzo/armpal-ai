@@ -37,6 +37,7 @@ export default function CreateProgram() {
   const [saving, setSaving] = useState(false);
   const [programId, setProgramId] = useState(null);
   const [errorModal, setErrorModal] = useState(null);
+  const [confirmConfig, setConfirmConfig] = useState(null);
   const LEVELS = ["Beginner", "Intermediate", "Advanced", "Elite"];
 
   useEffect(() => {
@@ -276,6 +277,30 @@ export default function CreateProgram() {
         </button>
         <button
           type="button"
+          onClick={() => {
+            // Start a blank manual program: one week, one empty day
+            setProgramModel({
+              weeks: [
+                {
+                  weekNumber: 1,
+                  days: [
+                    {
+                      dayNumber: 1,
+                      title: "Day 1",
+                      workout_card: { title: "Day 1", exercises: [] },
+                    },
+                  ],
+                },
+              ],
+            });
+            setConvertError("");
+          }}
+          style={S.secondaryBtn}
+        >
+          Start Blank Program
+        </button>
+        <button
+          type="button"
           onClick={() => saveProgram(false)}
           disabled={!programModel?.weeks?.length || saving}
           style={{ ...S.secondaryBtn, opacity: !programModel?.weeks?.length ? 0.5 : 1 }}
@@ -412,27 +437,34 @@ export default function CreateProgram() {
                           />
                           <button
                             type="button"
-                            style={S.smallDangerBtn}
-                            onClick={() => {
-                              setProgramModel((prev) => {
-                                if (!prev) return prev;
-                                const weeksCopy = prev.weeks.map((w, wi) => {
-                                  if (wi !== wIdx) return w;
-                                  const days = w.days.map((d, di) => {
-                                    if (di !== dIdx) return d;
-                                    const exercises = Array.isArray(d.workout_card?.exercises)
-                                      ? d.workout_card.exercises.filter((_, xi) => xi !== eIdx)
-                                      : [];
-                                    return {
-                                      ...d,
-                                      workout_card: { ...(d.workout_card || {}), exercises },
-                                    };
-                                  });
-                                  return { ...w, days };
+                      style={S.smallDangerBtn}
+                      onClick={() => {
+                        setConfirmConfig({
+                          title: "Delete exercise?",
+                          message: "This exercise will be removed from the day.",
+                          onConfirm: () => {
+                            setProgramModel((prev) => {
+                              if (!prev) return prev;
+                              const weeksCopy = prev.weeks.map((w, wi) => {
+                                if (wi !== wIdx) return w;
+                                const days = w.days.map((d, di) => {
+                                  if (di !== dIdx) return d;
+                                  const exercises = Array.isArray(d.workout_card?.exercises)
+                                    ? d.workout_card.exercises.filter((_, xi) => xi !== eIdx)
+                                    : [];
+                                  return {
+                                    ...d,
+                                    workout_card: { ...(d.workout_card || {}), exercises },
+                                  };
                                 });
-                                return { ...prev, weeks: weeksCopy };
+                                return { ...w, days };
                               });
-                            }}
+                              return { ...prev, weeks: weeksCopy };
+                            });
+                            setConfirmConfig(null);
+                          },
+                        });
+                      }}
                           >
                             ✕
                           </button>
@@ -479,14 +511,21 @@ export default function CreateProgram() {
                     type="button"
                     style={S.smallDangerOutlineBtn}
                     onClick={() => {
-                      setProgramModel((prev) => {
-                        if (!prev) return prev;
-                        const weeksCopy = prev.weeks.map((w, wi) => {
-                          if (wi !== wIdx) return w;
-                          const days = w.days.filter((_, di) => di !== dIdx);
-                          return { ...w, days };
-                        });
-                        return { ...prev, weeks: weeksCopy };
+                      setConfirmConfig({
+                        title: "Delete workout day?",
+                        message: "This workout day and its exercises will be removed.",
+                        onConfirm: () => {
+                          setProgramModel((prev) => {
+                            if (!prev) return prev;
+                            const weeksCopy = prev.weeks.map((w, wi) => {
+                              if (wi !== wIdx) return w;
+                              const days = w.days.filter((_, di) => di !== dIdx);
+                              return { ...w, days };
+                            });
+                            return { ...prev, weeks: weeksCopy };
+                          });
+                          setConfirmConfig(null);
+                        },
                       });
                     }}
                   >
@@ -535,6 +574,33 @@ export default function CreateProgram() {
             >
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {confirmConfig && (
+        <div style={S.modalBackdrop} onClick={() => setConfirmConfig(null)}>
+          <div style={S.modalCard} onClick={(e) => e.stopPropagation()}>
+            <h3 style={S.modalTitle}>{confirmConfig.title}</h3>
+            <p style={S.modalBody}>{confirmConfig.message}</p>
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              <button
+                type="button"
+                style={S.secondaryBtn}
+                onClick={() => setConfirmConfig(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={S.primaryBtn}
+                onClick={() => {
+                  confirmConfig.onConfirm?.();
+                }}
+              >
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}
