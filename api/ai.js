@@ -635,11 +635,11 @@ export default async function handler(req, res) {
       .eq("date", today)
       .maybeSingle();
 
-    const DAILY_LIMIT = 25;
-    if (usage && usage.count >= DAILY_LIMIT) {
+    const CHAT_DAILY_LIMIT = 25;
+    if (usage && usage.chat_responses >= CHAT_DAILY_LIMIT) {
       return res.status(403).json({
         error: "DAILY_LIMIT_REACHED",
-        message: "Daily AI limit reached.",
+        message: "You've reached today's AI chat limit (25). Try again tomorrow.",
       });
     }
 
@@ -711,14 +711,14 @@ OUTPUT FORMAT:
     if (usage) {
       await supabase
         .from("ai_usage")
-        .update({ count: usage.count + 1 })
+        .update({ chat_responses: (usage.chat_responses || 0) + 1 })
         .eq("user_id", userId)
         .eq("date", today);
     } else {
       await supabase.from("ai_usage").insert({
         user_id: userId,
         date: today,
-        count: 1,
+        chat_responses: 1,
       });
     }
 

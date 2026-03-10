@@ -49,6 +49,22 @@ export default async function handler(req, res) {
       });
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: usage } = await supabase
+      .from("ai_usage")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", today)
+      .maybeSingle();
+
+    const CONVERT_DAILY_LIMIT = 10;
+    if (usage && usage.workout_converts >= CONVERT_DAILY_LIMIT) {
+      return res.status(403).json({
+        error: "DAILY_LIMIT_REACHED",
+        message: "Daily AI workout conversion limit reached (10). Try again tomorrow.",
+      });
+    }
+
     const cardLimit = Math.min(
       Math.max(1, Number(max_cards) || 50),
       MAX_CARDS_HARD_LIMIT
@@ -161,6 +177,20 @@ Example: "Squat 3x5 @ RPE 8" → { "name": "Squat", "input": "3x5 @ RPE 8" }`,
         }
         current.setDate(current.getDate() + 1);
       }
+    }
+
+    if (usage) {
+      await supabase
+        .from("ai_usage")
+        .update({ workout_converts: (usage.workout_converts || 0) + 1 })
+        .eq("user_id", userId)
+        .eq("date", today);
+    } else {
+      await supabase.from("ai_usage").insert({
+        user_id: userId,
+        date: today,
+        workout_converts: 1,
+      });
     }
 
     return res.status(200).json({ workouts });

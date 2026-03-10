@@ -286,12 +286,12 @@ try {
 if (!res.ok) {
 
   if (json?.error === "PRO_REQUIRED") {
-    alert("🔒 ArmPal AI is Pro only. Upgrade to unlock.");
+    setError("🔒 ArmPal AI is Pro only. Upgrade to unlock.");
     return;
   }
 
   if (json?.error === "DAILY_LIMIT_REACHED") {
-    alert("You reached your daily AI limit.");
+    setError("You've reached today's AI chat limit (25). Try again tomorrow.");
     return;
   }
 

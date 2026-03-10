@@ -9,40 +9,25 @@ import { supabase } from "../supabaseClient";
 const PRO_PRICE_DISPLAY = "$7.99";
 
 const FREE_FEATURES = [
-  "Up to 25 workouts saved",
-  "Basic PR tracking",
-  "Basic measurements",
-  "AI chat (limited)",
-  "Messaging",
-  "Add friends",
-  "Basic dashboard",
-  "Progress photos (private)",
-  "Standard analytics",
-  "Workout sharing",
+  "AI Chat — limited to 5 responses/day",
+  "AI Workout Converter — limited to 2 uses/day",
+  "AI Food Scan — limited to 2 scans/day",
+  "Up to 5 workouts saved",
+  "Up to 5 bodyweight logs",
+  "Up to 5 measurement logs",
+  "Up to 5 PR logs",
+  "Up to 5 nutrition entries/day",
 ];
 
 const PRO_FEATURES = [
+  "AI Chat — up to 25 responses/day",
+  "AI Workout Converter — up to 10 uses/day",
+  "AI Food Scan — up to 10 scans/day",
   "Up to 1,000 saved workouts",
-  "Unlimited program creation",
-  "Advanced AI workout generator",
-  "AI structured program builder",
-  "Rep range + % + RPE support",
-  "Advanced analytics graphs",
-  "1RM prediction",
-  "Goal tracking system",
-  "Milestone celebrations",
-  "Streak tracking",
-  "Full measurement history tracking",
-  "Progress comparison charts",
-  "Workout export visuals",
-  "Shareable progress cards",
-  "AI personality modes (Coach / Savage / Science / Recovery)",
-  "Early feature access",
-  "Creator marketplace access (future)",
-  "Referral rewards system (future)",
-  "Pro badge",
-  "Exclusive premium programs",
-  "Advanced workout sharing tools",
+  "Up to 1,000 bodyweight logs",
+  "Up to 1,000 measurement logs",
+  "Up to 1,000 PR logs",
+  "Up to 1,000 nutrition entries/day",
 ];
 
 function FeatureCheck({ text, accent }) {
@@ -108,7 +93,7 @@ export default function ProUpgradePage() {
         <div style={S.proBadge}>PRO</div>
         <h1 style={S.heroTitle}>Upgrade to ArmPal Pro</h1>
         <p style={S.heroSub}>
-          Unlock the full training experience — advanced AI, analytics, program creation, and more.
+          Unlock higher AI limits and more room for your training history.
         </p>
       </div>
 

@@ -5,7 +5,7 @@
 
 import { supabase } from "../supabaseClient";
 
-const MAX_CONVERSATIONS = 10;
+const MAX_CONVERSATIONS = 100;
 
 export async function listConversations(userId) {
   if (!userId) return [];

@@ -229,7 +229,8 @@ function AppContent() {
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/find-friends" element={<FindFriends />} />
         <Route path="/find-friends/setup" element={<FindFriendsSetupPage />} />
-        <Route path="/groups" element={<GroupsPage />} />
+        {/* Groups temporarily hidden for App Store launch */}
+        {/* <Route path="/groups" element={<GroupsPage />} /> */}
         <Route path="/messages" element={<FriendsPage />} />
         <Route path="/chat" element={<GroupsPage />} />
 
@@ -245,11 +246,12 @@ function AppContent() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
         <Route path="/pro" element={<ProUpgradePage />} />
-        <Route path="/programs" element={<ProgramsErrorBoundary><ProgramMarketplace /></ProgramsErrorBoundary>} />
-        <Route path="/programs/create" element={<ProgramsErrorBoundary><CreateProgram /></ProgramsErrorBoundary>} />
-        <Route path="/programs/my" element={<ProgramsErrorBoundary><MyPrograms /></ProgramsErrorBoundary>} />
-        <Route path="/programs/:id" element={<ProgramsErrorBoundary><ProgramPreview /></ProgramsErrorBoundary>} />
-        <Route path="/programs/:id/view" element={<ProgramsErrorBoundary><ProgramViewer /></ProgramsErrorBoundary>} />
+        {/* Programs temporarily hidden for App Store launch */}
+        {/* <Route path="/programs" element={<ProgramsErrorBoundary><ProgramMarketplace /></ProgramsErrorBoundary>} /> */}
+        {/* <Route path="/programs/create" element={<ProgramsErrorBoundary><CreateProgram /></ProgramsErrorBoundary>} /> */}
+        {/* <Route path="/programs/my" element={<ProgramsErrorBoundary><MyPrograms /></ProgramsErrorBoundary>} /> */}
+        {/* <Route path="/programs/:id" element={<ProgramsErrorBoundary><ProgramPreview /></ProgramsErrorBoundary>} /> */}
+        {/* <Route path="/programs/:id/view" element={<ProgramsErrorBoundary><ProgramViewer /></ProgramsErrorBoundary>} /> */}
         <Route path="/games" element={<GamesHub />} />
         <Route path="/games/arena-select" element={<ArenaSelect />} />
         <Route path="/games/arena-trainer" element={<ArenaTrainer />} />

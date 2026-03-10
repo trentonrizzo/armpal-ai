@@ -175,6 +175,19 @@ export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, 
 
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
+
+        if (d?.error === "PRO_REQUIRED") {
+          setError("AI Workout Converter is Pro only. Upgrade to unlock.");
+          setPhase(PHASE.INPUT);
+          return;
+        }
+
+        if (d?.error === "DAILY_LIMIT_REACHED") {
+          setError("Daily AI workout conversion limit reached (10). Try again tomorrow.");
+          setPhase(PHASE.INPUT);
+          return;
+        }
+
         throw new Error(d.message || d.error || "Conversion failed");
       }
 

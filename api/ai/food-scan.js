@@ -23,7 +23,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const DAILY_SCAN_LIMIT = 20;
+const DAILY_SCAN_LIMIT = 10;
 
 /** Per 100g: calories, protein, carbs, fat. Keywords (lowercase) for fuzzy match. */
 const NUTRITION_REFERENCE = [
@@ -155,16 +155,17 @@ export default async function handler(req, res) {
       }
 
       const today = new Date().toISOString().slice(0, 10);
-      const { count: scanCount, error: countErr } = await supabase
-        .from("food_scans")
-        .select("*", { count: "exact", head: true })
+      const { data: usage } = await supabase
+        .from("ai_usage")
+        .select("*")
         .eq("user_id", userId)
-        .gte("created_at", today + "T00:00:00Z");
+        .eq("date", today)
+        .maybeSingle();
 
-      if (!countErr && scanCount >= DAILY_SCAN_LIMIT) {
+      if (usage && usage.image_scans >= DAILY_SCAN_LIMIT) {
         return res.status(429).json({
           error: "SCAN_LIMIT_REACHED",
-          message: `Daily scan limit (${DAILY_SCAN_LIMIT}) reached. Try again tomorrow.`,
+          message: "Daily AI image scan limit reached (10). Try again tomorrow.",
         });
       }
 
@@ -284,6 +285,30 @@ Example: { "foods": [ { "name": "grilled chicken breast", "estimated_weight_g": 
         })
         .then(() => {})
         .catch(() => {});
+    }
+
+    if (userId) {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: usage } = await supabase
+        .from("ai_usage")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("date", today)
+        .maybeSingle();
+
+      if (usage) {
+        await supabase
+          .from("ai_usage")
+          .update({ image_scans: (usage.image_scans || 0) + 1 })
+          .eq("user_id", userId)
+          .eq("date", today);
+      } else {
+        await supabase.from("ai_usage").insert({
+          user_id: userId,
+          date: today,
+          image_scans: 1,
+        });
+      }
     }
 
     return res.status(200).json(response);
