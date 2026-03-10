@@ -7,54 +7,24 @@ export default function ProgramViewer({ previewProgram = null, program: programP
   const { id } = useParams();
   const navigate = useNavigate();
   const [program, setProgram] = useState(null);
-  const [logic, setLogic] = useState(null);
   const [owned, setOwned] = useState(false);
-  const [selectedFrequency, setSelectedFrequency] = useState(null);
+  const [selectedSplitKey, setSelectedSplitKey] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [aiVariant, setAiVariant] = useState(null);
 
-  function weeksToLogicDays(programJson) {
-    const weeks = programJson?.weeks;
-    if (!Array.isArray(weeks)) return null;
-    const days = [];
-    weeks.forEach((w) => {
-      (w.days || []).forEach((d) => {
-        days.push({
-          name: d.title || d.workout_card?.title || "Workout",
-          exercises: Array.isArray(d.workout_card?.exercises) ? d.workout_card.exercises : [],
-        });
-      });
-    });
-    return days.length ? days : null;
-  }
-
-  const preview = previewProgram ?? (programProp?.parsed_program ? { ...programProp, parsed_program: programProp.parsed_program } : null);
-  const rawLogic = aiVariant ?? program?.parsed_program ?? logic?.logic_json ?? {};
-  const programJsonDays = weeksToLogicDays(program?.program_json);
-  const logicJson = programJsonDays
-    ? { days: programJsonDays }
-    : rawLogic;
-  const simpleDays = Array.isArray(logicJson.days) ? logicJson.days : null;
-  const frequencyRange = logicJson.frequency_range ?? [];
-  const hasFrequencyRange = !simpleDays && Array.isArray(frequencyRange) && frequencyRange.length > 0;
-  const layout = hasFrequencyRange && selectedFrequency != null
-    ? logicJson.layouts?.[selectedFrequency]
-    : null;
-
-  if (hasFrequencyRange && selectedFrequency != null && layout === undefined) {
-    console.warn("Missing layout for frequency", selectedFrequency);
-  }
+  const preview =
+    previewProgram ??
+    (programProp?.program_json ? { ...programProp, program_json: programProp.program_json } : null);
 
   useEffect(() => {
     if (!preview) return;
-    const parsed = preview.parsed_program ?? {};
     setProgram(preview);
-    setLogic({ logic_json: parsed });
     setOwned(true);
     setLoading(false);
-    const fr = parsed.frequency_range;
-    if (Array.isArray(fr) && fr.length > 0) setSelectedFrequency(fr[0]);
+    const splits = preview.program_json?.splits || {};
+    const keys = Object.keys(splits);
+    if (keys.length > 0) setSelectedSplitKey(keys.sort((a, b) => Number(a) - Number(b))[0]);
   }, [preview]);
 
   useEffect(() => {
@@ -93,19 +63,11 @@ export default function ProgramViewer({ previewProgram = null, program: programP
         if (alive) setOwned(!!up || isCreator);
       }
 
-      const { data: logicRow } = await supabase
-        .from("program_logic")
-        .select("logic_json")
-        .eq("program_id", id)
-        .maybeSingle();
-
       if (!alive) return;
-      const logic = prog.parsed_program ?? prog.program_json ?? logicRow?.logic_json ?? {};
-      const daysFromWeeks = weeksToLogicDays(prog.program_json);
-      setLogic({ logic_json: daysFromWeeks ? { days: daysFromWeeks } : logic });
-      const fr = logic?.frequency_range;
-      if (Array.isArray(fr) && fr.length > 0) {
-        setSelectedFrequency(fr[0]);
+      const splits = prog.program_json?.splits || {};
+      const keys = Object.keys(splits);
+      if (keys.length > 0) {
+        setSelectedSplitKey(keys.sort((a, b) => Number(a) - Number(b))[0]);
       }
       setLoading(false);
     })();
@@ -215,7 +177,14 @@ export default function ProgramViewer({ previewProgram = null, program: programP
     );
   }
 
-  const workouts = simpleDays ?? layout?.days ?? layout?.workouts ?? [];
+  const splits = program?.program_json?.splits || {};
+  const splitEntries = Object.entries(splits).sort(
+    ([a], [b]) => Number(a) - Number(b)
+  );
+  const activeKey =
+    selectedSplitKey && splits[selectedSplitKey]
+      ? selectedSplitKey
+      : splitEntries[0]?.[0] ?? null;
 
   return (
     <div style={styles.wrap}>
@@ -229,7 +198,6 @@ export default function ProgramViewer({ previewProgram = null, program: programP
       </button>
 
       <h1 style={styles.title}>{program?.title ?? "Program"}</h1>
-
       {program?.parsed_program && (
         <div style={styles.aiVariantRow}>
           <button type="button" onClick={() => modifyProgram("beginner")} style={styles.aiVariantBtn}>Beginner</button>
@@ -239,78 +207,79 @@ export default function ProgramViewer({ previewProgram = null, program: programP
         </div>
       )}
 
-      {hasFrequencyRange && (
-        <div style={styles.frequencyRow}>
-          <span style={styles.frequencyLabel}>Days per week</span>
+      {splitEntries.length > 0 && (
+        <div style={styles.splitPickerRow}>
+          <span style={styles.frequencyLabel}>Available splits</span>
           <div style={styles.frequencyButtons}>
-            {frequencyRange.map((freq) => (
+            {splitEntries.map(([key]) => (
               <button
-                key={freq}
+                key={key}
                 type="button"
-                onClick={() => setSelectedFrequency(freq)}
-                className={selectedFrequency === freq ? "pill active" : "pill"}
+                onClick={() => setSelectedSplitKey(key)}
                 style={{
                   ...styles.freqBtn,
-                  ...(selectedFrequency === freq ? styles.freqBtnActive : {}),
+                  ...(activeKey === key ? styles.freqBtnActive : {}),
                 }}
               >
-                {freq}×
+                {key}x
               </button>
             ))}
           </div>
         </div>
       )}
 
-      <div style={styles.layout}>
-        {layout?.summary && (
-          <div style={styles.summary}>{layout.summary}</div>
-        )}
+      {activeKey && splits[activeKey] && (
+        <div style={styles.layout}>
+          {splits[activeKey].title && (
+            <div style={styles.summary}>{splits[activeKey].title}</div>
+          )}
 
-        {workouts.length > 0 && workouts.map((workout) => {
-          const exList = Array.isArray(workout.exercises) ? workout.exercises : [];
-          return (
-            <div key={workout.name || Math.random()} style={styles.workoutBlock}>
-              <h3 style={styles.workoutTitle}>{workout.name}</h3>
-              {workout.estimated_time && (
-                <p style={styles.estimatedTime}>{workout.estimated_time}</p>
-              )}
-              {exList.map((exercise, ei) => (
-                <div key={ei} style={styles.exerciseRow}>
-                  <span style={{ fontWeight: 600, color: "var(--text)" }}>{getDisplayText(exercise)}</span>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => saveProgramWorkout(workout)}
-                disabled={!!savingId || !exList.length}
-                style={styles.saveBtn}
-              >
-                {savingId === workout.name ? "Saving…" : "Save as Workout Card"}
-              </button>
-            </div>
-          );
-        })}
-
-        {!layout?.summary && workouts.length === 0 && logicJson.phases?.length > 0 && (
-          <div style={styles.phaseBlock}>
-            <div style={styles.phaseLabel}>
-              {selectedFrequency != null ? `${selectedFrequency}×/week` : ""} · {logicJson.weeks ?? 1} week(s)
-            </div>
-            {logicJson.phases.map((phase, i) => (
-              <div key={i} style={styles.phaseCard}>
-                <strong>{phase.name ?? `Phase ${i + 1}`}</strong>
-                {phase.description ? <p style={styles.phaseDesc}>{phase.description}</p> : null}
+          {Array.isArray(splits[activeKey].weeks) &&
+            splits[activeKey].weeks.map((week, wIdx) => (
+              <div key={week.weekNumber ?? wIdx} style={styles.workoutBlock}>
+                <h3 style={styles.workoutTitle}>
+                  Week {week.weekNumber ?? wIdx + 1}
+                </h3>
+                {(week.days || []).map((day, dIdx) => {
+                  const exList = Array.isArray(day.workout_card?.exercises)
+                    ? day.workout_card.exercises
+                    : [];
+                  const workoutName =
+                    day.title || day.workout_card?.title || `Day ${dIdx + 1}`;
+                  return (
+                    <div key={dIdx} style={{ marginBottom: 16 }}>
+                      <h4 style={styles.dayTitle}>{workoutName}</h4>
+                      {exList.map((exercise, ei) => (
+                        <div key={ei} style={styles.exerciseRow}>
+                          <span style={{ fontWeight: 600, color: "var(--text)" }}>
+                            {getDisplayText(exercise)}
+                          </span>
+                        </div>
+                      ))}
+                      {exList.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            saveProgramWorkout({
+                              name: workoutName,
+                              exercises: exList,
+                            })
+                          }
+                          disabled={!!savingId || !exList.length}
+                          style={styles.saveBtn}
+                        >
+                          {savingId === workoutName
+                            ? "Saving…"
+                            : "Save as Workout Card"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ))}
-          </div>
-        )}
-
-        {!layout?.summary && workouts.length === 0 && !logicJson.phases?.length && (
-          <p style={styles.layoutText}>
-            No layout for {selectedFrequency != null ? `${selectedFrequency}×/week` : "this frequency"}.
-          </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -358,6 +327,9 @@ const styles = {
   },
   frequencyRow: {
     marginBottom: 20,
+  },
+  splitPickerRow: {
+    marginBottom: 16,
   },
   frequencyLabel: {
     display: "block",

@@ -28,7 +28,6 @@ export default function CreateProgram() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [rawContent, setRawContent] = useState("");
-  const [programModel, setProgramModel] = useState(null);
   const [convertError, setConvertError] = useState("");
   const [isConverting, setIsConverting] = useState(false);
   const [priceInput, setPriceInput] = useState("15.99");
@@ -204,7 +203,6 @@ export default function CreateProgram() {
     try {
       setIsConverting(true);
       setConvertError("");
-      setProgramModel(null);
 
       const res = await fetch(`${window.location.origin}/api/ai/workout-converter`, {
         method: "POST",
@@ -278,10 +276,10 @@ export default function CreateProgram() {
       });
       return;
     }
-    if (!programModel || !Array.isArray(programModel.weeks) || programModel.weeks.length === 0) {
+    if (!hasAnyContent(programJson)) {
       setErrorModal({
         title: "No workouts yet",
-        message: "Run Convert With AI and review the workouts before saving.",
+        message: "Configure at least one split with weeks, days, and exercises before saving.",
       });
       return;
     }
@@ -297,12 +295,18 @@ export default function CreateProgram() {
     }
 
     const price = Number(priceInput) || 0;
+    const splits = programJson.splits || {};
+    const splitKeys = Object.keys(splits);
+    const primaryDays =
+      splitKeys.length > 0 ? Number(splitKeys[0]) || daysPerWeek || 3 : daysPerWeek || 3;
     const programJsonWithMeta = {
-      ...programModel,
+      ...programJson,
+      splits,
       meta: {
+        ...(programJson.meta || {}),
         difficulty,
-        tags: programModel.meta?.tags ?? [],
-        days_per_week: daysPerWeek,
+        tags: Array.isArray(programJson.meta?.tags) ? programJson.meta.tags : [],
+        days_per_week: primaryDays,
       },
     };
 
@@ -376,8 +380,6 @@ export default function CreateProgram() {
     }
   }
 
-  const weeks = programModel?.weeks ?? [];
-
   return (
     <div style={{ padding: "16px 16px 90px", maxWidth: 560, margin: "0 auto" }}>
       <button type="button" onClick={() => navigate("/programs")} style={S.backBtn}>
@@ -416,19 +418,42 @@ export default function CreateProgram() {
       <div style={S.levelRow}>
         <span style={S.levelLabel}>Days per week</span>
         <div style={S.levelOptions}>
-          {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDaysPerWeek(d)}
-              style={{
-                ...S.levelBtn,
-                ...(daysPerWeek === d ? S.levelBtnActive : {}),
-              }}
-            >
-              {d} {d === 1 ? "Day" : "Days"}
-            </button>
-          ))}
+          {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+            const key = String(d);
+            const enabled = !!programJson.splits?.[key];
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => {
+                  if (!enabled) {
+                    setDaysPerWeek(d);
+                    ensureSplit(d);
+                    return;
+                  }
+                  setConfirmConfig({
+                    title: `Remove ${d}-day split?`,
+                    message: "This will delete this split and all its weeks and days from this program.",
+                    onConfirm: () => {
+                      setProgramJson((prev) => {
+                        const prevSplits = prev?.splits || {};
+                        const nextSplits = { ...prevSplits };
+                        delete nextSplits[key];
+                        return { ...prev, splits: nextSplits };
+                      });
+                      setConfirmConfig(null);
+                    },
+                  });
+                }}
+                style={{
+                  ...S.splitToggleBtn,
+                  ...(enabled ? S.splitToggleBtnActive : {}),
+                }}
+              >
+                {d} {d === 1 ? "Day" : "Days"}
+              </button>
+            );
+          })}
         </div>
       </div>
       <input
@@ -477,21 +502,8 @@ export default function CreateProgram() {
         <button
           type="button"
           onClick={() => {
-            // Start a blank manual program: one week, one empty day
-            setProgramModel({
-              weeks: [
-                {
-                  weekNumber: 1,
-                  days: [
-                    {
-                      dayNumber: 1,
-                      title: "Day 1",
-                      workout_card: { title: "Day 1", exercises: [] },
-                    },
-                  ],
-                },
-              ],
-            });
+            const days = daysPerWeek || 3;
+            ensureSplit(days);
             setConvertError("");
           }}
           style={S.secondaryBtn}
@@ -501,16 +513,16 @@ export default function CreateProgram() {
         <button
           type="button"
           onClick={() => saveProgram(false)}
-          disabled={!programModel?.weeks?.length || saving}
-          style={{ ...S.secondaryBtn, opacity: !programModel?.weeks?.length ? 0.5 : 1 }}
+          disabled={!hasAnyContent(programJson) || saving}
+          style={{ ...S.secondaryBtn, opacity: !hasAnyContent(programJson) ? 0.5 : 1 }}
         >
           {saving ? "Saving…" : "Save Draft"}
         </button>
         <button
           type="button"
           onClick={() => saveProgram(true)}
-          disabled={!programModel?.weeks?.length || saving}
-          style={{ ...S.primaryBtn, opacity: !programModel?.weeks?.length ? 0.5 : 1 }}
+          disabled={!hasAnyContent(programJson) || saving}
+          style={{ ...S.primaryBtn, opacity: !hasAnyContent(programJson) ? 0.5 : 1 }}
         >
           {saving ? "Saving…" : "Publish"}
         </button>
@@ -531,291 +543,545 @@ export default function CreateProgram() {
         </p>
       )}
 
-      {programModel && weeks.length > 0 && (
-        <div>
+      {programJson && Object.keys(programJson.splits || {}).length > 0 && (
+        <div style={{ marginTop: 16 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 12px", color: "var(--text)" }}>
-            Live Preview — {weeks.reduce((acc, w) => acc + w.days.length, 0)} workout day(s)
+            Splits — build each version side by side
           </h3>
+          <div style={S.splitsRow} className="no-scrollbar">
+            {Object.entries(programJson.splits)
+              .sort(([a], [b]) => Number(a) - Number(b))
+              .map(([splitKey, split]) => {
+                const weeks = Array.isArray(split.weeks) ? split.weeks : [];
+                return (
+                  <div key={splitKey} style={S.splitColumn}>
+                    <div style={S.splitHeader}>
+                      <div>
+                        <div style={S.splitLabel}>{splitKey} Days / Week</div>
+                        <input
+                          style={S.splitTitleInput}
+                          value={split.title ?? ""}
+                          placeholder="Split title"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            updateSplit(splitKey, (prevSplit) => ({
+                              ...prevSplit,
+                              title: value,
+                            }));
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        style={S.splitRemoveBtn}
+                        onClick={() => {
+                          setConfirmConfig({
+                            title: `Remove ${splitKey}-day split?`,
+                            message: "This will delete this split and all its weeks and days.",
+                            onConfirm: () => {
+                              setProgramJson((prev) => {
+                                const prevSplits = prev?.splits || {};
+                                const nextSplits = { ...prevSplits };
+                                delete nextSplits[splitKey];
+                                return { ...prev, splits: nextSplits };
+                              });
+                              setConfirmConfig(null);
+                            },
+                          });
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
 
-          {weeks.map((week, wIdx) => (
-            <div key={week.weekNumber} style={{ marginBottom: 20 }}>
-              <div style={S.weekLabel}>Week {week.weekNumber}</div>
-              {week.days.map((day, dIdx) => (
-                <div key={dIdx} style={S.dayCard}>
-                  <h4 style={S.dayTitle}>{day.title}</h4>
-                  {Array.isArray(day.workout_card?.exercises) && day.workout_card.exercises.length > 0 ? (
-                    day.workout_card.exercises.map((ex, eIdx) => (
-                      <div key={eIdx} style={S.exRow}>
-                        <div style={S.exName}>{getDisplayText(ex)}</div>
-                        <div style={S.editRow}>
-                          <input
-                            style={S.smallInput}
-                            value={ex.name ?? ""}
-                            placeholder="Exercise name"
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setProgramModel((prev) => {
-                                if (!prev) return prev;
-                                const weeksCopy = prev.weeks.map((w, wi) => {
-                                  if (wi !== wIdx) return w;
-                                  const days = w.days.map((d, di) => {
-                                    if (di !== dIdx) return d;
-                                    const exercises = Array.isArray(d.workout_card?.exercises)
-                                      ? d.workout_card.exercises.map((ex2, xi) =>
-                                          xi === eIdx ? { ...ex2, name: value } : ex2
-                                        )
-                                      : [];
-                                    return {
-                                      ...d,
-                                      workout_card: { ...(d.workout_card || {}), exercises },
-                                    };
-                                  });
-                                  return { ...w, days };
-                                });
-                                return { ...prev, weeks: weeksCopy };
-                              });
-                            }}
-                          />
-                          <input
-                            type="number"
-                            style={S.smallInput}
-                            value={ex.sets ?? ""}
-                            placeholder="Sets"
-                            onChange={(e) => {
-                              const value = e.target.value === "" ? null : Number(e.target.value);
-                              setProgramModel((prev) => {
-                                if (!prev) return prev;
-                                const weeksCopy = prev.weeks.map((w, wi) => {
-                                  if (wi !== wIdx) return w;
-                                  const days = w.days.map((d, di) => {
-                                    if (di !== dIdx) return d;
-                                    const exercises = Array.isArray(d.workout_card?.exercises)
-                                      ? d.workout_card.exercises.map((ex2, xi) =>
-                                          xi === eIdx ? { ...ex2, sets: value } : ex2
-                                        )
-                                      : [];
-                                    return {
-                                      ...d,
-                                      workout_card: { ...(d.workout_card || {}), exercises },
-                                    };
-                                  });
-                                  return { ...w, days };
-                                });
-                                return { ...prev, weeks: weeksCopy };
-                              });
-                            }}
-                          />
-                          <input
-                            type="number"
-                            style={S.smallInput}
-                            value={ex.reps ?? ""}
-                            placeholder="Reps"
-                            onChange={(e) => {
-                              const value = e.target.value === "" ? null : Number(e.target.value);
-                              setProgramModel((prev) => {
-                                if (!prev) return prev;
-                                const weeksCopy = prev.weeks.map((w, wi) => {
-                                  if (wi !== wIdx) return w;
-                                  const days = w.days.map((d, di) => {
-                                    if (di !== dIdx) return d;
-                                    const exercises = Array.isArray(d.workout_card?.exercises)
-                                      ? d.workout_card.exercises.map((ex2, xi) =>
-                                          xi === eIdx ? { ...ex2, reps: value } : ex2
-                                        )
-                                      : [];
-                                    return {
-                                      ...d,
-                                      workout_card: { ...(d.workout_card || {}), exercises },
-                                    };
-                                  });
-                                  return { ...w, days };
-                                });
-                                return { ...prev, weeks: weeksCopy };
-                              });
-                            }}
-                          />
-                          <input
-                            type="text"
-                            style={S.smallInput}
-                            value={ex.percentage ?? ""}
-                            placeholder="%"
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setProgramModel((prev) => {
-                                if (!prev) return prev;
-                                const weeksCopy = prev.weeks.map((w, wi) => {
-                                  if (wi !== wIdx) return w;
-                                  const days = w.days.map((d, di) => {
-                                    if (di !== dIdx) return d;
-                                    const exercises = Array.isArray(d.workout_card?.exercises)
-                                      ? d.workout_card.exercises.map((ex2, xi) =>
-                                          xi === eIdx ? { ...ex2, percentage: value } : ex2
-                                        )
-                                      : [];
-                                    return {
-                                      ...d,
-                                      workout_card: { ...(d.workout_card || {}), exercises },
-                                    };
-                                  });
-                                  return { ...w, days };
-                                });
-                                return { ...prev, weeks: weeksCopy };
-                              });
-                            }}
-                          />
-                          <input
-                            type="text"
-                            style={S.smallInput}
-                            value={ex.rpe ?? ""}
-                            placeholder="RPE"
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setProgramModel((prev) => {
-                                if (!prev) return prev;
-                                const weeksCopy = prev.weeks.map((w, wi) => {
-                                  if (wi !== wIdx) return w;
-                                  const days = w.days.map((d, di) => {
-                                    if (di !== dIdx) return d;
-                                    const exercises = Array.isArray(d.workout_card?.exercises)
-                                      ? d.workout_card.exercises.map((ex2, xi) =>
-                                          xi === eIdx ? { ...ex2, rpe: value } : ex2
-                                        )
-                                      : [];
-                                    return {
-                                      ...d,
-                                      workout_card: { ...(d.workout_card || {}), exercises },
-                                    };
-                                  });
-                                  return { ...w, days };
-                                });
-                                return { ...prev, weeks: weeksCopy };
-                              });
-                            }}
-                          />
-                          <button
-                            type="button"
-                      style={S.smallDangerBtn}
+                    <button
+                      type="button"
+                      style={S.smallAddBtn}
                       onClick={() => {
-                        setConfirmConfig({
-                          title: "Delete exercise?",
-                          message: "This exercise will be removed from the day.",
-                          onConfirm: () => {
-                            setProgramModel((prev) => {
-                              if (!prev) return prev;
-                              const weeksCopy = prev.weeks.map((w, wi) => {
-                                if (wi !== wIdx) return w;
-                                const days = w.days.map((d, di) => {
-                                  if (di !== dIdx) return d;
-                                  const exercises = Array.isArray(d.workout_card?.exercises)
-                                    ? d.workout_card.exercises.filter((_, xi) => xi !== eIdx)
-                                    : [];
-                                  return {
-                                    ...d,
-                                    workout_card: { ...(d.workout_card || {}), exercises },
-                                  };
-                                });
-                                return { ...w, days };
-                              });
-                              return { ...prev, weeks: weeksCopy };
-                            });
-                            setConfirmConfig(null);
-                          },
+                        updateSplit(splitKey, (prevSplit) => {
+                          const currentWeeks = Array.isArray(prevSplit.weeks)
+                            ? prevSplit.weeks
+                            : [];
+                          const nextWeekNumber =
+                            (currentWeeks[currentWeeks.length - 1]?.weekNumber ||
+                              currentWeeks.length) + 1;
+                          const baseDays =
+                            currentWeeks[0]?.days?.length || Number(splitKey) || daysPerWeek || 3;
+                          const newWeek = {
+                            weekNumber: nextWeekNumber,
+                            days: Array.from({ length: baseDays }, (_v, idx) => {
+                              const dayNum = idx + 1;
+                              const name = `Day ${dayNum}`;
+                              return {
+                                dayNumber: dayNum,
+                                title: name,
+                                workout_card: { title: name, exercises: [] },
+                              };
+                            }),
+                          };
+                          return {
+                            ...prevSplit,
+                            weeks: [...currentWeeks, newWeek],
+                          };
                         });
                       }}
+                    >
+                      + Add Week
+                    </button>
+
+                    {weeks.map((week, wIdx) => (
+                      <div key={week.weekNumber ?? wIdx} style={{ marginBottom: 16 }}>
+                        <div style={S.weekRow}>
+                          <div style={S.weekLabel}>Week {week.weekNumber ?? wIdx + 1}</div>
+                          <button
+                            type="button"
+                            style={S.smallDangerOutlineBtn}
+                            onClick={() => {
+                              setConfirmConfig({
+                                title: "Delete week?",
+                                message: "This week and all its days will be removed from this split.",
+                                onConfirm: () => {
+                                  updateSplit(splitKey, (prevSplit) => {
+                                    const currentWeeks = Array.isArray(prevSplit.weeks)
+                                      ? prevSplit.weeks
+                                      : [];
+                                    return {
+                                      ...prevSplit,
+                                      weeks: currentWeeks.filter((_, idx) => idx !== wIdx),
+                                    };
+                                  });
+                                  setConfirmConfig(null);
+                                },
+                              });
+                            }}
                           >
-                            ✕
+                            Delete Week
                           </button>
                         </div>
+
+                        {Array.isArray(week.days) &&
+                          week.days.map((day, dIdx) => (
+                            <div key={dIdx} style={S.dayCard}>
+                              <div style={S.dayHeaderRow}>
+                                <input
+                                  style={S.dayTitleInput}
+                                  value={day.title ?? ""}
+                                  placeholder={`Day ${day.dayNumber ?? dIdx + 1}`}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    updateSplit(splitKey, (prevSplit) => {
+                                      const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                        if (wi !== wIdx) return w;
+                                        const daysCopy = w.days.map((d, di) => {
+                                          if (di !== dIdx) return d;
+                                          return {
+                                            ...d,
+                                            title: value,
+                                            workout_card: {
+                                              ...(d.workout_card || {}),
+                                              title: value || d.workout_card?.title,
+                                            },
+                                          };
+                                        });
+                                        return { ...w, days: daysCopy };
+                                      });
+                                      return { ...prevSplit, weeks: weeksCopy };
+                                    });
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  style={S.smallDangerOutlineBtn}
+                                  onClick={() => {
+                                    setConfirmConfig({
+                                      title: "Delete workout day?",
+                                      message: "This workout day and its exercises will be removed.",
+                                      onConfirm: () => {
+                                        updateSplit(splitKey, (prevSplit) => {
+                                          const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                            if (wi !== wIdx) return w;
+                                            return {
+                                              ...w,
+                                              days: w.days.filter((_, di) => di !== dIdx),
+                                            };
+                                          });
+                                          return { ...prevSplit, weeks: weeksCopy };
+                                        });
+                                        setConfirmConfig(null);
+                                      },
+                                    });
+                                  }}
+                                >
+                                  Delete Day
+                                </button>
+                              </div>
+
+                              {Array.isArray(day.workout_card?.exercises) &&
+                              day.workout_card.exercises.length > 0 ? (
+                                day.workout_card.exercises.map((ex, eIdx) => (
+                                  <div key={eIdx} style={S.exRow}>
+                                    <div style={S.exName}>{getDisplayText(ex)}</div>
+                                    <div style={S.editRow}>
+                                      <input
+                                        style={S.smallInput}
+                                        value={ex.name ?? ""}
+                                        placeholder="Exercise name"
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateSplit(splitKey, (prevSplit) => {
+                                            const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                              if (wi !== wIdx) return w;
+                                              const daysCopy = w.days.map((d, di) => {
+                                                if (di !== dIdx) return d;
+                                                const exercises = Array.isArray(
+                                                  d.workout_card?.exercises
+                                                )
+                                                  ? d.workout_card.exercises.map((ex2, xi) =>
+                                                      xi === eIdx ? { ...ex2, name: value } : ex2
+                                                    )
+                                                  : [];
+                                                return {
+                                                  ...d,
+                                                  workout_card: {
+                                                    ...(d.workout_card || {}),
+                                                    exercises,
+                                                  },
+                                                };
+                                              });
+                                              return { ...w, days: daysCopy };
+                                            });
+                                            return { ...prevSplit, weeks: weeksCopy };
+                                          });
+                                        }}
+                                      />
+                                      <input
+                                        type="number"
+                                        style={S.smallInput}
+                                        value={ex.sets ?? ""}
+                                        placeholder="Sets"
+                                        onChange={(e) => {
+                                          const value =
+                                            e.target.value === "" ? null : Number(e.target.value);
+                                          updateSplit(splitKey, (prevSplit) => {
+                                            const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                              if (wi !== wIdx) return w;
+                                              const daysCopy = w.days.map((d, di) => {
+                                                if (di !== dIdx) return d;
+                                                const exercises = Array.isArray(
+                                                  d.workout_card?.exercises
+                                                )
+                                                  ? d.workout_card.exercises.map((ex2, xi) =>
+                                                      xi === eIdx ? { ...ex2, sets: value } : ex2
+                                                    )
+                                                  : [];
+                                                return {
+                                                  ...d,
+                                                  workout_card: {
+                                                    ...(d.workout_card || {}),
+                                                    exercises,
+                                                  },
+                                                };
+                                              });
+                                              return { ...w, days: daysCopy };
+                                            });
+                                            return { ...prevSplit, weeks: weeksCopy };
+                                          });
+                                        }}
+                                      />
+                                      <input
+                                        type="number"
+                                        style={S.smallInput}
+                                        value={ex.reps ?? ""}
+                                        placeholder="Reps"
+                                        onChange={(e) => {
+                                          const value =
+                                            e.target.value === "" ? null : Number(e.target.value);
+                                          updateSplit(splitKey, (prevSplit) => {
+                                            const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                              if (wi !== wIdx) return w;
+                                              const daysCopy = w.days.map((d, di) => {
+                                                if (di !== dIdx) return d;
+                                                const exercises = Array.isArray(
+                                                  d.workout_card?.exercises
+                                                )
+                                                  ? d.workout_card.exercises.map((ex2, xi) =>
+                                                      xi === eIdx ? { ...ex2, reps: value } : ex2
+                                                    )
+                                                  : [];
+                                                return {
+                                                  ...d,
+                                                  workout_card: {
+                                                    ...(d.workout_card || {}),
+                                                    exercises,
+                                                  },
+                                                };
+                                              });
+                                              return { ...w, days: daysCopy };
+                                            });
+                                            return { ...prevSplit, weeks: weeksCopy };
+                                          });
+                                        }}
+                                      />
+                                      <input
+                                        type="text"
+                                        style={S.smallInput}
+                                        value={ex.percentage ?? ""}
+                                        placeholder="%"
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateSplit(splitKey, (prevSplit) => {
+                                            const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                              if (wi !== wIdx) return w;
+                                              const daysCopy = w.days.map((d, di) => {
+                                                if (di !== dIdx) return d;
+                                                const exercises = Array.isArray(
+                                                  d.workout_card?.exercises
+                                                )
+                                                  ? d.workout_card.exercises.map((ex2, xi) =>
+                                                      xi === eIdx
+                                                        ? { ...ex2, percentage: value }
+                                                        : ex2
+                                                    )
+                                                  : [];
+                                                return {
+                                                  ...d,
+                                                  workout_card: {
+                                                    ...(d.workout_card || {}),
+                                                    exercises,
+                                                  },
+                                                };
+                                              });
+                                              return { ...w, days: daysCopy };
+                                            });
+                                            return { ...prevSplit, weeks: weeksCopy };
+                                          });
+                                        }}
+                                      />
+                                      <input
+                                        type="text"
+                                        style={S.smallInput}
+                                        value={ex.rpe ?? ""}
+                                        placeholder="RPE"
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateSplit(splitKey, (prevSplit) => {
+                                            const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                              if (wi !== wIdx) return w;
+                                              const daysCopy = w.days.map((d, di) => {
+                                                if (di !== dIdx) return d;
+                                                const exercises = Array.isArray(
+                                                  d.workout_card?.exercises
+                                                )
+                                                  ? d.workout_card.exercises.map((ex2, xi) =>
+                                                      xi === eIdx ? { ...ex2, rpe: value } : ex2
+                                                    )
+                                                  : [];
+                                                return {
+                                                  ...d,
+                                                  workout_card: {
+                                                    ...(d.workout_card || {}),
+                                                    exercises,
+                                                  },
+                                                };
+                                              });
+                                              return { ...w, days: daysCopy };
+                                            });
+                                            return { ...prevSplit, weeks: weeksCopy };
+                                          });
+                                        }}
+                                      />
+                                      <input
+                                        type="text"
+                                        style={S.smallInput}
+                                        value={ex.weight ?? ""}
+                                        placeholder="Weight"
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateSplit(splitKey, (prevSplit) => {
+                                            const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                              if (wi !== wIdx) return w;
+                                              const daysCopy = w.days.map((d, di) => {
+                                                if (di !== dIdx) return d;
+                                                const exercises = Array.isArray(
+                                                  d.workout_card?.exercises
+                                                )
+                                                  ? d.workout_card.exercises.map((ex2, xi) =>
+                                                      xi === eIdx ? { ...ex2, weight: value } : ex2
+                                                    )
+                                                  : [];
+                                                return {
+                                                  ...d,
+                                                  workout_card: {
+                                                    ...(d.workout_card || {}),
+                                                    exercises,
+                                                  },
+                                                };
+                                              });
+                                              return { ...w, days: daysCopy };
+                                            });
+                                            return { ...prevSplit, weeks: weeksCopy };
+                                          });
+                                        }}
+                                      />
+                                      <input
+                                        type="text"
+                                        style={S.smallInput}
+                                        value={ex.notes ?? ""}
+                                        placeholder="Notes"
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          updateSplit(splitKey, (prevSplit) => {
+                                            const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                              if (wi !== wIdx) return w;
+                                              const daysCopy = w.days.map((d, di) => {
+                                                if (di !== dIdx) return d;
+                                                const exercises = Array.isArray(
+                                                  d.workout_card?.exercises
+                                                )
+                                                  ? d.workout_card.exercises.map((ex2, xi) =>
+                                                      xi === eIdx ? { ...ex2, notes: value } : ex2
+                                                    )
+                                                  : [];
+                                                return {
+                                                  ...d,
+                                                  workout_card: {
+                                                    ...(d.workout_card || {}),
+                                                    exercises,
+                                                  },
+                                                };
+                                              });
+                                              return { ...w, days: daysCopy };
+                                            });
+                                            return { ...prevSplit, weeks: weeksCopy };
+                                          });
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        style={S.smallDangerBtn}
+                                        onClick={() => {
+                                          setConfirmConfig({
+                                            title: "Delete exercise?",
+                                            message: "This exercise will be removed from the day.",
+                                            onConfirm: () => {
+                                              updateSplit(splitKey, (prevSplit) => {
+                                                const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                                  if (wi !== wIdx) return w;
+                                                  const daysCopy = w.days.map((d, di) => {
+                                                    if (di !== dIdx) return d;
+                                                    const exercises = Array.isArray(
+                                                      d.workout_card?.exercises
+                                                    )
+                                                      ? d.workout_card.exercises.filter(
+                                                          (_ex2, xi) => xi !== eIdx
+                                                        )
+                                                      : [];
+                                                    return {
+                                                      ...d,
+                                                      workout_card: {
+                                                        ...(d.workout_card || {}),
+                                                        exercises,
+                                                      },
+                                                    };
+                                                  });
+                                                  return { ...w, days: daysCopy };
+                                                });
+                                                return { ...prevSplit, weeks: weeksCopy };
+                                              });
+                                              setConfirmConfig(null);
+                                            },
+                                          });
+                                        }}
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <p
+                                  style={{
+                                    fontSize: 13,
+                                    color: "var(--text-dim)",
+                                    margin: 0,
+                                  }}
+                                >
+                                  No exercises listed.
+                                </p>
+                              )}
+
+                              <button
+                                type="button"
+                                style={S.smallAddBtn}
+                                onClick={() => {
+                                  updateSplit(splitKey, (prevSplit) => {
+                                    const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                      if (wi !== wIdx) return w;
+                                      const daysCopy = w.days.map((d, di) => {
+                                        if (di !== dIdx) return d;
+                                        const exercises = Array.isArray(
+                                          d.workout_card?.exercises
+                                        )
+                                          ? [...d.workout_card.exercises]
+                                          : [];
+                                        exercises.push({
+                                          name: "",
+                                          sets: null,
+                                          reps: null,
+                                          weight: "",
+                                          percentage: "",
+                                          rpe: "",
+                                          notes: "",
+                                          input: "",
+                                        });
+                                        return {
+                                          ...d,
+                                          workout_card: {
+                                            ...(d.workout_card || {}),
+                                            exercises,
+                                          },
+                                        };
+                                      });
+                                      return { ...w, days: daysCopy };
+                                    });
+                                    return { ...prevSplit, weeks: weeksCopy };
+                                  });
+                                }}
+                              >
+                                + Add Exercise
+                              </button>
+                            </div>
+                          ))}
+
+                        <button
+                          type="button"
+                          style={S.smallAddBtn}
+                          onClick={() => {
+                            updateSplit(splitKey, (prevSplit) => {
+                              const weeksCopy = prevSplit.weeks.map((w, wi) => {
+                                if (wi !== wIdx) return w;
+                                const nextDayNumber =
+                                  (w.days[w.days.length - 1]?.dayNumber || w.days.length) + 1;
+                                const title = `Day ${nextDayNumber}`;
+                                const newDay = {
+                                  dayNumber: nextDayNumber,
+                                  title,
+                                  workout_card: { title, exercises: [] },
+                                };
+                                return { ...w, days: [...w.days, newDay] };
+                              });
+                              return { ...prevSplit, weeks: weeksCopy };
+                            });
+                          }}
+                        >
+                          + Add Workout Day
+                        </button>
                       </div>
-                    ))
-                  ) : (
-                    <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>No exercises listed.</p>
-                  )}
-                  <button
-                    type="button"
-                    style={S.smallAddBtn}
-                    onClick={() => {
-                      setProgramModel((prev) => {
-                        if (!prev) return prev;
-                        const weeksCopy = prev.weeks.map((w, wi) => {
-                          if (wi !== wIdx) return w;
-                          const days = w.days.map((d, di) => {
-                            if (di !== dIdx) return d;
-                            const exercises = Array.isArray(d.workout_card?.exercises)
-                              ? [...d.workout_card.exercises]
-                              : [];
-                            exercises.push({
-                              name: "",
-                              sets: null,
-                              reps: null,
-                              weight: null,
-                              input: "",
-                            });
-                            return {
-                              ...d,
-                              workout_card: { ...(d.workout_card || {}), exercises },
-                            };
-                          });
-                          return { ...w, days };
-                        });
-                        return { ...prev, weeks: weeksCopy };
-                      });
-                    }}
-                  >
-                    + Add Exercise
-                  </button>
-                  <button
-                    type="button"
-                    style={S.smallDangerOutlineBtn}
-                    onClick={() => {
-                      setConfirmConfig({
-                        title: "Delete workout day?",
-                        message: "This workout day and its exercises will be removed.",
-                        onConfirm: () => {
-                          setProgramModel((prev) => {
-                            if (!prev) return prev;
-                            const weeksCopy = prev.weeks.map((w, wi) => {
-                              if (wi !== wIdx) return w;
-                              const days = w.days.filter((_, di) => di !== dIdx);
-                              return { ...w, days };
-                            });
-                            return { ...prev, weeks: weeksCopy };
-                          });
-                          setConfirmConfig(null);
-                        },
-                      });
-                    }}
-                  >
-                    Delete Day
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                style={S.smallAddBtn}
-                onClick={() => {
-                  setProgramModel((prev) => {
-                    if (!prev) return prev;
-                    const weeksCopy = prev.weeks.map((w, wi) => {
-                      if (wi !== wIdx) return w;
-                      const nextDayNumber =
-                        (w.days[w.days.length - 1]?.dayNumber || w.days.length) + 1;
-                      const title = `Day ${nextDayNumber}`;
-                      const newDay = {
-                        dayNumber: nextDayNumber,
-                        title,
-                        workout_card: { title, exercises: [] },
-                      };
-                      return { ...w, days: [...w.days, newDay] };
-                    });
-                    return { ...prev, weeks: weeksCopy };
-                  });
-                }}
-              >
-                + Add Workout Day
-              </button>
-            </div>
-          ))}
+                    ))}
+                  </div>
+                );
+              })}
+          </div>
         </div>
       )}
 
@@ -873,6 +1139,23 @@ const S = {
   levelOptions: { display: "flex", flexWrap: "wrap", gap: 8 },
   levelBtn: { padding: "8px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--card-2)", color: "var(--text)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   levelBtnActive: { background: "var(--accent)", borderColor: "var(--accent)" },
+  splitToggleBtn: {
+    padding: "8px 14px",
+    borderRadius: 999,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text-dim)",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    outline: "none",
+    boxShadow: "none",
+    WebkitTapHighlightColor: "transparent",
+  },
+  splitToggleBtnActive: {
+    borderColor: "var(--accent)",
+    color: "var(--accent)",
+  },
   convertingOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 },
   convertingBox: { background: "var(--card)", borderRadius: 16, padding: 24, border: "1px solid var(--border)", textAlign: "center", minWidth: 200 },
   convertingText: { margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "var(--text)" },
@@ -898,4 +1181,74 @@ const S = {
   modalCard: { background: "var(--card-2)", borderRadius: 16, border: "1px solid var(--border)", padding: 20, maxWidth: 360, width: "100%", boxShadow: "0 18px 40px rgba(0,0,0,0.6)" },
   modalTitle: { margin: "0 0 8px", fontSize: 16, fontWeight: 800, color: "var(--text)" },
   modalBody: { margin: "0 0 14px", fontSize: 13, color: "var(--text-dim)" },
+  splitsRow: {
+    display: "flex",
+    gap: 12,
+    overflowX: "auto",
+    paddingBottom: 8,
+  },
+  splitColumn: {
+    minWidth: 260,
+    maxWidth: 320,
+    background: "var(--card-2)",
+    borderRadius: 14,
+    border: "1px solid var(--border)",
+    padding: 12,
+  },
+  splitHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8,
+    marginBottom: 8,
+  },
+  splitLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "var(--accent)",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  splitTitleInput: {
+    width: "100%",
+    padding: 6,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--text)",
+    fontSize: 13,
+  },
+  splitRemoveBtn: {
+    padding: "4px 8px",
+    borderRadius: 999,
+    border: "1px solid var(--accent)",
+    background: "transparent",
+    color: "var(--accent)",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  weekRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  dayHeaderRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 6,
+  },
+  dayTitleInput: {
+    flex: 1,
+    padding: 6,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--text)",
+    fontSize: 13,
+  },
 };
