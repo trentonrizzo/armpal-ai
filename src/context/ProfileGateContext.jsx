@@ -14,4 +14,3 @@ export function ProfileGateProvider({ children }) {
 export function useProfileGate() {
   return useContext(ProfileGateContext);
 }
-
