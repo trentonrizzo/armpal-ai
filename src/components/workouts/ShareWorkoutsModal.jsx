@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import EmptyState from "../EmptyState";
+import { getDisplayText } from "../../utils/displayText";
 
 /**
  * ShareWorkoutsModal (WORKING UI + WORKING SEND)
@@ -151,7 +152,7 @@ export default function ShareWorkoutsModal({ open, onClose }) {
   async function loadExercisesForWorkout(workoutId) {
     const { data, error } = await supabase
       .from("exercises")
-      .select("name,sets,reps,weight,position,display_text")
+      .select("name,sets,reps,weight,position,input")
       .eq("workout_id", workoutId)
       .order("position", { ascending: true });
 
@@ -245,12 +246,24 @@ export default function ShareWorkoutsModal({ open, onClose }) {
               // fall through
             }
           }
-          return {
+          const base = {
             name: e.name,
             sets: e.sets,
             reps: e.reps,
             weight: e.weight,
             position: e.position,
+          };
+          const display_text = getDisplayText({
+            name: e.name,
+            sets: e.sets,
+            reps: e.reps,
+            weight: e.weight,
+            input: e.input,
+          });
+          return {
+            ...base,
+            input: e.input ?? null,
+            display_text,
           };
         });
         payloads.push({
