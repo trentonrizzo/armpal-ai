@@ -415,10 +415,45 @@ export default function WorkoutsPage() {
   function openExerciseModal(workoutId, exercise = null) {
     setExerciseWorkoutId(workoutId);
     setEditingExercise(exercise);
-    setExerciseName(exercise?.name || "");
-    setExerciseSets(exercise?.sets ?? "");
-    setExerciseReps(exercise?.reps ?? "");
-    setExerciseWeight(exercise?.weight ?? "");
+
+    const baseName =
+      (exercise?.name ??
+        exercise?.exercise ??
+        exercise?.title ??
+        "") || "";
+
+    const setsVal =
+      exercise?.sets != null && exercise?.sets !== ""
+        ? String(exercise.sets)
+        : "";
+    const repsVal =
+      exercise?.reps != null && exercise?.reps !== ""
+        ? String(exercise.reps)
+        : "";
+
+    let weightVal =
+      exercise?.weight != null && exercise?.weight !== ""
+        ? String(exercise.weight)
+        : "";
+
+    // Flexible format fallback: if no structured fields, hydrate from input/display_text
+    if (!setsVal && !repsVal && !weightVal) {
+      const flexibleInput = (
+        exercise?.input ??
+        exercise?.display_text ??
+        ""
+      )
+        .toString()
+        .trim();
+      if (flexibleInput) {
+        weightVal = flexibleInput;
+      }
+    }
+
+    setExerciseName(baseName);
+    setExerciseSets(setsVal);
+    setExerciseReps(repsVal);
+    setExerciseWeight(weightVal);
     setExerciseModalOpen(true);
   }
 
@@ -426,19 +461,53 @@ export default function WorkoutsPage() {
     if (!user || !exerciseWorkoutId) return;
 
     const list = expandedExercises[exerciseWorkoutId] || [];
-    const displayText = buildDisplayText({
-      name: exerciseName || "Exercise",
-      sets: exerciseSets === "" ? null : Number(exerciseSets),
-      reps: exerciseReps === "" ? null : Number(exerciseReps),
-      weight: exerciseWeight === "" ? null : exerciseWeight,
-    });
-    const exercisePayload = {
-      name: exerciseName || "Exercise",
-      sets: exerciseSets === "" ? null : Number(exerciseSets),
-      reps: exerciseReps === "" ? null : Number(exerciseReps),
-      weight: exerciseWeight === "" ? null : exerciseWeight,
-      display_text: displayText,
-    };
+
+    const rawName = (exerciseName || "Exercise").trim();
+    const hasSets = exerciseSets !== "" && exerciseSets != null;
+    const hasReps = exerciseReps !== "" && exerciseReps != null;
+    const trimmedWeight = (exerciseWeight ?? "").toString().trim();
+
+    let exercisePayload;
+
+    if (hasSets || hasReps) {
+      // Structured mode: sets / reps (and optional weight)
+      const setsNum = hasSets ? Number(exerciseSets) : null;
+      const repsNum = hasReps ? Number(exerciseReps) : null;
+      const weightValue = trimmedWeight === "" ? null : trimmedWeight;
+
+      const structured = {
+        name: rawName,
+        sets: setsNum,
+        reps: repsNum,
+        weight: weightValue,
+      };
+      const displayText = buildDisplayText(structured);
+
+      exercisePayload = {
+        ...structured,
+        display_text: displayText,
+        // Clear flexible input so display_text becomes source of truth
+        input: null,
+      };
+    } else {
+      // Flexible mode: treat the Weight field as freeform "input"
+      const inputText = trimmedWeight;
+      const displayText =
+        inputText ||
+        (editingExercise?.display_text ??
+          editingExercise?.input ??
+          buildDisplayText({ name: rawName }));
+
+      exercisePayload = {
+        name: rawName,
+        sets: null,
+        reps: null,
+        // Store freeform text in input/display_text; weight is not structured here
+        weight: null,
+        input: inputText || null,
+        display_text: displayText || null,
+      };
+    }
 
     let updatedExercises;
     if (editingExercise) {
