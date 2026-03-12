@@ -6,6 +6,7 @@ import "./index.css";
 
 // 🔥 THEME PROVIDER (GLOBAL)
 import { ThemeProvider } from "./context/ThemeContext";
+import OnboardingProvider from "./onboarding/OnboardingProvider";
 
 // ======================================================
 // ✅ SERVICE WORKER — IOS SAFE UPDATE HANDLING (KEEP)
@@ -33,7 +34,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
       <BrowserRouter>
-        <App />
+        <OnboardingProvider>
+          <App />
+        </OnboardingProvider>
       </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>

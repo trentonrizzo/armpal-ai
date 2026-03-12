@@ -1216,6 +1216,7 @@ export default function ProfilePage() {
                     </span>
                   </button>
                   <button
+                    data-onboarding="save-profile"
                     onClick={saveProfile}
                     disabled={!dirty || saving}
                     style={{
@@ -1321,6 +1322,7 @@ export default function ProfilePage() {
                   >
                     <FieldLabel>Display name</FieldLabel>
                     <TextInput
+                      data-onboarding="display-name"
                       value={displayName}
                       onChange={(e) => {
                         setDisplayName(e.target.value);
@@ -1338,6 +1340,7 @@ export default function ProfilePage() {
 
                     <FieldLabel>Handle</FieldLabel>
                     <TextInput
+                      data-onboarding="handle"
                       value={formatHandle(handle)}
                       onChange={(e) => {
                         setHandle(stripHandle(e.target.value));
@@ -1356,9 +1359,9 @@ export default function ProfilePage() {
 
                   <FieldLabel>Bio</FieldLabel>
                   <TextArea
+                    data-onboarding="bio"
                     value={bio}
                     onChange={(e) => {
-                      if (isNewUserOnboarding) return;
                       const next = e.target.value.slice(0, MAX_BIO_LENGTH);
                       setBio(next);
                       recomputeDirty({
@@ -1370,7 +1373,6 @@ export default function ProfilePage() {
                     }}
                     placeholder="Tell people what you’re training for…"
                     rows={6}
-                    disabled={isNewUserOnboarding}
                   />
 
                   <div

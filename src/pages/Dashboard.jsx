@@ -337,6 +337,7 @@ export default function Dashboard() {
             height: 36,
             width: 36,
           }}
+          data-onboarding="friends-button"
         >
           <FiUsers size={18} color="var(--text)" />
           {unread.count > 0 && (
@@ -388,7 +389,7 @@ export default function Dashboard() {
       )}
 
       {/* AI CHAT (PREMIUM ONLY) */}
-<section style={{ marginBottom: 20 }}>
+<section style={{ marginBottom: 20 }} data-onboarding="dashboard-main">
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Today’s Focus
         </h2>
@@ -517,7 +518,7 @@ export default function Dashboard() {
       {/* REMOVED — goals belong in /analytics and /goals */}
 
       {/* STRENGTH CALCULATOR */}
-      <section style={{ marginBottom: 20 }}>
+      <section style={{ marginBottom: 20 }} data-onboarding="strength-calculator">
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Strength Calculator
         </h2>

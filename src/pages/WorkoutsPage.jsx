@@ -890,6 +890,7 @@ export default function WorkoutsPage() {
 
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         <button
+          data-onboarding="workouts-add"
           onClick={() => openWorkoutModal(null)}
           style={{
             padding: "10px 20px",
@@ -937,12 +938,14 @@ export default function WorkoutsPage() {
           ))}
         </>
       ) : workouts.length === 0 ? (
-        <EmptyState
-          icon="💪"
-          message="No workouts yet — add your first one."
-          ctaLabel="Add Workout"
-          ctaOnClick={() => openWorkoutModal()}
-        />
+        <div data-onboarding="nav-tabs">
+          <EmptyState
+            icon="💪"
+            message="No workouts yet — add your first one."
+            ctaLabel="Add Workout"
+            ctaOnClick={() => openWorkoutModal()}
+          />
+        </div>
       ) : (
         <DndContext
           sensors={sensors}
