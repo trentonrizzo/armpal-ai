@@ -224,23 +224,19 @@ export default function OnboardingProvider({ children }) {
     navigate("/", { replace: true });
   }, [navigate]);
 
-  // Event-triggered steps (e.g., wait for profile save).
+  // Generic event-triggered steps (excluding profile_edit which has a custom handler)
   useEffect(() => {
     if (!currentStep || isComplete) return;
+    if (currentStep.id === "profile_edit") return;
     if (currentStep.trigger?.type !== "event" || !currentStep.trigger.name) {
       return;
     }
 
     const handler = () => {
-      if (currentStep.id === "profile_edit") {
-        // Mark setup as complete only when the save event fires for the profile edit step.
-        setSetupComplete(true);
-      }
       goToNext();
     };
 
     if (typeof window !== "undefined") {
-      // Use once:true so duplicate events can't advance multiple times.
       window.addEventListener(currentStep.trigger.name, handler, { once: true });
     }
     return () => {
@@ -249,6 +245,29 @@ export default function OnboardingProvider({ children }) {
       }
     };
   }, [currentStep, goToNext, isComplete]);
+
+  // Specific handler for profile_edit → profile_saved transition
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleProfileSaved = () => {
+      if (currentStep?.id !== "profile_edit") return;
+      setSetupComplete(true);
+      goToNext();
+    };
+
+    window.addEventListener(
+      "ap_onboarding_profile_saved",
+      handleProfileSaved
+    );
+
+    return () => {
+      window.removeEventListener(
+        "ap_onboarding_profile_saved",
+        handleProfileSaved
+      );
+    };
+  }, [currentStep, goToNext]);
 
   // Safety: never show profile_saved if setup is not actually complete.
   useEffect(() => {

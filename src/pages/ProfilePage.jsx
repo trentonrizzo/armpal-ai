@@ -962,7 +962,9 @@ export default function ProfilePage() {
 
       // Notify onboarding engine that profile has been successfully saved.
       if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("ap_onboarding_profile_saved"));
+        window.dispatchEvent(
+          new CustomEvent("ap_onboarding_profile_saved")
+        );
       }
 
       if (isNewUserOnboarding) {
