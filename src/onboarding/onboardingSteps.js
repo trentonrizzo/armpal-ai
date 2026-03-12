@@ -51,6 +51,7 @@ export const ONBOARDING_STEPS = [
     target: null,
     title: "Profile Saved",
     description: "Let's take a quick tour.",
+    canAdvanceManually: true,
     trigger: { type: "button", action: "start_tour" },
   },
   {
@@ -60,6 +61,8 @@ export const ONBOARDING_STEPS = [
     target: "[data-onboarding='workouts-add']",
     title: "Workouts",
     description: "This is where you log workouts.",
+    canAdvanceManually: true,
+    allowSkip: true,
     trigger: { type: "button", action: "next_or_skip_tour" },
   },
   {
@@ -69,6 +72,7 @@ export const ONBOARDING_STEPS = [
     target: "[data-onboarding='nav-tabs']",
     title: "Track progress",
     description: "ArmPal tracks workouts, PRs, measurements, nutrition, and goals.",
+    canAdvanceManually: true,
     trigger: { type: "button", action: "next" },
   },
   {
@@ -78,7 +82,10 @@ export const ONBOARDING_STEPS = [
     target: "[data-onboarding='friends-button']",
     title: "Friends",
     description: "Open the friends page.",
-    trigger: { type: "route", path: "/friends" },
+    requiredAction: "navigate",
+    canAdvanceManually: false,
+    advanceWhenRouteIs: "/friends",
+    trigger: null,
   },
   {
     id: "tour_add_friend",
@@ -87,6 +94,7 @@ export const ONBOARDING_STEPS = [
     target: "[data-onboarding='add-friend-button']",
     title: "Add friend",
     description: "Add a friend by handle to start a conversation.",
+    canAdvanceManually: true,
     trigger: { type: "button", action: "next" },
   },
   {
@@ -96,7 +104,9 @@ export const ONBOARDING_STEPS = [
     target: "[data-onboarding='settings-button']",
     title: "Profile settings",
     description: "Open settings.",
-    trigger: { type: "route", path: "/profile?settings=open" },
+    requiredAction: "click",
+    canAdvanceManually: false,
+    trigger: { type: "event", name: "ap_settings_opened" },
   },
   {
     id: "tour_profile_settings_panel",
@@ -105,6 +115,7 @@ export const ONBOARDING_STEPS = [
     target: "[data-onboarding='settings-panel']",
     title: "Settings",
     description: "Customize ArmPal’s appearance and settings here.",
+    canAdvanceManually: true,
     trigger: { type: "button", action: "next" },
   },
   {

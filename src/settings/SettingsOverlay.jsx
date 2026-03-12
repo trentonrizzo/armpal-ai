@@ -58,6 +58,12 @@ export default function SettingsOverlay({ open, onClose }) {
   const [notifBusy, setNotifBusy] = useState(false);
 
   useEffect(() => {
+    if (open && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("ap_settings_opened"));
+    }
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
 
     supabase.auth.getUser().then(async ({ data }) => {

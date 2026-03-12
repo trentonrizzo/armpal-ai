@@ -120,11 +120,17 @@ export default function SpotlightOverlay({
     if (step.id === "profile_saved") return "Start Tour";
     if (step.id === "tour_complete") return "Go to Dashboard";
     if (step.id === "tour_workouts") return "Next";
+    if (step.id === "tour_overview") return "Next";
+    if (step.id === "tour_add_friend") return "Next";
+    if (step.id === "tour_profile_settings_panel") return "Next";
     return "Next";
   })();
 
-  const showSecondary = step.id === "tour_workouts";
-  const secondaryLabel = step.id === "tour_workouts" ? "Skip Tour" : "";
+  const canAdvanceManually =
+    step.canAdvanceManually === undefined ? true : !!step.canAdvanceManually;
+
+  const showSecondary = !!step.allowSkip;
+  const secondaryLabel = step.allowSkip ? "Skip Tour" : "";
 
   return createPortal(
         <div
@@ -215,7 +221,7 @@ export default function SpotlightOverlay({
                 {secondaryLabel}
               </button>
             )}
-            {step.id !== "profile_edit" && (
+            {canAdvanceManually && (
               <button
                 type="button"
                 onClick={onPrimary}

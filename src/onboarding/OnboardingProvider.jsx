@@ -41,6 +41,8 @@ export default function OnboardingProvider({ children }) {
   const [stepLocked, setStepLocked] = useState(false);
   const navLockedRef = useRef(false);
   const [tourStarted, setTourStarted] = useState(false);
+  const routeRequestRef = useRef(null);
+  const routeAdvanceRef = useRef(null);
 
   const isComplete = phase === "complete";
 
@@ -136,14 +138,30 @@ export default function OnboardingProvider({ children }) {
   // Force route for onboarding steps when active.
   useEffect(() => {
     if (!currentStep || isComplete) return;
-    if (location.pathname !== currentStep.route) {
-      navigate(currentStep.route, { replace: true });
+
+    const targetRoute = currentStep.route;
+    if (!targetRoute) {
+      routeRequestRef.current = null;
+      return;
     }
+
+    if (location.pathname !== targetRoute) {
+      if (routeRequestRef.current !== currentStep.id) {
+        routeRequestRef.current = currentStep.id;
+        navigate(targetRoute, { replace: true });
+      }
+      return;
+    }
+
+    // Route now matches the step; clear request marker.
+    routeRequestRef.current = null;
   }, [currentStep, isComplete, location.pathname, navigate]);
 
   // Ensure incomplete profiles always land on /profile?onboarding=true.
   useEffect(() => {
     if (!profileLoaded || !profileNeedsOnboarding) return;
+    // Do not force /profile?onboarding=true during the tour phase.
+    if (phase === ONBOARDING_PHASE_TOUR) return;
 
     const isOnProfile = location.pathname === "/profile";
     const searchParams = new URLSearchParams(location.search || "");
@@ -222,6 +240,22 @@ export default function OnboardingProvider({ children }) {
       }
     };
   }, [currentStep, goToNext, isComplete]);
+
+  // Route-based advancement for required navigation steps.
+  useEffect(() => {
+    if (!currentStep || isComplete) return;
+    const advanceRoute = currentStep.advanceWhenRouteIs;
+    if (!advanceRoute) return;
+
+    if (location.pathname === advanceRoute) {
+      if (routeAdvanceRef.current === currentStep.id) return;
+      routeAdvanceRef.current = currentStep.id;
+      goToNext();
+    } else if (routeAdvanceRef.current === currentStep.id) {
+      // User navigated away; allow a future advance if the step is shown again.
+      routeAdvanceRef.current = null;
+    }
+  }, [currentStep, isComplete, location.pathname, goToNext]);
 
   const [targetRect, setTargetRect] = useState(null);
 
