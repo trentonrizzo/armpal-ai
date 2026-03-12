@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
 import SpotlightOverlay from "./SpotlightOverlay";
 import {
   ONBOARDING_PHASE_SETUP,
@@ -28,42 +29,138 @@ export default function OnboardingProvider({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [phase, setPhase] = useState(() => {
-    if (typeof window === "undefined") return ONBOARDING_PHASE_SETUP;
-    const complete = window.localStorage.getItem(STORAGE_COMPLETE) === "true";
-    if (complete) return "complete";
-    return (
-      window.localStorage.getItem(STORAGE_PHASE) || ONBOARDING_PHASE_SETUP
-    );
-  });
+  const [phase, setPhase] = useState(ONBOARDING_PHASE_SETUP);
+  const [stepIndex, setStepIndex] = useState(0);
 
-  const [stepIndex, setStepIndex] = useState(() => {
-    if (typeof window === "undefined") return 0;
-    const stored = window.localStorage.getItem(STORAGE_STEP);
-    const parsed = stored != null ? parseInt(stored, 10) : 0;
-    return Number.isNaN(parsed) ? 0 : parsed;
-  });
+  // Derived from Supabase profile: true when display_name or handle is missing.
+  const [profileNeedsOnboarding, setProfileNeedsOnboarding] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   const currentStep = ONBOARDING_STEPS[stepIndex] || null;
 
   const isComplete = phase === "complete";
 
+  // Load profile and decide if onboarding is required (display_name and handle missing).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadForUser(userId) {
+      if (cancelled) return;
+
+      if (!userId) {
+        setProfileNeedsOnboarding(false);
+        setProfileLoaded(true);
+        setPhase("complete");
+        return;
+      }
+
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("display_name, handle")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (error && error.code !== "PGRST116") {
+          throw error;
+        }
+
+        const hasDisplayName =
+          typeof profile?.display_name === "string" &&
+          profile.display_name.trim().length > 0;
+        const hasHandle =
+          typeof profile?.handle === "string" &&
+          profile.handle.trim().length > 0;
+
+        const needs = !(hasDisplayName && hasHandle);
+
+        setProfileNeedsOnboarding(needs);
+        setProfileLoaded(true);
+
+        if (!needs) {
+          // Profile is complete: permanently disable onboarding regardless of localStorage.
+          setPhase("complete");
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(STORAGE_COMPLETE, "true");
+          }
+        } else {
+          // Profile incomplete: initialize phase/step from stored progress if present.
+          if (typeof window !== "undefined") {
+            const storedPhase =
+              window.localStorage.getItem(STORAGE_PHASE) ||
+              ONBOARDING_PHASE_SETUP;
+            const storedStep = window.localStorage.getItem(STORAGE_STEP);
+            const parsed =
+              storedStep != null ? parseInt(storedStep, 10) : 0;
+            setPhase(storedPhase);
+            setStepIndex(Number.isNaN(parsed) ? 0 : parsed);
+          } else {
+            setPhase(ONBOARDING_PHASE_SETUP);
+            setStepIndex(0);
+          }
+        }
+      } catch {
+        if (cancelled) return;
+        // If profile fetch fails, err on the side of requiring onboarding.
+        setProfileNeedsOnboarding(true);
+        setProfileLoaded(true);
+        setPhase(ONBOARDING_PHASE_SETUP);
+        setStepIndex(0);
+      }
+    }
+
+    // Initial load (handles page refresh / session restore).
+    supabase.auth
+      .getUser()
+      .then(({ data }) => loadForUser(data?.user?.id || null));
+
+    // React to login/logout.
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      loadForUser(session?.user?.id || null);
+    });
+
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  // Persist in-progress step/phase only while onboarding is needed.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isComplete) {
-      window.localStorage.setItem(STORAGE_COMPLETE, "true");
-    } else {
-      window.localStorage.setItem(STORAGE_PHASE, phase);
-      window.localStorage.setItem(STORAGE_STEP, String(stepIndex));
-    }
-  }, [phase, stepIndex, isComplete]);
+    if (!profileNeedsOnboarding || isComplete) return;
+    window.localStorage.setItem(STORAGE_PHASE, phase);
+    window.localStorage.setItem(STORAGE_STEP, String(stepIndex));
+  }, [phase, stepIndex, profileNeedsOnboarding, isComplete]);
 
+  // Force route for onboarding steps when active.
   useEffect(() => {
-    if (!currentStep || isComplete) return;
+    if (!currentStep || isComplete || !profileNeedsOnboarding) return;
     if (location.pathname !== currentStep.route) {
       navigate(currentStep.route, { replace: true });
     }
-  }, [currentStep, isComplete, location.pathname, navigate]);
+  }, [
+    currentStep,
+    isComplete,
+    profileNeedsOnboarding,
+    location.pathname,
+    navigate,
+  ]);
+
+  // Ensure incomplete profiles always land on /profile?onboarding=true.
+  useEffect(() => {
+    if (!profileLoaded || !profileNeedsOnboarding) return;
+
+    const isOnProfile = location.pathname === "/profile";
+    const searchParams = new URLSearchParams(location.search || "");
+    const hasFlag = searchParams.get("onboarding") === "true";
+
+    if (!isOnProfile || !hasFlag) {
+      navigate("/profile?onboarding=true", { replace: true });
+    }
+  }, [profileLoaded, profileNeedsOnboarding, location.pathname, location.search, navigate]);
 
   const goToNext = useCallback(
     (opts = {}) => {
@@ -235,11 +332,24 @@ export default function OnboardingProvider({ children }) {
       goToNext,
       skipTour,
       finishOnboarding,
+      profileNeedsOnboarding,
+      profileLoaded,
     }),
-    [phase, stepIndex, currentStep, isComplete, goToNext, skipTour, finishOnboarding]
+    [
+      phase,
+      stepIndex,
+      currentStep,
+      isComplete,
+      goToNext,
+      skipTour,
+      finishOnboarding,
+      profileNeedsOnboarding,
+      profileLoaded,
+    ]
   );
 
-  const active = !isComplete && !!currentStep;
+  const active =
+    profileLoaded && profileNeedsOnboarding && !isComplete && !!currentStep;
 
   return (
     <OnboardingContext.Provider value={value}>

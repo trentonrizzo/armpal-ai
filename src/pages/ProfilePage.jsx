@@ -941,10 +941,14 @@ export default function ProfilePage() {
       setEditMode(false);
       toast.success("Saved");
 
+      // Notify onboarding engine that profile has been successfully saved.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("ap_onboarding_profile_saved"));
+      }
+
       if (isNewUserOnboarding) {
         if (typeof window !== "undefined") {
           sessionStorage.removeItem(NEW_USER_PROFILE_FLAG);
-          window.dispatchEvent(new Event("ap_onboarding_profile_saved"));
         }
         setIsNewUserOnboarding(false);
         navigate("/", { replace: true });
