@@ -78,8 +78,8 @@ export default function StrengthCalculator() {
     setOneRM(est);
   }
 
-  // Save PR
-  async function savePR() {
+  // Save PR (public.prs)
+  async function handleSavePR() {
     const trimmedName = liftName.trim();
     if (!trimmedName) {
       if (toast?.error) {
@@ -89,6 +89,7 @@ export default function StrengthCalculator() {
     }
 
     if (!oneRM) {
+      // No estimated 1RM yet — nothing to save
       return;
     }
 
@@ -98,42 +99,43 @@ export default function StrengthCalculator() {
       } = await supabase.auth.getUser();
 
       if (!user?.id) {
+        if (toast?.error) {
+          toast.error("You must be logged in");
+        }
         return;
       }
 
       const today = new Date().toISOString().slice(0, 10);
       const notes = `Estimated PR from Strength Calculator (${weight || "?"} x ${reps || "?"})`;
 
-      const { error } = await supabase
-        .from("prs")
-        .insert({
-          user_id: user.id,
-          lift_name: trimmedName,
-          weight: oneRM,
-          reps: 1,
-          unit: "lb",
-          date: today,
-          notes,
-        });
+      const { error } = await supabase.from("prs").insert({
+        user_id: user.id,
+        lift_name: trimmedName,
+        weight: Math.round(oneRM),
+        reps: 1,
+        unit: "lb",
+        date: today,
+        notes,
+      });
 
       if (error) {
-        console.error("StrengthCalculator savePR failed", error);
+        console.error("Save PR failed:", error);
         if (toast?.error) {
-          toast.error("Failed to save PR");
+          toast.error(error.message || "Failed to save PR");
         }
         return;
       }
 
-      setCurrentPR(oneRM);
+      setCurrentPR(Math.round(oneRM));
       setCapMessage("");
 
       if (toast?.success) {
         toast.success("Estimated PR Saved");
       }
     } catch (err) {
-      console.error("StrengthCalculator savePR failed", err);
+      console.error("Save PR failed:", err);
       if (toast?.error) {
-        toast.error("Failed to save PR");
+        toast.error(err.message || "Failed to save PR");
       }
     }
   }
@@ -206,7 +208,8 @@ export default function StrengthCalculator() {
                   </p>
                   {capMessage ? <p className="text-red-400 text-sm mt-1">{capMessage}</p> : null}
                   <button
-                    onClick={savePR}
+                    type="button"
+                    onClick={handleSavePR}
                     className="w-full py-2 mt-3 bg-red-700 rounded-lg hover:bg-red-800 transition"
                   >
                     Save as PR
