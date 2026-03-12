@@ -6,19 +6,80 @@ import { useProfileGate } from "../../context/ProfileGateContext";
 const ONBOARDING_KEY = "armpal_onboarding_complete";
 
 // Ordered, 20–25s guided tour.
+// Each step acts as a mini state machine entry.
 const STEPS = [
-  { id: "welcome", route: "/profile" },
-  { id: "profileFields", route: "/profile" },
-  { id: "profileSave", route: "/profile" },
-  { id: "workouts", route: "/workouts" },
-  { id: "prs", route: "/prs" },
-  { id: "measure", route: "/measure" },
-  { id: "goals", route: "/goals" },
-  { id: "nutrition", route: "/nutrition" },
-  { id: "strength", route: "/" },
-  { id: "friends", route: "/" },    // wait for user to tap Friends
-  { id: "settings", route: "/profile" },
-  { id: "finish", route: "/" },
+  {
+    id: "welcome",
+    route: "/profile",
+    waitForInteraction: true,
+    nextDelay: null,
+  },
+  {
+    id: "profileFields",
+    route: "/profile",
+    waitForInteraction: true, // waits for typing
+    nextDelay: null,
+  },
+  {
+    id: "profileSave",
+    route: "/profile",
+    waitForInteraction: true, // waits for Save
+    nextDelay: null,
+  },
+  {
+    id: "workouts",
+    route: "/workouts",
+    waitForInteraction: false,
+    nextDelay: 2000,
+  },
+  {
+    id: "prs",
+    route: "/prs",
+    waitForInteraction: false,
+    nextDelay: 2000,
+  },
+  {
+    id: "measure",
+    route: "/measure",
+    waitForInteraction: false,
+    nextDelay: 2000,
+  },
+  {
+    id: "goals",
+    route: "/goals",
+    waitForInteraction: false,
+    nextDelay: 2000,
+  },
+  {
+    id: "nutrition",
+    route: "/nutrition",
+    waitForInteraction: false,
+    nextDelay: 2000,
+  },
+  {
+    id: "strength",
+    route: "/",
+    waitForInteraction: false,
+    nextDelay: 2000,
+  },
+  {
+    id: "friends",
+    route: "/",
+    waitForInteraction: true, // must tap Friends icon
+    nextDelay: null,
+  },
+  {
+    id: "settings",
+    route: "/profile",
+    waitForInteraction: false,
+    nextDelay: 2000,
+  },
+  {
+    id: "finish",
+    route: "/",
+    waitForInteraction: true,
+    nextDelay: null,
+  },
 ];
 
 function useShouldRunOnboarding(isNewUser) {
@@ -159,11 +220,11 @@ export default function OnboardingOverlay({ isNewUser }) {
   // Auto-advance for non-interactive steps.
   useEffect(() => {
     if (!visible) return;
-    if (["welcome", "profileFields", "profileSave", "friends", "finish"].includes(current.id)) {
+    if (current.waitForInteraction) {
       return;
     }
 
-    const delay = current.id === "strength" ? 2200 : 2000;
+    const delay = current.nextDelay ?? (current.id === "strength" ? 2200 : 2000);
 
     const t = setTimeout(() => {
       setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
