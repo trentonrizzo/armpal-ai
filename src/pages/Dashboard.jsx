@@ -406,113 +406,19 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* SMART ANALYTICS (PRO-ONLY) — lock state + upgrade on click if free */}
+      {/* SMART ANALYTICS — basic progress overview is now free */}
       <div
         role="button"
         tabIndex={0}
-        onClick={() => {
-          if (analyticsPro === false) {
-            setShowAnalyticsUpgrade(true);
-            return;
-          }
-          if (analyticsPro === true) navigate("/analytics");
-        }}
+        onClick={() => navigate("/analytics")}
         onKeyDown={(e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
-          if (analyticsPro === false) {
-            setShowAnalyticsUpgrade(true);
-            return;
-          }
-          if (analyticsPro === true) navigate("/analytics");
+          navigate("/analytics");
         }}
         style={{ cursor: "pointer", position: "relative" }}
       >
         <SmartAnalytics />
-        {analyticsPro === false && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: 16,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              pointerEvents: "none",
-            }}
-          >
-            <span style={{ fontSize: 32 }} aria-hidden>🔒</span>
-          </div>
-        )}
       </div>
-      {showAnalyticsUpgrade && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 9998,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-          onClick={() => setShowAnalyticsUpgrade(false)}
-        >
-          <div
-            style={{
-              background: "var(--card)",
-              borderRadius: 16,
-              padding: 24,
-              maxWidth: 320,
-              border: "1px solid var(--border)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p style={{ margin: "0 0 16px", fontWeight: 600 }}>
-              Progress Overview is a Pro feature
-            </p>
-            <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.9 }}>
-              Upgrade to unlock Smart Analytics and full progress tracking.
-            </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => setShowAnalyticsUpgrade(false)}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  background: "transparent",
-                  color: "var(--text)",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Not now
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAnalyticsUpgrade(false);
-                  navigate("/pro");
-                }}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: 10,
-                  border: "none",
-                  background: "var(--accent)",
-                  color: "var(--text)",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Upgrade to Pro
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* GOALS */}
       {/* REMOVED — goals belong in /analytics and /goals */}

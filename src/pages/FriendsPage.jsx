@@ -762,6 +762,7 @@ export default function FriendsPage() {
       <section style={card}>
         <button
           style={bigAddButton}
+          data-onboarding="add-friend-button"
           onClick={() => {
             setShowAddBox((v) => !v);
             setErrorMsg("");

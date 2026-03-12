@@ -279,9 +279,11 @@ export default function OnboardingProvider({ children }) {
   }, [currentStep, finishOnboarding, goToNext, navigate, stepLocked]);
 
   const handleSecondary = useCallback(() => {
-    // Secondary actions (like skipping tour) are not used in the short flow.
-    return;
-  }, []);
+    if (!currentStep || stepLocked) return;
+    if (currentStep.id === "tour_workouts") {
+      skipTour();
+    }
+  }, [currentStep, skipTour, stepLocked]);
 
   const value = useMemo(
     () => ({

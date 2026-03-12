@@ -107,30 +107,34 @@ export default function SpotlightOverlay({
     }
     : null;
 
+  const isModalStep = step.type === "modal";
+
   const isWelcomeOrComplete =
-    step.id === "welcome" ||
+    isModalStep ||
     step.id === "tour_complete" ||
     step.id === "profile_saved";
 
   const primaryLabel = (() => {
-    if (step.id === "welcome") return "Continue";
+    if (step.id === "welcome") return "Next";
+    if (step.id === "profile_intro") return "Continue";
     if (step.id === "profile_saved") return "Start Tour";
     if (step.id === "tour_complete") return "Go to Dashboard";
+    if (step.id === "tour_workouts") return "Next";
     return "Next";
   })();
 
-  const showSecondary = false;
-  const secondaryLabel = "";
+  const showSecondary = step.id === "tour_workouts";
+  const secondaryLabel = step.id === "tour_workouts" ? "Skip Tour" : "";
 
   return createPortal(
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9998,
-        pointerEvents: "none",
-      }}
-    >
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9998,
+            pointerEvents: isModalStep ? "auto" : "none",
+          }}
+        >
       <div
         style={{
           position: "fixed",
