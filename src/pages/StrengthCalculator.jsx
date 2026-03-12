@@ -1,7 +1,6 @@
 // src/pages/StrengthCalculator.jsx
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
-import { AppContext } from "../context/AppContext";
 import { useToast } from "../components/ToastProvider";
 
 export default function StrengthCalculator() {
@@ -13,7 +12,6 @@ export default function StrengthCalculator() {
   const [capMessage, setCapMessage] = useState("");
 
   const toast = useToast();
-  const { createPR } = useContext(AppContext);
 
   // Rep multipliers
   const repMultipliers = {
@@ -94,38 +92,40 @@ export default function StrengthCalculator() {
       return;
     }
 
-    if (!createPR) {
-      return;
-    }
-
     try {
-      const payload = {
-        exercise: trimmedName,
-        value: oneRM,
-        type: "estimated_pr",
-        source: "strength_calculator",
-      };
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      const today = new Date().toISOString().slice(0, 10);
-
-      // Reuse existing PR create logic (same table + caps)
-      const result = await createPR(
-        payload.exercise,
-        payload.value,
-        "lbs",
-        today,
-        1,
-        null
-      );
-
-      if (result && !result.success && result.cap) {
-        setCapMessage(`PR limit reached (${result.cap.limit}). Go Pro for more!`);
+      if (!user?.id) {
         return;
       }
 
-      setCapMessage("");
+      const today = new Date().toISOString().slice(0, 10);
+      const notes = `Estimated PR from Strength Calculator (${weight || "?"} x ${reps || "?"})`;
+
+      const { error } = await supabase
+        .from("prs")
+        .insert({
+          user_id: user.id,
+          lift_name: trimmedName,
+          weight: oneRM,
+          reps: 1,
+          unit: "lb",
+          date: today,
+          notes,
+        });
+
+      if (error) {
+        console.error("StrengthCalculator savePR failed", error);
+        if (toast?.error) {
+          toast.error("Failed to save PR");
+        }
+        return;
+      }
 
       setCurrentPR(oneRM);
+      setCapMessage("");
 
       if (toast?.success) {
         toast.success("Estimated PR Saved");
