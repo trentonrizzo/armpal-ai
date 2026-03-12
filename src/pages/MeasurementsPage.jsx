@@ -576,8 +576,13 @@ export default function MeasurementsPage() {
                 >
                   {ms.active && <SelectCheck show={ms.selected.has(groupName)} />}
                   <div style={rowStyle}>
+                    {/* MAIN CLICKABLE BODY (toggles expand/collapse) */}
                     <div
-                      style={{ flexBasis: "40%", cursor: "grab" }}
+                      style={{
+                        flex: 1,
+                        cursor: "pointer",
+                        userSelect: "none",
+                      }}
                       onClick={(e) => {
                         if (ms.active) return;
                         e.stopPropagation();
@@ -595,12 +600,19 @@ export default function MeasurementsPage() {
                       </p>
                     </div>
 
+                    {/* ACTIONS (do NOT toggle) */}
                     {ms.active ? (
-                      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
                         <ViewBtn onClick={() => openEdit(latest)} />
                       </div>
                     ) : (
-                      <div style={{ display: "flex", gap: 12 }}>
+                      <div
+                        style={{ display: "flex", gap: 12 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <FaEdit onClick={() => openEdit(latest)} />
                         <FaTrash
                           style={{ color: "var(--accent)" }}
