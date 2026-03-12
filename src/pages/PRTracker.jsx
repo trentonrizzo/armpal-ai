@@ -442,6 +442,21 @@ export default function PRTracker() {
 
                     {!ms.active && isOpen && (
                       <div style={{ marginTop: 10 }}>
+                        {latest.notes && (
+                          <p
+                            style={{
+                              margin: 0,
+                              marginBottom: entries.length > 1 ? 10 : 0,
+                              fontSize: 11,
+                              opacity: 0.75,
+                              fontStyle: "italic",
+                              transition: "opacity 0.2s ease",
+                            }}
+                          >
+                            {latest.notes}
+                          </p>
+                        )}
+
                         {entries.slice(1).map((entry) => (
                           <div
                             key={entry.id}
