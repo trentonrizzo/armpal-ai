@@ -208,7 +208,7 @@ export default function Dashboard() {
     if (!user?.id || !name) return;
 
     const { data: pr } = await supabase
-      .from("PRs")
+      .from("prs")
       .select("*")
       .eq("user_id", user.id)
       .eq("lift_name", name)
@@ -239,7 +239,7 @@ export default function Dashboard() {
 
     const today = new Date().toISOString().split("T")[0];
 
-    await supabase.from("PRs").insert({
+    await supabase.from("prs").insert({
       user_id: user.id,
       lift_name: exerciseName,
       weight: calculated1RM,

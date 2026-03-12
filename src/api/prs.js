@@ -6,7 +6,7 @@ import { supabase } from "../supabaseClient";
 // ----------------------------
 export async function getPRs(userId) {
   const { data, error } = await supabase
-    .from("PRs")
+    .from("prs")
     .select("*")
     .eq("user_id", userId)
     .order("order_index", { ascending: true })
@@ -25,7 +25,7 @@ export async function getPRs(userId) {
 // ----------------------------
 export async function addPR({ userId, lift_name, weight, unit, date }) {
   const { data: maxOrder } = await supabase
-    .from("PRs")
+    .from("prs")
     .select("order_index")
     .eq("user_id", userId)
     .order("order_index", { ascending: false })
@@ -34,7 +34,7 @@ export async function addPR({ userId, lift_name, weight, unit, date }) {
   const nextIndex = maxOrder?.[0]?.order_index + 1 || 0;
 
   const { data, error } = await supabase
-    .from("PRs")
+    .from("prs")
     .insert([
       {
         user_id: userId,
@@ -56,7 +56,7 @@ export async function addPR({ userId, lift_name, weight, unit, date }) {
 // DELETE PR
 // ----------------------------
 export async function deletePR(id) {
-  const { error } = await supabase.from("PRs").delete().eq("id", id);
+  const { error } = await supabase.from("prs").delete().eq("id", id);
   if (error) console.error("deletePR error:", error);
 }
 
@@ -65,7 +65,7 @@ export async function deletePR(id) {
 // ----------------------------
 export async function updatePR(id, values) {
   const { data, error } = await supabase
-    .from("PRs")
+    .from("prs")
     .update(values)
     .eq("id", id)
     .select();
@@ -83,7 +83,7 @@ export async function updatePR(id, values) {
 // ---------------------------------------
 export async function updatePROrder(updates) {
   const { error } = await supabase
-    .from("PRs")
+    .from("prs")
     .upsert(updates, { onConflict: "id" });
 
   if (error) console.error("updatePROrder error:", error);
