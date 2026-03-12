@@ -80,6 +80,7 @@ export default function StrengthCalculator() {
 
   // Save PR via RPC public.save_estimated_pr
   async function handleSavePR() {
+    console.log("RPC save_estimated_pr fired");
     const trimmedName = liftName.trim();
     if (!trimmedName) {
       if (toast?.error) {
@@ -100,11 +101,12 @@ export default function StrengthCalculator() {
       const inputWeight = Number(weight);
       const inputReps = Number(reps);
 
+      console.log("Calling RPC save_estimated_pr");
       const { error } = await supabase.rpc("save_estimated_pr", {
         p_lift_name: trimmedName,
         p_estimated_weight: estimated,
-        p_input_weight: Number.isFinite(inputWeight) ? inputWeight : null,
-        p_input_reps: Number.isFinite(inputReps) ? inputReps : null,
+        p_input_weight: inputWeight,
+        p_input_reps: inputReps,
         p_unit: "lb",
       });
 

@@ -237,20 +237,17 @@ export default function Dashboard() {
     }
     setPrCapMessage("");
 
-    const today = new Date().toISOString().split("T")[0];
+    const estimated = Math.round(calculated1RM);
 
-    await supabase.from("prs").insert({
-      user_id: user.id,
-      lift_name: exerciseName,
-      weight: calculated1RM,
-      reps: 1,
-      unit: "lb",
-      date: today,
-      notes: "",
-      order_index: 0,
+    await supabase.rpc("save_estimated_pr", {
+      p_lift_name: exerciseName,
+      p_estimated_weight: estimated,
+      p_input_weight: Number(weightInput),
+      p_input_reps: Number(repsInput),
+      p_unit: "lb",
     });
 
-    fetchBestPR(exerciseName, calculated1RM);
+    fetchBestPR(exerciseName, estimated);
   }
 
   // Table data (15 rows)
