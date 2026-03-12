@@ -70,7 +70,7 @@ export async function enablePush(userId) {
     const subJson = subscription.toJSON();
     const { error } = await supabase.from("push_subscriptions").upsert(
       { user_id: userId, endpoint: subJson.endpoint, keys: subJson.keys },
-      { onConflict: "user_id,endpoint" }
+      { onConflict: "endpoint" }
     );
     if (error) {
       console.warn("push_subscriptions upsert:", error.message);

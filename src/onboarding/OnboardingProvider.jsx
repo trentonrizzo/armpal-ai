@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -38,6 +39,7 @@ export default function OnboardingProvider({ children }) {
 
   const currentStep = ONBOARDING_STEPS[stepIndex] || null;
   const [stepLocked, setStepLocked] = useState(false);
+  const navLockedRef = useRef(false);
 
   const isComplete = phase === "complete";
 
@@ -152,20 +154,27 @@ export default function OnboardingProvider({ children }) {
 
   const goToNext = useCallback(
     () => {
-      if (!currentStep || stepLocked) return;
+      if (!currentStep || stepLocked || navLockedRef.current) return;
       setStepLocked(true);
+      navLockedRef.current = true;
       const idx = ONBOARDING_STEPS.findIndex((s) => s.id === currentStep.id);
       const next = ONBOARDING_STEPS[idx + 1];
       if (!next) {
         setPhase("complete");
-        setTimeout(() => setStepLocked(false), 200);
+        setTimeout(() => {
+          setStepLocked(false);
+          navLockedRef.current = false;
+        }, 300);
         return;
       }
       if (next.phase === ONBOARDING_PHASE_TOUR) {
         setPhase(ONBOARDING_PHASE_TOUR);
       }
       setStepIndex(idx + 1);
-      setTimeout(() => setStepLocked(false), 200);
+      setTimeout(() => {
+        setStepLocked(false);
+        navLockedRef.current = false;
+      }, 300);
     },
     [currentStep, stepLocked]
   );
@@ -202,7 +211,8 @@ export default function OnboardingProvider({ children }) {
     };
 
     if (typeof window !== "undefined") {
-      window.addEventListener(currentStep.trigger.name, handler);
+      // Use once:true so duplicate events can't advance multiple times.
+      window.addEventListener(currentStep.trigger.name, handler, { once: true });
     }
     return () => {
       if (typeof window !== "undefined") {
