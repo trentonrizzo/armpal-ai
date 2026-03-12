@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { enablePush, disablePush } from "../lib/push";
 import { useTheme } from "../context/ThemeContext";
+import { updateProfile } from "../utils/profile";
 
 /* ============================
    TOGGLE PILL
@@ -81,7 +82,8 @@ export default function SettingsOverlay({ open, onClose }) {
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    localStorage.setItem("armpal_mode", next);
+    // Persist per-account in profiles; ignore errors.
+    updateProfile({ theme_mode: next }).catch(() => {});
   }
 
   async function toggleNotifications() {
@@ -197,9 +199,10 @@ export default function SettingsOverlay({ open, onClose }) {
                     <button
                       key={c}
                       onClick={(e) => {
-                        e.stopPropagation();
-                        setAccent(c);
-                        localStorage.setItem("armpal_theme", c);
+                    e.stopPropagation();
+                    setAccent(c);
+                    // Persist per-account accent; ignore errors.
+                    updateProfile({ theme_accent: c }).catch(() => {});
                       }}
                       style={{
                         flex: 1,

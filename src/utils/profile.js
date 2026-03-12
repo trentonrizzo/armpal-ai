@@ -56,6 +56,9 @@ export async function createProfileIfMissing() {
       username: null,
       bio: "",
       avatar_url: "",
+      // Default theme for brand new accounts
+      theme_mode: "dark",
+      theme_accent: "red",
       ...(referredBy && { referred_by: referredBy }),
     },
   ]);

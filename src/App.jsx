@@ -57,6 +57,7 @@ import usePresence from "./hooks/usePresence";
 import useNotifications from "./hooks/useNotifications";
 import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
 import InAppBanner from "./components/notifications/InAppBanner";
+import { useTheme } from "./context/ThemeContext";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -145,6 +146,7 @@ function AuthenticatedLayout({ session }) {
   const [notifQueue, setNotifQueue] = useState([]);
   const location = useLocation();
   const navigate = useNavigate();
+  const { setTheme, setAccent } = useTheme();
 
   const matchChat = location.pathname.match(/^\/chat\/([^/]+)/);
   const currentChatFriendId = matchChat?.[1] ?? null;
@@ -160,6 +162,62 @@ function AuthenticatedLayout({ session }) {
   );
 
   useInAppBannerNotifications(session?.user?.id, isSuppressedFn, setNotifQueue);
+
+  // Load per-account theme from profiles; default to dark + red if missing.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadThemeForUser() {
+      const userId = session?.user?.id;
+      if (!userId) {
+        setTheme("dark");
+        setAccent("red");
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("theme_mode, theme_accent")
+          .eq("id", userId)
+          .single();
+
+        if (cancelled) return;
+        if (error && error.code !== "PGRST116") {
+          // Unexpected error — fall back to defaults
+          setTheme("dark");
+          setAccent("red");
+          return;
+        }
+
+        let mode = data?.theme_mode || "dark";
+        let accent = data?.theme_accent || "red";
+
+        setTheme(mode);
+        setAccent(accent);
+
+        // If profile had no theme yet, persist the defaults for this account.
+        if (!data?.theme_mode || !data?.theme_accent) {
+          await supabase
+            .from("profiles")
+            .update({ theme_mode: mode, theme_accent: accent })
+            .eq("id", userId);
+        }
+      } catch {
+        // On failure, keep safe defaults for this session.
+        if (!cancelled) {
+          setTheme("dark");
+          setAccent("red");
+        }
+      }
+    }
+
+    loadThemeForUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, setTheme, setAccent]);
 
   // New-signup only: redirect to Profile once so they can set handle + display name
   useEffect(() => {
@@ -217,12 +275,8 @@ function AppContent() {
     sessionStorage.getItem(NEW_USER_PROFILE_FLAG) === "1";
 
   useEffect(() => {
+    // Mark when React tree is mounted; ThemeProvider handles DOM theme attributes.
     setMounted(true);
-    const savedMode = localStorage.getItem("armpal_mode") || "dark";
-    const savedTheme = localStorage.getItem("armpal_theme") || "red";
-    document.documentElement.setAttribute("data-theme", savedMode);
-    document.documentElement.setAttribute("data-accent", savedTheme);
-    if (document.body) document.body.setAttribute("data-theme", savedMode);
   }, []);
 
   return (
@@ -324,6 +378,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const { setTheme, setAccent } = useTheme();
 
   usePresence(session?.user);
   useNotifications(session?.user?.id);
@@ -338,6 +393,19 @@ export default function App() {
     const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // When logged out, immediately reset theme to default dark + red
+  // so previous user's theme does not leak into the next session.
+  useEffect(() => {
+    if (!session) {
+      setTheme("dark");
+      setAccent("red");
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("armpal_mode", "dark");
+        localStorage.setItem("armpal_theme", "red");
+      }
+    }
+  }, [session, setTheme, setAccent]);
 
   return (
     <>

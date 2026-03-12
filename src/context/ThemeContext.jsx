@@ -6,8 +6,9 @@ const THEME_KEY = "armpal_theme";   // accent: "red" | "blue" | "purple" | "gree
 const MODE_KEY = "armpal_mode";     // "dark" | "light"
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem(MODE_KEY) || "dark");
-  const [accent, setAccent] = useState(() => localStorage.getItem(THEME_KEY) || "red");
+  // Default to dark + red; per-account overrides are applied from profile in App.
+  const [theme, setTheme] = useState("dark");
+  const [accent, setAccent] = useState("red");
 
   useEffect(() => {
     const html = document.documentElement;
