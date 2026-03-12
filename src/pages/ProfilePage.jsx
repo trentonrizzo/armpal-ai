@@ -888,6 +888,21 @@ export default function ProfilePage() {
         return;
       }
 
+      if (displayNameValue.length < 2) {
+        toast.error("Display name must be at least 2 characters.");
+        setSaving(false);
+        return;
+      }
+
+      const handleValid = /^[a-z0-9_]{3,}$/.test(handleValue);
+      if (!handleValid) {
+        toast.error(
+          "Handle must be at least 3 characters using lowercase letters, numbers, or underscores."
+        );
+        setSaving(false);
+        return;
+      }
+
       // Handle uniqueness (exclude current user)
       if (handleValue && safeString(orig.handle) !== handleValue) {
         const { data: existing, error: handleErr } = await supabase

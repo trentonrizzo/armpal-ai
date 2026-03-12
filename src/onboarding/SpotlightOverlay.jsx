@@ -129,6 +129,10 @@ export default function SpotlightOverlay({
   const canAdvanceManually =
     step.canAdvanceManually === undefined ? true : !!step.canAdvanceManually;
 
+  // Hard rule: profile_edit can never advance manually; only the save event may advance it.
+  const effectiveCanAdvance =
+    step.id === "profile_edit" ? false : canAdvanceManually;
+
   const showSecondary = !!step.allowSkip;
   const secondaryLabel = step.allowSkip ? "Skip Tour" : "";
 
@@ -221,7 +225,7 @@ export default function SpotlightOverlay({
                 {secondaryLabel}
               </button>
             )}
-            {canAdvanceManually && (
+            {effectiveCanAdvance && (
               <button
                 type="button"
                 onClick={onPrimary}

@@ -43,6 +43,7 @@ export default function OnboardingProvider({ children }) {
   const [tourStarted, setTourStarted] = useState(false);
   const routeRequestRef = useRef(null);
   const routeAdvanceRef = useRef(null);
+  const [setupComplete, setSetupComplete] = useState(false);
 
   const isComplete = phase === "complete";
 
@@ -75,10 +76,10 @@ export default function OnboardingProvider({ children }) {
 
         const hasDisplayName =
           typeof profile?.display_name === "string" &&
-          profile.display_name.trim().length > 0;
+          profile.display_name.trim().length >= 2;
         const hasHandle =
           typeof profile?.handle === "string" &&
-          profile.handle.trim().length > 0;
+          profile.handle.trim().length >= 3;
 
         const needs = !(hasDisplayName && hasHandle);
 
@@ -89,6 +90,7 @@ export default function OnboardingProvider({ children }) {
           // Profile is complete: permanently disable onboarding regardless of localStorage.
           setPhase("complete");
           setTourStarted(false);
+          setSetupComplete(true);
           if (typeof window !== "undefined") {
             window.localStorage.setItem(STORAGE_COMPLETE, "true");
           }
@@ -96,6 +98,7 @@ export default function OnboardingProvider({ children }) {
           // Profile incomplete: always start onboarding from the first step for this user.
           setPhase(ONBOARDING_PHASE_SETUP);
           setStepIndex(0);
+          setSetupComplete(false);
           if (typeof window !== "undefined") {
             window.localStorage.removeItem(STORAGE_STEP);
             window.localStorage.setItem(STORAGE_PHASE, ONBOARDING_PHASE_SETUP);
@@ -175,6 +178,8 @@ export default function OnboardingProvider({ children }) {
   const goToNext = useCallback(
     () => {
       if (!currentStep || stepLocked || navLockedRef.current) return;
+      // Hard safety: never advance past profile_edit unless setupComplete is true.
+      if (currentStep.id === "profile_edit" && !setupComplete) return;
       setStepLocked(true);
       navLockedRef.current = true;
       const idx = ONBOARDING_STEPS.findIndex((s) => s.id === currentStep.id);
@@ -196,7 +201,7 @@ export default function OnboardingProvider({ children }) {
         navLockedRef.current = false;
       }, 300);
     },
-    [currentStep, stepLocked]
+    [currentStep, stepLocked, setupComplete]
   );
 
   const skipTour = useCallback(() => {
@@ -227,6 +232,10 @@ export default function OnboardingProvider({ children }) {
     }
 
     const handler = () => {
+      if (currentStep.id === "profile_edit") {
+        // Mark setup as complete only when the save event fires for the profile edit step.
+        setSetupComplete(true);
+      }
       goToNext();
     };
 
@@ -240,6 +249,20 @@ export default function OnboardingProvider({ children }) {
       }
     };
   }, [currentStep, goToNext, isComplete]);
+
+  // Safety: never show profile_saved if setup is not actually complete.
+  useEffect(() => {
+    if (!currentStep) return;
+    if (currentStep.id === "profile_saved" && !setupComplete) {
+      const editIndex = ONBOARDING_STEPS.findIndex(
+        (s) => s.id === "profile_edit"
+      );
+      if (editIndex !== -1) {
+        setStepIndex(editIndex);
+        setPhase(ONBOARDING_PHASE_SETUP);
+      }
+    }
+  }, [currentStep, setupComplete]);
 
   // Route-based advancement for required navigation steps.
   useEffect(() => {
