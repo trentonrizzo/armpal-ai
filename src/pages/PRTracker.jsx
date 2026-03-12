@@ -410,6 +410,19 @@ export default function PRTracker() {
                           {latest.weight} {latest.unit}
                           {latest.reps ? ` × ${latest.reps}` : ""} — {latest.date}
                         </p>
+                        {latest.notes && (
+                          <p
+                            style={{
+                              margin: 0,
+                              marginTop: 2,
+                              fontSize: 11,
+                              opacity: 0.6,
+                              fontStyle: "italic",
+                            }}
+                          >
+                            {latest.notes}
+                          </p>
+                        )}
                       </div>
 
                       {ms.active ? (

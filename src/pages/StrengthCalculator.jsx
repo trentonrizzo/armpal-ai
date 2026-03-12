@@ -78,7 +78,7 @@ export default function StrengthCalculator() {
     setOneRM(est);
   }
 
-  // Save PR (public.prs)
+  // Save PR via RPC public.save_estimated_pr
   async function handleSavePR() {
     const trimmedName = liftName.trim();
     if (!trimmedName) {
@@ -89,53 +89,56 @@ export default function StrengthCalculator() {
     }
 
     if (!oneRM) {
-      // No estimated 1RM yet — nothing to save
+      if (toast?.error) {
+        toast.error("Invalid estimated PR");
+      }
       return;
     }
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const estimated = Math.round(oneRM);
+      const inputWeight = Number(weight);
+      const inputReps = Number(reps);
 
-      if (!user?.id) {
-        if (toast?.error) {
-          toast.error("You must be logged in");
-        }
-        return;
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const notes = `Estimated PR from Strength Calculator (${weight || "?"} x ${reps || "?"})`;
-
-      const { error } = await supabase.from("prs").insert({
-        user_id: user.id,
-        lift_name: trimmedName,
-        weight: Math.round(oneRM),
-        reps: 1,
-        unit: "lb",
-        date: today,
-        notes,
+      const { error } = await supabase.rpc("save_estimated_pr", {
+        p_lift_name: trimmedName,
+        p_estimated_weight: estimated,
+        p_input_weight: Number.isFinite(inputWeight) ? inputWeight : null,
+        p_input_reps: Number.isFinite(inputReps) ? inputReps : null,
+        p_unit: "lb",
       });
 
       if (error) {
-        console.error("Save PR failed:", error);
+        console.error("Estimated PR save failed:", error);
         if (toast?.error) {
-          toast.error(error.message || "Failed to save PR");
+          toast.error(error.message || "Failed to save estimated PR");
         }
         return;
       }
 
-      setCurrentPR(Math.round(oneRM));
-      setCapMessage("");
+      // Refresh current PR from public.prs
+      try {
+        const cleanName = liftName.toLowerCase().trim();
+        const { data } = await supabase
+          .from("prs")
+          .select("weight")
+          .eq("lift_name", cleanName)
+          .order("weight", { ascending: false })
+          .limit(1);
+
+        const latest = data?.[0]?.weight;
+        setCurrentPR(latest ?? estimated);
+      } catch {
+        setCurrentPR(estimated);
+      }
 
       if (toast?.success) {
         toast.success("Estimated PR Saved");
       }
     } catch (err) {
-      console.error("Save PR failed:", err);
+      console.error("Estimated PR save failed:", err);
       if (toast?.error) {
-        toast.error(err.message || "Failed to save PR");
+        toast.error(err.message || "Failed to save estimated PR");
       }
     }
   }
