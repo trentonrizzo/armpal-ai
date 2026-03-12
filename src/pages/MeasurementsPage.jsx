@@ -108,6 +108,7 @@ export default function MeasurementsPage() {
   const [mValue, setMValue] = useState("");
   const [mUnit, setMUnit] = useState("in");
   const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
+  const [mNotes, setMNotes] = useState("");
 
   const [deleteId, setDeleteId] = useState(null);
 
@@ -247,6 +248,7 @@ export default function MeasurementsPage() {
     setMValue("");
     setMUnit("in");
     setMDate(new Date().toISOString().slice(0, 10));
+    setMNotes("");
     setCapMessage("");
     setModalOpen(true);
   }
@@ -257,6 +259,7 @@ export default function MeasurementsPage() {
     setMValue(entry.value);
     setMUnit(entry.unit);
     setMDate(entry.date);
+    setMNotes(entry.notes ?? "");
     setModalOpen(true);
   }
 
@@ -266,6 +269,9 @@ export default function MeasurementsPage() {
     } = await supabase.auth.getUser();
     if (!user || !mName || !mValue) return;
 
+    const trimmedNotes = (mNotes || "").trim();
+    const notes = trimmedNotes || null;
+
     if (editId) {
       await updateMeasurement({
         id: editId,
@@ -273,6 +279,7 @@ export default function MeasurementsPage() {
         value: mValue,
         unit: mUnit,
         date: mDate,
+        notes,
       });
     } else {
       const cap = await checkUsageCap(user.id, "measurements");
@@ -287,6 +294,7 @@ export default function MeasurementsPage() {
         value: mValue,
         unit: mUnit,
         date: mDate,
+        notes,
       });
     }
 
@@ -326,11 +334,16 @@ export default function MeasurementsPage() {
 
     const iso = new Date(`${bwLogDate}T12:00:00.000Z`).toISOString();
 
+    // Optional notes column can be added to bodyweight_logs table.
+    const trimmedNotes = ""; // inline form currently has no notes field
+    const notes = trimmedNotes || null;
+
     await supabase.from("bodyweight_logs").insert({
       user_id: user.id,
       weight: n,
       unit: "lbs",
       logged_at: iso,
+      notes,
     });
 
     await reloadBodyweight(user.id);
@@ -579,6 +592,21 @@ export default function MeasurementsPage() {
 
                   {!ms.active && isOpen && (
                     <div style={{ marginTop: 10 }}>
+                      {latest.notes && (
+                        <p
+                          style={{
+                            margin: 0,
+                            marginBottom: list.length > 1 ? 10 : 0,
+                            fontSize: 11,
+                            opacity: 0.75,
+                            fontStyle: "italic",
+                            transition: "opacity 0.2s ease",
+                          }}
+                        >
+                          {latest.notes}
+                        </p>
+                      )}
+
                       {list.slice(1).map((entry) => (
                         <div key={entry.id} style={historyCard}>
                           <div style={rowStyle}>
@@ -589,6 +617,19 @@ export default function MeasurementsPage() {
                               <p style={{ margin: 0, opacity: 0.7 }}>
                                 {entry.date}
                               </p>
+                              {entry.notes && (
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    marginTop: 4,
+                                    fontSize: 11,
+                                    opacity: 0.75,
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  {entry.notes}
+                                </p>
+                              )}
                             </div>
                             <div style={{ display: "flex", gap: 12 }}>
                               <FaEdit onClick={() => openEdit(entry)} />
@@ -625,6 +666,13 @@ export default function MeasurementsPage() {
             </select>
             <label style={labelStyle}>Date</label>
             <input style={inputStyle} type="date" value={mDate} onChange={(e) => setMDate(e.target.value)} />
+            <label style={labelStyle}>Notes (optional)</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 60 }}
+              value={mNotes}
+              onChange={(e) => setMNotes(e.target.value)}
+              placeholder="Optional notes about this measurement"
+            />
             {capMessage ? <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p> : null}
             <button style={primaryBtn} onClick={saveMeasurement}>Save</button>
           </div>

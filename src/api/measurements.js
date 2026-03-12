@@ -21,7 +21,7 @@ export async function getMeasurements(userId) {
 // ----------------------------------------------------------
 // ADD new measurement
 // ----------------------------------------------------------
-export async function addMeasurement({ userId, name, value, unit, date }) {
+export async function addMeasurement({ userId, name, value, unit, date, notes }) {
   const { data, error } = await supabase
     .from("measurements")
     .insert([
@@ -31,6 +31,7 @@ export async function addMeasurement({ userId, name, value, unit, date }) {
         value,
         unit,
         date,
+        notes,
       },
     ])
     .select();
@@ -46,10 +47,10 @@ export async function addMeasurement({ userId, name, value, unit, date }) {
 // ----------------------------------------------------------
 // UPDATE existing measurement (your new need!)
 // ----------------------------------------------------------
-export async function updateMeasurement({ id, name, value, unit, date }) {
+export async function updateMeasurement({ id, name, value, unit, date, notes }) {
   const { data, error } = await supabase
     .from("measurements")
-    .update({ name, value, unit, date })
+    .update({ name, value, unit, date, notes })
     .eq("id", id)
     .select();
 

@@ -32,8 +32,10 @@ export default function BodyweightHistoryOverlay({
   const [editRow, setEditRow] = useState(null);
   const [editWeight, setEditWeight] = useState("");
   const [editDate, setEditDate] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   const [deleteId, setDeleteId] = useState(null);
+  const [expanded, setExpanded] = useState({});
 
   useEffect(() => {
     if (!open) {
@@ -48,6 +50,7 @@ export default function BodyweightHistoryOverlay({
     setEditRow(row);
     setEditWeight(String(row.weight));
     setEditDate(safeDateOnly(row.logged_at));
+    setEditNotes(row.notes ?? "");
   }
 
   async function saveEdit() {
@@ -59,9 +62,11 @@ export default function BodyweightHistoryOverlay({
     const n = Number(editWeight);
     if (!editWeight || Number.isNaN(n) || n <= 0) return;
     const iso = new Date(`${editDate}T12:00:00.000Z`).toISOString();
+    const trimmedNotes = (editNotes || "").trim();
+    const notes = trimmedNotes || null;
     await supabase
       .from("bodyweight_logs")
-      .update({ weight: n, unit: "lbs", logged_at: iso })
+      .update({ weight: n, unit: "lbs", logged_at: iso, notes })
       .eq("id", editRow.id);
     setEditRow(null);
     onReload();
@@ -133,6 +138,7 @@ export default function BodyweightHistoryOverlay({
 
         {bwHistory.map((b) => {
           const isSel = ms.selected.has(b.id);
+          const isOpen = !!expanded[b.id];
           return (
             <div
               key={b.id}
@@ -153,6 +159,10 @@ export default function BodyweightHistoryOverlay({
                   ms.toggle(b.id);
                   return;
                 }
+                setExpanded((prev) => ({
+                  ...prev,
+                  [b.id]: !prev[b.id],
+                }));
               }}
             >
               {ms.active && <SelectCheck show={isSel} />}
@@ -161,6 +171,20 @@ export default function BodyweightHistoryOverlay({
                 <div style={E_DATE}>
                   {new Date(b.logged_at).toLocaleDateString()}
                 </div>
+                {isOpen && b.notes && (
+                  <p
+                    style={{
+                      margin: 0,
+                      marginTop: 6,
+                      fontSize: 11,
+                      opacity: 0.75,
+                      fontStyle: "italic",
+                      transition: "opacity 0.2s ease",
+                    }}
+                  >
+                    {b.notes}
+                  </p>
+                )}
               </div>
               {ms.active ? (
                 <div
@@ -228,6 +252,13 @@ export default function BodyweightHistoryOverlay({
               type="date"
               value={editDate}
               onChange={(e) => setEditDate(e.target.value)}
+            />
+            <label style={LBL}>Notes (optional)</label>
+            <textarea
+              style={{ ...INP, minHeight: 70 }}
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="Optional notes about this entry"
             />
             <button style={SAVE_BTN} onClick={saveEdit}>
               Save
