@@ -11,7 +11,11 @@ export const ONBOARDING_STEPS = [
     title: "Welcome to ArmPal",
     description:
       "Track your workouts, PRs, nutrition, and goals. Connect with friends and monitor your progress.",
+    body:
+      "Track your workouts, PRs, nutrition, and goals. Connect with friends and monitor your progress.",
     type: "modal",
+    buttonText: "Next",
+    blockInteraction: true,
     trigger: { type: "button", action: "start_profile" },
   },
   {
@@ -21,8 +25,12 @@ export const ONBOARDING_STEPS = [
     target: null,
     title: "Create your profile",
     description:
-      "Create a name and handle to continue. The rest is optional. Tap Save to start the tour.",
+      "Create a name and handle to continue. The rest of the profile is optional. Tap Save once finished to start the tour.",
+    body:
+      "Create a name and handle to continue. The rest of the profile is optional. Tap Save once finished to start the tour.",
     type: "modal",
+    buttonText: "Continue",
+    blockInteraction: true,
     trigger: { type: "button", action: "start_profile_instructions" },
   },
   {
