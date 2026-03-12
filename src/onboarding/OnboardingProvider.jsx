@@ -258,7 +258,8 @@ export default function OnboardingProvider({ children }) {
 
     window.addEventListener(
       "ap_onboarding_profile_saved",
-      handleProfileSaved
+      handleProfileSaved,
+      { once: true }
     );
 
     return () => {

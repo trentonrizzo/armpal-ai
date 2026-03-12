@@ -46,11 +46,14 @@ export const ONBOARDING_STEPS = [
   // Phase 2 — App tour (only after profile saved)
   {
     id: "profile_saved",
-    phase: ONBOARDING_PHASE_TOUR,
+    phase: ONBOARDING_PHASE_SETUP,
     route: "/profile",
     target: null,
     title: "Profile Saved",
     description: "Let's take a quick tour.",
+    body: "Let's take a quick tour.",
+    type: "modal",
+    buttonText: "Start Tour",
     canAdvanceManually: true,
     trigger: { type: "button", action: "start_tour" },
   },
