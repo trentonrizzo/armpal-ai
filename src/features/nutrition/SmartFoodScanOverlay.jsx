@@ -67,9 +67,9 @@ const CLOSE_BTN = {
   width: 36,
   height: 36,
   borderRadius: 999,
-  background: "rgba(255,255,255,0.08)",
-  border: "1px solid rgba(255,255,255,0.15)",
-  color: "#fff",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -89,8 +89,8 @@ const ICON_CIRCLE = {
   width: 72,
   height: 72,
   borderRadius: "50%",
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.12)",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -99,12 +99,12 @@ const ICON_CIRCLE = {
 const TITLE = {
   fontSize: 22,
   fontWeight: 800,
-  color: "#fff",
+  color: "var(--text)",
   margin: "0 0 8px",
 };
 const SUB = {
   fontSize: 14,
-  color: "rgba(255,255,255,0.6)",
+  color: "var(--text-dim)",
   margin: "0 0 28px",
   lineHeight: 1.5,
   maxWidth: 300,
@@ -116,7 +116,7 @@ const PRIMARY_BTN = {
   borderRadius: 12,
   border: "none",
   background: "var(--accent)",
-  color: "#fff",
+  color: "var(--text)",
   fontSize: 16,
   fontWeight: 700,
   cursor: "pointer",
@@ -125,9 +125,9 @@ const SECONDARY_BTN = {
   width: "100%",
   padding: "14px 20px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 15,
   fontWeight: 600,
   cursor: "pointer",
@@ -138,7 +138,7 @@ const ERROR_BOX = {
   borderRadius: 10,
   background: "rgba(255,80,80,0.12)",
   border: "1px solid rgba(255,80,80,0.3)",
-  color: "#ff6b6b",
+  color: "var(--accent)",
   fontSize: 13,
   fontWeight: 600,
   marginTop: 12,
@@ -150,7 +150,7 @@ const IMG_WRAP = {
   borderRadius: 16,
   overflow: "hidden",
   marginBottom: 20,
-  border: "1px solid rgba(255,255,255,0.1)",
+  border: "1px solid var(--border)",
 };
 const IMG_STYLE = {
   width: "100%",
@@ -160,15 +160,15 @@ const IMG_STYLE = {
   display: "block",
 };
 const CARD = {
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
   borderRadius: 14,
   padding: 14,
   marginBottom: 10,
 };
 const TOTALS_CARD = {
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.12)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 14,
   padding: "14px 16px",
   marginTop: 16,
@@ -178,16 +178,16 @@ const EDIT_INPUT = {
   boxSizing: "border-box",
   padding: "10px 12px",
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 14,
 };
 const EDIT_LABEL = {
   display: "block",
   fontSize: 11,
   fontWeight: 600,
-  color: "rgba(255,255,255,0.5)",
+  color: "var(--text-dim)",
   marginBottom: 4,
 };
 const DISCLAIMER = {
@@ -195,12 +195,12 @@ const DISCLAIMER = {
   gap: 8,
   alignItems: "flex-start",
   fontSize: 12,
-  color: "rgba(255,255,255,0.5)",
+  color: "var(--text-dim)",
   marginTop: 12,
   padding: "10px 12px",
   borderRadius: 10,
-  background: "rgba(255,255,255,0.03)",
-  border: "1px solid rgba(255,255,255,0.06)",
+  background: "var(--card-2)",
+  border: "1px solid var(--border)",
 };
 
 function confidenceColor(c) {
@@ -243,9 +243,9 @@ const PORTION_INPUT = {
   width: 72,
   padding: "7px 8px",
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 14,
   fontWeight: 600,
   boxSizing: "border-box",
@@ -253,9 +253,9 @@ const PORTION_INPUT = {
 const PORTION_SELECT = {
   padding: "7px 8px",
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 13,
   fontWeight: 600,
   boxSizing: "border-box",
@@ -628,7 +628,7 @@ export default function SmartFoodScanOverlay({
                   <img src={imagePreview} alt="Food preview" style={IMG_STYLE} />
                 </div>
               )}
-              <label style={{ display: "block", width: "100%", marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.6)" }}>
+              <label style={{ display: "block", width: "100%", marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: 600, color: "var(--text-dim)" }}>
                 Optional context (e.g. &quot;pork under gravy&quot;)
               </label>
               <input
@@ -641,9 +641,9 @@ export default function SmartFoodScanOverlay({
                   boxSizing: "border-box",
                   padding: "10px 12px",
                   borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#fff",
+                  border: "1px solid var(--border)",
+                  background: "var(--card-2)",
+                  color: "var(--text)",
                   fontSize: 14,
                   marginBottom: 8,
                 }}
@@ -710,7 +710,7 @@ export default function SmartFoodScanOverlay({
                         gap: 10,
                         fontSize: 14,
                         fontWeight: 600,
-                        color: done ? "var(--accent)" : active ? "#fff" : "rgba(255,255,255,0.3)",
+                        color: done ? "var(--accent)" : active ? "var(--text)" : "var(--text-dim)",
                         transition: "color 0.4s ease, opacity 0.4s ease",
                         opacity: done || active ? 1 : 0.5,
                       }}
@@ -755,11 +755,11 @@ export default function SmartFoodScanOverlay({
               {/* food list */}
               <div style={{ marginTop: 8 }}>
                 {editFoods.length === 0 && (
-                  <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>No foods detected.</p>
+                  <p style={{ color: "var(--text-dim)", fontSize: 14 }}>No foods detected.</p>
                 )}
                 {editFoods.map((food, foodIdx) => (
                   <div key={food._key} style={CARD}>
-                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, color: "#fff", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, color: "var(--text)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span>{food.name}</span>
                       {food.needs_review && (
                         <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4, background: "rgba(255,152,0,0.2)", color: "#ff9800" }}>
@@ -788,10 +788,10 @@ export default function SmartFoodScanOverlay({
                         ))}
                       </select>
                     </div>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 6 }}>
                       Adjust portion to recalculate macros
                     </div>
-                    <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
+                    <div style={{ fontSize: 13, color: "var(--text)" }}>
                       {food.calories} cal&ensp;·&ensp;P {food.protein}g&ensp;·&ensp;C {food.carbs}g&ensp;·&ensp;F {food.fat}g
                     </div>
                   </div>
@@ -801,7 +801,7 @@ export default function SmartFoodScanOverlay({
               {/* totals */}
               {totals && (
                 <div style={TOTALS_CARD}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
                     Totals
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
@@ -812,8 +812,8 @@ export default function SmartFoodScanOverlay({
                       { l: "Fat", v: `${totals.fat}g` },
                     ].map((t) => (
                       <div key={t.l} style={{ textAlign: "center", minWidth: 60 }}>
-                        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 2 }}>{t.l}</div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{t.v}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 2 }}>{t.l}</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text)" }}>{t.v}</div>
                       </div>
                     ))}
                   </div>
@@ -869,7 +869,7 @@ export default function SmartFoodScanOverlay({
               <h2 style={{ ...TITLE, marginBottom: 16 }}>Edit Foods</h2>
 
               {editFoods.length === 0 && (
-                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>All foods removed.</p>
+                <p style={{ color: "var(--text-dim)", fontSize: 14 }}>All foods removed.</p>
               )}
 
               {editFoods.map((food, i) => (
@@ -934,7 +934,7 @@ export default function SmartFoodScanOverlay({
                 const t = computeTotals();
                 return (
                   <div style={TOTALS_CARD}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
                       Totals
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
@@ -944,9 +944,9 @@ export default function SmartFoodScanOverlay({
                         { l: "C", v: `${t.carbs}g` },
                         { l: "F", v: `${t.fat}g` },
                       ].map((x) => (
-                        <div key={x.l} style={{ textAlign: "center", minWidth: 50 }}>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 2 }}>{x.l}</div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>{x.v}</div>
+                          <div key={x.l} style={{ textAlign: "center", minWidth: 50 }}>
+                            <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 2 }}>{x.l}</div>
+                            <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text)" }}>{x.v}</div>
                         </div>
                       ))}
                     </div>

@@ -14,19 +14,19 @@ const OVERLAY = {
   padding: 20,
 };
 const MODAL = {
-  background: "#111",
-  border: "1px solid rgba(255,255,255,0.12)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 16,
   padding: 20,
   maxWidth: 400,
   width: "100%",
-  color: "#fff",
+  color: "var(--text)",
 };
 const TITLE = {
   fontSize: 20,
   fontWeight: 800,
   marginBottom: 16,
-  color: "#fff",
+  color: "var(--text)",
 };
 const ROW = {
   marginBottom: 12,
@@ -35,7 +35,7 @@ const LABEL = {
   display: "block",
   fontSize: 12,
   fontWeight: 600,
-  color: "rgba(255,255,255,0.6)",
+  color: "var(--text-dim)",
   marginBottom: 4,
 };
 const INPUT = {
@@ -43,9 +43,9 @@ const INPUT = {
   boxSizing: "border-box",
   padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 15,
 };
 const TOGGLE_ROW = {
@@ -58,14 +58,14 @@ const TOGGLE_ROW = {
 const TOGGLE_LABEL = {
   fontSize: 14,
   fontWeight: 600,
-  color: "rgba(255,255,255,0.9)",
+  color: "var(--text)",
 };
 const TOGGLE = {
   width: 48,
   height: 26,
   borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.1)",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
   cursor: "pointer",
   padding: 2,
   display: "flex",
@@ -82,7 +82,7 @@ const KNOB = {
   width: 20,
   height: 20,
   borderRadius: 999,
-  background: "#fff",
+  background: "var(--bg)",
 };
 const ACTIONS = {
   display: "flex",
@@ -99,14 +99,14 @@ const BTN = {
 };
 const BTN_CANCEL = {
   ...BTN,
-  background: "rgba(255,255,255,0.1)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,0.2)",
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
 };
 const BTN_SAVE = {
   ...BTN,
   background: "var(--accent)",
-  color: "#fff",
+  color: "var(--text)",
 };
 
 export default function NutritionGoalsModal({ open, onClose, initialGoals, onSave }) {

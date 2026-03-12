@@ -117,7 +117,7 @@ export default function NutritionHistory({ userId, selectedDate, onSelectDate })
   if (loading) {
     return (
       <div style={WRAP}>
-        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>Loading history…</p>
+        <p style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading history…</p>
       </div>
     );
   }
@@ -125,7 +125,7 @@ export default function NutritionHistory({ userId, selectedDate, onSelectDate })
   if (days.length === 0) {
     return (
       <div style={WRAP}>
-        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>
+        <p style={{ color: "var(--text-dim)", fontSize: 14 }}>
           No entries in the last 30 days.
         </p>
       </div>
@@ -215,8 +215,8 @@ const DAY_ITEM = {
   alignItems: "center",
   padding: "14px 16px",
   marginBottom: 8,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 12,
   cursor: "pointer",
   transition: "border-color 0.2s, background 0.2s, opacity 0.2s",
@@ -225,11 +225,11 @@ const DAY_ITEM = {
 const DAY_LABEL = {
   fontSize: 15,
   fontWeight: 600,
-  color: "#fff",
+  color: "var(--text)",
 };
 const DAY_TOTALS = {
   fontSize: 13,
-  color: "rgba(255,255,255,0.7)",
+  color: "var(--text-dim)",
 };
 const ACCENT = { color: "var(--accent)", fontWeight: 700 };
 const SELECT_HINT = {

@@ -1,8 +1,8 @@
 import React from "react";
 
 const WRAP = {
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.12)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 20,
   padding: "20px 20px 16px",
   marginBottom: 24,
@@ -19,7 +19,7 @@ const ROW = {
 const MAIN_LABEL = {
   fontSize: 12,
   fontWeight: 700,
-  color: "rgba(255,255,255,0.6)",
+  color: "var(--text-dim)",
   textTransform: "uppercase",
   letterSpacing: "0.06em",
   marginBottom: 4,
@@ -28,7 +28,7 @@ const MAIN_LABEL = {
 const MAIN_VALUE = {
   fontSize: 36,
   fontWeight: 800,
-  color: "#fff",
+  color: "var(--text)",
   lineHeight: 1.1,
 };
 
@@ -42,7 +42,7 @@ const ACCENT_VALUE = {
 const SECONDARY = {
   marginTop: 16,
   paddingTop: 16,
-  borderTop: "1px solid rgba(255,255,255,0.1)",
+  borderTop: "1px solid var(--border)",
   display: "flex",
   gap: 24,
   flexWrap: "wrap",
@@ -57,14 +57,14 @@ const SEC_ITEM = {
 const SEC_LABEL = {
   fontSize: 11,
   fontWeight: 600,
-  color: "rgba(255,255,255,0.5)",
+  color: "var(--text-dim)",
   textTransform: "uppercase",
 };
 
 const SEC_VAL = {
   fontSize: 18,
   fontWeight: 700,
-  color: "rgba(255,255,255,0.9)",
+  color: "var(--text)",
 };
 
 export default function NutritionDailySummary({ totals, loading }) {
@@ -73,7 +73,7 @@ export default function NutritionDailySummary({ totals, loading }) {
   if (loading) {
     return (
       <div style={WRAP}>
-        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>Loading totals…</p>
+        <p style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading totals…</p>
       </div>
     );
   }

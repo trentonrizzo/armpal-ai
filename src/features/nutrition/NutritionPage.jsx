@@ -21,8 +21,8 @@ import { Camera } from "lucide-react";
 
 const PAGE = {
   minHeight: "100vh",
-  background: "#000",
-  color: "#fff",
+  background: "var(--bg)",
+  color: "var(--text)",
   padding: "16px 16px 100px",
   maxWidth: 480,
   margin: "0 auto",
@@ -32,26 +32,26 @@ const HEADER = {
   fontSize: 24,
   fontWeight: 800,
   marginBottom: 4,
-  color: "#fff",
+  color: "var(--text)",
 };
 const SUB = {
   fontSize: 14,
-  color: "rgba(255,255,255,0.6)",
+  color: "var(--text-dim)",
   marginBottom: 20,
 };
 
 const SECTION_TITLE = {
   fontSize: 14,
   fontWeight: 700,
-  color: "rgba(255,255,255,0.7)",
+  color: "var(--text-dim)",
   marginBottom: 10,
   textTransform: "uppercase",
   letterSpacing: "0.05em",
 };
 
 const CARD = {
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: 16,
   padding: 16,
   marginBottom: 16,
@@ -63,7 +63,7 @@ const BTN_PRIMARY = {
   borderRadius: 12,
   border: "none",
   background: "var(--accent)",
-  color: "#fff",
+  color: "var(--text)",
   fontSize: 16,
   fontWeight: 700,
   cursor: "pointer",
@@ -79,17 +79,17 @@ const DATE_INPUT = {
   flex: 1,
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 15,
 };
 const HEADER_BTN = {
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 14,
   fontWeight: 600,
   cursor: "pointer",
@@ -108,17 +108,17 @@ const PROGRESS_ROW = {
 const PROGRESS_LABEL = {
   fontSize: 13,
   fontWeight: 600,
-  color: "rgba(255,255,255,0.85)",
+  color: "var(--text)",
   minWidth: 80,
 };
 const PROGRESS_TEXT = {
   fontSize: 12,
-  color: "rgba(255,255,255,0.6)",
+  color: "var(--text-dim)",
 };
 const PROGRESS_BAR_BG = {
   height: 6,
   borderRadius: 3,
-  background: "rgba(255,255,255,0.1)",
+  background: "var(--border)",
   overflow: "hidden",
   marginTop: 4,
 };
@@ -277,7 +277,7 @@ export default function NutritionPage() {
   if (!user) {
     return (
       <div style={PAGE}>
-        <p style={{ color: "rgba(255,255,255,0.7)" }}>Loading…</p>
+        <p style={{ color: "var(--text-dim)" }}>Loading…</p>
       </div>
     );
   }
@@ -327,9 +327,9 @@ export default function NutritionPage() {
             gap: 6,
             padding: "8px 12px",
             borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.2)",
-            background: "rgba(255,255,255,0.08)",
-            color: "#fff",
+            border: "1px solid var(--border)",
+            background: "var(--card-2)",
+            color: "var(--text)",
             fontSize: 13,
             fontWeight: 600,
             cursor: "pointer",
@@ -402,9 +402,9 @@ export default function NutritionPage() {
       <div style={SECTION_TITLE}>Entries</div>
       <div style={CARD}>
         {loading ? (
-          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>Loading…</p>
+          <p style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading…</p>
         ) : entries.length === 0 ? (
-          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>
+          <p style={{ color: "var(--text-dim)", fontSize: 14 }}>
             No entries for this day. Add one below.
           </p>
         ) : (
@@ -442,7 +442,7 @@ export default function NutritionPage() {
                     <div
                       style={{
                         fontSize: 13,
-                        color: "rgba(255,255,255,0.7)",
+                        color: "var(--text-dim)",
                         marginBottom: 8,
                       }}
                     >

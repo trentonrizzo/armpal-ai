@@ -7,7 +7,7 @@ const LABEL = {
   display: "block",
   fontSize: 12,
   fontWeight: 600,
-  color: "rgba(255,255,255,0.6)",
+  color: "var(--text-dim)",
   marginBottom: 4,
 };
 const INPUT = {
@@ -15,9 +15,9 @@ const INPUT = {
   boxSizing: "border-box",
   padding: "12px 14px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
+  border: "1px solid var(--border)",
+  background: "var(--card-2)",
+  color: "var(--text)",
   fontSize: 15,
 };
 const ACTIONS = {
@@ -37,13 +37,13 @@ const BTN = {
 const BTN_PRIMARY = {
   ...BTN,
   background: "var(--accent)",
-  color: "#fff",
+  color: "var(--text)",
 };
 const BTN_SECONDARY = {
   ...BTN,
-  background: "rgba(255,255,255,0.1)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,0.2)",
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
 };
 
 export default function NutritionEntryForm({
