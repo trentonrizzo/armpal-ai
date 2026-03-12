@@ -87,19 +87,12 @@ export default function OnboardingProvider({ children }) {
             window.localStorage.setItem(STORAGE_COMPLETE, "true");
           }
         } else {
-          // Profile incomplete: initialize phase/step from stored progress if present.
+          // Profile incomplete: always start onboarding from the first step for this user.
+          setPhase(ONBOARDING_PHASE_SETUP);
+          setStepIndex(0);
           if (typeof window !== "undefined") {
-            const storedPhase =
-              window.localStorage.getItem(STORAGE_PHASE) ||
-              ONBOARDING_PHASE_SETUP;
-            const storedStep = window.localStorage.getItem(STORAGE_STEP);
-            const parsed =
-              storedStep != null ? parseInt(storedStep, 10) : 0;
-            setPhase(storedPhase);
-            setStepIndex(Number.isNaN(parsed) ? 0 : parsed);
-          } else {
-            setPhase(ONBOARDING_PHASE_SETUP);
-            setStepIndex(0);
+            window.localStorage.removeItem(STORAGE_STEP);
+            window.localStorage.setItem(STORAGE_PHASE, ONBOARDING_PHASE_SETUP);
           }
         }
       } catch {
