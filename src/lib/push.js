@@ -1,5 +1,7 @@
 import { supabase } from "../supabaseClient";
 
+let pushRegistered = false;
+
 const VAPID_PUBLIC_KEY =
   import.meta.env.VITE_VAPID_PUBLIC_KEY ||
   "BI8cG9Td4RYclDiMuLH55inFeWUVFQR_fq6uYUNjh8XlWQVzsUoHAYRyRlMjCb4j6Uep5erVvDsqIf1pXZU0vDs";
@@ -27,6 +29,10 @@ export async function enablePush(userId) {
   }
 
   if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+    return;
+  }
+
+  if (pushRegistered) {
     return;
   }
 

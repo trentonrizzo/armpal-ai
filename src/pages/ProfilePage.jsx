@@ -85,8 +85,12 @@ const PAGE_MAX_WIDTH = 1200;
 // Storage bucket name you already use.
 const AVATAR_BUCKET = "avatars";
 
-// A big, visible default avatar.
-const FALLBACK_AVATAR = "https://via.placeholder.com/400";
+// A big, visible default avatar — inline SVG data URI to avoid external fetches.
+const FALLBACK_AVATAR =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128"><rect width="128" height="128" fill="#111"/><circle cx="64" cy="52" r="28" fill="#333"/><path d="M20 116c4-28 20-44 44-44s40 16 44 44" fill="#222"/></svg>'
+  );
 
 // Heartbeat interval for online presence.
 const PRESENCE_HEARTBEAT_MS = 30000;
