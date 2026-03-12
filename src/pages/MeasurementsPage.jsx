@@ -114,6 +114,7 @@ export default function MeasurementsPage() {
   // ---------------- BODYWEIGHT ----------------
   const [bwHistory, setBwHistory] = useState([]); // newest first
   const [bwInput, setBwInput] = useState("");
+  const [bwLogDate, setBwLogDate] = useState(new Date().toISOString().slice(0, 10));
 
   const [bwEditRow, setBwEditRow] = useState(null);
   const [bwEditWeight, setBwEditWeight] = useState("");
@@ -323,10 +324,13 @@ export default function MeasurementsPage() {
     }
     setCapMessage("");
 
+    const iso = new Date(`${bwLogDate}T12:00:00.000Z`).toISOString();
+
     await supabase.from("bodyweight_logs").insert({
       user_id: user.id,
       weight: n,
       unit: "lbs",
+      logged_at: iso,
     });
 
     await reloadBodyweight(user.id);
@@ -406,42 +410,55 @@ export default function MeasurementsPage() {
             : "No entries yet"}
         </p>
 
-        <div
-          style={{ display: "flex", gap: 10, alignItems: "center" }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            style={{
-              ...inputStyle,
-              marginBottom: 0,
-              flex: 1,
-              height: 44,
-              fontSize: 16,
-              padding: "0 12px",
-            }}
-            type="number"
-            inputMode="decimal"
-            placeholder="Enter weight"
-            value={bwInput}
-            onChange={(e) => setBwInput(e.target.value)}
-          />
-          <button
-            style={{
-              height: 44,
-              padding: "0 16px",
-              borderRadius: 10,
-              border: "none",
-              background: "var(--accent)",
-              color: "var(--text)",
-              fontWeight: 700,
-              minWidth: 80,
-              flexShrink: 0,
-            }}
-            onClick={saveBodyweight}
+          <div
+            style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+            onClick={(e) => e.stopPropagation()}
           >
-            Log
-          </button>
-        </div>
+            <input
+              style={{
+                ...inputStyle,
+                marginBottom: 0,
+                flex: 1,
+                height: 44,
+                fontSize: 16,
+                padding: "0 12px",
+              }}
+              type="number"
+              inputMode="decimal"
+              placeholder="Enter weight"
+              value={bwInput}
+              onChange={(e) => setBwInput(e.target.value)}
+            />
+            <input
+              style={{
+                ...inputStyle,
+                marginBottom: 0,
+                width: 140,
+                height: 44,
+                fontSize: 14,
+                padding: "0 10px",
+              }}
+              type="date"
+              value={bwLogDate}
+              onChange={(e) => setBwLogDate(e.target.value)}
+            />
+            <button
+              style={{
+                height: 44,
+                padding: "0 16px",
+                borderRadius: 10,
+                border: "none",
+                background: "var(--accent)",
+                color: "var(--text)",
+                fontWeight: 700,
+                minWidth: 80,
+                flexShrink: 0,
+              }}
+              onClick={saveBodyweight}
+            >
+              Log
+            </button>
+          </div>
         {capMessage ? <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p> : null}
 
         {bwHistory.length > 1 && (

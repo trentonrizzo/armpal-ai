@@ -5,6 +5,7 @@ import { supabase } from "../supabaseClient";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { Link, useNavigate } from "react-router-dom";
 import StripeTestButton from "../components/StripeTestButton";
+import { useToast } from "../components/ToastProvider";
 
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
@@ -25,6 +26,8 @@ import { useProfileGate } from "../context/ProfileGateContext";
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const toast = useToast();
 
   const [isPro, setIsPro] = useState(false);
   const [user, setUser] = useState(null);
@@ -248,6 +251,10 @@ export default function Dashboard() {
     });
 
     fetchBestPR(exerciseName, estimated);
+
+    if (toast?.success) {
+      toast.success("PR saved");
+    }
   }
 
   // Table data (15 rows)

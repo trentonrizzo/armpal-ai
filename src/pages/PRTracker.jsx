@@ -410,19 +410,6 @@ export default function PRTracker() {
                           {latest.weight} {latest.unit}
                           {latest.reps ? ` × ${latest.reps}` : ""} — {latest.date}
                         </p>
-                        {latest.notes && (
-                          <p
-                            style={{
-                              margin: 0,
-                              marginTop: 2,
-                              fontSize: 11,
-                              opacity: 0.6,
-                              fontStyle: "italic",
-                            }}
-                          >
-                            {latest.notes}
-                          </p>
-                        )}
                       </div>
 
                       {ms.active ? (
@@ -548,6 +535,22 @@ export default function PRTracker() {
               style={inputStyle}
               value={prReps}
               onChange={(e) => setPrReps(e.target.value)}
+            />
+
+            <label style={labelStyle}>Date</label>
+            <input
+              type="date"
+              style={inputStyle}
+              value={prDate}
+              onChange={(e) => setPrDate(e.target.value)}
+            />
+
+            <label style={labelStyle}>Notes</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 60 }}
+              value={prNotes}
+              onChange={(e) => setPrNotes(e.target.value)}
+              placeholder="Optional notes about this PR"
             />
 
             {capMessage ? (
