@@ -115,10 +115,27 @@ function formatMMSS(seconds) {
 }
 
 // ============================================================
-// STORAGE HELPERS
+// STORAGE / UPLOAD LIMITS
 // ============================================================
 
-const MAX_AUDIO_SECONDS = 30;
+// Voice messages
+const MAX_VOICE_SECONDS = 60;
+const MAX_AUDIO_SECONDS = MAX_VOICE_SECONDS; // recording hard cap
+const MAX_VOICE_BYTES = 10 * 1024 * 1024; // 10MB
+
+// Videos
+const MAX_VIDEO_BYTES = 25 * 1024 * 1024; // 25MB
+const ALLOWED_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime"]);
+
+// Voice MIME types (recorded blob types) we consider acceptable
+const ALLOWED_VOICE_MIME_PREFIXES = [
+  "audio/m4a",
+  "audio/mp3",
+  "audio/wav",
+  // Common actual recorder types that map to m4a/mp3
+  "audio/mp4",
+  "audio/mpeg",
+];
 
 // IMPORTANT:
 // Your base file uses storage buckets named:
@@ -1023,6 +1040,12 @@ export default function ChatPage() {
   async function sendVideo(file) {
     if (!user?.id || !file) return;
 
+    // Validate BEFORE upload for instant feedback
+    if (file.size > MAX_VIDEO_BYTES || (file.type && !ALLOWED_VIDEO_TYPES.has(file.type))) {
+      toast.error("Video must be under 25MB");
+      return;
+    }
+
     setError("");
 
     try {
@@ -1177,6 +1200,24 @@ export default function ChatPage() {
     try {
       const mime = recordedBlob.type || activeMimeRef.current || "";
       const ext = fileExtFromMime(mime);
+
+      // Validate BEFORE upload: duration, size, and type
+      if (recordDuration > MAX_VOICE_SECONDS || recordedBlob.size > MAX_VOICE_BYTES) {
+        setSendingAudio(false);
+        toast.error("Voice message must be under 60 seconds and 10MB");
+        return;
+      }
+
+      const lowerMime = (mime || "").toLowerCase();
+      if (
+        lowerMime &&
+        !ALLOWED_VOICE_MIME_PREFIXES.some((prefix) => lowerMime.startsWith(prefix))
+      ) {
+        setSendingAudio(false);
+        toast.error("Voice message must be under 60 seconds and 10MB");
+        return;
+      }
+
       const path = audioPath(chatIdForStorage, user.id, ext);
 
       const { error: uploadErr } = await supabase.storage

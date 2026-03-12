@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap } from "../utils/usageLimits";
+import { useToast } from "../components/ToastProvider";
 
 export default function StrengthCalculator() {
   const [liftName, setLiftName] = useState("");
@@ -10,6 +11,8 @@ export default function StrengthCalculator() {
   const [oneRM, setOneRM] = useState(null);
   const [currentPR, setCurrentPR] = useState(null);
   const [capMessage, setCapMessage] = useState("");
+
+  const toast = useToast();
 
   // Rep multipliers
   const repMultipliers = {
@@ -78,29 +81,68 @@ export default function StrengthCalculator() {
 
   // Save PR
   async function savePR() {
-    if (!liftName || !oneRM) return;
+    const trimmedName = liftName.trim();
+    if (!trimmedName) {
+      if (toast?.error) {
+        toast.error("Enter an exercise name.");
+      }
+      return;
+    }
+
+    if (!oneRM) {
+      if (toast?.error) {
+        toast.error("Calculate a 1RM first.");
+      }
+      return;
+    }
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const cap = await checkUsageCap(user.id, "prs");
-    if (!cap.allowed) {
-      setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+    if (!user) {
+      if (toast?.error) {
+        toast.error("Sign in to save PRs.");
+      }
       return;
     }
-    setCapMessage("");
 
-    const cleanName = liftName.toLowerCase().trim();
+    try {
+      const cap = await checkUsageCap(user.id, "prs");
+      if (!cap.allowed) {
+        setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+        return;
+      }
+      setCapMessage("");
 
-    await supabase.from("prs").insert({
-      user_id: user.id,
-      lift_name: cleanName,
-      weight: oneRM,
-    });
+      const cleanName = trimmedName.toLowerCase();
 
-    setCurrentPR(oneRM);
+      // Maintain existing PR table insert
+      await supabase.from("prs").insert({
+        user_id: user.id,
+        lift_name: cleanName,
+        weight: oneRM,
+      });
+
+      // New: log into PR records table for analytics/history
+      await supabase.from("pr_records").insert({
+        user_id: user.id,
+        exercise_name: trimmedName,
+        value: oneRM,
+        type: "estimated_pr",
+        source: "strength_calculator",
+      });
+
+      setCurrentPR(oneRM);
+
+      if (toast?.success) {
+        toast.success("Estimated PR Saved");
+      }
+    } catch (err) {
+      console.error("StrengthCalculator savePR failed", err);
+      if (toast?.error) {
+        toast.error("Failed to save PR");
+      }
+    }
   }
 
   return (
