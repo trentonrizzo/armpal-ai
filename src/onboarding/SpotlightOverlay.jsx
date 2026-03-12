@@ -108,26 +108,19 @@ export default function SpotlightOverlay({
     : null;
 
   const isWelcomeOrComplete =
-    step.id === "welcome" || step.id === "tour_complete" || step.id === "profile_success";
+    step.id === "welcome" ||
+    step.id === "tour_complete" ||
+    step.id === "profile_saved";
 
   const primaryLabel = (() => {
-    if (step.id === "welcome") return "Set Up Profile";
-    if (step.id === "profile_bio") return "Next";
-    if (step.id === "profile_success") return "Start Tour";
-    if (step.id === "tour_workouts") return "Next";
-    if (step.id === "tour_tracking_overview") return "Next";
-    if (step.id === "tour_friends") return "Next";
-    if (step.id === "tour_dashboard") return "Next";
-    if (step.id === "tour_strength_calculator") return "Next";
-    if (step.id === "tour_settings") return "Next";
+    if (step.id === "welcome") return "Continue";
+    if (step.id === "profile_saved") return "Start Tour";
     if (step.id === "tour_complete") return "Go to Dashboard";
     return "Next";
   })();
 
-  const showSecondary =
-    step.id === "profile_bio" || step.id === "tour_workouts" || step.id === "tour_workouts_skip";
-
-  const secondaryLabel = step.id === "profile_bio" ? "Skip" : "Skip Tour";
+  const showSecondary = false;
+  const secondaryLabel = "";
 
   return createPortal(
     <div

@@ -37,6 +37,7 @@ export default function OnboardingProvider({ children }) {
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   const currentStep = ONBOARDING_STEPS[stepIndex] || null;
+  const [stepLocked, setStepLocked] = useState(false);
 
   const isComplete = phase === "complete";
 
@@ -137,17 +138,11 @@ export default function OnboardingProvider({ children }) {
 
   // Force route for onboarding steps when active.
   useEffect(() => {
-    if (!currentStep || isComplete || !profileNeedsOnboarding) return;
+    if (!currentStep || isComplete) return;
     if (location.pathname !== currentStep.route) {
       navigate(currentStep.route, { replace: true });
     }
-  }, [
-    currentStep,
-    isComplete,
-    profileNeedsOnboarding,
-    location.pathname,
-    navigate,
-  ]);
+  }, [currentStep, isComplete, location.pathname, navigate]);
 
   // Ensure incomplete profiles always land on /profile?onboarding=true.
   useEffect(() => {
@@ -163,27 +158,23 @@ export default function OnboardingProvider({ children }) {
   }, [profileLoaded, profileNeedsOnboarding, location.pathname, location.search, navigate]);
 
   const goToNext = useCallback(
-    (opts = {}) => {
-      if (!currentStep) return;
+    () => {
+      if (!currentStep || stepLocked) return;
+      setStepLocked(true);
       const idx = ONBOARDING_STEPS.findIndex((s) => s.id === currentStep.id);
       const next = ONBOARDING_STEPS[idx + 1];
       if (!next) {
         setPhase("complete");
+        setTimeout(() => setStepLocked(false), 200);
         return;
       }
       if (next.phase === ONBOARDING_PHASE_TOUR) {
         setPhase(ONBOARDING_PHASE_TOUR);
       }
-      if (opts.resetTour) {
-        const firstTourIndex = ONBOARDING_STEPS.findIndex(
-          (s) => s.phase === ONBOARDING_PHASE_TOUR
-        );
-        setStepIndex(firstTourIndex >= 0 ? firstTourIndex : idx + 1);
-      } else {
-        setStepIndex(idx + 1);
-      }
+      setStepIndex(idx + 1);
+      setTimeout(() => setStepLocked(false), 200);
     },
-    [currentStep]
+    [currentStep, stepLocked]
   );
 
   const skipTour = useCallback(() => {
@@ -206,53 +197,27 @@ export default function OnboardingProvider({ children }) {
     navigate("/", { replace: true });
   }, [navigate]);
 
+  // After profile save event, unlock tour and jump to "profile_saved" step.
   useEffect(() => {
-    if (!currentStep || isComplete) return;
-    if (currentStep.trigger?.type === "display_name_valid") {
-      const selector = currentStep.target;
-      if (!selector) return;
-      const handleInput = (e) => {
-        if (!(e.target instanceof HTMLInputElement)) return;
-        if (!e.target.matches(selector)) return;
-        if (e.target.value.trim().length >= currentStep.trigger.minLength) {
-          goToNext();
-        }
-      };
-      window.addEventListener("input", handleInput, true);
-      return () => window.removeEventListener("input", handleInput, true);
+    const handler = () => {
+      setProfileNeedsOnboarding(false);
+      const savedIndex = ONBOARDING_STEPS.findIndex(
+        (s) => s.id === "profile_saved"
+      );
+      if (savedIndex !== -1) {
+        setPhase(ONBOARDING_PHASE_TOUR);
+        setStepIndex(savedIndex);
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("ap_onboarding_profile_saved", handler);
     }
-  }, [currentStep, goToNext, isComplete]);
-
-  useEffect(() => {
-    if (!currentStep || isComplete) return;
-    if (currentStep.trigger?.type === "handle_valid") {
-      const selector = currentStep.target;
-      if (!selector) return;
-      const handleInput = (e) => {
-        if (!(e.target instanceof HTMLInputElement)) return;
-        if (!e.target.matches(selector)) return;
-        const value = e.target.value.trim();
-        const valid = /^[a-z0-9_]{3,}$/.test(value);
-        if (valid) {
-          goToNext();
-        }
-      };
-      window.addEventListener("input", handleInput, true);
-      return () => window.removeEventListener("input", handleInput, true);
-    }
-  }, [currentStep, goToNext, isComplete]);
-
-  useEffect(() => {
-    if (!currentStep || isComplete) return;
-    if (currentStep.trigger?.type === "event" && currentStep.trigger.name) {
-      const handler = () => {
-        goToNext({ resetTour: true });
-      };
-      window.addEventListener(currentStep.trigger.name, handler);
-      return () =>
-        window.removeEventListener(currentStep.trigger.name, handler);
-    }
-  }, [currentStep, goToNext, isComplete]);
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("ap_onboarding_profile_saved", handler);
+      }
+    };
+  }, []);
 
   const [targetRect, setTargetRect] = useState(null);
 
@@ -291,37 +256,32 @@ export default function OnboardingProvider({ children }) {
   }, [currentStep, location.pathname]);
 
   const handlePrimary = useCallback(() => {
-    if (!currentStep) return;
-    if (currentStep.id === "welcome") {
-      goToNext();
-      return;
-    }
-    if (currentStep.id === "profile_bio") {
-      goToNext();
-      return;
-    }
-    if (currentStep.id === "profile_success") {
-      goToNext({ resetTour: true });
-      return;
-    }
+    if (!currentStep || stepLocked) return;
     if (currentStep.id === "tour_complete") {
       finishOnboarding();
       return;
     }
+    if (currentStep.id === "profile_saved") {
+      // Start tour: jump to first workouts step and navigate to /workouts.
+      const firstTourIndex = ONBOARDING_STEPS.findIndex(
+        (s) => s.id === "tour_workouts"
+      );
+      if (firstTourIndex !== -1) {
+        setStepLocked(true);
+        setPhase(ONBOARDING_PHASE_TOUR);
+        setStepIndex(firstTourIndex);
+        navigate("/workouts", { replace: true });
+        setTimeout(() => setStepLocked(false), 200);
+      }
+      return;
+    }
     goToNext();
-  }, [currentStep, finishOnboarding, goToNext]);
+  }, [currentStep, finishOnboarding, goToNext, navigate, stepLocked]);
 
   const handleSecondary = useCallback(() => {
-    if (!currentStep) return;
-    if (currentStep.id === "profile_bio") {
-      goToNext();
-      return;
-    }
-    if (currentStep.phase === ONBOARDING_PHASE_TOUR) {
-      skipTour();
-      return;
-    }
-  }, [currentStep, goToNext, skipTour]);
+    // Secondary actions (like skipping tour) are not used in the short flow.
+    return;
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -349,7 +309,10 @@ export default function OnboardingProvider({ children }) {
   );
 
   const active =
-    profileLoaded && profileNeedsOnboarding && !isComplete && !!currentStep;
+    profileLoaded &&
+    !isComplete &&
+    !!currentStep &&
+    (profileNeedsOnboarding || currentStep.phase === ONBOARDING_PHASE_TOUR);
 
   return (
     <OnboardingContext.Provider value={value}>

@@ -1312,6 +1312,7 @@ export default function ProfilePage() {
               ) : (
                 <>
                   <div
+                    data-onboarding="display-handle-block"
                     style={
                       isNewUserOnboarding
                         ? {
