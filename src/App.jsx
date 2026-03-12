@@ -58,6 +58,7 @@ import useNotifications from "./hooks/useNotifications";
 import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
 import InAppBanner from "./components/notifications/InAppBanner";
 import { useTheme } from "./context/ThemeContext";
+import OnboardingOverlay from "./components/onboarding/OnboardingOverlay";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -248,6 +249,10 @@ function AuthenticatedLayout({ session }) {
     navigate(link || "/friends");
   };
 
+  const isNewUser =
+    typeof window !== "undefined" &&
+    sessionStorage.getItem("armpal_needs_profile_setup") === "1";
+
   return (
     <>
       <InAppBanner
@@ -256,6 +261,7 @@ function AuthenticatedLayout({ session }) {
         onClick={handleBannerClick}
       />
       <AppContent />
+      <OnboardingOverlay isNewUser={isNewUser} />
     </>
   );
 }

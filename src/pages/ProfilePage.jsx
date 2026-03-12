@@ -944,6 +944,7 @@ export default function ProfilePage() {
       if (isNewUserOnboarding) {
         if (typeof window !== "undefined") {
           sessionStorage.removeItem(NEW_USER_PROFILE_FLAG);
+          window.dispatchEvent(new Event("ap_onboarding_profile_saved"));
         }
         setIsNewUserOnboarding(false);
         navigate("/", { replace: true });
