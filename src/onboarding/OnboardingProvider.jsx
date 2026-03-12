@@ -40,6 +40,7 @@ export default function OnboardingProvider({ children }) {
   const currentStep = ONBOARDING_STEPS[stepIndex] || null;
   const [stepLocked, setStepLocked] = useState(false);
   const navLockedRef = useRef(false);
+  const [tourStarted, setTourStarted] = useState(false);
 
   const isComplete = phase === "complete";
 
@@ -85,6 +86,7 @@ export default function OnboardingProvider({ children }) {
         if (!needs) {
           // Profile is complete: permanently disable onboarding regardless of localStorage.
           setPhase("complete");
+          setTourStarted(false);
           if (typeof window !== "undefined") {
             window.localStorage.setItem(STORAGE_COMPLETE, "true");
           }
@@ -264,21 +266,27 @@ export default function OnboardingProvider({ children }) {
       return;
     }
     if (currentStep.id === "profile_saved") {
+      if (tourStarted || navLockedRef.current) return;
+      setTourStarted(true);
       // Start tour: jump to first workouts step and navigate to /workouts.
       const firstTourIndex = ONBOARDING_STEPS.findIndex(
         (s) => s.id === "tour_workouts"
       );
       if (firstTourIndex !== -1) {
         setStepLocked(true);
+        navLockedRef.current = true;
         setPhase(ONBOARDING_PHASE_TOUR);
         setStepIndex(firstTourIndex);
         navigate("/workouts", { replace: true });
-        setTimeout(() => setStepLocked(false), 200);
+        setTimeout(() => {
+          setStepLocked(false);
+          navLockedRef.current = false;
+        }, 300);
       }
       return;
     }
     goToNext();
-  }, [currentStep, finishOnboarding, goToNext, navigate, stepLocked]);
+  }, [currentStep, finishOnboarding, goToNext, navigate, stepLocked, tourStarted]);
 
   const handleSecondary = useCallback(() => {
     if (!currentStep || stepLocked) return;
