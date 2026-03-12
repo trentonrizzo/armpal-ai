@@ -9,8 +9,21 @@ export const ONBOARDING_STEPS = [
     route: "/profile",
     target: null,
     title: "Welcome to ArmPal",
-    description: "Enter your name and handle, then tap Save to continue.",
+    description:
+      "Track your workouts, PRs, nutrition, and goals. Connect with friends and monitor your progress.",
+    type: "modal",
     trigger: { type: "button", action: "start_profile" },
+  },
+  {
+    id: "profile_intro",
+    phase: ONBOARDING_PHASE_SETUP,
+    route: "/profile",
+    target: null,
+    title: "Create your profile",
+    description:
+      "Create a name and handle to continue. The rest is optional. Tap Save to start the tour.",
+    type: "modal",
+    trigger: { type: "button", action: "start_profile_instructions" },
   },
   {
     id: "profile_edit",
