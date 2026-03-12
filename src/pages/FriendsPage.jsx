@@ -889,28 +889,30 @@ export default function FriendsPage() {
         {!showAddBox && successMsg && <p style={successStyle}>{successMsg}</p>}
       </section>
 
-      {/* GROUPS + FRIEND FINDER */}
-      <div style={gridRow}>
-        <button
-          type="button"
-          onClick={() => navigate("/groups")}
-          style={gridBtn}
-        >
-          <span>Groups</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate("/find-friends")}
-          style={gridBtn}
-        >
-          <span>Friend Finder</span>
-          {recommendedCount > 0 && (
-            <span style={gridBadge}>
-              {recommendedCount > 99 ? "99+" : recommendedCount}
-            </span>
-          )}
-        </button>
-      </div>
+      {/* GROUPS + FRIEND FINDER (temporarily disabled for App Store launch) */}
+      {false && (
+        <div style={gridRow}>
+          <button
+            type="button"
+            onClick={() => navigate("/groups")}
+            style={gridBtn}
+          >
+            <span>Groups</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/find-friends")}
+            style={gridBtn}
+          >
+            <span>Friend Finder</span>
+            {recommendedCount > 0 && (
+              <span style={gridBadge}>
+                {recommendedCount > 99 ? "99+" : recommendedCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* PENDING REQUESTS (friend_requests sent by me) */}
       {pendingRequests.length > 0 && (

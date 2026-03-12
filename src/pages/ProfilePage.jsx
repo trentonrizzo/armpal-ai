@@ -102,6 +102,9 @@ const DISCOVERY_INTERESTS = [
   "Other",
 ];
 
+// Feature flag: Discovery Profile UI (temporarily disabled)
+const DISCOVERY_PROFILE_ENABLED = false;
+
 // =================================================================================================
 // 3) SMALL UTILS
 // =================================================================================================
@@ -1412,87 +1415,89 @@ export default function ProfilePage() {
         </BigCard>
 
         {/* =========================================================================================
-            DISCOVERY PROFILE (Find Friends)
+            DISCOVERY PROFILE (Find Friends) — temporarily disabled
         ========================================================================================= */}
 
-        <BigCard>
-          <SectionTitle>Discovery Profile</SectionTitle>
-          <p style={{ fontSize: 14, color: COLORS.subtext, marginBottom: 16 }}>
-            Used for Find Friends. Age, location, and interests help others find you.
-          </p>
-          <FieldLabel>Age</FieldLabel>
-          <input
-            type="number"
-            min={1}
-            max={150}
-            value={discoveryAge}
-            onChange={(e) => setDiscoveryAge(e.target.value)}
-            placeholder="Optional"
-            style={{
-              width: "100%",
-              height: 56,
-              borderRadius: 18,
-              padding: "0 16px",
-              background: COLORS.surface2,
-              border: `1px solid ${COLORS.border2}`,
-              color: COLORS.text,
-              fontSize: 16,
-              boxSizing: "border-box",
-            }}
-          />
-          <div style={{ height: 12 }} />
-          <FieldLabel>City</FieldLabel>
-          <TextInput
-            value={discoveryCity}
-            onChange={(e) => setDiscoveryCity(e.target.value)}
-            placeholder="City"
-          />
-          <div style={{ height: 12 }} />
-          <FieldLabel>State</FieldLabel>
-          <TextInput
-            value={discoveryState}
-            onChange={(e) => setDiscoveryState(e.target.value)}
-            placeholder="State"
-          />
-          <div style={{ height: 16 }} />
-          <FieldLabel>Interests</FieldLabel>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-            {DISCOVERY_INTERESTS.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => toggleDiscoveryInterest(name)}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 999,
-                  border: `1px solid ${discoveryInterests.includes(name) ? COLORS.red : COLORS.border}`,
-                  background: discoveryInterests.includes(name) ? COLORS.red : COLORS.surface2,
-                  color: COLORS.text,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={saveDiscovery}
-            disabled={discoverySaving}
-            style={{
-              padding: "12px 20px",
-              borderRadius: 14,
-              border: "none",
-              background: COLORS.red,
-              color: COLORS.text,
-              fontWeight: 900,
-              cursor: discoverySaving ? "not-allowed" : "pointer",
-              opacity: discoverySaving ? 0.75 : 1,
-            }}
-          >
-            {discoverySaving ? "Saving…" : "Save"}
-          </button>
-        </BigCard>
+        {DISCOVERY_PROFILE_ENABLED && (
+          <BigCard>
+            <SectionTitle>Discovery Profile</SectionTitle>
+            <p style={{ fontSize: 14, color: COLORS.subtext, marginBottom: 16 }}>
+              Used for Find Friends. Age, location, and interests help others find you.
+            </p>
+            <FieldLabel>Age</FieldLabel>
+            <input
+              type="number"
+              min={1}
+              max={150}
+              value={discoveryAge}
+              onChange={(e) => setDiscoveryAge(e.target.value)}
+              placeholder="Optional"
+              style={{
+                width: "100%",
+                height: 56,
+                borderRadius: 18,
+                padding: "0 16px",
+                background: COLORS.surface2,
+                border: `1px solid ${COLORS.border2}`,
+                color: COLORS.text,
+                fontSize: 16,
+                boxSizing: "border-box",
+              }}
+            />
+            <div style={{ height: 12 }} />
+            <FieldLabel>City</FieldLabel>
+            <TextInput
+              value={discoveryCity}
+              onChange={(e) => setDiscoveryCity(e.target.value)}
+              placeholder="City"
+            />
+            <div style={{ height: 12 }} />
+            <FieldLabel>State</FieldLabel>
+            <TextInput
+              value={discoveryState}
+              onChange={(e) => setDiscoveryState(e.target.value)}
+              placeholder="State"
+            />
+            <div style={{ height: 16 }} />
+            <FieldLabel>Interests</FieldLabel>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {DISCOVERY_INTERESTS.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => toggleDiscoveryInterest(name)}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 999,
+                    border: `1px solid ${discoveryInterests.includes(name) ? COLORS.red : COLORS.border}`,
+                    background: discoveryInterests.includes(name) ? COLORS.red : COLORS.surface2,
+                    color: COLORS.text,
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={saveDiscovery}
+              disabled={discoverySaving}
+              style={{
+                padding: "12px 20px",
+                borderRadius: 14,
+                border: "none",
+                background: COLORS.red,
+                color: COLORS.text,
+                fontWeight: 900,
+                cursor: discoverySaving ? "not-allowed" : "pointer",
+                opacity: discoverySaving ? 0.75 : 1,
+              }}
+            >
+              {discoverySaving ? "Saving…" : "Save"}
+            </button>
+          </BigCard>
+        )}
 
         {/* =========================================================================================
             QUICK ACTIONS (REPLACE EVERYTHING ELSE)

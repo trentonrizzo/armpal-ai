@@ -1,7 +1,7 @@
 // src/pages/StrengthCalculator.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { supabase } from "../supabaseClient";
-import { checkUsageCap } from "../utils/usageLimits";
+import { AppContext } from "../context/AppContext";
 import { useToast } from "../components/ToastProvider";
 
 export default function StrengthCalculator() {
@@ -13,6 +13,7 @@ export default function StrengthCalculator() {
   const [capMessage, setCapMessage] = useState("");
 
   const toast = useToast();
+  const { createPR } = useContext(AppContext);
 
   // Rep multipliers
   const repMultipliers = {
@@ -84,53 +85,45 @@ export default function StrengthCalculator() {
     const trimmedName = liftName.trim();
     if (!trimmedName) {
       if (toast?.error) {
-        toast.error("Enter an exercise name.");
+        toast.error("Enter an exercise name");
       }
       return;
     }
 
     if (!oneRM) {
-      if (toast?.error) {
-        toast.error("Calculate a 1RM first.");
-      }
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      if (toast?.error) {
-        toast.error("Sign in to save PRs.");
-      }
+    if (!createPR) {
       return;
     }
 
     try {
-      const cap = await checkUsageCap(user.id, "prs");
-      if (!cap.allowed) {
-        setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
-        return;
-      }
-      setCapMessage("");
-
-      const cleanName = trimmedName.toLowerCase();
-
-      // Maintain existing PR table insert
-      await supabase.from("prs").insert({
-        user_id: user.id,
-        lift_name: cleanName,
-        weight: oneRM,
-      });
-
-      // New: log into PR records table for analytics/history
-      await supabase.from("pr_records").insert({
-        user_id: user.id,
-        exercise_name: trimmedName,
+      const payload = {
+        exercise: trimmedName,
         value: oneRM,
         type: "estimated_pr",
         source: "strength_calculator",
-      });
+      };
+
+      const today = new Date().toISOString().slice(0, 10);
+
+      // Reuse existing PR create logic (same table + caps)
+      const result = await createPR(
+        payload.exercise,
+        payload.value,
+        "lbs",
+        today,
+        1,
+        null
+      );
+
+      if (result && !result.success && result.cap) {
+        setCapMessage(`PR limit reached (${result.cap.limit}). Go Pro for more!`);
+        return;
+      }
+
+      setCapMessage("");
 
       setCurrentPR(oneRM);
 
