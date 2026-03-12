@@ -190,27 +190,26 @@ export default function OnboardingProvider({ children }) {
     navigate("/", { replace: true });
   }, [navigate]);
 
-  // After profile save event, unlock tour and jump to "profile_saved" step.
+  // Event-triggered steps (e.g., wait for profile save).
   useEffect(() => {
+    if (!currentStep || isComplete) return;
+    if (currentStep.trigger?.type !== "event" || !currentStep.trigger.name) {
+      return;
+    }
+
     const handler = () => {
-      setProfileNeedsOnboarding(false);
-      const savedIndex = ONBOARDING_STEPS.findIndex(
-        (s) => s.id === "profile_saved"
-      );
-      if (savedIndex !== -1) {
-        setPhase(ONBOARDING_PHASE_TOUR);
-        setStepIndex(savedIndex);
-      }
+      goToNext();
     };
+
     if (typeof window !== "undefined") {
-      window.addEventListener("ap_onboarding_profile_saved", handler);
+      window.addEventListener(currentStep.trigger.name, handler);
     }
     return () => {
       if (typeof window !== "undefined") {
-        window.removeEventListener("ap_onboarding_profile_saved", handler);
+        window.removeEventListener(currentStep.trigger.name, handler);
       }
     };
-  }, []);
+  }, [currentStep, goToNext, isComplete]);
 
   const [targetRect, setTargetRect] = useState(null);
 

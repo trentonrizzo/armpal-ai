@@ -40,7 +40,7 @@ export const ONBOARDING_STEPS = [
     target: "[data-onboarding='display-handle-block']",
     title: "Set your profile",
     description: "Enter your name and handle, then tap Save.",
-    trigger: null,
+    trigger: { type: "event", name: "ap_onboarding_profile_saved" },
   },
 
   // Phase 2 — App tour (only after profile saved)

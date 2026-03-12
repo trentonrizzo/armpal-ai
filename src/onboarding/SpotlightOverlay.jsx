@@ -215,22 +215,24 @@ export default function SpotlightOverlay({
                 {secondaryLabel}
               </button>
             )}
-            <button
-              type="button"
-              onClick={onPrimary}
-              style={{
-                flex: 1,
-                padding: "10px 12px",
-                borderRadius: 999,
-                border: "none",
-                background: "var(--accent)",
-                color: "#000",
-                fontWeight: 600,
-                fontSize: 14,
-              }}
-            >
-              {primaryLabel}
-            </button>
+            {step.id !== "profile_edit" && (
+              <button
+                type="button"
+                onClick={onPrimary}
+                style={{
+                  flex: 1,
+                  padding: "10px 12px",
+                  borderRadius: 999,
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "#000",
+                  fontWeight: 600,
+                  fontSize: 14,
+                }}
+              >
+                {primaryLabel}
+              </button>
+            )}
           </div>
         </div>
       </div>
