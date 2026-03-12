@@ -87,12 +87,39 @@ export default function OnboardingProvider({ children }) {
         setProfileLoaded(true);
 
         if (!needs) {
-          // Profile is complete: permanently disable onboarding regardless of localStorage.
-          setPhase("complete");
-          setTourStarted(false);
-          setSetupComplete(true);
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(STORAGE_COMPLETE, "true");
+          // Profile has name + handle. Only treat as full access if onboarding was explicitly completed (Skip/Finish tour).
+          const storedComplete =
+            typeof window !== "undefined" &&
+            window.localStorage.getItem(STORAGE_COMPLETE) === "true";
+          if (storedComplete) {
+            setPhase("complete");
+            setTourStarted(false);
+            setSetupComplete(true);
+          } else {
+            // Profile complete but onboarding not complete: resume at profile_saved or saved tour step.
+            setSetupComplete(true);
+            setTourStarted(false);
+            if (typeof window !== "undefined") {
+              const storedPhase =
+                window.localStorage.getItem(STORAGE_PHASE) ||
+                ONBOARDING_PHASE_SETUP;
+              const storedStep = window.localStorage.getItem(STORAGE_STEP);
+              const stepNum = storedStep != null ? parseInt(storedStep, 10) : NaN;
+              const safeIndex =
+                Number.isFinite(stepNum) &&
+                stepNum >= 0 &&
+                stepNum < ONBOARDING_STEPS.length
+                  ? stepNum
+                  : ONBOARDING_STEPS.findIndex((s) => s.id === "profile_saved");
+              setPhase(storedPhase);
+              setStepIndex(safeIndex >= 0 ? safeIndex : 0);
+            } else {
+              const savedIndex = ONBOARDING_STEPS.findIndex(
+                (s) => s.id === "profile_saved"
+              );
+              setPhase(ONBOARDING_PHASE_SETUP);
+              setStepIndex(savedIndex >= 0 ? savedIndex : 0);
+            }
           }
         } else {
           // Profile incomplete: always start onboarding from the first step for this user.
@@ -130,13 +157,13 @@ export default function OnboardingProvider({ children }) {
     };
   }, []);
 
-  // Persist in-progress step/phase only while onboarding is needed.
+  // Persist step/phase whenever onboarding is not complete (including profile_saved and tour).
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!profileNeedsOnboarding || isComplete) return;
+    if (isComplete) return;
     window.localStorage.setItem(STORAGE_PHASE, phase);
     window.localStorage.setItem(STORAGE_STEP, String(stepIndex));
-  }, [phase, stepIndex, profileNeedsOnboarding, isComplete]);
+  }, [phase, stepIndex, isComplete]);
 
   // Force route for onboarding steps when active.
   useEffect(() => {
@@ -246,14 +273,21 @@ export default function OnboardingProvider({ children }) {
     };
   }, [currentStep, goToNext, isComplete]);
 
-  // Specific handler for profile_edit → profile_saved transition
+  // Specific handler for profile_edit → profile_saved transition (set step directly so async setState does not block advance).
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const handleProfileSaved = () => {
       if (currentStep?.id !== "profile_edit") return;
+      const savedIndex = ONBOARDING_STEPS.findIndex(
+        (s) => s.id === "profile_saved"
+      );
+      if (savedIndex === -1) return;
       setSetupComplete(true);
-      goToNext();
+      setPhase(ONBOARDING_PHASE_SETUP);
+      setStepIndex(savedIndex);
+      window.localStorage.setItem(STORAGE_PHASE, ONBOARDING_PHASE_SETUP);
+      window.localStorage.setItem(STORAGE_STEP, String(savedIndex));
     };
 
     window.addEventListener(
@@ -268,7 +302,7 @@ export default function OnboardingProvider({ children }) {
         handleProfileSaved
       );
     };
-  }, [currentStep, goToNext]);
+  }, [currentStep]);
 
   // Safety: never show profile_saved if setup is not actually complete.
   useEffect(() => {
@@ -401,7 +435,9 @@ export default function OnboardingProvider({ children }) {
     profileLoaded &&
     !isComplete &&
     !!currentStep &&
-    (profileNeedsOnboarding || currentStep.phase === ONBOARDING_PHASE_TOUR);
+    (profileNeedsOnboarding ||
+      currentStep.phase === ONBOARDING_PHASE_TOUR ||
+      (phase === ONBOARDING_PHASE_SETUP && setupComplete));
 
   return (
     <OnboardingContext.Provider value={value}>
