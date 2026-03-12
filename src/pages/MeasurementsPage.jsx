@@ -272,34 +272,55 @@ export default function MeasurementsPage() {
     const trimmedNotes = (mNotes || "").trim();
     const notes = trimmedNotes || null;
 
-    if (editId) {
-      await updateMeasurement({
-        id: editId,
-        name: mName,
-        value: mValue,
-        unit: mUnit,
-        date: mDate,
-        notes,
-      });
-    } else {
-      const cap = await checkUsageCap(user.id, "measurements");
-      if (!cap.allowed) {
-        setCapMessage(`Measurement limit reached (${cap.limit}). Go Pro for more!`);
+    try {
+      let result;
+
+      if (editId) {
+        result = await updateMeasurement({
+          id: editId,
+          name: mName,
+          value: mValue,
+          unit: mUnit,
+          date: mDate,
+          notes,
+        });
+      } else {
+        const cap = await checkUsageCap(user.id, "measurements");
+        if (!cap.allowed) {
+          setCapMessage(`Measurement limit reached (${cap.limit}). Go Pro for more!`);
+          return;
+        }
+        setCapMessage("");
+        result = await addMeasurement({
+          userId: user.id,
+          name: mName,
+          value: mValue,
+          unit: mUnit,
+          date: mDate,
+          notes,
+        });
+      }
+
+      const error = result?.error;
+      if (error) {
+        console.error("Measurement save failed:", error);
+        if (toast?.error) {
+          toast.error(error.message || "Failed to save measurement");
+        }
         return;
       }
-      setCapMessage("");
-      await addMeasurement({
-        userId: user.id,
-        name: mName,
-        value: mValue,
-        unit: mUnit,
-        date: mDate,
-        notes,
-      });
-    }
 
-    await reloadMeasurements(user.id);
-    setModalOpen(false);
+      await reloadMeasurements(user.id);
+      setModalOpen(false);
+      if (toast?.success) {
+        toast.success("Saved");
+      }
+    } catch (error) {
+      console.error("Measurement save failed:", error);
+      if (toast?.error) {
+        toast.error(error.message || "Failed to save measurement");
+      }
+    }
   }
 
   async function confirmDeleteMeasurement() {

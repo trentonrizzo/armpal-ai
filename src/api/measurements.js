@@ -36,12 +36,7 @@ export async function addMeasurement({ userId, name, value, unit, date, notes })
     ])
     .select();
 
-  if (error) {
-    console.error("addMeasurement error:", error);
-    return null;
-  }
-
-  return data;
+  return { data, error };
 }
 
 // ----------------------------------------------------------
@@ -54,12 +49,7 @@ export async function updateMeasurement({ id, name, value, unit, date, notes }) 
     .eq("id", id)
     .select();
 
-  if (error) {
-    console.error("updateMeasurement error:", error);
-    return null;
-  }
-
-  return data;
+  return { data, error };
 }
 
 // ----------------------------------------------------------
