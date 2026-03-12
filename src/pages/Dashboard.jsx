@@ -21,7 +21,6 @@ import DashboardAISection from "../components/ai/DashboardAISection";
 import DashboardAIChat from "../components/ai/DashboardAIChat";
 import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
 import EmptyState from "../components/EmptyState";
-import DashboardCreditsCard from "../components/credits/DashboardCreditsCard";
 import { useProfileGate } from "../context/ProfileGateContext";
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -318,7 +317,6 @@ export default function Dashboard() {
     </span>
   )}
 </h1>
-          <DashboardCreditsCard />
           <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
             Track your progress. Crush your PRs. Stay locked in.
           </p>

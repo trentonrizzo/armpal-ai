@@ -261,9 +261,10 @@ function AppContent() {
         <Route path="/chat/:friendId" element={<ChatPage />} />
         <Route path="/enable-notifications" element={<EnableNotifications />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/credits" element={<CreditsPage />} />
-        <Route path="/redeem" element={<RedeemPage />} />
-        <Route path="/referrals" element={<ReferralsPage />} />
+        {/* Credits / Referral system temporarily disabled for MVP App Store release */}
+        <Route path="/credits" element={<Navigate to="/" replace />} />
+        <Route path="/redeem" element={<Navigate to="/" replace />} />
+        <Route path="/referrals" element={<Navigate to="/" replace />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
         <Route path="/pro" element={<ProUpgradePage />} />

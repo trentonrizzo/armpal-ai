@@ -70,69 +70,14 @@ export default function CreditsPage() {
     }
   }
 
+  // MVP App Store: Credits UI disabled. Placeholder only. Backend logic left intact for future re-enable.
   return (
     <div style={styles.wrap}>
       <button type="button" onClick={() => navigate(-1)} style={styles.backBtn}>
         ← Back
       </button>
       <h1 style={styles.title}>Credits</h1>
-
-      {loading ? (
-        <p style={styles.hint}>Loading…</p>
-      ) : (
-        <>
-          <div style={styles.summary}>
-            <div style={styles.summaryRow}>
-              <span style={styles.summaryLabel}>Current balance</span>
-              <span style={styles.summaryVal}>{balance.toLocaleString()}</span>
-            </div>
-            <div style={styles.summaryRow}>
-              <span style={styles.summaryLabel}>Lifetime earned</span>
-              <span style={styles.summaryVal}>{lifetimeEarned.toLocaleString()}</span>
-            </div>
-          </div>
-
-          <div style={styles.actions}>
-            <Link to="/redeem" style={styles.actionBtn}>Redeem</Link>
-            <Link to="/referrals" style={styles.actionBtn}>Invite Friends</Link>
-          </div>
-
-          <h2 style={styles.sectionTitle}>Refer a friend</h2>
-          <p style={styles.referralExplanation}>
-            Share your link. When friends sign up and go Pro, you earn credits.
-          </p>
-          <div style={styles.linkBox}>
-            <input readOnly value={referralLink} style={styles.linkInput} aria-label="Referral link" />
-          </div>
-          <button type="button" onClick={copyReferralLink} disabled={!referralLink} style={styles.copyBtn}>
-            Copy referral link
-          </button>
-
-          <h2 style={styles.sectionTitle}>History</h2>
-          <ul style={styles.list}>
-            {transactions.length === 0 ? (
-              <li style={styles.empty}>No transactions yet.</li>
-            ) : (
-              transactions.map((tx) => {
-                const isPositive = tx.amount > 0;
-                return (
-                  <li key={tx.id} style={styles.row}>
-                    <div style={styles.rowLeft}>
-                      <span style={{ ...styles.amount, color: isPositive ? "var(--green, #22c55e)" : "var(--red, #ef4444)" }}>
-                        {isPositive ? "+" : ""}{tx.amount}
-                      </span>
-                      <span style={styles.reason}>{tx.reason || "—"}</span>
-                    </div>
-                    <span style={styles.date}>
-                      {tx.created_at ? new Date(tx.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                    </span>
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </>
-      )}
+      <p style={styles.placeholder}>Credits system coming in a future update.</p>
     </div>
   );
 }
@@ -149,6 +94,7 @@ const styles = {
     cursor: "pointer",
   },
   title: { fontSize: 22, fontWeight: 800, margin: "0 0 20px", color: "var(--text)" },
+  placeholder: { color: "var(--text-dim)", fontSize: 16, margin: "20px 0 0" },
   hint: { color: "var(--text-dim)", fontSize: 14 },
   summary: {
     background: "var(--card-2)",
