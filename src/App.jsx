@@ -23,6 +23,7 @@ import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
+import Support from "./pages/Support";
 import FriendProfile from "./pages/FriendProfile";
 import ResetPassword from "./pages/ResetPassword";
 import CreditsPage from "./pages/CreditsPage";
@@ -420,6 +421,7 @@ export default function App() {
         <Routes>
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/support" element={<Support />} />
           <Route
             path="*"
             element={

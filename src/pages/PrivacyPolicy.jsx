@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 export default function PrivacyPolicy() {
   return (
@@ -142,6 +143,22 @@ export default function PrivacyPolicy() {
           </a>
           .
         </p>
+        <Link
+          to="/support"
+          style={{
+            display: "inline-block",
+            marginTop: 14,
+            padding: "12px 20px",
+            borderRadius: 12,
+            background: "var(--accent)",
+            color: "#fff",
+            fontWeight: 700,
+            textDecoration: "none",
+            border: "1px solid var(--border)",
+          }}
+        >
+          Contact Support
+        </Link>
       </div>
     </div>
   );

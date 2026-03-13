@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 export default function TermsOfService() {
   return (
@@ -147,6 +148,23 @@ export default function TermsOfService() {
           >
             support@armpal.app
           </a>
+          .
+        </p>
+        <p style={{ marginTop: 14, fontSize: 14, lineHeight: 1.6 }}>
+          For support contact{" "}
+          <a
+            href="mailto:support@armpal.app"
+            style={{ color: "var(--accent)", textDecoration: "underline" }}
+          >
+            support@armpal.app
+          </a>{" "}
+          or visit{" "}
+          <Link
+            to="/support"
+            style={{ color: "var(--accent)", textDecoration: "underline" }}
+          >
+            /support
+          </Link>
           .
         </p>
       </div>
