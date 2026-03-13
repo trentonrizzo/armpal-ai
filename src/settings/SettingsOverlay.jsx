@@ -314,7 +314,7 @@ export default function SettingsOverlay({ open, onClose }) {
             )}
           </div>
 
-          {/* LEGAL (always visible button) */}
+          {/* LEGAL (always visible button, very obvious) */}
           <div
             onClick={() => setLegalModal("menu")}
             style={{
@@ -322,12 +322,34 @@ export default function SettingsOverlay({ open, onClose }) {
               padding: 14,
               borderRadius: 14,
               background: "var(--card-2)",
-              border: "1px solid var(--border)",
+              border: "2px solid var(--accent)",
               cursor: "pointer",
             }}
           >
-            <div style={{ fontWeight: 800 }}>Legal</div>
-            <div style={{ fontSize: 12, opacity: 0.6 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 900, letterSpacing: 1 }}>LEGAL</div>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: "3px 8px",
+                  borderRadius: 999,
+                  background: "var(--accent)",
+                  color: "#000",
+                  textTransform: "uppercase",
+                }}
+              >
+                Important
+              </span>
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
               Privacy Policy &amp; Terms &amp; Conditions
             </div>
           </div>
