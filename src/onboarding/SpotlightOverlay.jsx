@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 const OVERLAY_ROOT_ID = "armpal-onboarding-root";
@@ -21,14 +21,73 @@ export default function SpotlightOverlay({
   onPrimary,
   onSecondary,
 }) {
-  const root = ensureOverlayRoot();
+  const [viewportOffset, setViewportOffset] = useState({ top: 0, height: 0 });
 
-  const cardPositionStyle = useMemo(() => ({
-    position: "fixed",
-    left: "50%",
-    transform: "translateX(-50%)",
-    bottom: "calc(env(safe-area-inset-bottom) + 88px)",
-  }), []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function handleViewportChange() {
+      const vv = window.visualViewport;
+      if (vv) {
+        setViewportOffset({ top: vv.offsetTop || 0, height: vv.height || 0 });
+      } else {
+        setViewportOffset({ top: 0, height: window.innerHeight || 0 });
+      }
+    }
+
+    handleViewportChange();
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", handleViewportChange);
+      vv.addEventListener("scroll", handleViewportChange);
+    } else {
+      window.addEventListener("resize", handleViewportChange);
+      window.addEventListener("scroll", handleViewportChange);
+    }
+    return () => {
+      if (vv) {
+        vv.removeEventListener("resize", handleViewportChange);
+        vv.removeEventListener("scroll", handleViewportChange);
+      } else {
+        window.removeEventListener("resize", handleViewportChange);
+        window.removeEventListener("scroll", handleViewportChange);
+      }
+    };
+  }, []);
+
+  const root = ensureOverlayRoot();
+  const showFullScreenCard = !targetRect;
+
+  const cardPositionStyle = useMemo(() => {
+    const padding = 16;
+    const viewportTop = viewportOffset.top || 0;
+    const viewportHeight = viewportOffset.height || window.innerHeight || 0;
+    const bottomSafe = viewportTop + viewportHeight - padding;
+
+    if (!targetRect || showFullScreenCard) {
+      return {
+        left: "50%",
+        transform: "translateX(-50%)",
+        bottom: viewportHeight > 0 ? viewportHeight * 0.12 : 80,
+      };
+    }
+
+    const desiredTop = targetRect.bottom + 16;
+    const cardHeightEstimate = 160;
+    if (desiredTop + cardHeightEstimate > bottomSafe) {
+      return {
+        left: "50%",
+        transform: "translateX(-50%)",
+        bottom: viewportHeight > 0 ? viewportHeight * 0.12 : 80,
+      };
+    }
+
+    return {
+      left: "50%",
+      transform: "translateX(-50%)",
+      top: Math.max(desiredTop, viewportTop + padding),
+    };
+  }, [targetRect, viewportOffset, showFullScreenCard]);
 
   if (!active || !root || !step) return null;
 
@@ -100,10 +159,15 @@ export default function SpotlightOverlay({
 
       <div
         style={{
+          position: "fixed",
           zIndex: 9999,
           maxWidth: 420,
           width: "calc(100% - 32px)",
+          margin: "0 auto",
           ...cardPositionStyle,
+          left: "50%",
+          transform: "translateX(-50%)",
+          bottom: "calc(env(safe-area-inset-bottom) + 88px)",
           pointerEvents: "auto",
         }}
       >

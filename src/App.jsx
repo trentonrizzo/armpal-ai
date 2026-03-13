@@ -21,6 +21,8 @@ import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import FriendProfile from "./pages/FriendProfile";
 import ResetPassword from "./pages/ResetPassword";
 import CreditsPage from "./pages/CreditsPage";
@@ -414,16 +416,29 @@ export default function App() {
   return (
     <>
       <RuntimeSplash show={showSplash} />
-      {!ready ? null : !session ? (
-        <AuthPage initialMode={location?.pathname === "/signup" ? "signup" : undefined} />
-      ) : (
-        <AppProvider>
-          <ToastProvider>
-            <ProfileGateProvider>
-              <AuthenticatedLayout session={session} />
-            </ProfileGateProvider>
-          </ToastProvider>
-        </AppProvider>
+      {!ready ? null : (
+        <Routes>
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route
+            path="*"
+            element={
+              !session ? (
+                <AuthPage
+                  initialMode={location?.pathname === "/signup" ? "signup" : undefined}
+                />
+              ) : (
+                <AppProvider>
+                  <ToastProvider>
+                    <ProfileGateProvider>
+                      <AuthenticatedLayout session={session} />
+                    </ProfileGateProvider>
+                  </ToastProvider>
+                </AppProvider>
+              )
+            }
+          />
+        </Routes>
       )}
     </>
   );

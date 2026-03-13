@@ -52,6 +52,7 @@ export default function SettingsOverlay({ open, onClose }) {
   const [user, setUser] = useState(null);
   const [section, setSection] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [legalModal, setLegalModal] = useState(null); // "menu" | "privacy" | "terms" | null
 
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -313,6 +314,24 @@ export default function SettingsOverlay({ open, onClose }) {
             )}
           </div>
 
+          {/* LEGAL (always visible button) */}
+          <div
+            onClick={() => setLegalModal("menu")}
+            style={{
+              marginTop: 14,
+              padding: 14,
+              borderRadius: 14,
+              background: "var(--card-2)",
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Legal</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              Privacy Policy &amp; Terms &amp; Conditions
+            </div>
+          </div>
+
           <div style={{ flex: 1 }} />
 
           <button
@@ -390,6 +409,393 @@ export default function SettingsOverlay({ open, onClose }) {
                 Log out
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* LEGAL MODAL(S) */}
+      {legalModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={() => setLegalModal(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "90%",
+              maxWidth: legalModal === "menu" ? 360 : 420,
+              maxHeight: "80vh",
+              background: "var(--card)",
+              borderRadius: 18,
+              padding: 18,
+              border: "1px solid var(--border)",
+              overflowY: legalModal === "menu" ? "visible" : "auto",
+            }}
+          >
+            {legalModal === "menu" && (
+              <>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>
+                    Legal
+                  </h3>
+                  <button
+                    onClick={() => setLegalModal(null)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--text)",
+                      fontSize: 16,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <p style={{ fontSize: 13, opacity: 0.8, marginBottom: 14 }}>
+                  Read how ArmPal handles your data and the terms of using the app.
+                </p>
+
+                <button
+                  onClick={() => setLegalModal("privacy")}
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: "var(--card-2)",
+                    color: "var(--text)",
+                    fontWeight: 700,
+                    marginBottom: 10,
+                    textAlign: "left",
+                  }}
+                >
+                  Privacy Policy
+                </button>
+
+                <button
+                  onClick={() => setLegalModal("terms")}
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: "var(--card-2)",
+                    color: "var(--text)",
+                    fontWeight: 700,
+                    textAlign: "left",
+                  }}
+                >
+                  Terms &amp; Conditions
+                </button>
+              </>
+            )}
+
+            {legalModal === "privacy" && (
+              <>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <button
+                    onClick={() => setLegalModal("menu")}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--text)",
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={() => setLegalModal(null)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--text)",
+                      fontSize: 16,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 8px" }}>
+                  Privacy Policy
+                </h3>
+                <p style={{ fontSize: 12, opacity: 0.7, marginBottom: 12 }}>
+                  Last updated: {new Date().toLocaleDateString()}
+                </p>
+
+                <p style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 10 }}>
+                  ArmPal helps you track your training and connect with other athletes.
+                  We only collect the data we need to run the app and improve it, and
+                  we never sell your personal data.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Data We Collect
+                </h4>
+                <ul style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                  <li>
+                    <strong>Account &amp; profile info</strong>: email, handle, display
+                    name, avatar, and basic settings tied to your account.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    <strong>Workout data</strong>: workouts you log, exercises, PRs,
+                    goals, and related training history.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    <strong>Messages &amp; social activity</strong>: direct messages,
+                    group chats, and friend connections needed to power social features.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    <strong>Uploaded progress images</strong>: photos or media you
+                    choose to upload for tracking progress.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    <strong>Measurements</strong>: body measurements and other metrics
+                    you log to follow your progress over time.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    <strong>Subscription / payment status</strong>: information about
+                    whether you have a Pro subscription and related billing status (we
+                    rely on third‑party processors for payments).
+                  </li>
+                </ul>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  How We Store Data
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  ArmPal uses <strong>Supabase</strong> as our primary backend. Your
+                  account, workout history, messages, measurements, and other app data
+                  are stored in Supabase databases and storage running on modern cloud
+                  infrastructure.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  How We Use Data
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  We use your data to operate and improve ArmPal, including:
+                </p>
+                <ul style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                  <li>Creating and maintaining your account and profile.</li>
+                  <li style={{ marginTop: 6 }}>
+                    Powering training tools like logs, analytics, and recommendations.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    Enabling messaging, friends, and other social features.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    Sending optional notifications about activity related to your
+                    account.
+                  </li>
+                </ul>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  No Sale of Personal Data
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  We <strong>do not sell</strong> your personal data. We may work with
+                  service providers (for infrastructure, analytics, or payments) who
+                  process data on our behalf under contract, but they do not own or sell
+                  your data.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Security Measures
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  We use reasonable technical and organizational measures to protect
+                  your information, including Supabase authentication, access controls,
+                  and HTTPS where supported. No system is perfectly secure, but we work
+                  to keep your data safe.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Your Choices &amp; Control
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  You control what you share with ArmPal. You decide which workouts,
+                  measurements, images, and messages to create or delete. If you want to
+                  request account deletion or have questions about your data, contact us
+                  using the email below.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Contact
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  For privacy questions, reach us at{" "}
+                  <a
+                    href="mailto:support@armpal.app"
+                    style={{ color: "var(--accent)", textDecoration: "underline" }}
+                  >
+                    support@armpal.app
+                  </a>
+                  .
+                </p>
+              </>
+            )}
+
+            {legalModal === "terms" && (
+              <>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <button
+                    onClick={() => setLegalModal("menu")}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--text)",
+                      fontSize: 13,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={() => setLegalModal(null)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "var(--text)",
+                      fontSize: 16,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 8px" }}>
+                  Terms &amp; Conditions
+                </h3>
+                <p style={{ fontSize: 12, opacity: 0.7, marginBottom: 12 }}>
+                  Last updated: {new Date().toLocaleDateString()}
+                </p>
+
+                <p style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 10 }}>
+                  By using ArmPal, you agree to these Terms &amp; Conditions. If you do
+                  not agree, please stop using the app.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Fitness &amp; Information Only
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  ArmPal is a fitness tracking and informational tool. It does not
+                  provide medical advice, diagnosis, or treatment. Always consult a
+                  qualified healthcare professional before starting or changing any
+                  training program.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Your Responsibility &amp; Injury Risk
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  You are solely responsible for your training decisions and for
+                  evaluating the risks of any exercise. Strength training and
+                  armwrestling carry a risk of injury. You agree that you use ArmPal at
+                  your own risk and that you are responsible for stopping or adjusting
+                  any activity that feels unsafe.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  No Guarantee of Results
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  We do not guarantee any specific performance outcomes, strength gains,
+                  rankings, or competition results. Progress depends on many factors
+                  outside our control, including your consistency, health, and overall
+                  lifestyle.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  App Provided &quot;As-Is&quot;
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  ArmPal is provided on an &quot;as-is&quot; and &quot;as-available&quot;
+                  basis. To the fullest extent permitted by law, we disclaim all
+                  warranties, express or implied, including implied warranties of
+                  merchantability, fitness for a particular purpose, and
+                  non‑infringement.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Misuse &amp; Account Termination
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  Abusive, harassing, or illegal use of ArmPal is not allowed. We may
+                  suspend or terminate accounts that:
+                </p>
+                <ul style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                  <li>Violate these Terms or other posted policies.</li>
+                  <li style={{ marginTop: 6 }}>
+                    Engage in harassment, hate, or threats toward other users.
+                  </li>
+                  <li style={{ marginTop: 6 }}>
+                    Attempt to hack, reverse engineer, or otherwise attack the service.
+                  </li>
+                </ul>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Limitation of Liability
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  To the maximum extent permitted by law, ArmPal and its creators are
+                  not liable for any indirect, incidental, special, consequential, or
+                  punitive damages, or any loss of profits or data, arising from your
+                  use of the app, even if we have been advised of the possibility of
+                  such damages.
+                </p>
+
+                <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>
+                  Contact
+                </h4>
+                <p style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  If you have questions about these Terms &amp; Conditions, contact us
+                  at{" "}
+                  <a
+                    href="mailto:support@armpal.app"
+                    style={{ color: "var(--accent)", textDecoration: "underline" }}
+                  >
+                    support@armpal.app
+                  </a>
+                  .
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}
