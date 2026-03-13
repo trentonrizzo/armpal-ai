@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { enablePush, disablePush } from "../lib/push";
 import { useTheme } from "../context/ThemeContext";
@@ -48,6 +49,11 @@ function TogglePill({ on, disabled, onClick }) {
 
 export default function SettingsOverlay({ open, onClose }) {
   const { theme, setTheme, accent, setAccent } = useTheme();
+
+  function closeLegalAndOverlay() {
+    setLegalModal(null);
+    onClose();
+  }
 
   const [user, setUser] = useState(null);
   const [section, setSection] = useState(null);
@@ -493,9 +499,11 @@ export default function SettingsOverlay({ open, onClose }) {
                   Read how ArmPal handles your data and the terms of using the app.
                 </p>
 
-                <button
-                  onClick={() => setLegalModal("privacy")}
+                <Link
+                  to="/privacy"
+                  onClick={closeLegalAndOverlay}
                   style={{
+                    display: "block",
                     width: "100%",
                     padding: 12,
                     borderRadius: 12,
@@ -505,14 +513,37 @@ export default function SettingsOverlay({ open, onClose }) {
                     fontWeight: 700,
                     marginBottom: 10,
                     textAlign: "left",
+                    textDecoration: "none",
                   }}
                 >
                   Privacy Policy
-                </button>
+                </Link>
 
-                <button
-                  onClick={() => setLegalModal("terms")}
+                <Link
+                  to="/terms"
+                  onClick={closeLegalAndOverlay}
                   style={{
+                    display: "block",
+                    width: "100%",
+                    padding: 12,
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: "var(--card-2)",
+                    color: "var(--text)",
+                    fontWeight: 700,
+                    marginBottom: 10,
+                    textAlign: "left",
+                    textDecoration: "none",
+                  }}
+                >
+                  Terms of Service
+                </Link>
+
+                <Link
+                  to="/support"
+                  onClick={closeLegalAndOverlay}
+                  style={{
+                    display: "block",
                     width: "100%",
                     padding: 12,
                     borderRadius: 12,
@@ -521,10 +552,11 @@ export default function SettingsOverlay({ open, onClose }) {
                     color: "var(--text)",
                     fontWeight: 700,
                     textAlign: "left",
+                    textDecoration: "none",
                   }}
                 >
-                  Terms &amp; Conditions
-                </button>
+                  Contact Support
+                </Link>
               </>
             )}
 

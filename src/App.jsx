@@ -419,6 +419,7 @@ export default function App() {
       <RuntimeSplash show={showSplash} />
       {!ready ? null : (
         <Routes>
+          {/* Public legal/support — must be before catch-all so they load without auth */}
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/support" element={<Support />} />

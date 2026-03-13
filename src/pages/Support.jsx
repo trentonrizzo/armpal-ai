@@ -83,7 +83,7 @@ export default function Support() {
             color: "var(--text)",
           }}
         >
-          Support request sent. We&apos;ll respond soon.
+          Support request sent successfully.
         </div>
       )}
 
