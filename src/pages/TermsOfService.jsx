@@ -6,8 +6,12 @@ export default function TermsOfService() {
   const navigate = useNavigate();
   const location = useLocation();
   const backToSettingsLegal = () => {
-    navigate("/profile", { state: { openSettings: true, openLegal: true } });
+    navigate("/profile", {
+      replace: true,
+      state: { openSettings: true, openLegal: true },
+    });
   };
+
   return (
     <div
       style={{
@@ -16,38 +20,52 @@ export default function TermsOfService() {
         margin: "0 auto",
       }}
     >
-      <button
-        type="button"
-        onClick={() =>
-          location.state?.fromSettingsLegal ? backToSettingsLegal() : navigate("/profile")
-        }
+      <div
         style={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          background: "rgba(255,255,255,0.2)",
-          border: "none",
-          color: "var(--text)",
+          position: "relative",
+          padding: "4px 52px 12px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          cursor: "pointer",
         }}
       >
-        <FaArrowLeft size={18} />
-      </button>
-      <h1
-        style={{
-          fontSize: 24,
-          fontWeight: 800,
-          marginBottom: 12,
-        }}
-      >
-        Terms of Service
-      </h1>
+        <button
+          type="button"
+          onClick={() =>
+            location.state?.fromSettingsLegal
+              ? backToSettingsLegal()
+              : navigate("/profile", { replace: true })
+          }
+          style={{
+            position: "absolute",
+            left: 12,
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            background: "rgba(255,255,255,0.2)",
+            border: "none",
+            color: "var(--text)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <FaArrowLeft size={18} />
+        </button>
+        <h1
+          style={{
+            fontSize: 24,
+            fontWeight: 800,
+            margin: 0,
+            textAlign: "center",
+          }}
+        >
+          Terms of Service
+        </h1>
+      </div>
 
       <p style={{ fontSize: 13, opacity: 0.8, marginBottom: 16 }}>
         Last updated: {new Date().toLocaleDateString()}

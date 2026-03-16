@@ -7,7 +7,10 @@ export default function Support() {
   const navigate = useNavigate();
   const location = useLocation();
   const backToSettingsLegal = () => {
-    navigate("/profile", { state: { openSettings: true, openLegal: true } });
+    navigate("/profile", {
+      replace: true,
+      state: { openSettings: true, openLegal: true },
+    });
   };
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
@@ -65,38 +68,52 @@ export default function Support() {
         color: "var(--text)",
       }}
     >
-      <button
-        type="button"
-        onClick={() =>
-          location.state?.fromSettingsLegal ? backToSettingsLegal() : navigate("/profile")
-        }
+      <div
         style={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          background: "rgba(255,255,255,0.2)",
-          border: "none",
-          color: "var(--text)",
+          position: "relative",
+          padding: "4px 52px 12px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          cursor: "pointer",
         }}
       >
-        <FaArrowLeft size={18} />
-      </button>
-      <h1
-        style={{
-          fontSize: 24,
-          fontWeight: 800,
-          marginBottom: 8,
-        }}
-      >
-        Contact Support
-      </h1>
+        <button
+          type="button"
+          onClick={() =>
+            location.state?.fromSettingsLegal
+              ? backToSettingsLegal()
+              : navigate("/profile", { replace: true })
+          }
+          style={{
+            position: "absolute",
+            left: 12,
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            background: "rgba(255,255,255,0.2)",
+            border: "none",
+            color: "var(--text)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <FaArrowLeft size={18} />
+        </button>
+        <h1
+          style={{
+            fontSize: 24,
+            fontWeight: 800,
+            margin: 0,
+            textAlign: "center",
+          }}
+        >
+          Contact Support
+        </h1>
+      </div>
       <p style={{ fontSize: 14, opacity: 0.8, marginBottom: 20 }}>
         Send us a message and we&apos;ll get back to you as soon as we can.
       </p>
