@@ -37,23 +37,23 @@ export default function Support() {
     setSuccess(false);
     setError(null);
 
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id ?? null;
-
-    const { error: insertError } = await supabase.from("support_requests").insert({
-      email: trimmedEmail,
-      subject: trimmedSubject,
-      message: trimmedMessage,
-      user_id: userId,
-      created_at: new Date().toISOString(),
-    });
+    const { error: insertError } = await supabase
+      .from("support_requests")
+      .insert([
+        {
+          email: trimmedEmail,
+          subject: trimmedSubject,
+          message: trimmedMessage,
+        },
+      ]);
 
     setLoading(false);
     if (insertError) {
-      setError(insertError.message || "Failed to send. Try again.");
+      setError("Something went wrong. Please try again.");
       return;
     }
     setSuccess(true);
+    setEmail("");
     setSubject("");
     setMessage("");
   }
@@ -129,7 +129,7 @@ export default function Support() {
             color: "var(--text)",
           }}
         >
-          Support request sent successfully.
+          Support request sent successfully. We'll respond as soon as possible.
         </div>
       )}
 
