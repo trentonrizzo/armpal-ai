@@ -663,6 +663,13 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Reopen Settings overlay with Legal section when returning from legal detail pages
+  useEffect(() => {
+    if (location.state?.openSettings && location.state?.openLegal) {
+      setSettingsOpen(true);
+    }
+  }, [location.state?.openSettings, location.state?.openLegal]);
+
   const [user, setUser] = useState(null);
 
   // -----------------------------------------------------------------------------------------------
@@ -1692,7 +1699,11 @@ export default function ProfilePage() {
 
 
       {/* SETTINGS OVERLAY */}
-      <SettingsOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+      <SettingsOverlay
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        initialLegalOpen={!!(location.state?.openSettings && location.state?.openLegal)}
+      >
         <div style={{ padding: 16 }}>
           <div style={{ fontWeight: 900, marginBottom: 10 }}>Profile Visibility</div>
           <button

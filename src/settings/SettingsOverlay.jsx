@@ -47,7 +47,7 @@ function TogglePill({ on, disabled, onClick }) {
    SETTINGS OVERLAY
 ============================ */
 
-export default function SettingsOverlay({ open, onClose }) {
+export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const { theme, setTheme, accent, setAccent } = useTheme();
 
   function closeLegalAndOverlay() {
@@ -63,6 +63,12 @@ export default function SettingsOverlay({ open, onClose }) {
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
+
+  useEffect(() => {
+    if (open && initialLegalOpen) {
+      setLegalModal("menu");
+    }
+  }, [open, initialLegalOpen]);
 
   useEffect(() => {
     if (open && typeof window !== "undefined") {
@@ -501,6 +507,7 @@ export default function SettingsOverlay({ open, onClose }) {
 
                 <Link
                   to="/privacy"
+                  state={{ fromSettingsLegal: true }}
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -521,6 +528,7 @@ export default function SettingsOverlay({ open, onClose }) {
 
                 <Link
                   to="/terms"
+                  state={{ fromSettingsLegal: true }}
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -541,6 +549,7 @@ export default function SettingsOverlay({ open, onClose }) {
 
                 <Link
                   to="/support"
+                  state={{ fromSettingsLegal: true }}
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",

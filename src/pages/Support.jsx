@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { FaArrowLeft } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 
 export default function Support() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const backToSettingsLegal = () => {
+    navigate("/profile", { state: { openSettings: true, openLegal: true } });
+  };
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -62,10 +66,27 @@ export default function Support() {
       }}
     >
       <button
-        onClick={() => navigate("/legal")}
-        className="absolute top-4 left-4 flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/10 transition text-[var(--accent)]"
+        type="button"
+        onClick={() =>
+          location.state?.fromSettingsLegal ? backToSettingsLegal() : navigate("/profile")
+        }
+        style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          background: "rgba(255,255,255,0.2)",
+          border: "none",
+          color: "var(--text)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+        }}
       >
-        <ArrowLeft size={22} />
+        <FaArrowLeft size={18} />
       </button>
       <h1
         style={{
