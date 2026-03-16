@@ -13,8 +13,8 @@ export default function PrivacyPolicy() {
       }}
     >
       <button
-        onClick={() => navigate(-1)}
-        className="absolute top-4 left-4 p-2 rounded-lg hover:bg-white/10 transition"
+        onClick={() => navigate("/legal")}
+        className="absolute top-4 left-4 flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/10 transition text-[var(--accent)]"
       >
         <ArrowLeft size={22} />
       </button>
