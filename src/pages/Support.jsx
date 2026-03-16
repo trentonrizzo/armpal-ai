@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { supabase } from "../supabaseClient";
 
 export default function Support() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -59,6 +61,12 @@ export default function Support() {
         color: "var(--text)",
       }}
     >
+      <button
+        onClick={() => navigate(-1)}
+        className="absolute top-4 left-4 p-2 rounded-lg hover:bg-white/10 transition"
+      >
+        <ArrowLeft size={22} />
+      </button>
       <h1
         style={{
           fontSize: 24,

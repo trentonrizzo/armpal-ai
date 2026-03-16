@@ -1,7 +1,9 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 export default function TermsOfService() {
+  const navigate = useNavigate();
   return (
     <div
       style={{
@@ -10,6 +12,12 @@ export default function TermsOfService() {
         margin: "0 auto",
       }}
     >
+      <button
+        onClick={() => navigate(-1)}
+        className="absolute top-4 left-4 p-2 rounded-lg hover:bg-white/10 transition"
+      >
+        <ArrowLeft size={22} />
+      </button>
       <h1
         style={{
           fontSize: 24,
