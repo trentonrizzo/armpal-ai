@@ -713,14 +713,9 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   Contact
                 </h4>
                 <p style={{ fontSize: 13, lineHeight: 1.6 }}>
-                  For privacy questions, reach us at{" "}
-                  <a
-                    href="mailto:support@armpal.app"
-                    style={{ color: "var(--accent)", textDecoration: "underline" }}
-                  >
-                    support@armpal.app
-                  </a>
-                  .
+                  For privacy questions, use{" "}
+                  <span style={{ fontWeight: 700 }}>Contact Support</span> in the Legal
+                  section to reach the team.
                 </p>
               </>
             )}
@@ -847,15 +842,9 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   Contact
                 </h4>
                 <p style={{ fontSize: 13, lineHeight: 1.6 }}>
-                  If you have questions about these Terms &amp; Conditions, contact us
-                  at{" "}
-                  <a
-                    href="mailto:support@armpal.app"
-                    style={{ color: "var(--accent)", textDecoration: "underline" }}
-                  >
-                    support@armpal.app
-                  </a>
-                  .
+                  If you have questions about these Terms &amp; Conditions, use{" "}
+                  <span style={{ fontWeight: 700 }}>Contact Support</span> in the Legal
+                  section to reach the team.
                 </p>
               </>
             )}

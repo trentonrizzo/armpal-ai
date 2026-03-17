@@ -188,24 +188,11 @@ export default function TermsOfService() {
           Contact
         </h2>
         <p style={{ marginTop: 8 }}>
-          If you have questions about these Terms of Service, contact us at{" "}
-          <a
-            href="mailto:support@armpal.app"
-            style={{ color: "var(--accent)", textDecoration: "underline" }}
-          >
-            support@armpal.app
-          </a>
-          .
+          If you have questions about these Terms of Service, you can reach us
+          through the in‑app support form.
         </p>
         <p style={{ marginTop: 14, fontSize: 14, lineHeight: 1.6 }}>
-          For support contact{" "}
-          <a
-            href="mailto:support@armpal.app"
-            style={{ color: "var(--accent)", textDecoration: "underline" }}
-          >
-            support@armpal.app
-          </a>{" "}
-          or visit{" "}
+          For support, visit{" "}
           <Link
             to="/support"
             style={{ color: "var(--accent)", textDecoration: "underline" }}

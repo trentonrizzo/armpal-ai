@@ -181,14 +181,7 @@ export default function PrivacyPolicy() {
         </h2>
         <p style={{ marginTop: 8 }}>
           If you have questions about this Privacy Policy or how we handle your
-          data, contact us at{" "}
-          <a
-            href="mailto:support@armpal.app"
-            style={{ color: "var(--accent)", textDecoration: "underline" }}
-          >
-            support@armpal.app
-          </a>
-          .
+          data, you can reach us through the in‑app support form.
         </p>
         <Link
           to="/support"

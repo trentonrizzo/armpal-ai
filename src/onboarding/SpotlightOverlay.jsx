@@ -91,20 +91,23 @@ export default function SpotlightOverlay({
 
   if (!active || !root || !step) return null;
 
-  const radius = targetRect?.radius ?? 16;
+  const radius = targetRect?.radius ?? 20;
+
+  const SPOTLIGHT_PADDING = 12;
 
   const spotlightStyle = targetRect
     ? {
-      position: "fixed",
-      top: targetRect.top,
-      left: targetRect.left,
-      width: targetRect.width,
-      height: targetRect.height,
-      borderRadius: radius,
-      boxShadow: "0 0 0 9999px rgba(0,0,0,0.68)",
-      pointerEvents: "none",
-      transition: "all 0.25s ease",
-    }
+        position: "fixed",
+        top: Math.max(targetRect.top - SPOTLIGHT_PADDING, 0),
+        left: Math.max(targetRect.left - SPOTLIGHT_PADDING, 0),
+        width: targetRect.width + SPOTLIGHT_PADDING * 2,
+        height: targetRect.height + SPOTLIGHT_PADDING * 2,
+        borderRadius: radius,
+        boxShadow: "0 0 0 9999px rgba(0,0,0,0.68)",
+        pointerEvents: "none",
+        transition: "all 0.25s ease",
+        boxSizing: "border-box",
+      }
     : null;
 
   const isModalStep = step.type === "modal";
@@ -155,7 +158,49 @@ export default function SpotlightOverlay({
         }}
       />
 
-      {spotlightStyle && <div style={spotlightStyle} />}
+      {spotlightStyle && (
+        <>
+          <div
+            style={{
+              ...spotlightStyle,
+              boxShadow: "0 0 0 9999px rgba(0,0,0,0.7)",
+            }}
+          />
+          <div
+            style={{
+              position: "fixed",
+              top: spotlightStyle.top,
+              left: spotlightStyle.left,
+              width: spotlightStyle.width,
+              height: spotlightStyle.height,
+              borderRadius: spotlightStyle.borderRadius,
+              border: "2px solid rgba(255,255,255,0.85)",
+              boxShadow:
+                "0 0 24px rgba(255,255,255,0.45), 0 0 60px rgba(255,0,80,0.55)",
+              pointerEvents: "none",
+              animation: "apSpotlightPulse 1.4s ease-in-out infinite",
+            }}
+          />
+          <style>
+            {`
+              @keyframes apSpotlightPulse {
+                0% {
+                  transform: translateZ(0) scale(1);
+                  opacity: 0.9;
+                }
+                50% {
+                  transform: translateZ(0) scale(1.04);
+                  opacity: 1;
+                }
+                100% {
+                  transform: translateZ(0) scale(1);
+                  opacity: 0.9;
+                }
+              }
+            `}
+          </style>
+        </>
+      )}
 
       <div
         style={{
