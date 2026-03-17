@@ -44,15 +44,21 @@ export default function OnboardingProvider({ children }) {
   const routeRequestRef = useRef(null);
   const routeAdvanceRef = useRef(null);
   const [setupComplete, setSetupComplete] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const isComplete = phase === "complete";
 
-  // Load profile and decide if onboarding is required (display_name and handle missing).
+  // Load profile and decide if onboarding is required (display_name and handle missing),
+  // but short‑circuit entirely if the account has an explicit onboarding_completed flag.
   useEffect(() => {
     let cancelled = false;
 
-    async function loadForUser(userId) {
+    async function loadForUser(user) {
       if (cancelled) return;
+
+      const userId = user?.id || null;
+      const onboardingCompletedFromAuth =
+        !!user?.user_metadata?.onboarding_completed;
 
       if (!userId) {
         setProfileNeedsOnboarding(false);
@@ -64,7 +70,7 @@ export default function OnboardingProvider({ children }) {
       try {
         const { data: profile, error } = await supabase
           .from("profiles")
-          .select("display_name, handle")
+          .select("display_name, handle, onboarding_completed")
           .eq("id", userId)
           .maybeSingle();
 
@@ -72,6 +78,24 @@ export default function OnboardingProvider({ children }) {
 
         if (error && error.code !== "PGRST116") {
           throw error;
+        }
+
+        const onboardingCompletedFromProfile =
+          profile?.onboarding_completed === true;
+        const onboardingCompleted =
+          onboardingCompletedFromAuth || onboardingCompletedFromProfile;
+
+        if (onboardingCompleted) {
+          // This account has explicitly completed onboarding; never show it again.
+          setProfileNeedsOnboarding(false);
+          setProfileLoaded(true);
+          setPhase("complete");
+          setStepIndex(0);
+          setSetupComplete(true);
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(STORAGE_COMPLETE, "true");
+          }
+          return;
         }
 
         const hasDisplayName =
@@ -142,14 +166,18 @@ export default function OnboardingProvider({ children }) {
     }
 
     // Initial load (handles page refresh / session restore).
-    supabase.auth
-      .getUser()
-      .then(({ data }) => loadForUser(data?.user?.id || null));
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data?.user?.id || null);
+      loadForUser(data?.user || null);
+    });
 
     // React to login/logout.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      loadForUser(session?.user?.id || null);
-    });
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setCurrentUserId(session?.user?.id || null);
+        loadForUser(session?.user || null);
+      }
+    );
 
     return () => {
       cancelled = true;
@@ -234,6 +262,27 @@ export default function OnboardingProvider({ children }) {
     [currentStep, stepLocked, setupComplete]
   );
 
+  const markOnboardingComplete = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_COMPLETE, "true");
+    }
+
+    // Persist on account: user metadata + profile column (if present).
+    supabase.auth
+      .updateUser({
+        data: { onboarding_completed: true },
+      })
+      .catch(() => {});
+
+    if (currentUserId) {
+      supabase
+        .from("profiles")
+        .update({ onboarding_completed: true })
+        .eq("id", currentUserId)
+        .catch(() => {});
+    }
+  }, [currentUserId]);
+
   const skipTour = useCallback(() => {
     const completeIndex = ONBOARDING_STEPS.findIndex(
       (s) => s.id === "tour_complete"
@@ -244,15 +293,14 @@ export default function OnboardingProvider({ children }) {
     } else {
       setPhase("complete");
     }
-  }, []);
+    markOnboardingComplete();
+  }, [markOnboardingComplete]);
 
   const finishOnboarding = useCallback(() => {
     setPhase("complete");
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_COMPLETE, "true");
-    }
+    markOnboardingComplete();
     navigate("/", { replace: true });
-  }, [navigate]);
+  }, [markOnboardingComplete, navigate]);
 
   // Generic event-triggered steps (excluding profile_edit which has a custom handler)
   useEffect(() => {
@@ -345,13 +393,15 @@ export default function OnboardingProvider({ children }) {
       return;
     }
 
+    let cancelled = false;
+
     const updateRect = () => {
+      if (cancelled) return;
       const el =
         typeof document !== "undefined"
           ? document.querySelector(currentStep.target)
           : null;
       if (!el) {
-        setTargetRect(null);
         return;
       }
       const rect = el.getBoundingClientRect();
@@ -360,14 +410,33 @@ export default function OnboardingProvider({ children }) {
         left: rect.left,
         width: rect.width,
         height: rect.height,
+        bottom: rect.bottom,
+        right: rect.right,
         radius: 16,
       });
     };
 
-    updateRect();
+    // Poll quickly on step/route change so the spotlight appears as soon
+    // the DOM node mounts (avoids "wiggle to appear" or delayed highlights).
+    let rafId;
+    let attempts = 0;
+    const tryUpdate = () => {
+      if (cancelled) return;
+      attempts += 1;
+      updateRect();
+      if (attempts < 20) {
+        rafId = window.requestAnimationFrame(tryUpdate);
+      }
+    };
+    tryUpdate();
+
     window.addEventListener("resize", updateRect);
     window.addEventListener("scroll", updateRect, true);
     return () => {
+      cancelled = true;
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
       window.removeEventListener("resize", updateRect);
       window.removeEventListener("scroll", updateRect, true);
     };

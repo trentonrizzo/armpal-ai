@@ -140,14 +140,16 @@ export default function SpotlightOverlay({
   const secondaryLabel = step.allowSkip ? "Skip Tour" : "";
 
   return createPortal(
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 9998,
-            pointerEvents: isModalStep ? "auto" : "none",
-          }}
-        >
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        // Extremely high z-index so onboarding always renders
+        // above nav, overlays, sheets, and most modals.
+        zIndex: 10000000,
+        pointerEvents: isModalStep ? "auto" : "none",
+      }}
+    >
       <div
         style={{
           position: "fixed",
@@ -164,6 +166,7 @@ export default function SpotlightOverlay({
             style={{
               ...spotlightStyle,
               boxShadow: "0 0 0 9999px rgba(0,0,0,0.7)",
+              zIndex: 10000000,
             }}
           />
           <div
@@ -179,6 +182,7 @@ export default function SpotlightOverlay({
                 "0 0 24px rgba(255,255,255,0.45), 0 0 60px rgba(255,0,80,0.55)",
               pointerEvents: "none",
               animation: "apSpotlightPulse 1.4s ease-in-out infinite",
+              zIndex: 10000001,
             }}
           />
           <style>
@@ -205,7 +209,7 @@ export default function SpotlightOverlay({
       <div
         style={{
           position: "fixed",
-          zIndex: 9999,
+          zIndex: 10000002,
           maxWidth: 420,
           width: "calc(100% - 32px)",
           margin: "0 auto",
