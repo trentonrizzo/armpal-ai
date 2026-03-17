@@ -184,63 +184,71 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
 
           {/* APPEARANCE */}
           <div
-            onClick={() =>
-              setSection(section === "appearance" ? null : "appearance")
-            }
+            data-onboarding="settings-panel"
             style={{
               marginTop: 18,
-              padding: 14,
-              borderRadius: 14,
-              background: "var(--card-2)",
-              border: "1px solid var(--border)",
-              cursor: "pointer",
+              padding: 4,
+              borderRadius: 18,
             }}
           >
-            <div style={{ fontWeight: 800 }}>Appearance</div>
-            <div style={{ fontSize: 12, opacity: 0.6 }}>
-              {theme === "light" ? "Light mode" : "Dark mode"}
-            </div>
-
-            {section === "appearance" && (
-              <div style={{ marginTop: 12 }}>
-                <TogglePill
-                  on={theme === "light"}
-                  disabled={false}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTheme();
-                  }}
-                />
-
-                {/* ACCENT COLORS */}
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  {["red", "blue", "purple", "green"].map((c) => (
-                    <button
-                      key={c}
-                      onClick={(e) => {
-                    e.stopPropagation();
-                    setAccent(c);
-                    // Persist per-account accent; ignore errors.
-                    updateProfile({ theme_accent: c }).catch(() => {});
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: 8,
-                        borderRadius: 10,
-                        border:
-                          accent === c
-                            ? "2px solid var(--accent)"
-                            : "1px solid var(--border)",
-                        background: "var(--card)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
+            <div
+              onClick={() =>
+                setSection(section === "appearance" ? null : "appearance")
+              }
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                background: "var(--card-2)",
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>Appearance</div>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                {theme === "light" ? "Light mode" : "Dark mode"}
               </div>
-            )}
+
+              {section === "appearance" && (
+                <div style={{ marginTop: 12 }}>
+                  <TogglePill
+                    on={theme === "light"}
+                    disabled={false}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleTheme();
+                    }}
+                  />
+
+                  {/* ACCENT COLORS */}
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    {["red", "blue", "purple", "green"].map((c) => (
+                      <button
+                        key={c}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAccent(c);
+                          // Persist per-account accent; ignore errors.
+                          updateProfile({ theme_accent: c }).catch(() => {});
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: 8,
+                          borderRadius: 10,
+                          border:
+                            accent === c
+                              ? "2px solid var(--accent)"
+                              : "1px solid var(--border)",
+                          background: "var(--card)",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* NOTIFICATIONS */}
@@ -318,6 +326,9 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     background: "var(--card)",
                     border: "1px solid var(--border)",
                     fontWeight: 700,
+                    color: "var(--text)",
+                    textAlign: "center",
+                    marginTop: 6,
                   }}
                 >
                   Send password reset email

@@ -1192,6 +1192,7 @@ export default function ProfilePage() {
           </div>
 
           <button
+            data-onboarding="settings-button"
             onClick={() => setSettingsOpen(true)}
             style={styles.iconCircleBtn}
             aria-label="Settings"

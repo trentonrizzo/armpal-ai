@@ -90,7 +90,7 @@ const BottomNav = () => {
       {/* Profile */}
       <NavLink to="/profile" className="nav-item">
         {({ isActive }) => (
-          <div className="icon-container" data-onboarding="settings-button">
+          <div className="icon-container">
             {isActive && <div className="active-glow" />}
             <FaUserAlt className="nav-icon" />
             <span className={`nav-label ${isActive ? "active-label" : ""}`}>
