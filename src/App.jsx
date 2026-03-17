@@ -151,6 +151,7 @@ function AuthenticatedLayout({ session }) {
   const navigate = useNavigate();
   const { setTheme, setAccent } = useTheme();
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [onboardingLoaded, setOnboardingLoaded] = useState(false);
 
   const matchChat = location.pathname.match(/^\/chat\/([^/]+)/);
   const currentChatFriendId = matchChat?.[1] ?? null;
@@ -223,12 +224,18 @@ function AuthenticatedLayout({ session }) {
     };
   }, [session?.user?.id, setTheme, setAccent]);
 
-  // New-signup only: redirect to Profile once so they can set handle + display name
+  // Load onboarding completion state once per authenticated user
   useEffect(() => {
-    if (!session?.user?.id || typeof window === "undefined") return;
+    if (!session?.user?.id) {
+      setOnboardingCompleted(false);
+      setOnboardingLoaded(true);
+      return;
+    }
 
-    // If this account has already completed onboarding, never force /profile.
-    (async () => {
+    let cancelled = false;
+    setOnboardingLoaded(false);
+
+    async function loadOnboardingState() {
       try {
         const user = session.user;
         const completedFromMeta = !!user.user_metadata?.onboarding_completed;
@@ -245,35 +252,50 @@ function AuthenticatedLayout({ session }) {
           }
         }
 
+        if (cancelled) return;
+
         const completed = completedFromMeta || completedFromProfile;
         setOnboardingCompleted(completed);
 
-        const needsProfileFlag =
-          typeof window !== "undefined" &&
-          sessionStorage.getItem("armpal_needs_profile_setup") === "1";
-
-        if (completed) {
+        if (completed && typeof window !== "undefined") {
+          const needsProfileFlag =
+            sessionStorage.getItem("armpal_needs_profile_setup") === "1";
           if (needsProfileFlag) {
             sessionStorage.removeItem("armpal_needs_profile_setup");
           }
-          return;
-        }
-
-        if (needsProfileFlag && location.pathname !== "/profile") {
-          navigate("/profile", { replace: true });
         }
       } catch {
-        // On failure, fall back to existing behavior only when the flag is set.
-        if (
-          typeof window !== "undefined" &&
-          sessionStorage.getItem("armpal_needs_profile_setup") === "1" &&
-          location.pathname !== "/profile"
-        ) {
-          navigate("/profile", { replace: true });
+        if (cancelled) return;
+        // On failure, err on the side of not blocking navigation by profile redirects.
+        setOnboardingCompleted(false);
+      } finally {
+        if (!cancelled) {
+          setOnboardingLoaded(true);
         }
       }
-    })();
-  }, [session?.user, location.pathname, navigate]);
+    }
+
+    loadOnboardingState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user]);
+
+  // New-signup only: redirect to Profile once so they can set handle + display name,
+  // but never before onboardingLoaded is true, and never after onboardingCompleted.
+  useEffect(() => {
+    if (!session?.user?.id || typeof window === "undefined") return;
+    if (!onboardingLoaded) return;
+    if (onboardingCompleted) return;
+
+    const needsProfileFlag =
+      sessionStorage.getItem("armpal_needs_profile_setup") === "1";
+
+    if (needsProfileFlag && location.pathname !== "/profile") {
+      navigate("/profile", { replace: true });
+    }
+  }, [session?.user?.id, onboardingLoaded, onboardingCompleted, location.pathname, navigate]);
 
   const handleBannerDismiss = (id) => {
     setNotifQueue((prev) => prev.filter((n) => n.id !== id));
