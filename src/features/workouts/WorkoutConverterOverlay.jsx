@@ -308,8 +308,8 @@ export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, 
                   </li>
                 ))}
               </ul>
-              <button style={PRIMARY_BTN} onClick={() => { onClose(); navigate("/pro"); }}>
-                Upgrade to Pro
+              <button style={PRIMARY_BTN} onClick={onClose}>
+                Upgrade to Pro (Coming Soon)
               </button>
             </div>
           </div>

@@ -401,6 +401,7 @@ export default function ChatPage() {
   // ----------------------------------------------------------
 
   const [user, setUser] = useState(null);
+  const [isPro, setIsPro] = useState(false);
   const [friend, setFriend] = useState(null);
   const [group, setGroup] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
@@ -685,6 +686,21 @@ export default function ChatPage() {
       mounted = false;
     };
   }, [friendId, groupId, isGroup]);
+
+  // Load Pro status once for the current user (used for video gating).
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("is_pro")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!error) {
+        setIsPro(!!profile?.is_pro);
+      }
+    })();
+  }, [user?.id]);
 
   // ============================================================
   // REALTIME INSERTS
@@ -990,6 +1006,16 @@ export default function ChatPage() {
     setError("");
 
     try {
+      const sizeMb = file.size ? file.size / (1024 * 1024) : 0;
+      const { data: allowed, error: limitErr } = await supabase.rpc(
+        "check_media_limits",
+        { user_id: user.id, media_type: "photo", file_size_mb: sizeMb }
+      );
+      if (limitErr || allowed === false) {
+        toast.error("Photo limit reached. Upgrade to Pro (coming soon) to send more media.");
+        return;
+      }
+
       const path = imagePath(chatIdForStorage, user.id, file.name);
 
       const { error: uploadErr } = await supabase.storage
@@ -1026,6 +1052,11 @@ export default function ChatPage() {
         });
         notifyRecipient(friendId, "New Message", "Sent an image", "/messages");
       }
+
+      await supabase.rpc("increment_media_count", {
+        user_id: user.id,
+        media_type: "photo",
+      }).catch(() => {});
     } catch (e) {
       const msgImg = e?.message || "Image send failed";
       setError(msgImg);
@@ -1040,6 +1071,12 @@ export default function ChatPage() {
   async function sendVideo(file) {
     if (!user?.id || !file) return;
 
+    // Free users cannot send video; show upgrade overlay instead.
+    if (!isPro) {
+      toast.error("Video uploads are Pro only. Upgrade to Pro (coming soon).");
+      return;
+    }
+
     // Validate BEFORE upload for instant feedback
     if (file.size > MAX_VIDEO_BYTES || (file.type && !ALLOWED_VIDEO_TYPES.has(file.type))) {
       toast.error("Video must be under 25MB");
@@ -1049,6 +1086,16 @@ export default function ChatPage() {
     setError("");
 
     try {
+      const sizeMb = file.size ? file.size / (1024 * 1024) : 0;
+      const { data: allowed, error: limitErr } = await supabase.rpc(
+        "check_media_limits",
+        { user_id: user.id, media_type: "video", file_size_mb: sizeMb }
+      );
+      if (limitErr || allowed === false) {
+        toast.error("Video limit reached. Upgrade to Pro (coming soon) to send more media.");
+        return;
+      }
+
       const path = videoPath(chatIdForStorage, user.id, file.name);
 
       const contentType = file.type || "video/mp4";
@@ -1090,6 +1137,11 @@ export default function ChatPage() {
         });
         notifyRecipient(friendId, "New Message", "Sent a video", "/messages");
       }
+
+      await supabase.rpc("increment_media_count", {
+        user_id: user.id,
+        media_type: "video",
+      }).catch(() => {});
     } catch (e) {
       const msgVid = e?.message || "Video send failed";
       setError(msgVid);
@@ -1218,6 +1270,17 @@ export default function ChatPage() {
         return;
       }
 
+      const sizeMb = recordedBlob.size ? recordedBlob.size / (1024 * 1024) : 0;
+      const { data: allowed, error: limitErr } = await supabase.rpc(
+        "check_media_limits",
+        { user_id: user.id, media_type: "audio", file_size_mb: sizeMb }
+      );
+      if (limitErr || allowed === false) {
+        setSendingAudio(false);
+        toast.error("Voice limit reached. Upgrade to Pro (coming soon) to send more.");
+        return;
+      }
+
       const path = audioPath(chatIdForStorage, user.id, ext);
 
       const { error: uploadErr } = await supabase.storage
@@ -1265,6 +1328,11 @@ export default function ChatPage() {
       setRecordedBlob(null);
       setRecordDuration(0);
       setSendingAudio(false);
+
+      await supabase.rpc("increment_media_count", {
+        user_id: user.id,
+        media_type: "audio",
+      }).catch(() => {});
     } catch (e) {
       const msgAud = e?.message || "Audio send failed";
       setError(msgAud);
@@ -1631,6 +1699,7 @@ export default function ChatPage() {
               hidden
               type="file"
               accept="video/*"
+              disabled={!isPro}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = null;

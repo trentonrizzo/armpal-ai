@@ -353,6 +353,15 @@ export default function SmartFoodScanOverlay({
         const ext = compressed.type === "image/png" ? "png" : "jpg";
         path = `${userId}/${selectedDate}/${rand}.${ext}`;
 
+        const sizeMb = compressed.size ? compressed.size / (1024 * 1024) : 0;
+        const { data: allowed, error: limitErr } = await supabase.rpc(
+          "check_media_limits",
+          { user_id: userId, media_type: "photo", file_size_mb: sizeMb }
+        );
+        if (limitErr || allowed === false) {
+          throw new Error("Photo limit reached. Upgrade to Pro (coming soon) to scan more meals.");
+        }
+
         const { error: upErr } = await supabase.storage
           .from("food_scan_images")
           .upload(path, compressed, {
@@ -553,9 +562,9 @@ export default function SmartFoodScanOverlay({
               </ul>
               <button
                 style={PRIMARY_BTN}
-                onClick={() => { onClose(); navigate("/pro"); }}
+                onClick={onClose}
               >
-                Upgrade to Pro
+                Upgrade to Pro (Coming Soon)
               </button>
             </div>
           </div>

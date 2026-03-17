@@ -9,24 +9,16 @@ import { supabase } from "../supabaseClient";
 const PRO_PRICE_DISPLAY = "$7.99";
 
 const FREE_FEATURES = [
-  "Strength calculator",
-  "Up to 5 workouts saved",
-  "Up to 5 bodyweight logs",
-  "Up to 5 measurement logs",
-  "Up to 5 PR logs",
-  "Unlimited nutrition entries",
-  "Profiles + friends",
+  "No video uploads",
+  "20 photos/day (max 5MB)",
+  "10 voice messages/day (30s)",
 ];
 
 const PRO_FEATURES = [
-  "AI Chat — up to 25 responses/day",
-  "AI Workout Converter — up to 10 uses/day",
-  "AI Food Scan — up to 10 scans/day",
-  "Up to 1,000 saved workouts",
-  "Up to 1,000 bodyweight logs",
-  "Up to 1,000 measurement logs",
-  "Up to 1,000 PR logs",
-  "Up to 1,000 nutrition entries/day",
+  "10 videos/day (max 25MB)",
+  "100 photos/day (max 10MB)",
+  "50 voice messages/day (2 min)",
+  "Full access to all features",
 ];
 
 function FeatureCheck({ text, accent }) {
@@ -42,44 +34,6 @@ export default function ProUpgradePage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  const startCheckout = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user?.id) {
-        setError("Please sign in to upgrade.");
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetch(`${window.location.origin}/api/create-checkout-session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Checkout failed");
-      }
-
-      const data = await res.json();
-      if (data?.url) {
-        window.location.href = data.url;
-        return;
-      }
-      throw new Error("No checkout URL returned");
-    } catch (err) {
-      console.error(err);
-      setError(err.message || "Something went wrong. Try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div style={S.page}>
@@ -143,13 +97,15 @@ export default function ProUpgradePage() {
 
         <button
           type="button"
-          onClick={startCheckout}
+          onClick={() => {
+            setError("In-app Pro upgrade is coming soon.");
+            setLoading(false);
+          }}
           disabled={loading}
           style={{ ...S.ctaBtn, opacity: loading ? 0.8 : 1, cursor: loading ? "not-allowed" : "pointer" }}
         >
-          {loading ? "Redirecting…" : "Upgrade to Pro"}
+          Upgrade to Pro (Coming Soon)
         </button>
-        <p style={S.ctaFooter}>Secure checkout via Stripe</p>
       </div>
     </div>
   );

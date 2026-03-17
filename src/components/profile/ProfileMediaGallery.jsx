@@ -149,6 +149,16 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
     if (media.length >= MAX_PHOTOS) return;
 
     try {
+      const sizeMb = file.size ? file.size / (1024 * 1024) : 0;
+      const { data: allowed, error: limitErr } = await supabase.rpc(
+        "check_media_limits",
+        { user_id: userId, media_type: "photo", file_size_mb: sizeMb }
+      );
+      if (limitErr || allowed === false) {
+        alert("Photo limit reached. Upgrade to Pro (coming soon) to add more media.");
+        return;
+      }
+
       setUploading(true);
 
       const fileExt = (file.name || "jpg").split(".").pop();
@@ -196,6 +206,11 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
 
       setMedia(Array.isArray(data) ? data : []);
       haptic(10);
+
+      await supabase.rpc("increment_media_count", {
+        user_id: userId,
+        media_type: "photo",
+      }).catch(() => {});
     } catch (e) {
       console.error("ProfileMedia upload failed:", e);
       alert("Upload failed. Try again.");

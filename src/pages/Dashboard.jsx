@@ -4,7 +4,6 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { Link, useNavigate } from "react-router-dom";
-import StripeTestButton from "../components/StripeTestButton";
 import { useToast } from "../components/ToastProvider";
 
 // NEW FRIENDS ICON
@@ -366,7 +365,7 @@ export default function Dashboard() {
         </Link>
       </header>
 
-      {/* Upgrade to Pro — only when NOT Pro (uses existing isPro from profiles) */}
+      {/* Upgrade to Pro — informational only for now */}
       {!isPro && (
         <Link
           to="/pro"
@@ -384,7 +383,7 @@ export default function Dashboard() {
             textDecoration: "none",
           }}
         >
-          Upgrade to Pro
+          Upgrade to Pro (Coming Soon)
         </Link>
       )}
 
