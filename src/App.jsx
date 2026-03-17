@@ -150,6 +150,7 @@ function AuthenticatedLayout({ session }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { setTheme, setAccent } = useTheme();
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
 
   const matchChat = location.pathname.match(/^\/chat\/([^/]+)/);
   const currentChatFriendId = matchChat?.[1] ?? null;
@@ -225,10 +226,54 @@ function AuthenticatedLayout({ session }) {
   // New-signup only: redirect to Profile once so they can set handle + display name
   useEffect(() => {
     if (!session?.user?.id || typeof window === "undefined") return;
-    if (sessionStorage.getItem("armpal_needs_profile_setup") === "1" && location.pathname !== "/profile") {
-      navigate("/profile", { replace: true });
-    }
-  }, [session?.user?.id, location.pathname, navigate]);
+
+    // If this account has already completed onboarding, never force /profile.
+    (async () => {
+      try {
+        const user = session.user;
+        const completedFromMeta = !!user.user_metadata?.onboarding_completed;
+
+        let completedFromProfile = false;
+        if (!completedFromMeta) {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("onboarding_completed")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (!error && data?.onboarding_completed === true) {
+            completedFromProfile = true;
+          }
+        }
+
+        const completed = completedFromMeta || completedFromProfile;
+        setOnboardingCompleted(completed);
+
+        const needsProfileFlag =
+          typeof window !== "undefined" &&
+          sessionStorage.getItem("armpal_needs_profile_setup") === "1";
+
+        if (completed) {
+          if (needsProfileFlag) {
+            sessionStorage.removeItem("armpal_needs_profile_setup");
+          }
+          return;
+        }
+
+        if (needsProfileFlag && location.pathname !== "/profile") {
+          navigate("/profile", { replace: true });
+        }
+      } catch {
+        // On failure, fall back to existing behavior only when the flag is set.
+        if (
+          typeof window !== "undefined" &&
+          sessionStorage.getItem("armpal_needs_profile_setup") === "1" &&
+          location.pathname !== "/profile"
+        ) {
+          navigate("/profile", { replace: true });
+        }
+      }
+    })();
+  }, [session?.user, location.pathname, navigate]);
 
   const handleBannerDismiss = (id) => {
     setNotifQueue((prev) => prev.filter((n) => n.id !== id));
