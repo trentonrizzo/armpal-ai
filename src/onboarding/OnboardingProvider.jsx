@@ -16,10 +16,6 @@ import {
   ONBOARDING_STEPS,
 } from "./onboardingSteps";
 
-const STORAGE_PHASE = "armpal_onboarding_phase";
-const STORAGE_STEP = "armpal_onboarding_step";
-const STORAGE_COMPLETE = "armpal_onboarding_complete";
-
 const OnboardingContext = createContext(null);
 
 export function useOnboarding() {
@@ -45,11 +41,12 @@ export default function OnboardingProvider({ children }) {
   const routeAdvanceRef = useRef(null);
   const [setupComplete, setSetupComplete] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
 
   const isComplete = phase === "complete";
 
-  // Load profile and decide if onboarding is required (display_name and handle missing),
-  // but short‑circuit entirely if the account has an explicit onboarding_completed flag.
+  // Load profile and decide if onboarding is required, but short‑circuit entirely
+  // if the account has an explicit onboarding_completed flag (database is source of truth).
   useEffect(() => {
     let cancelled = false;
 
@@ -80,24 +77,6 @@ export default function OnboardingProvider({ children }) {
           throw error;
         }
 
-        const onboardingCompletedFromProfile =
-          profile?.onboarding_completed === true;
-        const onboardingCompleted =
-          onboardingCompletedFromAuth || onboardingCompletedFromProfile;
-
-        if (onboardingCompleted) {
-          // This account has explicitly completed onboarding; never show it again.
-          setProfileNeedsOnboarding(false);
-          setProfileLoaded(true);
-          setPhase("complete");
-          setStepIndex(0);
-          setSetupComplete(true);
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(STORAGE_COMPLETE, "true");
-          }
-          return;
-        }
-
         const hasDisplayName =
           typeof profile?.display_name === "string" &&
           profile.display_name.trim().length >= 2;
@@ -105,56 +84,48 @@ export default function OnboardingProvider({ children }) {
           typeof profile?.handle === "string" &&
           profile.handle.trim().length >= 3;
 
-        const needs = !(hasDisplayName && hasHandle);
+        const onboardingCompletedFromProfile =
+          profile?.onboarding_completed === true;
+        const onboardingCompleted =
+          onboardingCompletedFromAuth || onboardingCompletedFromProfile;
 
-        setProfileNeedsOnboarding(needs);
-        setProfileLoaded(true);
-
-        if (!needs) {
-          // Profile has name + handle. Only treat as full access if onboarding was explicitly completed (Skip/Finish tour).
-          const storedComplete =
-            typeof window !== "undefined" &&
-            window.localStorage.getItem(STORAGE_COMPLETE) === "true";
-          if (storedComplete) {
-            setPhase("complete");
-            setTourStarted(false);
-            setSetupComplete(true);
-          } else {
-            // Profile complete but onboarding not complete: resume at profile_saved or saved tour step.
-            setSetupComplete(true);
-            setTourStarted(false);
-            if (typeof window !== "undefined") {
-              const storedPhase =
-                window.localStorage.getItem(STORAGE_PHASE) ||
-                ONBOARDING_PHASE_SETUP;
-              const storedStep = window.localStorage.getItem(STORAGE_STEP);
-              const stepNum = storedStep != null ? parseInt(storedStep, 10) : NaN;
-              const safeIndex =
-                Number.isFinite(stepNum) &&
-                stepNum >= 0 &&
-                stepNum < ONBOARDING_STEPS.length
-                  ? stepNum
-                  : ONBOARDING_STEPS.findIndex((s) => s.id === "profile_saved");
-              setPhase(storedPhase);
-              setStepIndex(safeIndex >= 0 ? safeIndex : 0);
-            } else {
-              const savedIndex = ONBOARDING_STEPS.findIndex(
-                (s) => s.id === "profile_saved"
-              );
-              setPhase(ONBOARDING_PHASE_SETUP);
-              setStepIndex(savedIndex >= 0 ? savedIndex : 0);
-            }
-          }
-        } else {
-          // Profile incomplete: always start onboarding from the first step for this user.
-          setPhase(ONBOARDING_PHASE_SETUP);
+        if (onboardingCompleted || (hasDisplayName && hasHandle)) {
+          // This account has either explicitly completed onboarding,
+          // or is an existing user with a real profile. Treat as complete,
+          // and ensure the DB flag is set for future sessions.
+          setOnboardingCompleted(true);
+          setProfileNeedsOnboarding(false);
+          setProfileLoaded(true);
+          setPhase("complete");
           setStepIndex(0);
-          setSetupComplete(false);
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem(STORAGE_STEP);
-            window.localStorage.setItem(STORAGE_PHASE, ONBOARDING_PHASE_SETUP);
+          setSetupComplete(true);
+
+          if (!onboardingCompletedFromProfile) {
+            supabase
+              .from("profiles")
+              .update({ onboarding_completed: true })
+              .eq("id", userId)
+              .catch(() => {});
           }
+
+          if (!onboardingCompletedFromAuth) {
+            supabase.auth
+              .updateUser({
+                data: { onboarding_completed: true },
+              })
+              .catch(() => {});
+          }
+
+          return;
         }
+
+        // Profile incomplete: onboarding is required.
+        setOnboardingCompleted(false);
+        setProfileNeedsOnboarding(true);
+        setProfileLoaded(true);
+        setPhase(ONBOARDING_PHASE_SETUP);
+        setStepIndex(0);
+        setSetupComplete(false);
       } catch {
         if (cancelled) return;
         // If profile fetch fails, err on the side of requiring onboarding.
@@ -184,14 +155,6 @@ export default function OnboardingProvider({ children }) {
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
-
-  // Persist step/phase whenever onboarding is not complete (including profile_saved and tour).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (isComplete) return;
-    window.localStorage.setItem(STORAGE_PHASE, phase);
-    window.localStorage.setItem(STORAGE_STEP, String(stepIndex));
-  }, [phase, stepIndex, isComplete]);
 
   // Force route for onboarding steps when active.
   useEffect(() => {
@@ -263,9 +226,8 @@ export default function OnboardingProvider({ children }) {
   );
 
   const markOnboardingComplete = useCallback(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_COMPLETE, "true");
-    }
+    // Fail-safe: once set true in memory, onboarding cannot restart this session.
+    setOnboardingCompleted(true);
 
     // Persist on account: user metadata + profile column (if present).
     supabase.auth
@@ -506,6 +468,7 @@ export default function OnboardingProvider({ children }) {
   const active =
     profileLoaded &&
     !isComplete &&
+    !onboardingCompleted &&
     !!currentStep &&
     (profileNeedsOnboarding ||
       currentStep.phase === ONBOARDING_PHASE_TOUR ||
