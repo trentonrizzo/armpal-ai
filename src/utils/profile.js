@@ -113,6 +113,13 @@ export async function uploadAvatar(file) {
 ============================================================ */
 export async function requireUsername(navigate) {
   const profile = await fetchProfile();
+  if (!profile) return false;
+
+  // If this account has completed onboarding, never hard-force /profile here.
+  if (profile.onboarding_completed === true) {
+    return true;
+  }
+
   if (!profile?.username || profile.username.trim() === "") {
     navigate("/profile");
     return false;

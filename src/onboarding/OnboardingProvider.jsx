@@ -181,6 +181,7 @@ export default function OnboardingProvider({ children }) {
   // Ensure incomplete profiles always land on /profile?onboarding=true.
   useEffect(() => {
     if (!profileLoaded || !profileNeedsOnboarding) return;
+    if (onboardingCompleted) return;
     // Do not force /profile?onboarding=true during the tour phase.
     if (phase === ONBOARDING_PHASE_TOUR) return;
     // Allow public legal/support pages without redirect.
@@ -194,7 +195,15 @@ export default function OnboardingProvider({ children }) {
     if (!isOnProfile || !hasFlag) {
       navigate("/profile?onboarding=true", { replace: true });
     }
-  }, [profileLoaded, profileNeedsOnboarding, location.pathname, location.search, navigate]);
+  }, [
+    profileLoaded,
+    profileNeedsOnboarding,
+    onboardingCompleted,
+    phase,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const goToNext = useCallback(
     () => {
@@ -256,7 +265,8 @@ export default function OnboardingProvider({ children }) {
       setPhase("complete");
     }
     markOnboardingComplete();
-  }, [markOnboardingComplete]);
+    navigate("/", { replace: true });
+  }, [markOnboardingComplete, navigate]);
 
   const finishOnboarding = useCallback(() => {
     setPhase("complete");
@@ -299,8 +309,6 @@ export default function OnboardingProvider({ children }) {
       setSetupComplete(true);
       setPhase(ONBOARDING_PHASE_SETUP);
       setStepIndex(savedIndex);
-      window.localStorage.setItem(STORAGE_PHASE, ONBOARDING_PHASE_SETUP);
-      window.localStorage.setItem(STORAGE_STEP, String(savedIndex));
     };
 
     window.addEventListener(
