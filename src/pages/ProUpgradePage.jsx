@@ -9,15 +9,38 @@ import { supabase } from "../supabaseClient";
 const PRO_PRICE_DISPLAY = "$7.99";
 
 const FREE_FEATURES = [
+  // Existing base benefits
+  "Strength calculator",
+  "Up to 5 workouts saved",
+  "Up to 5 bodyweight logs",
+  "Up to 5 measurement logs",
+  "Up to 5 PR logs",
+  "Unlimited nutrition entries",
+  "Profiles + friends",
+  // Media + AI limits (appended)
   "No video uploads",
   "20 photos/day (max 5MB)",
   "10 voice messages/day (30s)",
+  "Limited AI usage (chat, food scan, workout converter)",
 ];
 
 const PRO_FEATURES = [
+  // Existing Pro benefits
+  "AI Chat — up to 25 responses/day",
+  "AI Workout Converter — up to 10 uses/day",
+  "AI Food Scan — up to 10 scans/day",
+  "Up to 1,000 saved workouts",
+  "Up to 1,000 bodyweight logs",
+  "Up to 1,000 measurement logs",
+  "Up to 1,000 PR logs",
+  "Up to 1,000 nutrition entries/day",
+  // Media + AI upgrades (appended)
+  "Unlimited workouts / PRs / measurements / goals (1000 cap)",
+  "Unlimited nutrition",
   "10 videos/day (max 25MB)",
   "100 photos/day (max 10MB)",
   "50 voice messages/day (2 min)",
+  "Expanded AI usage",
   "Full access to all features",
 ];
 

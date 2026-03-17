@@ -1071,9 +1071,9 @@ export default function ChatPage() {
   async function sendVideo(file) {
     if (!user?.id || !file) return;
 
-    // Free users cannot send video; show upgrade overlay instead.
+    // Free users: send them to the Pro upgrade screen instead of silently blocking.
     if (!isPro) {
-      toast.error("Video uploads are Pro only. Upgrade to Pro (coming soon).");
+      navigate("/pro");
       return;
     }
 
@@ -1699,7 +1699,6 @@ export default function ChatPage() {
               hidden
               type="file"
               accept="video/*"
-              disabled={!isPro}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = null;
