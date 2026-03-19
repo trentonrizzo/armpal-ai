@@ -1053,10 +1053,11 @@ export default function ChatPage() {
         notifyRecipient(friendId, "New Message", "Sent an image", "/messages");
       }
 
-      await supabase.rpc("increment_media_count", {
+      const { error: incRpcError } = await supabase.rpc("increment_media_count", {
         user_id: user.id,
         media_type: "photo",
-      }).catch(() => {});
+      });
+      if (incRpcError) console.error(incRpcError);
     } catch (e) {
       const msgImg = e?.message || "Image send failed";
       setError(msgImg);
@@ -1138,10 +1139,11 @@ export default function ChatPage() {
         notifyRecipient(friendId, "New Message", "Sent a video", "/messages");
       }
 
-      await supabase.rpc("increment_media_count", {
+      const { error: incRpcError } = await supabase.rpc("increment_media_count", {
         user_id: user.id,
         media_type: "video",
-      }).catch(() => {});
+      });
+      if (incRpcError) console.error(incRpcError);
     } catch (e) {
       const msgVid = e?.message || "Video send failed";
       setError(msgVid);
@@ -1329,10 +1331,11 @@ export default function ChatPage() {
       setRecordDuration(0);
       setSendingAudio(false);
 
-      await supabase.rpc("increment_media_count", {
+      const { error: incRpcError } = await supabase.rpc("increment_media_count", {
         user_id: user.id,
         media_type: "audio",
-      }).catch(() => {});
+      });
+      if (incRpcError) console.error(incRpcError);
     } catch (e) {
       const msgAud = e?.message || "Audio send failed";
       setError(msgAud);
@@ -1966,6 +1969,8 @@ const shell = {
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
+  boxSizing: "border-box",
+  paddingTop: "var(--safe-area-top)",
 };
 
 const chatContainer = {
@@ -1996,7 +2001,7 @@ const composerContainer = {
   borderTopColor: "var(--border)",
   paddingTop: 10,
   paddingRight: 10,
-  paddingBottom: "env(safe-area-inset-bottom)",
+  paddingBottom: "var(--safe-area-bottom)",
   paddingLeft: 10,
   flexShrink: 0,
   display: "flex",

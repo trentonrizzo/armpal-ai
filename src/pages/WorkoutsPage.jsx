@@ -1639,6 +1639,8 @@ const focusOverlay = {
   zIndex: 99999,
   display: "flex",
   flexDirection: "column",
+  paddingTop: "var(--safe-area-top)",
+  boxSizing: "border-box",
 };
 
 const focusHeader = {
@@ -1739,7 +1741,7 @@ const focusBody = {
   WebkitOverflowScrolling: "touch",
   paddingTop: 12,
   paddingRight: 12,
-  paddingBottom: 12,
+  paddingBottom: "calc(12px + var(--safe-area-bottom))",
   paddingLeft: 12,
 };
 

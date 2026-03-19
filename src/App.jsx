@@ -4,6 +4,7 @@ import { Routes, Route, useLocation, useParams, useNavigate, Navigate } from "re
 import { supabase } from "./supabaseClient";
 
 import { AppProvider } from "./context/AppContext";
+import { PurchaseProvider } from "./context/PurchaseContext";
 import { ToastProvider } from "./components/ToastProvider";
 import { ProfileGateProvider } from "./context/ProfileGateContext";
 import AuthPage from "./AuthPage";
@@ -355,63 +356,65 @@ function AppContent() {
 
   return (
     <div
-      className={
-        isChatRoute
-          ? "h-screen overflow-hidden"
-          : hideNavForNewUserOnProfile
-          ? "min-h-screen"
-          : "min-h-screen pb-20"
-      }
+      className="app-shell"
     >
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/signup" element={<Navigate to="/" replace />} />
-        <Route path="/home" element={<HomePage />} />
-        <Route path="/prs" element={<PRTracker />} />
-        <Route path="/measure" element={<MeasurementsPage />} />
-        <Route path="/workouts" element={<WorkoutsPage />} />
-        <Route path="/workoutlogger" element={<WorkoutLogger />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/goals" element={<GoalsPage />} />
-        <Route path="/strength" element={<StrengthCalculator />} />
-        <Route path="/friends" element={<FriendsPage />} />
-        {/* Discovery / Find Friends temporarily disabled — redirect to Friends */}
-        <Route path="/find-friends" element={<Navigate to="/friends" replace />} />
-        <Route path="/find-friends/setup" element={<Navigate to="/friends" replace />} />
-        {/* Groups temporarily disabled — redirect to Friends */}
-        <Route path="/groups" element={<Navigate to="/friends" replace />} />
-        <Route path="/messages" element={<FriendsPage />} />
-        <Route path="/chat" element={<Navigate to="/friends" replace />} />
+      <div
+        className={
+          isChatRoute || hideNavForNewUserOnProfile
+            ? "app-main-scroll app-main-scroll--no-nav"
+            : "app-main-scroll"
+        }
+      >
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/signup" element={<Navigate to="/" replace />} />
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/prs" element={<PRTracker />} />
+          <Route path="/measure" element={<MeasurementsPage />} />
+          <Route path="/workouts" element={<WorkoutsPage />} />
+          <Route path="/workoutlogger" element={<WorkoutLogger />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/goals" element={<GoalsPage />} />
+          <Route path="/strength" element={<StrengthCalculator />} />
+          <Route path="/friends" element={<FriendsPage />} />
+          {/* Discovery / Find Friends temporarily disabled — redirect to Friends */}
+          <Route path="/find-friends" element={<Navigate to="/friends" replace />} />
+          <Route path="/find-friends/setup" element={<Navigate to="/friends" replace />} />
+          {/* Groups temporarily disabled — redirect to Friends */}
+          <Route path="/groups" element={<Navigate to="/friends" replace />} />
+          <Route path="/messages" element={<FriendsPage />} />
+          <Route path="/chat" element={<Navigate to="/friends" replace />} />
 
-        <Route path="/u/:handle" element={<LegacyHandleRedirect />} />
-        <Route path="/friend/:friendId" element={<FriendProfile />} />
-        <Route path="/chat/group/:groupId" element={<ChatPage />} />
-        <Route path="/chat/:friendId" element={<ChatPage />} />
-        <Route path="/enable-notifications" element={<EnableNotifications />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        {/* Credits / Referral system temporarily disabled for MVP App Store release */}
-        <Route path="/credits" element={<Navigate to="/" replace />} />
-        <Route path="/redeem" element={<Navigate to="/" replace />} />
-        <Route path="/referrals" element={<Navigate to="/" replace />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
-        <Route path="/pro" element={<ProUpgradePage />} />
-        {/* Programs temporarily hidden for App Store launch */}
-        {/* <Route path="/programs" element={<ProgramsErrorBoundary><ProgramMarketplace /></ProgramsErrorBoundary>} /> */}
-        {/* <Route path="/programs/create" element={<ProgramsErrorBoundary><CreateProgram /></ProgramsErrorBoundary>} /> */}
-        {/* <Route path="/programs/my" element={<ProgramsErrorBoundary><MyPrograms /></ProgramsErrorBoundary>} /> */}
-        {/* <Route path="/programs/:id" element={<ProgramsErrorBoundary><ProgramPreview /></ProgramsErrorBoundary>} /> */}
-        {/* <Route path="/programs/:id/view" element={<ProgramsErrorBoundary><ProgramViewer /></ProgramsErrorBoundary>} /> */}
-        <Route path="/games" element={<GamesHub />} />
-        <Route path="/games/arena-select" element={<ArenaSelect />} />
-        <Route path="/games/arena-trainer" element={<ArenaTrainer />} />
-        <Route path="/minigames/arena" element={<ArenaPage />} />
-        <Route path="/nutrition" element={<NutritionPage />} />
-        <Route path="/games/arcade" element={<ArcadeProfile />} />
-        <Route path="/games/leaderboard" element={<Leaderboard />} />
-        <Route path="/games/session/:sessionId" element={<SessionPage />} />
-        <Route path="/games/:id" element={<GamePage />} />
-      </Routes>
+          <Route path="/u/:handle" element={<LegacyHandleRedirect />} />
+          <Route path="/friend/:friendId" element={<FriendProfile />} />
+          <Route path="/chat/group/:groupId" element={<ChatPage />} />
+          <Route path="/chat/:friendId" element={<ChatPage />} />
+          <Route path="/enable-notifications" element={<EnableNotifications />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Credits / Referral system temporarily disabled for MVP App Store release */}
+          <Route path="/credits" element={<Navigate to="/" replace />} />
+          <Route path="/redeem" element={<Navigate to="/" replace />} />
+          <Route path="/referrals" element={<Navigate to="/" replace />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
+          <Route path="/pro" element={<ProUpgradePage />} />
+          {/* Programs temporarily hidden for App Store launch */}
+          {/* <Route path="/programs" element={<ProgramsErrorBoundary><ProgramMarketplace /></ProgramsErrorBoundary>} /> */}
+          {/* <Route path="/programs/create" element={<ProgramsErrorBoundary><CreateProgram /></ProgramsErrorBoundary>} /> */}
+          {/* <Route path="/programs/my" element={<ProgramsErrorBoundary><MyPrograms /></ProgramsErrorBoundary>} /> */}
+          {/* <Route path="/programs/:id" element={<ProgramsErrorBoundary><ProgramPreview /></ProgramsErrorBoundary>} /> */}
+          {/* <Route path="/programs/:id/view" element={<ProgramsErrorBoundary><ProgramViewer /></ProgramsErrorBoundary>} /> */}
+          <Route path="/games" element={<GamesHub />} />
+          <Route path="/games/arena-select" element={<ArenaSelect />} />
+          <Route path="/games/arena-trainer" element={<ArenaTrainer />} />
+          <Route path="/minigames/arena" element={<ArenaPage />} />
+          <Route path="/nutrition" element={<NutritionPage />} />
+          <Route path="/games/arcade" element={<ArcadeProfile />} />
+          <Route path="/games/leaderboard" element={<Leaderboard />} />
+          <Route path="/games/session/:sessionId" element={<SessionPage />} />
+          <Route path="/games/:id" element={<GamePage />} />
+        </Routes>
+      </div>
 
       {location.pathname === "/" && <NotificationsBell />}
       {!isChatRoute && !hideNavForNewUserOnProfile && <BottomNav />}
@@ -421,7 +424,7 @@ function AppContent() {
           onClick={() => setOpenShare(true)}
           style={{
             position: "fixed",
-            top: 14,
+            top: "calc(var(--safe-area-top) + 14px)",
             right: 14,
             zIndex: 9999,
             width: 44,
@@ -499,11 +502,13 @@ export default function App() {
                 />
               ) : (
                 <AppProvider>
-                  <ToastProvider>
-                    <ProfileGateProvider>
-                      <AuthenticatedLayout session={session} />
-                    </ProfileGateProvider>
-                  </ToastProvider>
+                  <PurchaseProvider>
+                    <ToastProvider>
+                      <ProfileGateProvider>
+                        <AuthenticatedLayout session={session} />
+                      </ProfileGateProvider>
+                    </ToastProvider>
+                  </PurchaseProvider>
                 </AppProvider>
               )
             }

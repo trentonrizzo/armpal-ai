@@ -207,10 +207,11 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
       setMedia(Array.isArray(data) ? data : []);
       haptic(10);
 
-      await supabase.rpc("increment_media_count", {
+      const { error: incRpcError } = await supabase.rpc("increment_media_count", {
         user_id: userId,
         media_type: "photo",
-      }).catch(() => {});
+      });
+      if (incRpcError) console.error(incRpcError);
     } catch (e) {
       console.error("ProfileMedia upload failed:", e);
       alert("Upload failed. Try again.");

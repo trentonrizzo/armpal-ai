@@ -4,7 +4,7 @@
 
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import { usePurchase } from "../context/PurchaseContext";
 
 const PRO_PRICE_DISPLAY = "$7.99";
 
@@ -55,8 +55,18 @@ function FeatureCheck({ text, accent }) {
 
 export default function ProUpgradePage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const {
+    isPro,
+    product,
+    initializing,
+    purchaseLoading,
+    restoreLoading,
+    purchase,
+    restore,
+  } = usePurchase();
+
+  const priceDisplay = product?.displayPrice || PRO_PRICE_DISPLAY;
 
   return (
     <div style={S.page}>
@@ -93,7 +103,7 @@ export default function ProUpgradePage() {
           <div style={S.tierHeader}>
             <span style={{ ...S.tierLabel, color: "var(--accent)" }}>Pro</span>
             <span style={S.tierPrice}>
-              {PRO_PRICE_DISPLAY}
+              {priceDisplay}
               <span style={S.tierPriceSub}>/mo</span>
             </span>
           </div>
@@ -110,7 +120,7 @@ export default function ProUpgradePage() {
         <div style={S.priceBox}>
           <span style={S.priceLabel}>Monthly</span>
           <p style={S.priceValue}>
-            {PRO_PRICE_DISPLAY}
+            {priceDisplay}
             <span style={S.priceUnit}> / month</span>
           </p>
           <p style={S.priceSub}>Cancel anytime. No commitment.</p>
@@ -120,14 +130,55 @@ export default function ProUpgradePage() {
 
         <button
           type="button"
-          onClick={() => {
-            setError("In-app Pro upgrade is coming soon.");
-            setLoading(false);
+          onClick={async () => {
+            setError(null);
+            const result = await purchase();
+            if (result?.ok) return;
+            if (result?.status === "userCancelled") return;
+            if (result?.status === "pending") {
+              alert("Purchase is pending approval.");
+              return;
+            }
+            if (result?.status === "verificationFailed") {
+              alert("Purchase verification failed.");
+              return;
+            }
+            if (result?.error) {
+              alert(result.error);
+              return;
+            }
+            alert("Purchase failed. Please try again.");
           }}
-          disabled={loading}
-          style={{ ...S.ctaBtn, opacity: loading ? 0.8 : 1, cursor: loading ? "not-allowed" : "pointer" }}
+          disabled={initializing || purchaseLoading || isPro}
+          style={{
+            ...S.ctaBtn,
+            opacity: initializing || purchaseLoading || isPro ? 0.8 : 1,
+            cursor: initializing || purchaseLoading || isPro ? "not-allowed" : "pointer",
+          }}
         >
-          Upgrade to Pro (Coming Soon)
+          {isPro ? "You're Pro" : purchaseLoading ? "Processing..." : "Upgrade to Pro"}
+        </button>
+
+        <button
+          type="button"
+          onClick={async () => {
+            setError(null);
+            const result = await restore();
+            if (result?.ok) return;
+            if (result?.error) {
+              alert(result.error);
+            } else {
+              alert("Restore failed.");
+            }
+          }}
+          disabled={initializing || restoreLoading}
+          style={{
+            ...S.restoreBtn,
+            opacity: initializing || restoreLoading ? 0.8 : 1,
+            cursor: initializing || restoreLoading ? "not-allowed" : "pointer",
+          }}
+        >
+          {restoreLoading ? "Restoring..." : "Restore Purchases"}
         </button>
       </div>
     </div>
@@ -242,6 +293,17 @@ const S = {
     fontWeight: 800,
     fontSize: 17,
     letterSpacing: 0.3,
+  },
+  restoreBtn: {
+    width: "100%",
+    marginTop: 10,
+    padding: "14px 20px",
+    borderRadius: 14,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--text)",
+    fontWeight: 700,
+    fontSize: 15,
   },
   ctaFooter: {
     marginTop: 10,
