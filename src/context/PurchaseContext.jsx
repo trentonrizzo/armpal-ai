@@ -22,6 +22,19 @@ async function persistProToProfile() {
   if (error) console.error(error);
 }
 
+async function getProfileProFlag() {
+  const { data } = await supabase.auth.getUser();
+  const uid = data?.user?.id;
+  if (!uid) return false;
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("is_pro")
+    .eq("id", uid)
+    .maybeSingle();
+  if (error) return false;
+  return !!profile?.is_pro;
+}
+
 export function PurchaseProvider({ children }) {
   const [product, setProduct] = useState(null);
   const [isPro, setIsPro] = useState(getStoredProFlag());
@@ -38,7 +51,7 @@ export function PurchaseProvider({ children }) {
   async function initialize() {
     setInitializing(true);
     try {
-      const initResult = await initializePurchaseStore();
+      const initResult = await initializePurchaseStore(unlockPro);
       setProduct(initResult.product || null);
       if (initResult.hasActiveEntitlement) {
         await unlockPro();
@@ -49,8 +62,14 @@ export function PurchaseProvider({ children }) {
       if (entitlements?.hasActiveEntitlement) {
         await unlockPro();
       }
-    } catch (e) {
-      console.error(e);
+      // Keep previously persisted Pro state in sync across sessions.
+      const profileIsPro = await getProfileProFlag();
+      if (profileIsPro) {
+        setIsPro(true);
+        setStoredProFlag(true);
+      }
+    } catch {
+      // keep UI stable; purchase buttons will show friendly failure on action
     } finally {
       setInitializing(false);
     }
@@ -83,9 +102,8 @@ export function PurchaseProvider({ children }) {
         return { ok: false, status, error: "In-app purchases require iOS app build" };
       }
       return { ok: false, status: status || "failed", error: result?.message || "Purchase failed" };
-    } catch (e) {
-      console.error(e);
-      return { ok: false, status: "failed", error: e?.message || "Purchase failed" };
+    } catch {
+      return { ok: false, status: "failed", error: "Purchase failed. Please try again." };
     } finally {
       setPurchaseLoading(false);
     }
@@ -99,10 +117,12 @@ export function PurchaseProvider({ children }) {
         await unlockPro();
         return { ok: true };
       }
+      if (result?.error) {
+        return { ok: false, error: result.error };
+      }
       return { ok: false, error: "No active ArmPal Pro subscription found." };
-    } catch (e) {
-      console.error(e);
-      return { ok: false, error: e?.message || "Restore failed" };
+    } catch {
+      return { ok: false, error: "Restore failed. Please try again." };
     } finally {
       setRestoreLoading(false);
     }
