@@ -1012,7 +1012,7 @@ export default function ChatPage() {
         { user_id: user.id, media_type: "photo", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        toast.error("Photo limit reached. Upgrade to Pro (coming soon) to send more media.");
+        toast.error("Photo limit reached. Upgrade to Pro to send more media.");
         return;
       }
 
@@ -1093,7 +1093,7 @@ export default function ChatPage() {
         { user_id: user.id, media_type: "video", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        toast.error("Video limit reached. Upgrade to Pro (coming soon) to send more media.");
+        toast.error("Video limit reached. Upgrade to Pro to send more media.");
         return;
       }
 
@@ -1279,7 +1279,7 @@ export default function ChatPage() {
       );
       if (limitErr || allowed === false) {
         setSendingAudio(false);
-        toast.error("Voice limit reached. Upgrade to Pro (coming soon) to send more.");
+        toast.error("Voice limit reached. Upgrade to Pro to send more.");
         return;
       }
 

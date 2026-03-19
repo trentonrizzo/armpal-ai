@@ -155,7 +155,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
         { user_id: userId, media_type: "photo", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        alert("Photo limit reached. Upgrade to Pro (coming soon) to add more media.");
+        alert("Photo limit reached. Upgrade to Pro to add more media.");
         return;
       }
 

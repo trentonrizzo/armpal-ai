@@ -167,7 +167,7 @@ export default function ArenaBindsOverlay({ open, onClose, userId, initialBinds,
 
             <div style={{ ...sectionTitle, marginTop: 20 }}>GAMEPAD / MOBILE</div>
             <p style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 12 }}>
-              Gamepad and mobile layout remap coming soon. Use defaults for now.
+              Gamepad and mobile layout remap is not available yet. Use defaults for now.
             </p>
 
             <button type="button" onClick={handleReset} style={btnSecondary}>

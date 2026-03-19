@@ -359,7 +359,7 @@ export default function SmartFoodScanOverlay({
           { user_id: userId, media_type: "photo", file_size_mb: sizeMb }
         );
         if (limitErr || allowed === false) {
-          throw new Error("Photo limit reached. Upgrade to Pro (coming soon) to scan more meals.");
+          throw new Error("Photo limit reached. Upgrade to Pro to scan more meals.");
         }
 
         const { error: upErr } = await supabase.storage
@@ -562,9 +562,9 @@ export default function SmartFoodScanOverlay({
               </ul>
               <button
                 style={PRIMARY_BTN}
-                onClick={onClose}
+                onClick={() => navigate("/pro")}
               >
-                Upgrade to Pro (Coming Soon)
+                Upgrade to Pro
               </button>
             </div>
           </div>

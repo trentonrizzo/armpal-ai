@@ -55,7 +55,7 @@ export default function PauseMenu({
       <button type="button" style={btnDanger} onClick={onLeaveMatch}>
         Leave Match
       </button>
-      <div style={audioPlaceholder}>Audio (coming soon)</div>
+      <div style={audioPlaceholder}>Audio unavailable</div>
     </div>
   );
 }

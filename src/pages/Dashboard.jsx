@@ -365,7 +365,6 @@ export default function Dashboard() {
         </Link>
       </header>
 
-      {/* Upgrade to Pro — informational only for now */}
       {!isPro && (
         <Link
           to="/pro"
@@ -383,7 +382,7 @@ export default function Dashboard() {
             textDecoration: "none",
           }}
         >
-          Upgrade to Pro (Coming Soon)
+          Upgrade to Pro
         </Link>
       )}
 
