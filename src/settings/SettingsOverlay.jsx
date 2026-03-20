@@ -386,21 +386,31 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
 
           <div style={{ flex: 1 }} />
 
-          <button
-            onClick={() => setShowLogoutConfirm(true)}
+          <div
             style={{
-              padding: 14,
-              borderRadius: 14,
-              background: "color-mix(in srgb, var(--accent) 85%, #000)",
-              border: "1px solid color-mix(in srgb, var(--accent) 80%, #300)",
-              color: "white",
-              fontWeight: 900,
+              position: "sticky",
+              bottom: 0,
+              background: "var(--card)",
+              paddingTop: 10,
+              paddingBottom: "calc(16px + var(--safe-area-bottom))",
               marginTop: 12,
-              marginBottom: 4,
             }}
           >
-            Log out
-          </button>
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              style={{
+                width: "100%",
+                padding: 14,
+                borderRadius: 14,
+                background: "color-mix(in srgb, var(--accent) 85%, #000)",
+                border: "1px solid color-mix(in srgb, var(--accent) 80%, #300)",
+                color: "white",
+                fontWeight: 900,
+              }}
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </div>
 

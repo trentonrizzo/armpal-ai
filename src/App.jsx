@@ -146,6 +146,14 @@ function RuntimeSplash({ show }) {
   );
 }
 
+function PublicScrollable({ children }) {
+  return (
+    <div className="app-shell">
+      <div className="app-main-scroll app-main-scroll--no-nav">{children}</div>
+    </div>
+  );
+}
+
 function AuthenticatedLayout({ session }) {
   const [notifQueue, setNotifQueue] = useState([]);
   const location = useLocation();
@@ -490,9 +498,30 @@ export default function App() {
       {!ready ? null : (
         <Routes>
           {/* Public legal/support — must be before catch-all so they load without auth */}
-          <Route path="/privacy" element={<PrivacyPolicy />} />
-          <Route path="/terms" element={<TermsOfService />} />
-          <Route path="/support" element={<Support />} />
+          <Route
+            path="/privacy"
+            element={
+              <PublicScrollable>
+                <PrivacyPolicy />
+              </PublicScrollable>
+            }
+          />
+          <Route
+            path="/terms"
+            element={
+              <PublicScrollable>
+                <TermsOfService />
+              </PublicScrollable>
+            }
+          />
+          <Route
+            path="/support"
+            element={
+              <PublicScrollable>
+                <Support />
+              </PublicScrollable>
+            }
+          />
           <Route
             path="*"
             element={
