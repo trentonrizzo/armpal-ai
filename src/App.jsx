@@ -464,6 +464,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const { setTheme, setAccent } = useTheme();
+  const isPrivacyRoute =
+    location.pathname === "/privacy" || location.pathname === "/privacy/";
 
   usePresence(session?.user);
   useNotifications(session?.user?.id);
@@ -495,7 +497,11 @@ export default function App() {
   return (
     <>
       <RuntimeSplash show={showSplash} />
-      {!ready ? null : (
+      {isPrivacyRoute ? (
+        <PublicScrollable>
+          <PrivacyPolicy />
+        </PublicScrollable>
+      ) : !ready ? null : (
         <Routes>
           {/* Public legal/support — must be before catch-all so they load without auth */}
           <Route
