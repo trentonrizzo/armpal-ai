@@ -22,8 +22,6 @@ import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
-import TermsOfService from "./pages/TermsOfService";
-import Support from "./pages/Support";
 import FriendProfile from "./pages/FriendProfile";
 import ResetPassword from "./pages/ResetPassword";
 import CreditsPage from "./pages/CreditsPage";
@@ -141,14 +139,6 @@ function RuntimeSplash({ show }) {
           to { opacity: 1; transform: scale(1); }
         }
       `}</style>
-    </div>
-  );
-}
-
-function PublicScrollable({ children }) {
-  return (
-    <div className="app-shell">
-      <div className="app-main-scroll app-main-scroll--no-nav">{children}</div>
     </div>
   );
 }
@@ -463,9 +453,6 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const { setTheme, setAccent } = useTheme();
-  const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
-  const isPublicLegalRoute = ["/terms", "/support"].includes(normalizedPath);
-
   usePresence(session?.user);
   useNotifications(session?.user?.id);
 
@@ -496,33 +483,8 @@ export default function App() {
   return (
     <>
       <RuntimeSplash show={showSplash} />
-      {isPublicLegalRoute ? (
-        <PublicScrollable>
-          {normalizedPath === "/terms" ? (
-            <TermsOfService />
-          ) : (
-            <Support />
-          )}
-        </PublicScrollable>
-      ) : !ready ? null : (
+      {!ready ? null : (
         <Routes>
-          {/* Public legal/support — must be before catch-all so they load without auth */}
-          <Route
-            path="/terms"
-            element={
-              <PublicScrollable>
-                <TermsOfService />
-              </PublicScrollable>
-            }
-          />
-          <Route
-            path="/support"
-            element={
-              <PublicScrollable>
-                <Support />
-              </PublicScrollable>
-            }
-          />
           <Route
             path="*"
             element={

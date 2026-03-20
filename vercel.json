@@ -14,6 +14,22 @@
       "dest": "/privacy.html"
     },
     {
+      "src": "/terms",
+      "dest": "/terms.html"
+    },
+    {
+      "src": "/terms.html",
+      "dest": "/terms.html"
+    },
+    {
+      "src": "/support",
+      "dest": "/support.html"
+    },
+    {
+      "src": "/support.html",
+      "dest": "/support.html"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     },

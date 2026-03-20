@@ -555,9 +555,8 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   Privacy Policy
                 </a>
 
-                <Link
-                  to="/terms"
-                  state={{ fromSettingsLegal: true }}
+                <a
+                  href="/terms.html"
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -574,11 +573,10 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   }}
                 >
                   Terms of Service
-                </Link>
+                </a>
 
-                <Link
-                  to="/support"
-                  state={{ fromSettingsLegal: true }}
+                <a
+                  href="/support.html"
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -594,7 +592,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   }}
                 >
                   Contact Support
-                </Link>
+                </a>
               </>
             )}
 
