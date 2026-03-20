@@ -84,40 +84,51 @@ export default function PrivacyPolicy() {
           lineHeight: 1.7,
         }}
       >
-        <p>
-          ArmPal is built to help you track your armwrestling training and connect
-          with friends. We only collect the data we need to provide and improve
-          the app, and we don&apos;t sell your data.
+        <p style={{ marginBottom: 10 }}>
+          ArmPal helps you track your training and connect with other athletes.
+          We only collect the data we need to run the app and improve it, and
+          we never sell your personal data.
         </p>
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>
           Data We Collect
         </h2>
-        <ul style={{ paddingLeft: 18, marginTop: 8 }}>
+        <ul style={{ paddingLeft: 18, marginTop: 8, lineHeight: 1.6 }}>
           <li>
-            <strong>Profile information</strong>: such as your name, handle,
-            email, avatar, and basic account settings.
+            <strong>Account &amp; profile info</strong>: email, handle, display
+            name, avatar, and basic settings tied to your account.
           </li>
           <li style={{ marginTop: 6 }}>
-            <strong>Workout data</strong>: logs of your workouts, exercises,
-            PRs, measurements, goals, and related training data you choose to
-            save in the app.
+            <strong>Workout data</strong>: workouts you log, exercises, PRs,
+            goals, and related training history.
           </li>
           <li style={{ marginTop: 6 }}>
-            <strong>Messages and social activity</strong>: direct messages with
-            friends, group chats, friend connections, and basic activity needed
-            to power social features.
+            <strong>Messages &amp; social activity</strong>: direct messages,
+            group chats, and friend connections needed to power social features.
+          </li>
+          <li style={{ marginTop: 6 }}>
+            <strong>Uploaded progress images</strong>: photos or media you
+            choose to upload for tracking progress.
+          </li>
+          <li style={{ marginTop: 6 }}>
+            <strong>Measurements</strong>: body measurements and other metrics
+            you log to follow your progress over time.
+          </li>
+          <li style={{ marginTop: 6 }}>
+            <strong>Subscription / payment status</strong>: information about
+            whether you have a Pro subscription and related billing status (we
+            rely on third-party processors for payments).
           </li>
         </ul>
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>
-          How We Store Your Data
+          How We Store Data
         </h2>
         <p style={{ marginTop: 8 }}>
-          ArmPal uses <strong>Supabase</strong> as our primary data platform.
-          Your profile, workout history, and messages are stored in Supabase
-          databases and storage. Supabase runs on modern cloud infrastructure
-          with managed backups and access controls.
+          ArmPal uses <strong>Supabase</strong> as our primary backend. Your
+          account, workout history, messages, measurements, and other app data
+          are stored in Supabase databases and storage running on modern cloud
+          infrastructure.
         </p>
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>
@@ -126,16 +137,17 @@ export default function PrivacyPolicy() {
         <p style={{ marginTop: 8 }}>
           We use your data to operate and improve ArmPal, including:
         </p>
-        <ul style={{ paddingLeft: 18, marginTop: 8 }}>
+        <ul style={{ paddingLeft: 18, marginTop: 8, lineHeight: 1.6 }}>
           <li>Creating and maintaining your account and profile.</li>
           <li style={{ marginTop: 6 }}>
-            Powering training features like workout logs, analytics, and goals.
+            Powering training tools like logs, analytics, and recommendations.
           </li>
           <li style={{ marginTop: 6 }}>
-            Enabling social features like friends, messages, and coaching.
+            Enabling messaging, friends, and other social features.
           </li>
           <li style={{ marginTop: 6 }}>
-            Sending optional notifications about activity in your account.
+            Sending optional notifications about activity related to your
+            account.
           </li>
         </ul>
 
@@ -143,48 +155,38 @@ export default function PrivacyPolicy() {
           No Sale of Personal Data
         </h2>
         <p style={{ marginTop: 8 }}>
-          We <strong>do not sell</strong> your personal data to third parties.
-          We may use third-party services (like analytics or infrastructure
-          providers) to help run the app, but they only process data on our
-          behalf under contractual agreements.
+          We <strong>do not sell</strong> your personal data. We may work with
+          service providers (for infrastructure, analytics, or payments) who
+          process data on our behalf under contract, but they do not own or sell
+          your data.
         </p>
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>
-          Security Practices
+          Security Measures
         </h2>
         <p style={{ marginTop: 8 }}>
-          We take reasonable technical and organizational measures to protect
-          your data, including:
-        </p>
-        <ul style={{ paddingLeft: 18, marginTop: 8 }}>
-          <li>Using Supabase authentication and access controls.</li>
-          <li style={{ marginTop: 6 }}>
-            Restricting direct access to production databases.
-          </li>
-          <li style={{ marginTop: 6 }}>
-            Using HTTPS to encrypt data in transit where supported.
-          </li>
-        </ul>
-        <p style={{ marginTop: 8 }}>
-          No security system is perfect, and we can&apos;t guarantee absolute
-          security, but we continuously work to protect your information.
+          We use reasonable technical and organizational measures to protect
+          your information, including Supabase authentication, access controls,
+          and HTTPS where supported. No system is perfectly secure, but we work
+          to keep your data safe.
         </p>
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>
-          Your Choices
+          Your Choices &amp; Control
         </h2>
         <p style={{ marginTop: 8 }}>
-          You can update some of your profile information from within the app.
-          If you want to delete your account or request additional data actions,
-          contact us using the email below.
+          You control what you share with ArmPal. You decide which workouts,
+          measurements, images, and messages to create or delete. If you want to
+          request account deletion or have questions about your data, contact us
+          using the email below.
         </p>
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>
           Contact
         </h2>
         <p style={{ marginTop: 8 }}>
-          If you have questions about this Privacy Policy or how we handle your
-          data, you can reach us through the in‑app support form.
+          For privacy questions, use <span style={{ fontWeight: 700 }}>Contact Support</span> in the Legal
+          section to reach the team.
         </p>
         <Link
           to="/support"
