@@ -37,7 +37,7 @@ export default function PrivacyPolicy() {
           onClick={() =>
             location.state?.fromSettingsLegal
               ? backToSettingsLegal()
-              : navigate("/profile", { replace: true })
+              : navigate("/", { replace: true })
           }
           style={{
             position: "absolute",

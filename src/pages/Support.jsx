@@ -84,7 +84,7 @@ export default function Support() {
           onClick={() =>
             location.state?.fromSettingsLegal
               ? backToSettingsLegal()
-              : navigate("/profile", { replace: true })
+              : navigate("/", { replace: true })
           }
           style={{
             position: "absolute",

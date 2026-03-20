@@ -464,8 +464,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const { setTheme, setAccent } = useTheme();
-  const isPrivacyRoute =
-    location.pathname === "/privacy" || location.pathname === "/privacy/";
+  const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+  const isPublicLegalRoute = ["/privacy", "/terms", "/support"].includes(normalizedPath);
 
   usePresence(session?.user);
   useNotifications(session?.user?.id);
@@ -497,9 +497,15 @@ export default function App() {
   return (
     <>
       <RuntimeSplash show={showSplash} />
-      {isPrivacyRoute ? (
+      {isPublicLegalRoute ? (
         <PublicScrollable>
-          <PrivacyPolicy />
+          {normalizedPath === "/privacy" ? (
+            <PrivacyPolicy />
+          ) : normalizedPath === "/terms" ? (
+            <TermsOfService />
+          ) : (
+            <Support />
+          )}
         </PublicScrollable>
       ) : !ready ? null : (
         <Routes>
