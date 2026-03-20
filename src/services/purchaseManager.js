@@ -54,6 +54,8 @@ let initialized = false;
 let initPromise = null;
 let purchaseResolver = null;
 let onVerifiedGlobal = null;
+let storeReady = false;
+let storeReadyPromise = null;
 
 export function getStoredProFlag() {
   if (typeof window === "undefined") return false;
@@ -86,7 +88,25 @@ function resolvePurchase(result) {
   }
 }
 
+function waitForStoreReady(store) {
+  if (storeReady) return Promise.resolve();
+  if (!storeReadyPromise) {
+    storeReadyPromise = new Promise((resolve) => {
+      store.ready(() => {
+        storeReady = true;
+        console.log("[IAP] Store ready");
+        resolve();
+      });
+    });
+  }
+  return storeReadyPromise;
+}
+
 function setupStoreHandlers(store) {
+  store.error((err) => {
+    console.error("[IAP] Store error", err);
+  });
+
   store.when(IOS_PRODUCT_ID).approved((transaction) => {
     // Verification step: only verified flows unlock Pro.
     transaction.verify();
@@ -136,11 +156,18 @@ async function ensureInitialized(onVerified) {
           platform: Platform.APPLE_APPSTORE,
         });
         await store.initialize([Platform.APPLE_APPSTORE]);
+        await waitForStoreReady(store);
         initialized = true;
       }
       // Refresh receipts/products so owned state is current.
       await store.update();
       const product = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
+      if (product) {
+        console.log("[IAP] Product loaded", {
+          id: product.id,
+          owned: !!product.owned,
+        });
+      }
       return {
         product: mapProduct(product),
         hasActiveEntitlement: hasActiveEntitlement(product),
@@ -167,28 +194,24 @@ export async function purchaseProProduct() {
   if (init?.error) return { status: "failed", message: init.error };
 
   const runtime = getStoreRuntime();
-  const { store, Platform } = runtime;
-  const product = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
-  if (!product) {
-    return { status: "failed", message: "ArmPal Pro product is unavailable right now." };
+  if (!runtime) {
+    return { status: "failed", message: "In-app purchases are unavailable on this device." };
   }
+  const { store, Platform } = runtime;
+  await waitForStoreReady(store);
+  const product = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
+  if (!product || typeof product.order !== "function") {
+    return { status: "failed", message: "Product not loaded. Try again." };
+  }
+  console.log("[IAP] Product loaded", { id: product.id, owned: !!product.owned });
   if (product.owned) {
     return { status: "success", verified: true };
   }
 
   return new Promise(async (resolve) => {
     purchaseResolver = resolve;
-    setTimeout(() => {
-      resolvePurchase({ status: "pending" });
-    }, 45000);
-
     try {
-      const offer = product.getOffer?.();
-      if (offer?.order) {
-        await offer.order();
-      } else {
-        await store.order(IOS_PRODUCT_ID);
-      }
+      await product.order();
     } catch {
       resolvePurchase({ status: "failed", message: "Unable to start purchase. Please try again." });
     }
@@ -203,7 +226,11 @@ export async function restorePurchases() {
   if (init?.error) return { hasActiveEntitlement: false, error: init.error };
 
   const runtime = getStoreRuntime();
+  if (!runtime) {
+    return { hasActiveEntitlement: false, error: "In-app purchases are unavailable on this device." };
+  }
   const { store, Platform } = runtime;
+  await waitForStoreReady(store);
   try {
     await store.restorePurchases();
     await store.update();

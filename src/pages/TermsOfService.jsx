@@ -15,9 +15,12 @@ export default function TermsOfService() {
   return (
     <div
       style={{
-        padding: "16px 16px 90px",
-        maxWidth: 900,
+        padding: "16px 16px calc(110px + var(--safe-area-bottom))",
+        paddingTop: "calc(16px + var(--safe-area-top))",
+        maxWidth: 760,
         margin: "0 auto",
+        width: "100%",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -75,10 +78,10 @@ export default function TermsOfService() {
         style={{
           background: "var(--card)",
           borderRadius: 14,
-          padding: 16,
+          padding: 18,
           border: "1px solid var(--border)",
           fontSize: 14,
-          lineHeight: 1.6,
+          lineHeight: 1.7,
         }}
       >
         <p>

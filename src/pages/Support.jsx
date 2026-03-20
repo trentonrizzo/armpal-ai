@@ -61,10 +61,12 @@ export default function Support() {
   return (
     <div
       style={{
-        padding: "16px 16px 90px",
+        padding: "16px 16px calc(110px + var(--safe-area-bottom))",
+        paddingTop: "calc(16px + var(--safe-area-top))",
         maxWidth: 560,
         margin: "0 auto",
-        minHeight: "100vh",
+        width: "100%",
+        boxSizing: "border-box",
         color: "var(--text)",
       }}
     >

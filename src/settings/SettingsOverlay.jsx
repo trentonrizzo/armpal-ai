@@ -167,17 +167,24 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
           zIndex: 9999,
           display: "flex",
           justifyContent: "flex-end",
+          overflow: "hidden",
         }}
       >
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
-            width: "74%",
+            width: "78%",
             maxWidth: 380,
             background: "var(--card)",
             padding: 16,
+            paddingTop: "calc(16px + var(--safe-area-top))",
+            paddingBottom: "calc(16px + var(--safe-area-bottom))",
+            height: "100dvh",
             display: "flex",
             flexDirection: "column",
+            overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
+            boxSizing: "border-box",
           }}
         >
           <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
@@ -384,10 +391,12 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
             style={{
               padding: 14,
               borderRadius: 14,
-              background: "var(--accent)",
-              border: "none",
+              background: "color-mix(in srgb, var(--accent) 85%, #000)",
+              border: "1px solid color-mix(in srgb, var(--accent) 80%, #300)",
               color: "white",
               fontWeight: 900,
+              marginTop: 12,
+              marginBottom: 4,
             }}
           >
             Log out
