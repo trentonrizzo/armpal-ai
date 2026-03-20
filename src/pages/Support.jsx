@@ -247,12 +247,12 @@ export default function Support() {
       </form>
 
       <p style={{ marginTop: 20, fontSize: 13, opacity: 0.8 }}>
-        <Link
-          to="/privacy"
+        <a
+          href="/privacy.html"
           style={{ color: "var(--accent)", textDecoration: "underline", marginRight: 12 }}
         >
           Privacy Policy
-        </Link>
+        </a>
         <Link
           to="/terms"
           style={{ color: "var(--accent)", textDecoration: "underline" }}

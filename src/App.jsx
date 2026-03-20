@@ -22,7 +22,6 @@ import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Support from "./pages/Support";
 import FriendProfile from "./pages/FriendProfile";
@@ -465,7 +464,7 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const { setTheme, setAccent } = useTheme();
   const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
-  const isPublicLegalRoute = ["/privacy", "/terms", "/support"].includes(normalizedPath);
+  const isPublicLegalRoute = ["/terms", "/support"].includes(normalizedPath);
 
   usePresence(session?.user);
   useNotifications(session?.user?.id);
@@ -499,9 +498,7 @@ export default function App() {
       <RuntimeSplash show={showSplash} />
       {isPublicLegalRoute ? (
         <PublicScrollable>
-          {normalizedPath === "/privacy" ? (
-            <PrivacyPolicy />
-          ) : normalizedPath === "/terms" ? (
+          {normalizedPath === "/terms" ? (
             <TermsOfService />
           ) : (
             <Support />
@@ -510,14 +507,6 @@ export default function App() {
       ) : !ready ? null : (
         <Routes>
           {/* Public legal/support — must be before catch-all so they load without auth */}
-          <Route
-            path="/privacy"
-            element={
-              <PublicScrollable>
-                <PrivacyPolicy />
-              </PublicScrollable>
-            }
-          />
           <Route
             path="/terms"
             element={

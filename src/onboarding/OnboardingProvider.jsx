@@ -185,7 +185,9 @@ export default function OnboardingProvider({ children }) {
     // Do not force /profile?onboarding=true during the tour phase.
     if (phase === ONBOARDING_PHASE_TOUR) return;
     // Allow public legal/support pages without redirect.
-    const isPublicPage = ["/privacy", "/terms", "/support"].includes(location.pathname);
+    const isPublicPage = ["/privacy", "/privacy.html", "/terms", "/support"].includes(
+      location.pathname
+    );
     if (isPublicPage) return;
 
     const isOnProfile = location.pathname === "/profile";

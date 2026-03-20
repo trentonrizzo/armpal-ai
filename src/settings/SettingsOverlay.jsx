@@ -535,9 +535,8 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   Read how ArmPal handles your data and the terms of using the app.
                 </p>
 
-                <Link
-                  to="/privacy"
-                  state={{ fromSettingsLegal: true }}
+                <a
+                  href="/privacy.html"
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -554,7 +553,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   }}
                 >
                   Privacy Policy
-                </Link>
+                </a>
 
                 <Link
                   to="/terms"
