@@ -25,7 +25,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>This app uses the camera for photos and videos.</string>
+	<string>ArmPal uses the camera so users can upload progress photos, such as physique or arm measurement photos, to track fitness progress over time. Photos are private by default and are only shared publicly if the user chooses to make them public.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app uses the microphone for voice messages.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
