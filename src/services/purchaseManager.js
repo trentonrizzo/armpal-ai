@@ -132,7 +132,8 @@ function setupStoreHandlers(store) {
 }
 
 async function ensureInitialized(onVerified) {
-  if (!isNativeIOS()) return { product: null, hasActiveEntitlement: getStoredProFlag() };
+  // Never infer entitlement from localStorage; only from Store `owned` after update().
+  if (!isNativeIOS()) return { product: null, hasActiveEntitlement: false };
 
   const runtime = await waitForStoreRuntime();
   if (!runtime) {
@@ -181,9 +182,45 @@ async function ensureInitialized(onVerified) {
 
 export async function initializePurchaseStore(onVerified) {
   if (!isNativeIOS()) {
-    return { product: null, hasActiveEntitlement: getStoredProFlag() };
+    return { product: null, hasActiveEntitlement: false };
   }
   return ensureInitialized(onVerified);
+}
+
+/** After store init, load subscription product price with light retries (no infinite loops). */
+export async function fetchProductPriceWithRetry(maxAttempts = 3) {
+  if (!isNativeIOS()) {
+    return { product: null, priceStatus: "failed" };
+  }
+  const init = await ensureInitialized();
+  if (init?.error) {
+    return { product: null, priceStatus: "failed" };
+  }
+  const runtime = getStoreRuntime();
+  if (!runtime) {
+    return { product: null, priceStatus: "failed" };
+  }
+  const { store, Platform } = runtime;
+  await waitForStoreReady(store);
+
+  let lastMapped = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await store.update();
+    } catch (e) {
+      console.error("[IAP] store.update failed", e);
+    }
+    const raw = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
+    lastMapped = mapProduct(raw);
+    const dp = typeof lastMapped?.displayPrice === "string" ? lastMapped.displayPrice.trim() : "";
+    if (dp.length > 0) {
+      return { product: lastMapped, priceStatus: "ready" };
+    }
+    if (attempt < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 450));
+    }
+  }
+  return { product: lastMapped, priceStatus: "failed" };
 }
 
 export async function purchaseProProduct() {
@@ -220,7 +257,7 @@ export async function purchaseProProduct() {
 
 export async function restorePurchases() {
   if (!isNativeIOS()) {
-    return { hasActiveEntitlement: getStoredProFlag() };
+    return { hasActiveEntitlement: false };
   }
   const init = await ensureInitialized();
   if (init?.error) return { hasActiveEntitlement: false, error: init.error };
@@ -243,7 +280,7 @@ export async function restorePurchases() {
 
 export async function checkEntitlements() {
   if (!isNativeIOS()) {
-    return { hasActiveEntitlement: getStoredProFlag() };
+    return { hasActiveEntitlement: false };
   }
   const init = await ensureInitialized();
   if (init?.error) return { hasActiveEntitlement: false, error: init.error };

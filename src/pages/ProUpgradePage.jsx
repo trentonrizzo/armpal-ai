@@ -1,6 +1,5 @@
 // src/pages/ProUpgradePage.jsx
-// Pro upgrade page — benefits, price, CTA to Stripe checkout.
-// Pro status remains from Supabase profiles.is_pro (webhook updates).
+// Pro upgrade — App Store subscription on iOS; profile.is_pro on web.
 
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -51,8 +50,9 @@ export default function ProUpgradePage() {
   const navigate = useNavigate();
   const [error, setError] = useState(null);
   const {
-    isPro,
     product,
+    subscriptionStatus,
+    priceStatus,
     initializing,
     purchaseLoading,
     restoreLoading,
@@ -60,9 +60,15 @@ export default function ProUpgradePage() {
     restore,
   } = usePurchase();
 
+  const subResolving = subscriptionStatus === "loading" || initializing;
+  const verifiedPro = subscriptionStatus === "pro";
+
   const livePrice = typeof product?.displayPrice === "string" ? product.displayPrice.trim() : "";
   const hasLivePrice = livePrice.length > 0;
-  const priceDisplay = hasLivePrice ? livePrice : PRO_PRICE_FALLBACK_LABEL;
+  const priceLoading = priceStatus === "loading";
+
+  const priceDisplay = priceLoading ? "Loading price..." : hasLivePrice ? livePrice : PRO_PRICE_FALLBACK_LABEL;
+  const showPerMonthSuffix = hasLivePrice && !priceLoading;
 
   return (
     <div style={S.page}>
@@ -100,7 +106,7 @@ export default function ProUpgradePage() {
             <span style={{ ...S.tierLabel, color: "var(--accent)" }}>Pro</span>
             <span style={S.tierPrice}>
               {priceDisplay}
-              {hasLivePrice ? <span style={S.tierPriceSub}> / month</span> : null}
+              {showPerMonthSuffix ? <span style={S.tierPriceSub}> / month</span> : null}
             </span>
           </div>
           <ul style={S.featureList}>
@@ -117,7 +123,7 @@ export default function ProUpgradePage() {
           <span style={S.priceLabel}>Monthly</span>
           <p style={S.priceValue}>
             {priceDisplay}
-            {hasLivePrice ? <span style={S.priceUnit}> / month</span> : null}
+            {showPerMonthSuffix ? <span style={S.priceUnit}> / month</span> : null}
           </p>
           <p style={S.priceSub}>Cancel anytime. No commitment.</p>
         </div>
@@ -145,14 +151,20 @@ export default function ProUpgradePage() {
             }
             alert("Purchase failed. Please try again.");
           }}
-          disabled={initializing || purchaseLoading || isPro}
+          disabled={subResolving || purchaseLoading || verifiedPro}
           style={{
             ...S.ctaBtn,
-            opacity: initializing || purchaseLoading || isPro ? 0.8 : 1,
-            cursor: initializing || purchaseLoading || isPro ? "not-allowed" : "pointer",
+            opacity: subResolving || purchaseLoading || verifiedPro ? 0.8 : 1,
+            cursor: subResolving || purchaseLoading || verifiedPro ? "not-allowed" : "pointer",
           }}
         >
-          {isPro ? "You're Pro" : purchaseLoading ? "Processing..." : "Upgrade to Pro"}
+          {verifiedPro
+            ? "You're Pro"
+            : subResolving
+              ? "Checking..."
+              : purchaseLoading
+                ? "Processing..."
+                : "Upgrade to Pro"}
         </button>
 
         <button
@@ -167,11 +179,11 @@ export default function ProUpgradePage() {
               alert("Restore failed.");
             }
           }}
-          disabled={initializing || restoreLoading}
+          disabled={subResolving || restoreLoading}
           style={{
             ...S.restoreBtn,
-            opacity: initializing || restoreLoading ? 0.8 : 1,
-            cursor: initializing || restoreLoading ? "not-allowed" : "pointer",
+            opacity: subResolving || restoreLoading ? 0.8 : 1,
+            cursor: subResolving || restoreLoading ? "not-allowed" : "pointer",
           }}
         >
           {restoreLoading ? "Restoring..." : "Restore Purchases"}
@@ -179,7 +191,13 @@ export default function ProUpgradePage() {
 
         <div style={S.disclosureBox}>
           <p style={S.disclosureLine}>
-            <strong>{priceDisplay} / month</strong>
+            <strong>
+              {priceLoading
+                ? "Loading price..."
+                : hasLivePrice
+                  ? `${livePrice} / month`
+                  : PRO_PRICE_FALLBACK_LABEL}
+            </strong>
           </p>
           <p style={S.disclosureLine}>Monthly subscription.</p>
           <p style={S.disclosureLine}>
