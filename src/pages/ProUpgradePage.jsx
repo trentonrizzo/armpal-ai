@@ -180,6 +180,36 @@ export default function ProUpgradePage() {
         >
           {restoreLoading ? "Restoring..." : "Restore Purchases"}
         </button>
+
+        <div style={S.disclosureBox}>
+          <p style={S.disclosureLine}>
+            <strong>{priceDisplay} / month</strong>
+          </p>
+          <p style={S.disclosureLine}>Monthly subscription.</p>
+          <p style={S.disclosureLine}>
+            Subscription automatically renews monthly unless canceled at least 24 hours before the end
+            of the current billing period.
+          </p>
+          <p style={S.disclosureLine}>
+            Payment will be charged to your Apple ID at confirmation of purchase.
+          </p>
+          <p style={S.disclosureLine}>
+            Your account will be charged for renewal within 24 hours before the end of the current
+            period.
+          </p>
+          <p style={S.disclosureLine}>
+            You can manage or cancel your subscription anytime in your Apple ID account settings.
+          </p>
+          <p style={S.legalLinks}>
+            <a href="/privacy" style={S.legalLink}>
+              Privacy Policy
+            </a>
+            <span style={{ opacity: 0.5 }}>•</span>
+            <a href="/terms" style={S.legalLink}>
+              Terms of Service
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -304,6 +334,29 @@ const S = {
     color: "var(--text)",
     fontWeight: 700,
     fontSize: 15,
+  },
+  disclosureBox: {
+    marginTop: 12,
+    textAlign: "left",
+    fontSize: 12,
+    opacity: 0.78,
+    lineHeight: 1.45,
+  },
+  disclosureLine: {
+    margin: "0 0 6px",
+    color: "var(--text)",
+  },
+  legalLinks: {
+    margin: "10px 0 0",
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  legalLink: {
+    color: "var(--accent)",
+    textDecoration: "underline",
+    fontWeight: 700,
   },
   ctaFooter: {
     marginTop: 10,
