@@ -37,7 +37,7 @@ export default function TermsOfService() {
           onClick={() =>
             location.state?.fromSettingsLegal
               ? backToSettingsLegal()
-              : navigate("/", { replace: true })
+              : navigate(-1)
           }
           style={{
             position: "absolute",

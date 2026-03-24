@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 import { useToast } from "../components/ToastProvider";
@@ -14,8 +14,8 @@ export default function Support() {
       state: { openSettings: true, openLegal: true },
     });
   };
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -30,10 +30,10 @@ export default function Support() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const trimmedName = (name || "").trim();
     const trimmedEmail = (email || "").trim();
-    const trimmedSubject = (subject || "").trim();
     const trimmedMessage = (message || "").trim();
-    if (!trimmedEmail || !trimmedSubject || !trimmedMessage) return;
+    if (!trimmedName || !trimmedEmail || !trimmedMessage) return;
 
     setLoading(true);
     try {
@@ -41,7 +41,7 @@ export default function Support() {
         {
           user_id: userId,
           email: trimmedEmail,
-          subject: trimmedSubject,
+          subject: trimmedName,
           message: trimmedMessage,
           created_at: new Date().toISOString(),
         },
@@ -49,8 +49,8 @@ export default function Support() {
 
       if (insertError) throw insertError;
       toast.success("Message sent");
+      setName("");
       setEmail("");
-      setSubject("");
       setMessage("");
     } catch (err) {
       toast.error(err?.message || "Failed to send message");
@@ -85,7 +85,7 @@ export default function Support() {
           onClick={() =>
             location.state?.fromSettingsLegal
               ? backToSettingsLegal()
-              : navigate("/", { replace: true })
+              : navigate(-1)
           }
           style={{
             position: "absolute",
@@ -131,13 +131,13 @@ export default function Support() {
         }}
       >
         <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-          Email
+          Name
         </label>
         <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="your@email.com"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Your name"
           required
           style={{
             width: "100%",
@@ -153,13 +153,13 @@ export default function Support() {
         />
 
         <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-          Subject
+          Email
         </label>
         <input
-          type="text"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          placeholder="Brief subject"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="your@email.com"
           required
           style={{
             width: "100%",
@@ -251,12 +251,12 @@ export default function Support() {
         >
           Privacy Policy
         </a>
-        <Link
-          to="/terms"
+        <a
+          href="/terms.html"
           style={{ color: "var(--accent)", textDecoration: "underline" }}
         >
           Terms of Service
-        </Link>
+        </a>
       </p>
     </div>
   );
