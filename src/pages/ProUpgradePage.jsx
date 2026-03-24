@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePurchase } from "../context/PurchaseContext";
 
-const PRO_PRICE_DISPLAY = "$8.99";
+const PRO_PRICE_FALLBACK_LABEL = "Price shown at purchase";
 
 const FREE_FEATURES = [
   // Existing base benefits
@@ -29,19 +29,13 @@ const PRO_FEATURES = [
   "AI Chat — up to 25 responses/day",
   "AI Workout Converter — up to 10 uses/day",
   "AI Food Scan — up to 10 scans/day",
-  "Up to 1,000 saved workouts",
-  "Up to 1,000 bodyweight logs",
-  "Up to 1,000 measurement logs",
-  "Up to 1,000 PR logs",
-  "Up to 1,000 nutrition entries/day",
-  // Media + AI upgrades (appended)
-  "Unlimited workouts / PRs / measurements / goals (1000 cap)",
-  "Unlimited nutrition",
+  "Up to 1,000 workouts, PRs, measurements, bodyweight logs, and goals",
+  "Unlimited nutrition tracking",
   "10 videos/day (max 25MB)",
   "100 photos/day (max 10MB)",
   "50 voice messages/day (2 min)",
-  "Expanded AI usage",
-  "Full access to all features",
+  "Expanded AI usage with higher daily limits",
+  "Access to all Pro features",
 ];
 
 function FeatureCheck({ text, accent }) {
@@ -66,7 +60,9 @@ export default function ProUpgradePage() {
     restore,
   } = usePurchase();
 
-  const priceDisplay = product?.displayPrice || PRO_PRICE_DISPLAY;
+  const livePrice = typeof product?.displayPrice === "string" ? product.displayPrice.trim() : "";
+  const hasLivePrice = livePrice.length > 0;
+  const priceDisplay = hasLivePrice ? livePrice : PRO_PRICE_FALLBACK_LABEL;
 
   return (
     <div style={S.page}>
@@ -104,7 +100,7 @@ export default function ProUpgradePage() {
             <span style={{ ...S.tierLabel, color: "var(--accent)" }}>Pro</span>
             <span style={S.tierPrice}>
               {priceDisplay}
-              <span style={S.tierPriceSub}> / month</span>
+              {hasLivePrice ? <span style={S.tierPriceSub}> / month</span> : null}
             </span>
           </div>
           <ul style={S.featureList}>
@@ -121,7 +117,7 @@ export default function ProUpgradePage() {
           <span style={S.priceLabel}>Monthly</span>
           <p style={S.priceValue}>
             {priceDisplay}
-            <span style={S.priceUnit}> / month</span>
+            {hasLivePrice ? <span style={S.priceUnit}> / month</span> : null}
           </p>
           <p style={S.priceSub}>Cancel anytime. No commitment.</p>
         </div>
@@ -200,6 +196,7 @@ export default function ProUpgradePage() {
           <p style={S.disclosureLine}>
             You can manage or cancel your subscription anytime in your Apple ID account settings.
           </p>
+          <p style={S.disclosureLine}>Prices may vary by region.</p>
           <p style={S.legalLinks}>
             <a href="/privacy" style={S.legalLink}>
               Privacy Policy
