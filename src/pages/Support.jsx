@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
+import { useToast } from "../components/ToastProvider";
 
 export default function Support() {
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
   const backToSettingsLegal = () => {
     navigate("/profile", {
       replace: true,
@@ -15,13 +17,13 @@ export default function Support() {
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const u = data?.user;
+      setUserId(u?.id || null);
       if (u?.email) setEmail(u.email);
     });
   }, []);
@@ -34,28 +36,27 @@ export default function Support() {
     if (!trimmedEmail || !trimmedSubject || !trimmedMessage) return;
 
     setLoading(true);
-    setSuccess(false);
-    setError(null);
-
-    const { error: insertError } = await supabase
-      .from("support_requests")
-      .insert([
+    try {
+      const { error: insertError } = await supabase.from("support_requests").insert([
         {
+          user_id: userId,
           email: trimmedEmail,
           subject: trimmedSubject,
           message: trimmedMessage,
+          created_at: new Date().toISOString(),
         },
       ]);
 
-    setLoading(false);
-    if (insertError) {
-      setError("Something went wrong. Please try again.");
-      return;
+      if (insertError) throw insertError;
+      toast.success("Message sent");
+      setEmail("");
+      setSubject("");
+      setMessage("");
+    } catch (err) {
+      toast.error(err?.message || "Failed to send message");
+    } finally {
+      setLoading(false);
     }
-    setSuccess(true);
-    setEmail("");
-    setSubject("");
-    setMessage("");
   }
 
   return (
@@ -119,37 +120,6 @@ export default function Support() {
       <p style={{ fontSize: 14, opacity: 0.8, marginBottom: 20 }}>
         Send us a message and we&apos;ll get back to you as soon as we can.
       </p>
-
-      {success && (
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 14,
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            marginBottom: 20,
-            color: "var(--text)",
-          }}
-        >
-          Support request sent successfully. We'll respond as soon as possible.
-        </div>
-      )}
-
-      {error && (
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 14,
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            marginBottom: 20,
-            color: "var(--text)",
-            opacity: 0.9,
-          }}
-        >
-          {error}
-        </div>
-      )}
 
       <form
         onSubmit={handleSubmit}
@@ -245,6 +215,34 @@ export default function Support() {
           {loading ? "Sending..." : "Submit"}
         </button>
       </form>
+
+      <div
+        style={{
+          marginTop: 16,
+          background: "var(--card)",
+          borderRadius: 14,
+          padding: 16,
+          border: "1px solid var(--border)",
+        }}
+      >
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Or contact us directly</h2>
+        <p style={{ marginTop: 8, fontSize: 14, opacity: 0.8 }}>
+          If you prefer, you can email us at:
+        </p>
+        <a
+          href="mailto:armpalofficial@gmail.com"
+          style={{
+            display: "inline-block",
+            marginTop: 8,
+            color: "var(--accent)",
+            textDecoration: "underline",
+            fontWeight: 700,
+            wordBreak: "break-word",
+          }}
+        >
+          armpalofficial@gmail.com
+        </a>
+      </div>
 
       <p style={{ marginTop: 20, fontSize: 13, opacity: 0.8 }}>
         <a

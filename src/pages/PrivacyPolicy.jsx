@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 
 export default function PrivacyPolicy() {
@@ -185,25 +185,8 @@ export default function PrivacyPolicy() {
           Contact
         </h2>
         <p style={{ marginTop: 8 }}>
-          For privacy questions, use <span style={{ fontWeight: 700 }}>Contact Support</span> in the Legal
-          section to reach the team.
+          Use the Contact Support section in the app or email armpalofficial@gmail.com
         </p>
-        <Link
-          to="/support"
-          style={{
-            display: "inline-block",
-            marginTop: 14,
-            padding: "12px 20px",
-            borderRadius: 12,
-            background: "var(--accent)",
-            color: "#fff",
-            fontWeight: 700,
-            textDecoration: "none",
-            border: "1px solid var(--border)",
-          }}
-        >
-          Contact Support
-        </Link>
       </div>
     </div>
   );

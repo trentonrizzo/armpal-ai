@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 
 export default function TermsOfService() {
@@ -191,18 +191,7 @@ export default function TermsOfService() {
           Contact
         </h2>
         <p style={{ marginTop: 8 }}>
-          If you have questions about these Terms of Service, you can reach us
-          through the in‑app support form.
-        </p>
-        <p style={{ marginTop: 14, fontSize: 14, lineHeight: 1.6 }}>
-          For support, visit{" "}
-          <Link
-            to="/support"
-            style={{ color: "var(--accent)", textDecoration: "underline" }}
-          >
-            /support
-          </Link>
-          .
+          Use the Contact Support section in the app or email armpalofficial@gmail.com
         </p>
       </div>
     </div>
