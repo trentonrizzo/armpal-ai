@@ -14,6 +14,17 @@ export default function Support() {
       state: { openSettings: true, openLegal: true },
     });
   };
+  const handleBack = () => {
+    if (location.state?.fromSettingsLegal) {
+      backToSettingsLegal();
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/profile", { replace: true, state: { openSettings: true, openLegal: true } });
+  };
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -37,15 +48,25 @@ export default function Support() {
 
     setLoading(true);
     try {
-      const { error: insertError } = await supabase.from("support_requests").insert([
-        {
+      const payload = {
+        user_id: userId,
+        name: trimmedName,
+        email: trimmedEmail,
+        message: trimmedMessage,
+        created_at: new Date().toISOString(),
+      };
+      let { error: insertError } = await supabase.from("support_requests").insert([payload]);
+      // Compatibility fallback for older schemas without `name` column.
+      if (insertError) {
+        const fallbackPayload = {
           user_id: userId,
           email: trimmedEmail,
-          subject: trimmedName,
-          message: trimmedMessage,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+          message: `Name: ${trimmedName}\n\n${trimmedMessage}`,
+          created_at: payload.created_at,
+        };
+        const fallback = await supabase.from("support_requests").insert([fallbackPayload]);
+        insertError = fallback.error;
+      }
 
       if (insertError) throw insertError;
       toast.success("Message sent");
@@ -82,11 +103,7 @@ export default function Support() {
       >
         <button
           type="button"
-          onClick={() =>
-            location.state?.fromSettingsLegal
-              ? backToSettingsLegal()
-              : navigate(-1)
-          }
+          onClick={handleBack}
           style={{
             position: "absolute",
             left: 12,
@@ -227,7 +244,7 @@ export default function Support() {
       >
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Or contact us directly</h2>
         <p style={{ marginTop: 8, fontSize: 14, opacity: 0.8 }}>
-          If you prefer, you can email us at:
+          If you prefer, email us at:
         </p>
         <a
           href="mailto:armpalofficial@gmail.com"

@@ -11,6 +11,17 @@ export default function TermsOfService() {
       state: { openSettings: true, openLegal: true },
     });
   };
+  const handleBack = () => {
+    if (location.state?.fromSettingsLegal) {
+      backToSettingsLegal();
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/profile", { replace: true, state: { openSettings: true, openLegal: true } });
+  };
 
   return (
     <div
@@ -34,11 +45,7 @@ export default function TermsOfService() {
       >
         <button
           type="button"
-          onClick={() =>
-            location.state?.fromSettingsLegal
-              ? backToSettingsLegal()
-              : navigate(-1)
-          }
+          onClick={handleBack}
           style={{
             position: "absolute",
             left: 12,
@@ -191,7 +198,13 @@ export default function TermsOfService() {
           Contact
         </h2>
         <p style={{ marginTop: 8 }}>
-          Use the Contact Support section in the app or email armpalofficial@gmail.com
+          For support, use the Contact Support section in the app or email{" "}
+          <a
+            href="mailto:armpalofficial@gmail.com"
+            style={{ color: "var(--accent)", textDecoration: "underline" }}
+          >
+            armpalofficial@gmail.com
+          </a>
         </p>
       </div>
     </div>

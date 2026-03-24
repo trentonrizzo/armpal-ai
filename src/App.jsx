@@ -22,6 +22,9 @@ import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
 import StrengthCalculator from "./pages/StrengthCalculator";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
+import Support from "./pages/Support";
 import FriendProfile from "./pages/FriendProfile";
 import ResetPassword from "./pages/ResetPassword";
 import CreditsPage from "./pages/CreditsPage";
@@ -388,6 +391,9 @@ function AppContent() {
           <Route path="/chat/:friendId" element={<ChatPage />} />
           <Route path="/enable-notifications" element={<EnableNotifications />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/support" element={<Support />} />
           {/* Credits / Referral system temporarily disabled for MVP App Store release */}
           <Route path="/credits" element={<Navigate to="/" replace />} />
           <Route path="/redeem" element={<Navigate to="/" replace />} />

@@ -646,8 +646,9 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   Read how ArmPal handles your data and the terms of using the app.
                 </p>
 
-                <a
-                  href="/privacy.html"
+                <Link
+                  to="/privacy"
+                  state={{ fromSettingsLegal: true }}
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -664,10 +665,11 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   }}
                 >
                   Privacy Policy
-                </a>
+                </Link>
 
-                <a
-                  href="/terms.html"
+                <Link
+                  to="/terms"
+                  state={{ fromSettingsLegal: true }}
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -684,10 +686,11 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   }}
                 >
                   Terms of Service
-                </a>
+                </Link>
 
-                <a
-                  href="/support.html"
+                <Link
+                  to="/support"
+                  state={{ fromSettingsLegal: true }}
                   onClick={closeLegalAndOverlay}
                   style={{
                     display: "block",
@@ -703,7 +706,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                   }}
                 >
                   Contact Support
-                </a>
+                </Link>
               </>
             )}
 
