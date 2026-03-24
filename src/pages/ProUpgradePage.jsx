@@ -2,7 +2,7 @@
 // Pro upgrade — App Store subscription on iOS; profile.is_pro on web.
 
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { usePurchase } from "../context/PurchaseContext";
 
 const PRO_PRICE_FALLBACK_LABEL = "Price shown at purchase";
@@ -216,12 +216,18 @@ export default function ProUpgradePage() {
           </p>
           <p style={S.disclosureLine}>Prices may vary by region.</p>
           <p style={S.legalLinks}>
-            <a href="/privacy" style={S.legalLink}>
+            <Link to="/privacy" style={S.legalLink}>
               Privacy Policy
-            </a>
+            </Link>
             <span style={{ opacity: 0.5 }}>•</span>
-            <a href="/terms" style={S.legalLink}>
+            <Link to="/terms" style={S.legalLink}>
               Terms of Service
+            </Link>
+          </p>
+          <p style={S.disclosureLine}>
+            Questions?{" "}
+            <a href="mailto:support@armpal.net?subject=ArmPal%20Support" style={S.legalLink}>
+              support@armpal.net
             </a>
           </p>
         </div>
