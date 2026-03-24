@@ -727,6 +727,16 @@ export default function ProfilePage() {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [pendingAvatarBlob, setPendingAvatarBlob] = useState(null);
+  const [pendingAvatarPreview, setPendingAvatarPreview] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (pendingAvatarPreview) {
+        URL.revokeObjectURL(pendingAvatarPreview);
+      }
+    };
+  }, [pendingAvatarPreview]);
 
   const inputPhotosRef = useRef(null);
   const inputCameraRef = useRef(null);
@@ -1041,36 +1051,72 @@ export default function ProfilePage() {
     e.target.value = "";
   }
 
-  async function saveCroppedAvatar() {
+  async function applyCroppedPreview() {
     if (!user?.id || !selectedImage || !croppedAreaPixels) return;
+
+    try {
+      const blob = await getCroppedImg(selectedImage, croppedAreaPixels);
+      if (!blob) throw new Error("Unable to process cropped image.");
+
+      // Show cropped image immediately in UI; upload happens on explicit Save Photo.
+      const previewUrl = URL.createObjectURL(blob);
+      if (pendingAvatarPreview) {
+        URL.revokeObjectURL(pendingAvatarPreview);
+      }
+      setPendingAvatarBlob(blob);
+      setPendingAvatarPreview(previewUrl);
+      setAvatarUrl(previewUrl);
+      if (editMode) {
+        recomputeDirty({
+          display_name: displayName,
+          handle,
+          bio,
+          avatar_url: previewUrl,
+        });
+      }
+
+      setShowCropper(false);
+      setSelectedImage(null);
+    } catch (e) {
+      console.error("applyCroppedPreview failed", e);
+      toast.error("Failed to crop avatar");
+    }
+  }
+
+  async function saveAvatarPhoto() {
+    if (!user?.id || !pendingAvatarBlob) return;
 
     try {
       setUploading(true);
 
-      const blob = await getCroppedImg(selectedImage, croppedAreaPixels);
-      const path = `${user.id}-${Date.now()}.jpg`;
-
-      // upload
+      const path = `${user.id}/avatar.jpg`;
       const uploadRes = await supabase.storage
         .from(AVATAR_BUCKET)
-        .upload(path, blob, { upsert: true });
+        .upload(path, pendingAvatarBlob, {
+          upsert: true,
+          contentType: "image/jpeg",
+        });
 
       if (uploadRes?.error) throw uploadRes.error;
 
-      // public url
       const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+      const baseUrl = data?.publicUrl || "";
+      if (!baseUrl) throw new Error("Avatar URL unavailable");
+      const url = `${baseUrl}?t=${Date.now()}`;
 
-      const url = data?.publicUrl || "";
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: url })
+        .eq("id", user.id);
+      if (profileError) throw profileError;
 
       setAvatarUrl(url);
+      setPendingAvatarBlob(null);
+      if (pendingAvatarPreview) {
+        URL.revokeObjectURL(pendingAvatarPreview);
+      }
+      setPendingAvatarPreview("");
 
-      // persist immediately
-      await supabase.from("profiles").upsert({
-        id: user.id,
-        avatar_url: url,
-      });
-
-      // update origin if not editing, otherwise mark dirty
       if (!editMode) {
         setOrig((o) => ({ ...o, avatar_url: url }));
       } else {
@@ -1082,11 +1128,13 @@ export default function ProfilePage() {
         });
       }
 
-      setShowCropper(false);
-      setSelectedImage(null);
+      if (gate && gate.setProfile) {
+        gate.setProfile((prev) => ({ ...(prev || {}), avatar_url: url }));
+      }
+      toast.success("Photo saved");
     } catch (e) {
-      console.error("saveCroppedAvatar failed", e);
-      alert("Failed to upload avatar");
+      console.error("saveAvatarPhoto failed", e);
+      toast.error(e?.message || "Failed to upload avatar");
     } finally {
       setUploading(false);
     }
@@ -1096,12 +1144,18 @@ export default function ProfilePage() {
     if (!user?.id) return;
 
     try {
+      if (pendingAvatarPreview) {
+        URL.revokeObjectURL(pendingAvatarPreview);
+      }
+      setPendingAvatarBlob(null);
+      setPendingAvatarPreview("");
       setAvatarUrl("");
 
-      await supabase.from("profiles").upsert({
-        id: user.id,
-        avatar_url: "",
-      });
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: null })
+        .eq("id", user.id);
+      if (error) throw error;
 
       if (!editMode) {
         setOrig((o) => ({ ...o, avatar_url: "" }));
@@ -1115,9 +1169,13 @@ export default function ProfilePage() {
       }
 
       setAvatarMenuOpen(false);
+      if (gate && gate.setProfile) {
+        gate.setProfile((prev) => ({ ...(prev || {}), avatar_url: null }));
+      }
+      toast.success("Photo removed");
     } catch (e) {
       console.error("removeAvatar failed", e);
-      alert("Failed to remove avatar");
+      toast.error("Failed to remove avatar");
     }
   }
 
@@ -1323,6 +1381,28 @@ export default function ProfilePage() {
                 onChange={onPickFile}
                 style={{ display: "none" }}
               />
+
+              {pendingAvatarBlob && (
+                <button
+                  type="button"
+                  onClick={saveAvatarPhoto}
+                  disabled={uploading}
+                  style={{
+                    marginTop: 12,
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "none",
+                    background: "var(--accent)",
+                    color: "#fff",
+                    fontWeight: 900,
+                    cursor: uploading ? "not-allowed" : "pointer",
+                    opacity: uploading ? 0.8 : 1,
+                  }}
+                >
+                  {uploading ? "Saving Photo..." : "Save Photo"}
+                </button>
+              )}
             </div>
 
             {/* TEXT AREA */}
@@ -1658,7 +1738,7 @@ export default function ProfilePage() {
             <div style={{ fontWeight: 900 }}>Crop Photo</div>
 
             <button
-              onClick={saveCroppedAvatar}
+              onClick={applyCroppedPreview}
               disabled={uploading}
               style={{
                 ...styles.cropTopBtn,
@@ -1667,7 +1747,7 @@ export default function ProfilePage() {
                 opacity: uploading ? 0.75 : 1,
               }}
             >
-              {uploading ? "Saving…" : "Save"}
+              Apply Crop
             </button>
           </div>
 

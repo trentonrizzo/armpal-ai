@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePurchase } from "../context/PurchaseContext";
 
-const PRO_PRICE_DISPLAY = "$7.99";
+const PRO_PRICE_DISPLAY = "$8.99";
 
 const FREE_FEATURES = [
   // Existing base benefits
@@ -104,7 +104,7 @@ export default function ProUpgradePage() {
             <span style={{ ...S.tierLabel, color: "var(--accent)" }}>Pro</span>
             <span style={S.tierPrice}>
               {priceDisplay}
-              <span style={S.tierPriceSub}>/mo</span>
+              <span style={S.tierPriceSub}> / month</span>
             </span>
           </div>
           <ul style={S.featureList}>

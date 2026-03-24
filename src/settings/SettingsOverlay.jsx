@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { enablePush, disablePush } from "../lib/push";
 import { useTheme } from "../context/ThemeContext";
+import { useToast } from "../components/ToastProvider";
 import { updateProfile } from "../utils/profile";
 
 /* ============================
@@ -49,6 +50,7 @@ function TogglePill({ on, disabled, onClick }) {
 
 export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const { theme, setTheme, accent, setAccent } = useTheme();
+  const toast = useToast();
 
   function closeLegalAndOverlay() {
     setLegalModal(null);
@@ -58,6 +60,8 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const [user, setUser] = useState(null);
   const [section, setSection] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [legalModal, setLegalModal] = useState(null); // "menu" | "privacy" | "terms" | null
 
   const [notifSupported, setNotifSupported] = useState(false);
@@ -152,6 +156,25 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   async function confirmLogout() {
     await supabase.auth.signOut();
     window.location.reload();
+  }
+
+  async function confirmDeleteAccount() {
+    if (deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      const { error } = await supabase.rpc("delete_my_account");
+      if (error) throw error;
+
+      await supabase.auth.signOut();
+      toast.success("Account deleted");
+      setShowDeleteConfirm(false);
+      onClose();
+      window.location.assign("/login");
+    } catch (err) {
+      toast.error(err?.message || "Failed to delete account");
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   if (!open) return null;
@@ -340,6 +363,26 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                 >
                   Send password reset email
                 </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeleteConfirm(true);
+                  }}
+                  style={{
+                    padding: 10,
+                    width: "100%",
+                    borderRadius: 12,
+                    background: "color-mix(in srgb, var(--accent) 78%, #200)",
+                    border: "1px solid color-mix(in srgb, var(--accent) 70%, #300)",
+                    fontWeight: 800,
+                    color: "#fff",
+                    textAlign: "center",
+                    marginTop: 10,
+                  }}
+                >
+                  Delete Account
+                </button>
               </div>
             )}
           </div>
@@ -471,6 +514,74 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                 }}
               >
                 Log out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE ACCOUNT CONFIRM MODAL */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 10001,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 12,
+          }}
+        >
+          <div
+            style={{
+              width: "86%",
+              maxWidth: 340,
+              background: "var(--card)",
+              borderRadius: 16,
+              padding: 18,
+              border: "1px solid var(--border)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16 }}>Delete Account</div>
+            <div style={{ opacity: 0.75, marginTop: 8, fontSize: 13, lineHeight: 1.5 }}>
+              This will permanently delete your account and all data. This cannot be undone.
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleteBusy}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  borderRadius: 12,
+                  background: "transparent",
+                  border: "1px solid var(--accent)",
+                  color: "var(--accent)",
+                  fontWeight: 700,
+                  opacity: deleteBusy ? 0.7 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteAccount}
+                disabled={deleteBusy}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  borderRadius: 12,
+                  background: "color-mix(in srgb, var(--accent) 78%, #200)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 70%, #300)",
+                  color: "white",
+                  fontWeight: 900,
+                  opacity: deleteBusy ? 0.8 : 1,
+                }}
+              >
+                {deleteBusy ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
