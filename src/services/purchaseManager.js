@@ -1,61 +1,118 @@
+// src/services/purchaseManager.js
+// Apple IAP only. No Stripe. Boots at module load on native iOS so the product
+// is registered and prices are loaded before the user opens the paywall.
+
 import { Capacitor } from "@capacitor/core";
 
-const IOS_PRODUCT_ID = "armpal_pro";
+export const IOS_PRODUCT_ID = "armpal_pro";
 const LOCAL_PRO_KEY = "armpal_is_pro";
+const RUNTIME_READY_EVENT = "armpal-iap-state";
+
+function log(tag, ...rest) {
+  try {
+    console.log(`[IAP] ${tag}`, ...rest);
+  } catch {
+    // no-op
+  }
+}
 
 function isNativeIOS() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 }
 
-function getStoreRuntime() {
+function getRuntime() {
   if (typeof window === "undefined") return null;
-  const runtime = window.CdvPurchase;
-  if (!runtime?.store) return null;
-  return runtime;
+  const rt = window.CdvPurchase;
+  if (!rt?.store) return null;
+  return rt;
 }
 
-async function waitForStoreRuntime(timeoutMs = 8000) {
-  const existing = getStoreRuntime();
-  if (existing) return existing;
-
-  if (typeof window === "undefined") return null;
-
+function waitForRuntime(timeoutMs = 15000) {
+  const existing = getRuntime();
+  if (existing) return Promise.resolve(existing);
+  if (typeof window === "undefined") return Promise.resolve(null);
   return new Promise((resolve) => {
-    let settled = false;
+    let done = false;
     const started = Date.now();
-
-    const done = (value) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      resolve(v);
     };
-
-    const tick = () => {
-      const runtime = getStoreRuntime();
-      if (runtime) return done(runtime);
-      if (Date.now() - started >= timeoutMs) return done(null);
-      setTimeout(tick, 150);
-    };
-
     document.addEventListener(
       "deviceready",
       () => {
-        const runtime = getStoreRuntime();
-        if (runtime) done(runtime);
+        const rt = getRuntime();
+        if (rt) finish(rt);
       },
       { once: true }
     );
-
+    const tick = () => {
+      const rt = getRuntime();
+      if (rt) return finish(rt);
+      if (Date.now() - started >= timeoutMs) return finish(null);
+      setTimeout(tick, 150);
+    };
     tick();
   });
 }
 
-let initialized = false;
-let initPromise = null;
-let purchaseResolver = null;
-let onVerifiedGlobal = null;
-let storeReady = false;
-let storeReadyPromise = null;
+// ---------- Observable state ---------------------------------------------
+
+const state = {
+  initialized: false,
+  registered: false,
+  ready: false,
+  loaded: false,
+  canPurchase: false,
+  owned: false,
+  product: null, // { id, displayName, description, displayPrice }
+  lastError: null, // string | null
+};
+
+const listeners = new Set();
+
+function snapshot() {
+  return { ...state };
+}
+
+function emit() {
+  const snap = snapshot();
+  for (const l of listeners) {
+    try {
+      l(snap);
+    } catch (e) {
+      console.error("[IAP] listener error", e);
+    }
+  }
+  try {
+    window.dispatchEvent(new CustomEvent(RUNTIME_READY_EVENT, { detail: snap }));
+  } catch {
+    // ignored (e.g. SSR)
+  }
+}
+
+function update(patch) {
+  Object.assign(state, patch);
+  emit();
+}
+
+export function getIapState() {
+  return snapshot();
+}
+
+export function subscribeIap(listener) {
+  listeners.add(listener);
+  // Immediately send current state so subscribers get a value on mount.
+  try {
+    listener(snapshot());
+  } catch (e) {
+    console.error("[IAP] listener initial error", e);
+  }
+  return () => listeners.delete(listener);
+}
+
+// ---------- Local Pro flag (optimistic UI cache only) --------------------
 
 export function getStoredProFlag() {
   if (typeof window === "undefined") return false;
@@ -67,229 +124,348 @@ export function setStoredProFlag(value) {
   localStorage.setItem(LOCAL_PRO_KEY, value ? "1" : "0");
 }
 
+// ---------- Product helpers ----------------------------------------------
+
 function mapProduct(product) {
   if (!product) return null;
+  const price =
+    (product.pricing && product.pricing.price) ||
+    product.price ||
+    product.getOffer?.()?.pricingPhases?.[0]?.price ||
+    "";
   return {
     id: product.id,
     displayName: product.title || "ArmPal Pro",
     description: product.description || "",
-    displayPrice: product.pricing?.price || product.price || "",
+    displayPrice: typeof price === "string" ? price : "",
   };
 }
 
-function hasActiveEntitlement(product) {
-  return !!product?.owned;
+function readProductFromStore(runtime) {
+  const { store, Platform } = runtime;
+  return (
+    store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) ||
+    store.get(IOS_PRODUCT_ID) ||
+    null
+  );
 }
+
+function refreshProductState(runtime) {
+  const product = readProductFromStore(runtime);
+  const mapped = mapProduct(product);
+  const hasOffer = typeof product?.getOffer === "function" && !!product.getOffer();
+  const canPurchase = !!product && (product.canPurchase === true || hasOffer);
+  const hasPrice =
+    typeof mapped?.displayPrice === "string" && mapped.displayPrice.trim().length > 0;
+  const loaded = !!product && (hasPrice || hasOffer || canPurchase);
+  update({
+    product: mapped,
+    loaded,
+    canPurchase,
+    owned: !!product?.owned,
+  });
+  if (loaded && !state._loggedLoaded) {
+    state._loggedLoaded = true;
+    log("LOADED", mapped);
+  }
+  if (canPurchase && !state._loggedCan) {
+    state._loggedCan = true;
+    log("CAN PURCHASE", { id: mapped?.id, price: mapped?.displayPrice });
+  }
+}
+
+// ---------- Purchase / restore control flow ------------------------------
+
+let purchaseResolver = null;
+let onVerifiedListener = null;
 
 function resolvePurchase(result) {
   if (purchaseResolver) {
-    purchaseResolver(result);
+    const r = purchaseResolver;
     purchaseResolver = null;
+    try {
+      r(result);
+    } catch (e) {
+      console.error("[IAP] resolver error", e);
+    }
   }
 }
 
-function waitForStoreReady(store) {
-  if (storeReady) return Promise.resolve();
-  if (!storeReadyPromise) {
-    storeReadyPromise = new Promise((resolve) => {
-      store.ready(() => {
-        storeReady = true;
-        console.log("[IAP] Store ready");
-        resolve();
-      });
-    });
-  }
-  return storeReadyPromise;
-}
+function wireStoreHandlers(runtime) {
+  const { store } = runtime;
 
-function setupStoreHandlers(store) {
   store.error((err) => {
-    console.error("[IAP] Store error", err);
+    const message = err?.message || err?.description || "Store error";
+    log("ERROR", err);
+    update({ lastError: message });
+    resolvePurchase({ status: "failed", error: message });
+  });
+
+  store.when(IOS_PRODUCT_ID).updated(() => {
+    refreshProductState(runtime);
   });
 
   store.when(IOS_PRODUCT_ID).approved((transaction) => {
-    // Verification step: only verified flows unlock Pro.
-    transaction.verify();
+    log("APPROVED", {
+      id: IOS_PRODUCT_ID,
+      transactionId: transaction?.transactionId,
+    });
+    try {
+      transaction.verify();
+    } catch (e) {
+      log("ERROR", e);
+      update({ lastError: e?.message || "Verification could not start." });
+      resolvePurchase({ status: "failed", error: e?.message || "Verification failed" });
+    }
   });
 
   store.when(IOS_PRODUCT_ID).verified((receipt) => {
-    receipt.finish();
-    if (onVerifiedGlobal) onVerifiedGlobal();
+    try {
+      receipt.finish();
+      log("FINISHED", { id: IOS_PRODUCT_ID });
+    } catch (e) {
+      log("ERROR", e);
+    }
+    update({ owned: true, lastError: null });
+    if (onVerifiedListener) {
+      try {
+        onVerifiedListener();
+      } catch (e) {
+        console.error("[IAP] verified listener error", e);
+      }
+    }
     resolvePurchase({ status: "success", verified: true });
   });
 
   store.when(IOS_PRODUCT_ID).unverified(() => {
-    resolvePurchase({ status: "verificationFailed", verified: false });
+    const msg = "Apple could not verify this purchase.";
+    log("ERROR", msg);
+    update({ lastError: msg });
+    resolvePurchase({ status: "verificationFailed", error: msg });
   });
 
   store.when(IOS_PRODUCT_ID).cancelled(() => {
+    log("ERROR", "userCancelled");
     resolvePurchase({ status: "userCancelled" });
   });
+}
 
-  store.when(IOS_PRODUCT_ID).error(() => {
-    resolvePurchase({ status: "failed", message: "Purchase failed. Please try again." });
+// ---------- Boot (runs once at module load on iOS) -----------------------
+
+let bootPromise = null;
+
+export function bootPurchases() {
+  if (bootPromise) return bootPromise;
+  if (!isNativeIOS()) {
+    bootPromise = Promise.resolve({ ok: false, reason: "not-ios" });
+    return bootPromise;
+  }
+  bootPromise = (async () => {
+    try {
+      log("INIT", { productId: IOS_PRODUCT_ID });
+      const runtime = await waitForRuntime();
+      if (!runtime) {
+        const msg = "In-app purchases runtime unavailable.";
+        log("ERROR", msg);
+        update({ lastError: msg });
+        return { ok: false, reason: "no-runtime" };
+      }
+      const { store, Platform, ProductType } = runtime;
+
+      wireStoreHandlers(runtime);
+
+      store.register({
+        id: IOS_PRODUCT_ID,
+        type: ProductType.PAID_SUBSCRIPTION,
+        platform: Platform.APPLE_APPSTORE,
+      });
+      update({ registered: true });
+      log("REGISTERED", { id: IOS_PRODUCT_ID, type: "PAID_SUBSCRIPTION" });
+
+      await store.initialize([Platform.APPLE_APPSTORE]);
+      update({ initialized: true });
+
+      await new Promise((resolve) => store.ready(() => resolve()));
+      update({ ready: true });
+
+      await store.update();
+      refreshProductState(runtime);
+
+      return { ok: true };
+    } catch (e) {
+      const msg = e?.message || "IAP boot failed.";
+      log("ERROR", e);
+      update({ lastError: msg });
+      return { ok: false, reason: "boot-error", error: msg };
+    }
+  })();
+  return bootPromise;
+}
+
+// Auto-boot on module load for iOS — runs before the paywall opens.
+if (typeof window !== "undefined") {
+  bootPurchases().catch(() => {
+    // already logged inside bootPurchases
   });
 }
 
-async function ensureInitialized(onVerified) {
-  // Never infer entitlement from localStorage; only from Store `owned` after update().
-  if (!isNativeIOS()) return { product: null, hasActiveEntitlement: false };
+// ---------- Public API ---------------------------------------------------
 
-  const runtime = await waitForStoreRuntime();
-  if (!runtime) {
-    return {
-      product: null,
-      hasActiveEntitlement: false,
-      error: "In-app purchases are unavailable on this device.",
-    };
-  }
-
-  const { store, Platform } = runtime;
-  onVerifiedGlobal = onVerified || onVerifiedGlobal;
-
-  if (!initPromise) {
-    initPromise = (async () => {
-      if (!initialized) {
-        setupStoreHandlers(store);
-        store.register({
-          id: IOS_PRODUCT_ID,
-          type: runtime.ProductType.PAID_SUBSCRIPTION,
-          platform: Platform.APPLE_APPSTORE,
-        });
-        await store.initialize([Platform.APPLE_APPSTORE]);
-        await waitForStoreReady(store);
-        initialized = true;
-      }
-      // Refresh receipts/products so owned state is current.
-      await store.update();
-      const product = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
-      if (product) {
-        console.log("[IAP] Product loaded", {
-          id: product.id,
-          owned: !!product.owned,
-        });
-      }
-      return {
-        product: mapProduct(product),
-        hasActiveEntitlement: hasActiveEntitlement(product),
-      };
-    })().finally(() => {
-      initPromise = null;
-    });
-  }
-  return initPromise;
+export function setVerifiedListener(fn) {
+  onVerifiedListener = fn || null;
 }
 
-export async function initializePurchaseStore(onVerified) {
-  if (!isNativeIOS()) {
-    return { product: null, hasActiveEntitlement: false };
+export async function refreshProduct() {
+  if (!isNativeIOS()) return snapshot();
+  await bootPurchases();
+  const runtime = getRuntime();
+  if (!runtime) return snapshot();
+  try {
+    await runtime.store.update();
+  } catch (e) {
+    log("ERROR", e);
   }
-  return ensureInitialized(onVerified);
+  refreshProductState(runtime);
+  return snapshot();
 }
 
-/** After store init, load subscription product price with light retries (no infinite loops). */
-export async function fetchProductPriceWithRetry(maxAttempts = 3) {
+export async function orderPro() {
   if (!isNativeIOS()) {
-    return { product: null, priceStatus: "failed" };
+    return { status: "unsupported", error: "iOS-only purchase." };
   }
-  const init = await ensureInitialized();
-  if (init?.error) {
-    return { product: null, priceStatus: "failed" };
+  log("ORDER CALLED", { id: IOS_PRODUCT_ID });
+  const boot = await bootPurchases();
+  if (!boot.ok) {
+    const err = boot.error || "Purchases unavailable.";
+    update({ lastError: err });
+    return { status: "failed", error: err };
   }
-  const runtime = getStoreRuntime();
+  const runtime = getRuntime();
   if (!runtime) {
-    return { product: null, priceStatus: "failed" };
+    const err = "Store runtime unavailable.";
+    update({ lastError: err });
+    return { status: "failed", error: err };
   }
-  const { store, Platform } = runtime;
-  await waitForStoreReady(store);
 
-  let lastMapped = null;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      await store.update();
-    } catch (e) {
-      console.error("[IAP] store.update failed", e);
-    }
-    const raw = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
-    lastMapped = mapProduct(raw);
-    const dp = typeof lastMapped?.displayPrice === "string" ? lastMapped.displayPrice.trim() : "";
-    if (dp.length > 0) {
-      return { product: lastMapped, priceStatus: "ready" };
-    }
-    if (attempt < maxAttempts - 1) {
-      await new Promise((r) => setTimeout(r, 450));
-    }
-  }
-  return { product: lastMapped, priceStatus: "failed" };
-}
+  refreshProductState(runtime);
 
-export async function purchaseProProduct() {
-  if (!isNativeIOS()) {
-    return { status: "unsupported" };
+  const product = readProductFromStore(runtime);
+  if (!product) {
+    const err = "Product not loaded yet.";
+    update({ lastError: err });
+    return { status: "failed", error: err };
   }
-  const init = await ensureInitialized();
-  if (init?.error) return { status: "failed", message: init.error };
-
-  const runtime = getStoreRuntime();
-  if (!runtime) {
-    return { status: "failed", message: "In-app purchases are unavailable on this device." };
-  }
-  const { store, Platform } = runtime;
-  await waitForStoreReady(store);
-  const product = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
-  if (!product || typeof product.order !== "function") {
-    return { status: "failed", message: "Product not loaded. Try again." };
-  }
-  console.log("[IAP] Product loaded", { id: product.id, owned: !!product.owned });
   if (product.owned) {
+    update({ owned: true, lastError: null });
     return { status: "success", verified: true };
   }
 
-  return new Promise(async (resolve) => {
+  const offer =
+    typeof product.getOffer === "function" ? product.getOffer() : null;
+  if (!offer && typeof product.order !== "function") {
+    const err = "Product has no purchasable offer.";
+    update({ lastError: err });
+    return { status: "failed", error: err };
+  }
+
+  return new Promise((resolve) => {
     purchaseResolver = resolve;
-    try {
-      await product.order();
-    } catch {
-      resolvePurchase({ status: "failed", message: "Unable to start purchase. Please try again." });
-    }
+    const call = offer ? offer.order() : product.order();
+    Promise.resolve(call).catch((e) => {
+      const err = e?.message || "Could not start purchase.";
+      log("ERROR", e);
+      update({ lastError: err });
+      resolvePurchase({ status: "failed", error: err });
+    });
   });
 }
 
-export async function restorePurchases() {
+export async function restoreIap() {
   if (!isNativeIOS()) {
-    return { hasActiveEntitlement: false };
+    return { hasActiveEntitlement: false, error: "iOS-only." };
   }
-  const init = await ensureInitialized();
-  if (init?.error) return { hasActiveEntitlement: false, error: init.error };
-
-  const runtime = getStoreRuntime();
+  const boot = await bootPurchases();
+  if (!boot.ok) {
+    return { hasActiveEntitlement: false, error: boot.error || "Purchases unavailable." };
+  }
+  const runtime = getRuntime();
   if (!runtime) {
-    return { hasActiveEntitlement: false, error: "In-app purchases are unavailable on this device." };
+    return { hasActiveEntitlement: false, error: "Store runtime unavailable." };
   }
-  const { store, Platform } = runtime;
-  await waitForStoreReady(store);
   try {
-    await store.restorePurchases();
-    await store.update();
-    const product = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
-    return { hasActiveEntitlement: hasActiveEntitlement(product) };
-  } catch {
-    return { hasActiveEntitlement: false, error: "Restore failed. Please try again." };
+    await runtime.store.restorePurchases();
+    await runtime.store.update();
+    refreshProductState(runtime);
+    const owned = !!readProductFromStore(runtime)?.owned;
+    update({ owned });
+    return { hasActiveEntitlement: owned };
+  } catch (e) {
+    const err = e?.message || "Restore failed.";
+    log("ERROR", e);
+    update({ lastError: err });
+    return { hasActiveEntitlement: false, error: err };
   }
 }
 
 export async function checkEntitlements() {
-  if (!isNativeIOS()) {
-    return { hasActiveEntitlement: false };
+  if (!isNativeIOS()) return { hasActiveEntitlement: false };
+  const boot = await bootPurchases();
+  if (!boot.ok) return { hasActiveEntitlement: false, error: boot.error };
+  const runtime = getRuntime();
+  if (!runtime) return { hasActiveEntitlement: false };
+  try {
+    await runtime.store.update();
+  } catch (e) {
+    log("ERROR", e);
   }
-  const init = await ensureInitialized();
-  if (init?.error) return { hasActiveEntitlement: false, error: init.error };
-
-  const runtime = getStoreRuntime();
-  const { store, Platform } = runtime;
-  await store.update();
-  const product = store.get(IOS_PRODUCT_ID, Platform.APPLE_APPSTORE) || store.get(IOS_PRODUCT_ID);
-  return { hasActiveEntitlement: hasActiveEntitlement(product) };
+  refreshProductState(runtime);
+  return { hasActiveEntitlement: !!readProductFromStore(runtime)?.owned };
 }
 
-export { IOS_PRODUCT_ID };
+// ---------- Back-compat wrappers (used by existing context) --------------
+
+export async function initializePurchaseStore(onVerified) {
+  if (onVerified) setVerifiedListener(onVerified);
+  if (!isNativeIOS()) {
+    return { product: null, hasActiveEntitlement: false };
+  }
+  const boot = await bootPurchases();
+  if (!boot.ok) {
+    return {
+      product: null,
+      hasActiveEntitlement: false,
+      error: boot.error || "Purchases unavailable.",
+    };
+  }
+  const snap = snapshot();
+  return { product: snap.product, hasActiveEntitlement: snap.owned };
+}
+
+export async function fetchProductPriceWithRetry(maxAttempts = 3) {
+  if (!isNativeIOS()) return { product: null, priceStatus: "failed" };
+  await bootPurchases();
+  for (let i = 0; i < maxAttempts; i++) {
+    await refreshProduct();
+    const snap = snapshot();
+    const price =
+      typeof snap.product?.displayPrice === "string"
+        ? snap.product.displayPrice.trim()
+        : "";
+    if (price.length > 0) return { product: snap.product, priceStatus: "ready" };
+    await new Promise((r) => setTimeout(r, 450));
+  }
+  return { product: snapshot().product, priceStatus: "failed" };
+}
+
+export async function purchaseProProduct() {
+  const r = await orderPro();
+  if (r.status === "success" && r.verified) return r;
+  if (r.status === "userCancelled") return r;
+  if (r.status === "verificationFailed") return r;
+  if (r.status === "unsupported") return r;
+  return { status: r.status || "failed", message: r.error || "Purchase failed." };
+}
+
+export async function restorePurchases() {
+  return restoreIap();
+}

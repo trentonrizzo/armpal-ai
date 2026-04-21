@@ -4,6 +4,10 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 
+// Boot Apple IAP as early as possible on native iOS (no-op on web).
+// Registers "armpal_pro" and loads price before the paywall is opened.
+import "./services/purchaseManager";
+
 // 🔥 THEME PROVIDER (GLOBAL)
 import { ThemeProvider } from "./context/ThemeContext";
 import OnboardingProvider from "./onboarding/OnboardingProvider";

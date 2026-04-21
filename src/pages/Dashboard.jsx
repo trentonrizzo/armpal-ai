@@ -1,6 +1,5 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { Link, useNavigate } from "react-router-dom";
@@ -23,7 +22,6 @@ import EmptyState from "../components/EmptyState";
 import { useProfileGate } from "../context/ProfileGateContext";
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const toast = useToast();
 
@@ -78,28 +76,6 @@ export default function Dashboard() {
   useEffect(() => {
     loadUserAndData();
   }, []);
-
-  // After Stripe redirect: re-fetch profile from Supabase only. Never assume Pro from redirect.
-  useEffect(() => {
-    const stripeReturn = searchParams.get("stripe_return");
-    if (stripeReturn !== "1") return;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const uid = data?.user?.id;
-      if (!uid) return;
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name, handle, is_official, is_pro")
-        .eq("id", uid)
-        .single();
-      setUser(data?.user ?? null);
-      setIsPro(!!profile?.is_pro);
-      setIsOfficial(!!profile?.is_official);
-      setDisplayName(profile?.display_name || profile?.handle || "User");
-      getIsPro(uid).then(setAnalyticsPro);
-      setSearchParams({}, { replace: true });
-    })();
-  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!user?.id) return;

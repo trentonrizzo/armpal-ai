@@ -56,6 +56,9 @@ export default function ProUpgradePage() {
     initializing,
     purchaseLoading,
     restoreLoading,
+    productLoaded,
+    canPurchase,
+    iapError,
     purchase,
     restore,
   } = usePurchase();
@@ -69,6 +72,17 @@ export default function ProUpgradePage() {
 
   const priceDisplay = priceLoading ? "Loading price..." : hasLivePrice ? livePrice : PRO_PRICE_FALLBACK_LABEL;
   const showPerMonthSuffix = hasLivePrice && !priceLoading;
+
+  const purchaseReady = productLoaded && canPurchase;
+  const upgradeDisabled =
+    subResolving || purchaseLoading || verifiedPro || !purchaseReady;
+  const upgradeLabel = verifiedPro
+    ? "You're Pro"
+    : purchaseLoading
+      ? "Processing..."
+      : !purchaseReady
+        ? "Loading..."
+        : "Upgrade to Pro";
 
   return (
     <div style={S.page}>
@@ -128,43 +142,36 @@ export default function ProUpgradePage() {
           <p style={S.priceSub}>Cancel anytime. No commitment.</p>
         </div>
 
-        {error && <p style={S.error}>{error}</p>}
+        {(error || (iapError && !purchaseReady && !verifiedPro)) && (
+          <p style={S.error}>{error || iapError}</p>
+        )}
 
         <button
           type="button"
           onClick={async () => {
+            if (upgradeDisabled) return;
             setError(null);
             const result = await purchase();
             if (result?.ok) return;
             if (result?.status === "userCancelled") return;
             if (result?.status === "pending") {
-              alert("Purchase is pending approval.");
-              return;
-            }
-            if (result?.status === "verificationFailed") {
-              alert("Purchase verification failed.");
+              setError("Purchase is pending approval.");
               return;
             }
             if (result?.error) {
-              alert(result.error);
+              setError(result.error);
               return;
             }
-            alert("Purchase failed. Please try again.");
+            setError("Purchase failed. Please try again.");
           }}
-          disabled={subResolving || purchaseLoading || verifiedPro}
+          disabled={upgradeDisabled}
           style={{
             ...S.ctaBtn,
-            opacity: subResolving || purchaseLoading || verifiedPro ? 0.8 : 1,
-            cursor: subResolving || purchaseLoading || verifiedPro ? "not-allowed" : "pointer",
+            opacity: upgradeDisabled ? 0.8 : 1,
+            cursor: upgradeDisabled ? "not-allowed" : "pointer",
           }}
         >
-          {verifiedPro
-            ? "You're Pro"
-            : subResolving
-              ? "Checking..."
-              : purchaseLoading
-                ? "Processing..."
-                : "Upgrade to Pro"}
+          {upgradeLabel}
         </button>
 
         <button
@@ -173,11 +180,7 @@ export default function ProUpgradePage() {
             setError(null);
             const result = await restore();
             if (result?.ok) return;
-            if (result?.error) {
-              alert(result.error);
-            } else {
-              alert("Restore failed.");
-            }
+            setError(result?.error || "Restore failed.");
           }}
           disabled={subResolving || restoreLoading}
           style={{

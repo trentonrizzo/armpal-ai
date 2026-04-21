@@ -1,13 +1,24 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "../supabaseClient";
 import {
+  bootPurchases,
   checkEntitlements,
-  fetchProductPriceWithRetry,
-  initializePurchaseStore,
-  purchaseProProduct,
-  restorePurchases,
+  getIapState,
+  orderPro,
+  refreshProduct,
+  restoreIap,
   setStoredProFlag,
+  setVerifiedListener,
+  subscribeIap,
 } from "../services/purchaseManager";
 
 const PurchaseContext = createContext(null);
@@ -36,26 +47,32 @@ async function getProfileProFlag() {
   const { data } = await supabase.auth.getUser();
   const uid = data?.user?.id;
   if (!uid) return false;
-  const { data: profile, error } = await supabase.from("profiles").select("is_pro").eq("id", uid).maybeSingle();
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("is_pro")
+    .eq("id", uid)
+    .maybeSingle();
   if (error) return false;
   return !!profile?.is_pro;
 }
 
-/**
- * subscriptionStatus: verified Pro only on iOS via Store; on web/Android, server profile.is_pro.
- * priceStatus: iOS Store price fetch; web has no live price.
- */
 export function PurchaseProvider({ children }) {
-  const [product, setProduct] = useState(null);
+  const [iap, setIap] = useState(() => getIapState());
   const [subscriptionStatus, setSubscriptionStatus] = useState("loading");
-  const [priceStatus, setPriceStatus] = useState(() => (isNativeIOS() ? "loading" : "failed"));
   const [initializing, setInitializing] = useState(true);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState(false);
-
   const sessionUserIdRef = useRef(undefined);
 
   const isPro = subscriptionStatus === "pro";
+  const product = iap.product;
+  const priceStatus = useMemo(() => {
+    if (!isNativeIOS()) return "failed";
+    const p = iap.product?.displayPrice;
+    if (typeof p === "string" && p.trim().length > 0) return "ready";
+    if (iap.lastError && !iap.loaded) return "failed";
+    return "loading";
+  }, [iap.product, iap.loaded, iap.lastError]);
 
   const unlockPro = useCallback(async () => {
     setSubscriptionStatus("pro");
@@ -68,11 +85,18 @@ export function PurchaseProvider({ children }) {
     setStoredProFlag(false);
   }, []);
 
+  useEffect(() => {
+    setVerifiedListener(() => {
+      unlockPro().catch((e) => console.error(e));
+    });
+    return () => setVerifiedListener(null);
+  }, [unlockPro]);
+
+  useEffect(() => subscribeIap(setIap), []);
+
   const resolveSubscriptionState = useCallback(async () => {
     setInitializing(true);
     setSubscriptionStatus("loading");
-    setPriceStatus(isNativeIOS() ? "loading" : "failed");
-    setProduct(null);
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -84,33 +108,17 @@ export function PurchaseProvider({ children }) {
       }
 
       if (isNativeIOS()) {
-        // Conservative: clear stale local Pro before Store verification.
         setStoredProFlag(false);
-
-        const initResult = await initializePurchaseStore(unlockPro);
-        setProduct(initResult.product || null);
-
+        await bootPurchases();
+        await refreshProduct();
         const ent = await checkEntitlements();
-        const verified = !!(initResult.hasActiveEntitlement || ent?.hasActiveEntitlement);
-
-        if (verified) {
+        if (ent?.hasActiveEntitlement) {
           await unlockPro();
         } else {
           await clearProFromProfile();
           applyFreeState();
         }
-
-        const priceOutcome = await fetchProductPriceWithRetry(3);
-        if (priceOutcome.priceStatus === "ready" && priceOutcome.product?.displayPrice) {
-          setProduct(priceOutcome.product);
-          setPriceStatus("ready");
-        } else if (initResult.product?.displayPrice) {
-          setPriceStatus("ready");
-        } else {
-          setPriceStatus("failed");
-        }
       } else {
-        // No App Store on web; backend profile is the entitlement source here.
         const profileIsPro = await getProfileProFlag();
         if (profileIsPro) {
           setStoredProFlag(true);
@@ -119,13 +127,10 @@ export function PurchaseProvider({ children }) {
           setStoredProFlag(false);
           applyFreeState();
         }
-        setPriceStatus("failed");
-        setProduct(null);
       }
     } catch (e) {
       console.error("[PurchaseContext] resolveSubscriptionState", e);
       setSubscriptionStatus("error");
-      setPriceStatus("failed");
       setStoredProFlag(false);
     } finally {
       setInitializing(false);
@@ -160,28 +165,34 @@ export function PurchaseProvider({ children }) {
   const purchase = useCallback(async () => {
     setPurchaseLoading(true);
     try {
-      const result = await purchaseProProduct();
-      const status = result?.status;
-
-      if (status === "success" && result?.verified) {
+      const result = await orderPro();
+      if (result.status === "success" && result.verified) {
         await unlockPro();
-        return { ok: true, status };
+        return { ok: true, status: result.status };
       }
-      if (status === "userCancelled") {
-        return { ok: false, status };
+      if (result.status === "userCancelled") {
+        return { ok: false, status: result.status };
       }
-      if (status === "pending") {
-        return { ok: false, status };
+      if (result.status === "pending") {
+        return { ok: false, status: result.status };
       }
-      if (status === "verificationFailed") {
-        return { ok: false, status, error: "Verification failed" };
+      if (result.status === "verificationFailed") {
+        return {
+          ok: false,
+          status: result.status,
+          error: result.error || "Apple could not verify this purchase.",
+        };
       }
-      if (status === "unsupported") {
-        return { ok: false, status, error: "In-app purchases require iOS app build" };
+      if (result.status === "unsupported") {
+        return { ok: false, status: result.status, error: "iOS-only purchase." };
       }
-      return { ok: false, status: status || "failed", error: result?.message || "Purchase failed" };
-    } catch {
-      return { ok: false, status: "failed", error: "Purchase failed. Please try again." };
+      return {
+        ok: false,
+        status: result.status || "failed",
+        error: result.error || "Purchase failed.",
+      };
+    } catch (e) {
+      return { ok: false, status: "failed", error: e?.message || "Purchase failed." };
     } finally {
       setPurchaseLoading(false);
     }
@@ -190,7 +201,7 @@ export function PurchaseProvider({ children }) {
   const restore = useCallback(async () => {
     setRestoreLoading(true);
     try {
-      const result = await restorePurchases();
+      const result = await restoreIap();
       if (result?.hasActiveEntitlement) {
         await unlockPro();
         return { ok: true };
@@ -199,8 +210,8 @@ export function PurchaseProvider({ children }) {
         return { ok: false, error: result.error };
       }
       return { ok: false, error: "No active subscription found." };
-    } catch {
-      return { ok: false, error: "Restore failed. Please try again." };
+    } catch (e) {
+      return { ok: false, error: e?.message || "Restore failed." };
     } finally {
       setRestoreLoading(false);
     }
@@ -219,6 +230,10 @@ export function PurchaseProvider({ children }) {
       initializing,
       purchaseLoading,
       restoreLoading,
+      // Raw IAP flags the paywall needs for precise button gating.
+      productLoaded: iap.loaded,
+      canPurchase: iap.canPurchase,
+      iapError: iap.lastError,
       purchase,
       restore,
       refreshEntitlements,
@@ -231,6 +246,9 @@ export function PurchaseProvider({ children }) {
       initializing,
       purchaseLoading,
       restoreLoading,
+      iap.loaded,
+      iap.canPurchase,
+      iap.lastError,
       purchase,
       restore,
       refreshEntitlements,
