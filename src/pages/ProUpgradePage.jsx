@@ -1,9 +1,10 @@
 // src/pages/ProUpgradePage.jsx
 // Pro upgrade — App Store subscription on iOS; profile.is_pro on web.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { usePurchase } from "../context/PurchaseContext";
+import { printIapReport } from "../services/purchaseManager";
 
 const PRO_PRICE_FALLBACK_LABEL = "Price shown at purchase";
 
@@ -83,6 +84,17 @@ export default function ProUpgradePage() {
       : !purchaseReady
         ? "Loading..."
         : "Upgrade to Pro";
+
+  console.log("[IAP] Rendering purchase UI");
+  if (!purchaseReady && !verifiedPro) {
+    console.log("[IAP] Loading state ACTIVE");
+  }
+
+  useEffect(() => {
+    // Print a one-shot health report when the paywall opens, then again
+    // each time the IAP state moves between loading / loaded / error.
+    printIapReport();
+  }, [productLoaded, canPurchase, priceStatus, subscriptionStatus, iapError]);
 
   return (
     <div style={S.page}>

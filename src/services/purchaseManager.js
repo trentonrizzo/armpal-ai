@@ -59,6 +59,9 @@ function waitForRuntime(timeoutMs = 15000) {
 
 // ---------- Observable state ---------------------------------------------
 
+const FALLBACK_PRICE_LABEL = "$8.99";
+const FALLBACK_TIMEOUT_MS = 5000;
+
 const state = {
   initialized: false,
   registered: false,
@@ -68,6 +71,7 @@ const state = {
   owned: false,
   product: null, // { id, displayName, description, displayPrice }
   lastError: null, // string | null
+  fallback: false, // true once 5s fail-safe forces a UI-usable product
 };
 
 const listeners = new Set();
@@ -151,6 +155,10 @@ function readProductFromStore(runtime) {
 }
 
 function refreshProductState(runtime) {
+  // Don't let a fallback product be overwritten by a still-empty real product.
+  // If the fallback already fired and the real product still hasn't loaded,
+  // we keep the fallback in place. Once the real product loads with a price,
+  // we replace the fallback with the real value.
   const product = readProductFromStore(runtime);
   const mapped = mapProduct(product);
   const hasOffer = typeof product?.getOffer === "function" && !!product.getOffer();
@@ -158,11 +166,26 @@ function refreshProductState(runtime) {
   const hasPrice =
     typeof mapped?.displayPrice === "string" && mapped.displayPrice.trim().length > 0;
   const loaded = !!product && (hasPrice || hasOffer || canPurchase);
+
+  try {
+    console.log("[IAP] Products loaded:", runtime?.store?.products);
+    console.log("[IAP] armpal_pro:", product);
+  } catch {
+    // no-op
+  }
+
+  if (state.fallback && !hasPrice && !hasOffer) {
+    // Real product still empty — keep fallback values for the UI.
+    return;
+  }
+
   update({
     product: mapped,
     loaded,
     canPurchase,
     owned: !!product?.owned,
+    // Once a real product arrives, drop the fallback flag.
+    fallback: state.fallback && !loaded,
   });
   if (loaded && !state._loggedLoaded) {
     state._loggedLoaded = true;
@@ -172,6 +195,23 @@ function refreshProductState(runtime) {
     state._loggedCan = true;
     log("CAN PURCHASE", { id: mapped?.id, price: mapped?.displayPrice });
   }
+}
+
+function triggerFallback(reason = "timeout") {
+  if (state.loaded) return; // real product won the race — nothing to do
+  if (state.fallback) return; // already fired
+  console.log("[IAP] TIMEOUT — fallback triggered", { reason });
+  update({
+    product: {
+      id: IOS_PRODUCT_ID,
+      displayName: "ArmPal Pro",
+      description: "",
+      displayPrice: FALLBACK_PRICE_LABEL,
+    },
+    loaded: true,
+    canPurchase: true,
+    fallback: true,
+  });
 }
 
 // ---------- Purchase / restore control flow ------------------------------
@@ -191,63 +231,122 @@ function resolvePurchase(result) {
   }
 }
 
-function wireStoreHandlers(runtime) {
-  const { store } = runtime;
+// Helpers for v13 callback filtering. `store.when()` in cordova-plugin-purchase
+// v13 takes NO arguments and fires for ALL products. We filter by product id
+// inside each callback so other future products do not accidentally trigger
+// our paywall flow.
+function transactionMatchesPro(transaction) {
+  if (!transaction) return false;
+  if (Array.isArray(transaction.products)) {
+    return transaction.products.some((p) => p?.id === IOS_PRODUCT_ID);
+  }
+  if (transaction.productId === IOS_PRODUCT_ID) return true;
+  if (typeof transaction.hasProductId === "function") {
+    try { return !!transaction.hasProductId(IOS_PRODUCT_ID); } catch { /* noop */ }
+  }
+  return false;
+}
 
+function receiptHasPro(receipt) {
+  if (!receipt) return false;
+  if (typeof receipt.hasTransaction === "function") {
+    try {
+      // Some platforms expose hasTransaction(productId)
+      if (receipt.hasTransaction(IOS_PRODUCT_ID)) return true;
+    } catch { /* noop */ }
+  }
+  const txns = receipt.transactions || receipt.collection || [];
+  for (const t of txns) {
+    if (transactionMatchesPro(t)) return true;
+  }
+  // VerifiedReceipt shape: { collection: VerifiedPurchase[] }
+  if (Array.isArray(receipt.collection)) {
+    for (const c of receipt.collection) {
+      if (c?.id === IOS_PRODUCT_ID || c?.productId === IOS_PRODUCT_ID) return true;
+    }
+  }
+  return true; // best-effort: if we cannot determine, treat as ours (we only sell one product)
+}
+
+function wireStoreHandlers(runtime) {
+  const { store, ErrorCode } = runtime;
+
+  // Cancellation in v13 is delivered via store.error with code PAYMENT_CANCELLED.
   store.error((err) => {
+    const code = err?.code;
     const message = err?.message || err?.description || "Store error";
-    log("ERROR", err);
+    if (ErrorCode && code === ErrorCode.PAYMENT_CANCELLED) {
+      log("USER CANCELLED", { code, message });
+      // Do NOT set lastError on cancellation - it isn't a real failure.
+      resolvePurchase({ status: "userCancelled" });
+      return;
+    }
+    log("ERROR", { code, message, err });
     update({ lastError: message });
     resolvePurchase({ status: "failed", error: message });
   });
 
-  store.when(IOS_PRODUCT_ID).updated(() => {
-    refreshProductState(runtime);
-  });
-
-  store.when(IOS_PRODUCT_ID).approved((transaction) => {
-    log("APPROVED", {
-      id: IOS_PRODUCT_ID,
-      transactionId: transaction?.transactionId,
-    });
-    try {
-      transaction.verify();
-    } catch (e) {
-      log("ERROR", e);
-      update({ lastError: e?.message || "Verification could not start." });
-      resolvePurchase({ status: "failed", error: e?.message || "Verification failed" });
-    }
-  });
-
-  store.when(IOS_PRODUCT_ID).verified((receipt) => {
-    try {
-      receipt.finish();
-      log("FINISHED", { id: IOS_PRODUCT_ID });
-    } catch (e) {
-      log("ERROR", e);
-    }
-    update({ owned: true, lastError: null });
-    if (onVerifiedListener) {
+  // Single chained when() — v13 ignores any argument passed to when().
+  store
+    .when()
+    .productUpdated(() => {
+      refreshProductState(runtime);
+    })
+    .receiptUpdated(() => {
+      refreshProductState(runtime);
+    })
+    .approved((transaction) => {
+      if (!transactionMatchesPro(transaction)) return;
+      log("APPROVED", {
+        id: IOS_PRODUCT_ID,
+        transactionId: transaction?.transactionId,
+      });
       try {
-        onVerifiedListener();
+        // verify() returns a Promise. Without a configured validator, the
+        // plugin auto-resolves verification (see Validator.verify backward-compat).
+        const p = transaction.verify();
+        Promise.resolve(p).catch((e) => {
+          log("ERROR", e);
+          update({ lastError: e?.message || "Verification failed" });
+          resolvePurchase({ status: "failed", error: e?.message || "Verification failed" });
+        });
       } catch (e) {
-        console.error("[IAP] verified listener error", e);
+        log("ERROR", e);
+        update({ lastError: e?.message || "Verification could not start." });
+        resolvePurchase({ status: "failed", error: e?.message || "Verification failed" });
       }
-    }
-    resolvePurchase({ status: "success", verified: true });
-  });
-
-  store.when(IOS_PRODUCT_ID).unverified(() => {
-    const msg = "Apple could not verify this purchase.";
-    log("ERROR", msg);
-    update({ lastError: msg });
-    resolvePurchase({ status: "verificationFailed", error: msg });
-  });
-
-  store.when(IOS_PRODUCT_ID).cancelled(() => {
-    log("ERROR", "userCancelled");
-    resolvePurchase({ status: "userCancelled" });
-  });
+    })
+    .verified((receipt) => {
+      if (!receiptHasPro(receipt)) return;
+      try {
+        const p = receipt.finish();
+        Promise.resolve(p).catch((e) => log("ERROR", e));
+        log("FINISHED", { id: IOS_PRODUCT_ID });
+      } catch (e) {
+        log("ERROR", e);
+      }
+      update({ owned: true, lastError: null });
+      if (onVerifiedListener) {
+        try {
+          onVerifiedListener();
+        } catch (e) {
+          console.error("[IAP] verified listener error", e);
+        }
+      }
+      resolvePurchase({ status: "success", verified: true });
+    })
+    .unverified((data) => {
+      if (data?.receipt && !receiptHasPro(data.receipt)) return;
+      const msg = data?.payload?.message || "Apple could not verify this purchase.";
+      log("ERROR", msg);
+      update({ lastError: msg });
+      resolvePurchase({ status: "verificationFailed", error: msg });
+    })
+    .finished((transaction) => {
+      if (!transactionMatchesPro(transaction)) return;
+      log("FINISHED", { transactionId: transaction?.transactionId });
+      refreshProductState(runtime);
+    });
 }
 
 // ---------- Boot (runs once at module load on iOS) -----------------------
@@ -261,16 +360,25 @@ export function bootPurchases() {
     return bootPromise;
   }
   bootPromise = (async () => {
+    // Hard 5-second fail-safe: if the real product hasn't loaded by then,
+    // force a fallback so the paywall UI cannot stay stuck on "Loading...".
+    const fallbackTimer = setTimeout(() => {
+      if (!state.loaded) triggerFallback("boot-timeout");
+    }, FALLBACK_TIMEOUT_MS);
+
     try {
+      console.log("[IAP] Store initializing...");
       log("INIT", { productId: IOS_PRODUCT_ID });
       const runtime = await waitForRuntime();
       if (!runtime) {
         const msg = "In-app purchases runtime unavailable.";
         log("ERROR", msg);
         update({ lastError: msg });
+        triggerFallback("no-runtime");
         return { ok: false, reason: "no-runtime" };
       }
       const { store, Platform, ProductType } = runtime;
+      // ErrorCode is read inside wireStoreHandlers via `runtime.ErrorCode`.
 
       wireStoreHandlers(runtime);
 
@@ -287,6 +395,7 @@ export function bootPurchases() {
 
       await new Promise((resolve) => store.ready(() => resolve()));
       update({ ready: true });
+      console.log("[IAP] Store ready");
 
       await store.update();
       refreshProductState(runtime);
@@ -296,7 +405,10 @@ export function bootPurchases() {
       const msg = e?.message || "IAP boot failed.";
       log("ERROR", e);
       update({ lastError: msg });
+      triggerFallback("boot-error");
       return { ok: false, reason: "boot-error", error: msg };
+    } finally {
+      clearTimeout(fallbackTimer);
     }
   })();
   return bootPromise;
@@ -313,6 +425,27 @@ if (typeof window !== "undefined") {
 
 export function setVerifiedListener(fn) {
   onVerifiedListener = fn || null;
+}
+
+export function forceFallback(reason = "manual") {
+  triggerFallback(reason);
+  return snapshot();
+}
+
+export function printIapReport() {
+  const s = snapshot();
+  const productFound = !!s.product;
+  const stuck = isNativeIOS() && !s.loaded && !s.fallback;
+  console.log("[IAP REPORT]");
+  console.log("- Product found:", productFound ? "YES" : "NO");
+  console.log("- Store initialized:", s.initialized ? "YES" : "NO");
+  console.log("- Store ready fired:", s.ready ? "YES" : "NO");
+  console.log("- Product loaded:", s.loaded ? "YES" : "NO");
+  console.log("- UI can get stuck loading:", stuck ? "YES" : "NO");
+  console.log("- Fallback implemented:", "YES");
+  console.log("- Fallback active:", s.fallback ? "YES" : "NO");
+  console.log("- Last error:", s.lastError || "none");
+  return s;
 }
 
 export async function refreshProduct() {

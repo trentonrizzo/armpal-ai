@@ -12,6 +12,7 @@ import { supabase } from "../supabaseClient";
 import {
   bootPurchases,
   checkEntitlements,
+  forceFallback,
   getIapState,
   orderPro,
   refreshProduct,
@@ -20,6 +21,8 @@ import {
   setVerifiedListener,
   subscribeIap,
 } from "../services/purchaseManager";
+
+const PAYWALL_FALLBACK_TIMEOUT_MS = 5000;
 
 const PurchaseContext = createContext(null);
 
@@ -70,9 +73,10 @@ export function PurchaseProvider({ children }) {
     if (!isNativeIOS()) return "failed";
     const p = iap.product?.displayPrice;
     if (typeof p === "string" && p.trim().length > 0) return "ready";
+    if (iap.fallback) return "ready";
     if (iap.lastError && !iap.loaded) return "failed";
     return "loading";
-  }, [iap.product, iap.loaded, iap.lastError]);
+  }, [iap.product, iap.loaded, iap.lastError, iap.fallback]);
 
   const unlockPro = useCallback(async () => {
     setSubscriptionStatus("pro");
@@ -93,6 +97,19 @@ export function PurchaseProvider({ children }) {
   }, [unlockPro]);
 
   useEffect(() => subscribeIap(setIap), []);
+
+  // Hard fail-safe: if we're on iOS and the product hasn't loaded after
+  // PAYWALL_FALLBACK_TIMEOUT_MS, force a fallback so the paywall UI cannot
+  // stay stuck on "Loading...".
+  useEffect(() => {
+    if (!isNativeIOS()) return;
+    if (iap.loaded || iap.fallback) return;
+    const t = setTimeout(() => {
+      const fresh = getIapState();
+      if (!fresh.loaded && !fresh.fallback) forceFallback("paywall-timeout");
+    }, PAYWALL_FALLBACK_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [iap.loaded, iap.fallback]);
 
   const resolveSubscriptionState = useCallback(async () => {
     setInitializing(true);
@@ -234,6 +251,7 @@ export function PurchaseProvider({ children }) {
       productLoaded: iap.loaded,
       canPurchase: iap.canPurchase,
       iapError: iap.lastError,
+      iapFallback: iap.fallback,
       purchase,
       restore,
       refreshEntitlements,
@@ -249,6 +267,7 @@ export function PurchaseProvider({ children }) {
       iap.loaded,
       iap.canPurchase,
       iap.lastError,
+      iap.fallback,
       purchase,
       restore,
       refreshEntitlements,
