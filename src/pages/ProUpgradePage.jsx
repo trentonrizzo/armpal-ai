@@ -60,6 +60,7 @@ export default function ProUpgradePage() {
     productLoaded,
     canPurchase,
     iapError,
+    iapFallback,
     purchase,
     restore,
   } = usePurchase();
@@ -71,23 +72,36 @@ export default function ProUpgradePage() {
   const hasLivePrice = livePrice.length > 0;
   const priceLoading = priceStatus === "loading";
 
+  // The fallback price ($8.99/month) must stay visible — keep priceDisplay
+  // logic untouched so the disclosure + comparison + monthly box all still
+  // render the price even when the real Apple product never resolves.
   const priceDisplay = priceLoading ? "Loading price..." : hasLivePrice ? livePrice : PRO_PRICE_FALLBACK_LABEL;
   const showPerMonthSuffix = hasLivePrice && !priceLoading;
 
-  const purchaseReady = productLoaded && canPurchase;
+  // Only treat the product as real when StoreKit actually delivered it.
+  // If the 5-second fail-safe activated (`iapFallback === true`), we still
+  // render the price for App Store compliance, but we MUST NOT call
+  // store.order(...) — it would fail or stall, hurting App Review.
+  const isRealProduct = !!product && !iapFallback;
+  const purchaseReady = isRealProduct && canPurchase;
   const upgradeDisabled =
     subResolving || purchaseLoading || verifiedPro || !purchaseReady;
   const upgradeLabel = verifiedPro
     ? "You're Pro"
     : purchaseLoading
       ? "Processing..."
-      : !purchaseReady
-        ? "Loading..."
-        : "Upgrade to Pro";
+      : iapFallback
+        ? "Store loading… Try again in a moment"
+        : !purchaseReady
+          ? "Loading..."
+          : "Upgrade to Pro";
 
   console.log("[IAP] Rendering purchase UI");
   if (!purchaseReady && !verifiedPro) {
     console.log("[IAP] Loading state ACTIVE");
+  }
+  if (iapFallback) {
+    console.log("[IAP] Fallback active — purchase disabled");
   }
 
   useEffect(() => {
@@ -162,6 +176,12 @@ export default function ProUpgradePage() {
           type="button"
           onClick={async () => {
             if (upgradeDisabled) return;
+            // Hard guard: never call into store.order() while the fallback
+            // is active — there's no real Apple product to charge against.
+            if (iapFallback) {
+              console.log("[IAP] Fallback active — purchase disabled");
+              return;
+            }
             setError(null);
             const result = await purchase();
             if (result?.ok) return;
