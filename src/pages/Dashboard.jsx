@@ -209,7 +209,7 @@ export default function Dashboard() {
 
     const cap = await checkUsageCap(user.id, "prs");
     if (!cap.allowed) {
-      setPrCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+      setPrCapMessage(`PR limit reached (${cap.limit}).`);
       return;
     }
     setPrCapMessage("");
@@ -279,17 +279,9 @@ export default function Dashboard() {
                 "User")}
             </span>
 
-  {isPro && (
-    <span style={{
-      padding: "2px 6px",
-      fontSize: "12px",
-      borderRadius: "6px",
-      background: "#ffd700",
-      color: "#000",
-      fontWeight: "bold"
-    }}>
-      PRO
-    </span>
+  {/* Pro badge hidden for App Store launch — backend isPro flag preserved. */}
+  {false && isPro && (
+    <span>PRO</span>
   )}
 </h1>
           <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
@@ -341,28 +333,12 @@ export default function Dashboard() {
         </Link>
       </header>
 
-      {!isPro && (
-        <Link
-          to="/pro"
-          style={{
-            display: "block",
-            marginBottom: 16,
-            padding: "12px 16px",
-            borderRadius: 12,
-            background: "var(--accent)",
-            color: "var(--text)",
-            fontWeight: 700,
-            fontSize: 14,
-            textAlign: "center",
-            border: "1px solid var(--border)",
-            textDecoration: "none",
-          }}
-        >
-          Upgrade to Pro
-        </Link>
+      {/* Upgrade banner hidden for App Store launch — backend isPro flag preserved. */}
+      {false && !isPro && (
+        <Link to="/">Upgrade</Link>
       )}
 
-      {/* AI CHAT (PREMIUM ONLY) */}
+      {/* AI CHAT */}
 <section style={{ marginBottom: 20 }} data-onboarding="dashboard-main">
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
           Today’s Focus

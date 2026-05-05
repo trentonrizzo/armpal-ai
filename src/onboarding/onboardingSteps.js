@@ -128,7 +128,7 @@ export const ONBOARDING_STEPS = [
     target: null,
     title: "You're all set.",
     description:
-      "Create workouts, track progress, and train with friends. Upgrade to Pro for advanced analytics and AI.",
+      "Create workouts, track progress, and train with friends.",
     trigger: { type: "button", action: "finish" },
   },
 ];

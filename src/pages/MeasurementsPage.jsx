@@ -287,7 +287,7 @@ export default function MeasurementsPage() {
       } else {
         const cap = await checkUsageCap(user.id, "measurements");
         if (!cap.allowed) {
-          setCapMessage(`Measurement limit reached (${cap.limit}). Go Pro for more!`);
+          setCapMessage(`Measurement limit reached (${cap.limit}).`);
           return;
         }
         setCapMessage("");
@@ -348,7 +348,7 @@ export default function MeasurementsPage() {
 
     const cap = await checkUsageCap(user.id, "bodyweight");
     if (!cap.allowed) {
-      setCapMessage(`Bodyweight log limit reached (${cap.limit}). Go Pro for more!`);
+      setCapMessage(`Bodyweight log limit reached (${cap.limit}).`);
       return;
     }
     setCapMessage("");

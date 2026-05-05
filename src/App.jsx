@@ -33,7 +33,6 @@ import ReferralsPage from "./pages/ReferralsPage";
 
 import Analytics from "./pages/Analytics";
 import MeasurementAnalytics from "./pages/MeasurementAnalytics";
-import ProUpgradePage from "./pages/ProUpgradePage";
 
 import ProgramMarketplace from "./features/programs/ProgramMarketplace";
 import ProgramPreview from "./features/programs/ProgramPreview";
@@ -400,7 +399,8 @@ function AppContent() {
           <Route path="/referrals" element={<Navigate to="/" replace />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/analytics/measurements" element={<MeasurementAnalytics />} />
-          <Route path="/pro" element={<ProUpgradePage />} />
+          {/* Subscription / upgrade screen hidden for App Store launch — backend logic preserved. */}
+          <Route path="/pro" element={<Navigate to="/" replace />} />
           {/* Programs temporarily hidden for App Store launch */}
           {/* <Route path="/programs" element={<ProgramsErrorBoundary><ProgramMarketplace /></ProgramsErrorBoundary>} /> */}
           {/* <Route path="/programs/create" element={<ProgramsErrorBoundary><CreateProgram /></ProgramsErrorBoundary>} /> */}

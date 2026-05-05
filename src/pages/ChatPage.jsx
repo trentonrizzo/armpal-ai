@@ -1012,7 +1012,7 @@ export default function ChatPage() {
         { user_id: user.id, media_type: "photo", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        toast.error("Photo limit reached. Upgrade to Pro to send more media.");
+        toast.error("Daily photo limit reached.");
         return;
       }
 
@@ -1072,9 +1072,10 @@ export default function ChatPage() {
   async function sendVideo(file) {
     if (!user?.id || !file) return;
 
-    // Free users: send them to the Pro upgrade screen instead of silently blocking.
+    // Backend may still enforce isPro server-side; we simply block silently here
+    // for App Store launch and surface a neutral limit message below.
     if (!isPro) {
-      navigate("/pro");
+      toast.error("Video sending is temporarily unavailable.");
       return;
     }
 
@@ -1093,7 +1094,7 @@ export default function ChatPage() {
         { user_id: user.id, media_type: "video", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        toast.error("Video limit reached. Upgrade to Pro to send more media.");
+        toast.error("Daily video limit reached.");
         return;
       }
 
@@ -1279,7 +1280,7 @@ export default function ChatPage() {
       );
       if (limitErr || allowed === false) {
         setSendingAudio(false);
-        toast.error("Voice limit reached. Upgrade to Pro to send more.");
+        toast.error("Daily voice message limit reached.");
         return;
       }
 

@@ -122,9 +122,8 @@ export default function PrivacyPolicy() {
             you log to follow your progress over time.
           </li>
           <li style={{ marginTop: 6 }}>
-            <strong>Subscription / payment status</strong>: information about
-            whether you have a Pro subscription and related billing status (we
-            rely on third-party processors for payments).
+            <strong>Account preferences</strong>: settings and preferences tied
+            to your account.
           </li>
         </ul>
 
@@ -163,9 +162,8 @@ export default function PrivacyPolicy() {
         </h2>
         <p style={{ marginTop: 8 }}>
           We <strong>do not sell</strong> your personal data. We may work with
-          service providers (for infrastructure, analytics, or payments) who
-          process data on our behalf under contract, but they do not own or sell
-          your data.
+          service providers (for infrastructure or analytics) who process data
+          on our behalf under contract, but they do not own or sell your data.
         </p>
 
         <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 18 }}>

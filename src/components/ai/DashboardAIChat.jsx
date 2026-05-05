@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { FiMoreVertical } from "react-icons/fi";
 import { supabase } from "../../supabaseClient";
 import { getIsPro } from "../../utils/usageLimits";
@@ -17,8 +16,6 @@ import EmptyState from "../EmptyState";
 import { getDisplayText, normalizeExerciseToFlexible } from "../../utils/displayText";
 
 export default function DashboardAIChat({ onClose }) {
-  const navigate = useNavigate();
-
   const [conversations, setConversations] = useState([]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -236,7 +233,7 @@ export default function DashboardAIChat({ onClose }) {
 
     const isPro = await getIsPro(userId);
     if (!isPro) {
-      setError("🔒 ArmPal AI is Pro only. Upgrade to unlock.");
+      setError("AI is temporarily unavailable. Please try again later.");
       return;
     }
 
@@ -286,7 +283,7 @@ try {
 if (!res.ok) {
 
   if (json?.error === "PRO_REQUIRED") {
-    setError("🔒 ArmPal AI is Pro only. Upgrade to unlock.");
+    setError("AI is temporarily unavailable. Please try again later.");
     return;
   }
 
@@ -760,29 +757,7 @@ if (!res.ok) {
             }}
           >
             <strong style={{ color: "var(--accent)" }}>AI Error:</strong> {error}
-            {error.includes("Pro only") && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose?.();
-                  navigate("/pro");
-                }}
-                style={{
-                  display: "block",
-                  marginTop: 10,
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "var(--accent)",
-                  color: "var(--text)",
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                Upgrade to Pro
-              </button>
-            )}
+            {/* Upgrade button hidden for App Store launch — backend AI gating preserved. */}
           </div>
         )}
 

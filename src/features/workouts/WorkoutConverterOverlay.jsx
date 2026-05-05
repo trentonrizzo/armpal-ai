@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import { X, Check, Zap } from "lucide-react";
+import { X, Zap } from "lucide-react";
 
 const PHASE = { INPUT: "INPUT", GENERATING: "GENERATING", COMPLETE: "COMPLETE" };
 
@@ -111,7 +110,6 @@ function exerciseToRow(ex, userId, workoutId, position) {
    COMPONENT
    ============================================================ */
 export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, onComplete }) {
-  const navigate = useNavigate();
   const [phase, setPhase] = useState(PHASE.INPUT);
   const [programText, setProgramText] = useState("");
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -177,7 +175,7 @@ export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, 
         const d = await res.json().catch(() => ({}));
 
         if (d?.error === "PRO_REQUIRED") {
-          setError("AI Workout Converter is Pro only. Upgrade to unlock.");
+          setError("AI Workout Converter is temporarily unavailable. Please try again later.");
           setPhase(PHASE.INPUT);
           return;
         }
@@ -281,42 +279,9 @@ export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, 
 
   if (!open) return null;
 
-  /* ============ PRO GATE ============ */
-  if (!isPro) {
-    return createPortal(
-      <>
-        <div style={OVERLAY_BG} onClick={onClose} />
-        <div style={PANEL}>
-          <div style={INNER}>
-            <button style={CLOSE_BTN} onClick={onClose}><X size={18} /></button>
-            <div style={CENTER}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
-              <h2 style={TITLE}>Unlock AI Workout Converter</h2>
-              <p style={{ ...SUB, marginBottom: 20 }}>
-                Paste any training program and convert it into structured workout cards automatically
-              </p>
-              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 32px", textAlign: "left", width: "100%" }}>
-                {[
-                  "Converts full programs into workout cards",
-                  "Supports percentages, RPE, rep ranges",
-                  "Auto-assigns dates to training days",
-                  "Bulk create up to 100 workouts at once",
-                ].map((t) => (
-                  <li key={t} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", fontSize: 14, color: "rgba(255,255,255,0.85)" }}>
-                    <Check size={16} style={{ color: "var(--accent)", flexShrink: 0 }} />
-                    <span>{t}</span>
-                  </li>
-                ))}
-              </ul>
-              <button style={PRIMARY_BTN} onClick={() => navigate("/pro")}>
-                Upgrade to Pro
-              </button>
-            </div>
-          </div>
-        </div>
-      </>,
-      document.body,
-    );
+  /* Pro gate hidden for App Store launch — backend isPro prop preserved. */
+  if (false && !isPro) {
+    return null;
   }
 
   /* ============ GENERATING ============ */

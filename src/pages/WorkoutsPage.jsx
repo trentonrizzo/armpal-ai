@@ -445,7 +445,7 @@ export default function WorkoutsPage() {
       } else {
         const cap = await checkUsageCap(user.id, "workouts");
         if (!cap.allowed) {
-          setCapMessage(`Workout limit reached (${cap.limit} for ${cap.isPro ? "Pro" : "free"}). Go Pro for more!`);
+          setCapMessage(`Workout limit reached (${cap.limit}).`);
           return;
         }
         setCapMessage("");
@@ -923,11 +923,7 @@ export default function WorkoutsPage() {
         >
           <Zap size={14} />
           <span>AI Converter</span>
-          <span style={{
-            fontSize: 9, fontWeight: 800, color: "#000",
-            background: "var(--accent)", padding: "2px 5px",
-            borderRadius: 4, lineHeight: 1,
-          }}>PRO</span>
+          {/* Pro pill hidden for App Store launch. */}
         </button>
       </div>
 

@@ -58,7 +58,7 @@ export default function StrengthCalculatorInline() {
     }
     const result = await createPR(prLiftName, oneRM, "lbs", prDate);
     if (result && !result.success && result.cap) {
-      setCapMessage(`PR limit reached (${result.cap.limit}). Go Pro for more!`);
+      setCapMessage(`PR limit reached (${result.cap.limit}).`);
       return;
     }
     setCapMessage("");

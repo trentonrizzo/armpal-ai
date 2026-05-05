@@ -283,7 +283,7 @@ export default function GoalsPage() {
     } else {
       const cap = await checkUsageCap(user.id, "goals");
       if (!cap.allowed) {
-        setFormError(`Goal limit reached (${cap.limit}). Go Pro for more!`);
+        setFormError(`Goal limit reached (${cap.limit}).`);
         setSaving(false);
         return;
       }

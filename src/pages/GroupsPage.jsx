@@ -72,7 +72,7 @@ export default function GroupsPage() {
   async function handleCreateGroup() {
     if (!user?.id || !createName.trim() || creating) return;
     if (!isPro) {
-      toast.error("Pro membership required to create groups.");
+      toast.error("Group creation is temporarily unavailable.");
       return;
     }
     setCreating(true);

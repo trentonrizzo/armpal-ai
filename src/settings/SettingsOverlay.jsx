@@ -784,9 +784,8 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     you log to follow your progress over time.
                   </li>
                   <li style={{ marginTop: 6 }}>
-                    <strong>Subscription / payment status</strong>: information about
-                    whether you have a Pro subscription and related billing status (we
-                    rely on third‑party processors for payments).
+                    <strong>Account preferences</strong>: settings and preferences tied
+                    to your account.
                   </li>
                 </ul>
 
@@ -825,9 +824,8 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                 </h4>
                 <p style={{ fontSize: 13, lineHeight: 1.6 }}>
                   We <strong>do not sell</strong> your personal data. We may work with
-                  service providers (for infrastructure, analytics, or payments) who
-                  process data on our behalf under contract, but they do not own or sell
-                  your data.
+                  service providers (for infrastructure or analytics) who process data
+                  on our behalf under contract, but they do not own or sell your data.
                 </p>
 
                 <h4 style={{ fontSize: 15, fontWeight: 700, marginTop: 12 }}>

@@ -337,15 +337,7 @@ export default function NutritionPage() {
         >
           <Camera size={16} />
           <span>Scan</span>
-          <span style={{
-            fontSize: 9,
-            fontWeight: 800,
-            color: "#000",
-            background: "var(--accent)",
-            padding: "2px 5px",
-            borderRadius: 4,
-            lineHeight: 1,
-          }}>PRO</span>
+          {/* Pro pill hidden for App Store launch. */}
         </button>
       </div>
       <p style={SUB}>Track daily calories and macros</p>

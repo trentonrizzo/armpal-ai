@@ -53,7 +53,7 @@ export default function WorkoutLogger() {
 
     const cap = await checkUsageCap(user.id, "workouts");
     if (!cap.allowed) {
-      setCapMessage(`Workout limit reached (${cap.limit}). Go Pro for more!`);
+      setCapMessage(`Workout limit reached (${cap.limit}).`);
       return;
     }
     setCapMessage("");

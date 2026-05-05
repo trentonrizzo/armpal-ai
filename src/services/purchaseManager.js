@@ -16,6 +16,27 @@ function log(tag, ...rest) {
   }
 }
 
+function logReal(tag, ...rest) {
+  try {
+    console.log(`[IAP REAL] ${tag}`, ...rest);
+  } catch {
+    // no-op
+  }
+}
+
+async function readBundleId() {
+  try {
+    const App = Capacitor?.Plugins?.App;
+    if (App && typeof App.getInfo === "function") {
+      const info = await App.getInfo();
+      return info?.id || null;
+    }
+  } catch {
+    // App plugin not available — that's fine.
+  }
+  return null;
+}
+
 function isNativeIOS() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 }
@@ -27,9 +48,12 @@ function getRuntime() {
   return rt;
 }
 
+// Resolve only once BOTH:
+// (a) the Capacitor native layer / Cordova `deviceready` is ready, AND
+// (b) `window.CdvPurchase.store` is attached by cordova-plugin-purchase.
+// Never call store.* methods before both are true — they'll silently no-op
+// or throw if the bridge isn't up yet.
 function waitForRuntime(timeoutMs = 15000) {
-  const existing = getRuntime();
-  if (existing) return Promise.resolve(existing);
   if (typeof window === "undefined") return Promise.resolve(null);
   return new Promise((resolve) => {
     let done = false;
@@ -39,18 +63,26 @@ function waitForRuntime(timeoutMs = 15000) {
       done = true;
       resolve(v);
     };
-    document.addEventListener(
-      "deviceready",
-      () => {
-        const rt = getRuntime();
-        if (rt) finish(rt);
-      },
-      { once: true }
-    );
+
+    let nativeReady = !Capacitor?.isNativePlatform?.(); // web is "ready" by definition
+    const markNativeReady = () => {
+      nativeReady = true;
+      const rt = getRuntime();
+      if (rt) finish(rt);
+    };
+
+    if (Capacitor?.isNativePlatform?.()) {
+      // Cordova-style readiness signal that cordova-plugin-purchase relies on.
+      document.addEventListener("deviceready", markNativeReady, { once: true });
+      // Capacitor 8 fires its bridge synchronously; if it's already up, the
+      // poller below will pick up `window.CdvPurchase` as soon as it attaches.
+      if (typeof Capacitor?.Plugins === "object") nativeReady = true;
+    }
+
     const tick = () => {
       const rt = getRuntime();
-      if (rt) return finish(rt);
-      if (Date.now() - started >= timeoutMs) return finish(null);
+      if (nativeReady && rt) return finish(rt);
+      if (Date.now() - started >= timeoutMs) return finish(getRuntime() || null);
       setTimeout(tick, 150);
     };
     tick();
@@ -369,49 +401,217 @@ export function bootPurchases() {
     try {
       console.log("[IAP] Store initializing...");
       log("INIT", { productId: IOS_PRODUCT_ID });
+
+      // Wait for both deviceready / Capacitor native bridge AND for the
+      // cordova-plugin-purchase JS shim to attach `window.CdvPurchase`.
       const runtime = await waitForRuntime();
+
+      // [IAP REAL] CdvPurchase presence — proves native plugin is wired in.
+      logReal("CdvPurchase exists", !!runtime, {
+        platform: Capacitor?.getPlatform?.(),
+        isNative: Capacitor?.isNativePlatform?.(),
+      });
+
+      const bundleId = await readBundleId();
+      logReal("bundle id", bundleId || "(unavailable — @capacitor/app plugin not present)");
+
       if (!runtime) {
         const msg = "In-app purchases runtime unavailable.";
+        logReal("errors", { stage: "no-runtime", message: msg });
         log("ERROR", msg);
         update({ lastError: msg });
         triggerFallback("no-runtime");
+        printRealDiagnostic({ reason: "no-runtime", bundleId, runtime: null });
         return { ok: false, reason: "no-runtime" };
       }
+
       const { store, Platform, ProductType } = runtime;
       // ErrorCode is read inside wireStoreHandlers via `runtime.ErrorCode`.
 
       wireStoreHandlers(runtime);
 
-      store.register({
-        id: IOS_PRODUCT_ID,
-        type: ProductType.PAID_SUBSCRIPTION,
-        platform: Platform.APPLE_APPSTORE,
-      });
-      update({ registered: true });
-      log("REGISTERED", { id: IOS_PRODUCT_ID, type: "PAID_SUBSCRIPTION" });
+      // v13 canonical array-form register call.
+      try {
+        store.register([
+          {
+            id: IOS_PRODUCT_ID,
+            type: ProductType.PAID_SUBSCRIPTION,
+            platform: Platform.APPLE_APPSTORE,
+          },
+        ]);
+        update({ registered: true });
+        log("REGISTERED", { id: IOS_PRODUCT_ID, type: "PAID_SUBSCRIPTION" });
+        logReal("registered armpal_pro", {
+          id: IOS_PRODUCT_ID,
+          type: "PAID_SUBSCRIPTION",
+          platform: "APPLE_APPSTORE",
+        });
+      } catch (e) {
+        const msg = e?.message || "Register failed";
+        logReal("errors", { stage: "register", message: msg, err: e });
+        update({ lastError: msg });
+        triggerFallback("register-error");
+        printRealDiagnostic({ reason: "register-error", bundleId, runtime, error: msg });
+        return { ok: false, reason: "register-error", error: msg };
+      }
 
-      await store.initialize([Platform.APPLE_APPSTORE]);
-      update({ initialized: true });
+      try {
+        await store.initialize([Platform.APPLE_APPSTORE]);
+        update({ initialized: true });
+        logReal("initialized APPLE_APPSTORE", { ok: true });
+      } catch (e) {
+        const msg = e?.message || "store.initialize failed";
+        logReal("errors", { stage: "initialize", message: msg, err: e });
+        update({ lastError: msg });
+        triggerFallback("initialize-error");
+        printRealDiagnostic({ reason: "initialize-failed", bundleId, runtime, error: msg });
+        return { ok: false, reason: "initialize-failed", error: msg };
+      }
 
       await new Promise((resolve) => store.ready(() => resolve()));
       update({ ready: true });
       console.log("[IAP] Store ready");
 
-      await store.update();
+      try {
+        await store.update();
+      } catch (e) {
+        const msg = e?.message || "store.update failed";
+        logReal("errors", { stage: "update", message: msg, err: e });
+        update({ lastError: msg });
+      }
       refreshProductState(runtime);
+
+      // ---- [IAP REAL] product / offers ----------------------------------
+      const products = runtime.store?.products || [];
+      logReal("store products", products);
+      const realProduct = readProductFromStore(runtime);
+      logReal("armpal_pro product", realProduct);
+
+      let offers = [];
+      try {
+        if (Array.isArray(realProduct?.offers)) offers = realProduct.offers;
+        else if (typeof realProduct?.getOffers === "function") offers = realProduct.getOffers() || [];
+        else if (typeof realProduct?.getOffer === "function") {
+          const o = realProduct.getOffer();
+          offers = o ? [o] : [];
+        }
+      } catch (e) {
+        logReal("errors", { stage: "read-offers", message: e?.message, err: e });
+      }
+      logReal("offers", offers);
+
+      // Final categorical diagnostic if product still didn't load.
+      if (!state.loaded) {
+        printRealDiagnostic({
+          reason: "no-product",
+          bundleId,
+          runtime,
+          products,
+          realProduct,
+          offers,
+        });
+      }
 
       return { ok: true };
     } catch (e) {
       const msg = e?.message || "IAP boot failed.";
+      logReal("errors", { stage: "boot", message: msg, err: e });
       log("ERROR", e);
       update({ lastError: msg });
       triggerFallback("boot-error");
+      printRealDiagnostic({ reason: "boot-error", error: msg });
       return { ok: false, reason: "boot-error", error: msg };
     } finally {
       clearTimeout(fallbackTimer);
     }
   })();
   return bootPromise;
+}
+
+// Categorical post-mortem when the real Apple connection didn't deliver
+// armpal_pro. Tells the developer EXACTLY which gate failed.
+function printRealDiagnostic({
+  reason,
+  bundleId,
+  runtime,
+  products,
+  realProduct,
+  offers,
+  error,
+}) {
+  const expectedBundle = "com.armpal.app";
+  const expectedProductId = IOS_PRODUCT_ID;
+
+  const causes = {
+    missingNativePlugin:
+      reason === "no-runtime" || !runtime || typeof runtime?.store?.register !== "function",
+    wrongBundleId: !!bundleId && bundleId !== expectedBundle,
+    productIdMismatch:
+      Array.isArray(products) &&
+      products.length > 0 &&
+      !products.some((p) => p?.id === expectedProductId),
+    appleReturnedEmptyProducts:
+      reason === "no-product" && Array.isArray(products) && products.length === 0,
+    noOffersReturned:
+      !!realProduct && Array.isArray(offers) && offers.length === 0,
+    storeInitializeFailed: reason === "initialize-failed" || reason === "register-error",
+  };
+
+  console.log("[IAP REAL] DIAGNOSTIC ----------------------------------");
+  console.log("[IAP REAL] reason:", reason);
+  if (error) console.log("[IAP REAL] error:", error);
+  console.log("[IAP REAL] bundle id (read):", bundleId || "unavailable");
+  console.log("[IAP REAL] bundle id (expected):", expectedBundle);
+  console.log("[IAP REAL] product id (expected):", expectedProductId);
+  console.log("[IAP REAL] cause: missing native plugin:", causes.missingNativePlugin ? "YES" : "no");
+  console.log("[IAP REAL] cause: wrong bundle id:", causes.wrongBundleId ? "YES" : "no");
+  console.log("[IAP REAL] cause: product id mismatch:", causes.productIdMismatch ? "YES" : "no");
+  console.log(
+    "[IAP REAL] cause: Apple returned empty products:",
+    causes.appleReturnedEmptyProducts ? "YES" : "no"
+  );
+  console.log("[IAP REAL] cause: no offers returned:", causes.noOffersReturned ? "YES" : "no");
+  console.log(
+    "[IAP REAL] cause: store initialize failed:",
+    causes.storeInitializeFailed ? "YES" : "no"
+  );
+
+  // Single human-readable verdict.
+  let verdict = "Unknown — see causes above.";
+  if (causes.missingNativePlugin) {
+    verdict =
+      "MISSING NATIVE PLUGIN — `window.CdvPurchase` is not attached. " +
+      "Run `npx cap sync ios` so cordova-plugin-purchase is copied into " +
+      "`ios/App/capacitor-cordova-ios-plugins/` and rebuild from Xcode.";
+  } else if (causes.wrongBundleId) {
+    verdict =
+      `WRONG BUNDLE ID — device reports "${bundleId}" but App Store Connect ` +
+      `expects "${expectedBundle}". Subscription products are scoped to a bundle id.`;
+  } else if (causes.storeInitializeFailed) {
+    verdict =
+      "STORE INITIALIZE FAILED — store.register / store.initialize threw. " +
+      "Check the printed error above and verify Capacitor sync.";
+  } else if (causes.productIdMismatch) {
+    verdict =
+      "PRODUCT ID MISMATCH — Apple returned products but none have id " +
+      `"${expectedProductId}". Check the Subscriptions section in App Store Connect.`;
+  } else if (causes.appleReturnedEmptyProducts) {
+    verdict =
+      "APPLE RETURNED EMPTY PRODUCTS — most common causes (in order of " +
+      "likelihood): (1) Paid Apps Agreement not active in App Store Connect → " +
+      "Agreements, Tax, and Banking, (2) the subscription is not in 'Ready to " +
+      "Submit' state and assigned to a Subscription Group with a localization + " +
+      "price, (3) the device is signed into a regular Apple ID instead of a " +
+      "Sandbox Tester, (4) running in a build that wasn't installed via Xcode " +
+      "or TestFlight.";
+  } else if (causes.noOffersReturned) {
+    verdict =
+      "NO OFFERS RETURNED — the product was found but has no subscription " +
+      "offer. In App Store Connect, ensure the subscription has an active " +
+      "Subscription Price for the device's storefront.";
+  }
+  console.log("[IAP REAL] VERDICT:", verdict);
+  console.log("[IAP REAL] -----------------------------------------------");
 }
 
 // Auto-boot on module load for iOS — runs before the paywall opens.

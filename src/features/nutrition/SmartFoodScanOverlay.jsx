@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { addEntry } from "./nutritionService";
 import imageCompression from "browser-image-compression";
-import { Camera, X, ChevronLeft, Check, AlertTriangle } from "lucide-react";
+import { Camera, X, ChevronLeft, AlertTriangle } from "lucide-react";
 
 const STEP = {
   PICK_IMAGE: "PICK_IMAGE",
@@ -272,7 +271,6 @@ export default function SmartFoodScanOverlay({
   isPro,
   onSaved,
 }) {
-  const navigate = useNavigate();
   const [step, setStep] = useState(STEP.PICK_IMAGE);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -359,7 +357,7 @@ export default function SmartFoodScanOverlay({
           { user_id: userId, media_type: "photo", file_size_mb: sizeMb }
         );
         if (limitErr || allowed === false) {
-          throw new Error("Photo limit reached. Upgrade to Pro to scan more meals.");
+          throw new Error("Daily scan limit reached.");
         }
 
         const { error: upErr } = await supabase.storage
@@ -531,47 +529,9 @@ export default function SmartFoodScanOverlay({
 
   if (!open) return null;
 
-  /* ================================================================
-     PRO GATE
-     ================================================================ */
-  if (!isPro) {
-    return createPortal(
-      <>
-        <div style={OVERLAY_BG} onClick={onClose} />
-        <div style={PANEL}>
-          <div style={INNER}>
-            <button style={CLOSE_BTN} onClick={onClose}><X size={18} /></button>
-            <div style={CENTER}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
-              <h2 style={TITLE}>Unlock Smart AI Food Scan</h2>
-              <p style={{ ...SUB, marginBottom: 20 }}>
-                Scan any meal with AI to instantly track nutrition
-              </p>
-              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 32px", textAlign: "left", width: "100%" }}>
-                {[
-                  "Automatic food detection from photos",
-                  "Instant calorie & macro estimation",
-                  "One-tap nutrition logging",
-                  "Save hours of manual entry",
-                ].map((t) => (
-                  <li key={t} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", fontSize: 14, color: "rgba(255,255,255,0.85)" }}>
-                    <Check size={16} style={{ color: "var(--accent)", flexShrink: 0 }} />
-                    <span>{t}</span>
-                  </li>
-                ))}
-              </ul>
-              <button
-                style={PRIMARY_BTN}
-                onClick={() => navigate("/pro")}
-              >
-                Upgrade to Pro
-              </button>
-            </div>
-          </div>
-        </div>
-      </>,
-      document.body,
-    );
+  /* Pro gate hidden for App Store launch — backend isPro prop preserved. */
+  if (false && !isPro) {
+    return null;
   }
 
   /* ================================================================

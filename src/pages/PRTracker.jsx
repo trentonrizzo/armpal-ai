@@ -229,7 +229,7 @@ export default function PRTracker() {
       } else {
         const cap = await checkUsageCap(user.id, "prs");
         if (!cap.allowed) {
-          setCapMessage(`PR limit reached (${cap.limit}). Go Pro for more!`);
+          setCapMessage(`PR limit reached (${cap.limit}).`);
           return;
         }
         setCapMessage("");
