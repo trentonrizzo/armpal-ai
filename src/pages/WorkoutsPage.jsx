@@ -905,26 +905,7 @@ export default function WorkoutsPage() {
         >
           + Add Workout
         </button>
-        <button
-          onClick={() => setConverterOpen(true)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "10px 16px",
-            borderRadius: "999px",
-            border: "1px solid var(--border)",
-            background: "var(--card)",
-            color: "var(--text)",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          <Zap size={14} />
-          <span>AI Converter</span>
-          {/* Pro pill hidden for App Store launch. */}
-        </button>
+        {/* AI Converter button hidden for App Store launch — backend untouched. */}
       </div>
 
       {loading ? (

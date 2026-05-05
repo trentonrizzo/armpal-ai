@@ -12,12 +12,8 @@ import useUnreadChats from "../hooks/useUnreadChats";
 // SMART ANALYTICS (READ-ONLY)
 import SmartAnalytics from "../components/SmartAnalytics";
 
-// AI SECTION (keep if you still use it visually)
-import DashboardAISection from "../components/ai/DashboardAISection";
-
-// ✅ AI CHAT (from api folder)
-import DashboardAIChat from "../components/ai/DashboardAIChat";
-import AIChatButtonOverlay from "../components/ai/AIChatButtonOverlay";
+// AI entry points hidden for App Store launch — components remain on disk
+// and backend/API logic is untouched, but no UI access points are rendered.
 import EmptyState from "../components/EmptyState";
 import { useProfileGate } from "../context/ProfileGateContext";
 export default function Dashboard() {
@@ -32,8 +28,6 @@ export default function Dashboard() {
   const [goals, setGoals] = useState([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
 
-  // ✅ AI Chat State (ONLY ONCE)
-  const [showAIChat, setShowAIChat] = useState(false);
   // Smart Analytics / Progress Overview — Pro-only (centralized getIsPro)
   const [analyticsPro, setAnalyticsPro] = useState(null);
   const [showAnalyticsUpgrade, setShowAnalyticsUpgrade] = useState(false);
@@ -647,13 +641,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ✅ AI CHAT BUTTON */}
-      <AIChatButtonOverlay onOpen={() => setShowAIChat(true)} />
-
-      {/* ✅ AI CHAT OVERLAY */}
-      {showAIChat && (
-        <DashboardAIChat onClose={() => setShowAIChat(false)} />
-      )}
+      {/* AI chat button + overlay hidden for App Store launch — backend untouched. */}
 
     </div>
   );

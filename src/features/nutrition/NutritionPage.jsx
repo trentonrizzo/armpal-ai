@@ -318,27 +318,7 @@ export default function NutritionPage() {
     <div style={PAGE}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h1 style={{ ...HEADER, marginBottom: 0 }}>Nutrition</h1>
-        <button
-          type="button"
-          onClick={() => setScanOpen(true)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 12px",
-            borderRadius: 10,
-            border: "1px solid var(--border)",
-            background: "var(--card-2)",
-            color: "var(--text)",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          <Camera size={16} />
-          <span>Scan</span>
-          {/* Pro pill hidden for App Store launch. */}
-        </button>
+        {/* AI Smart Food Scan button hidden for App Store launch — backend untouched. */}
       </div>
       <p style={SUB}>Track daily calories and macros</p>
 
