@@ -14,7 +14,8 @@
 // - Build-safe (Vite / Vercel)
 // ============================================================
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 // dnd-kit
@@ -116,6 +117,42 @@ export default function MeasurementsPage() {
   const [bwHistory, setBwHistory] = useState([]); // newest first
   const [bwInput, setBwInput] = useState("");
   const [bwLogDate, setBwLogDate] = useState(new Date().toISOString().slice(0, 10));
+  const bwSectionRef = useRef(null);
+  const bwInputRef = useRef(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link from Dashboard → /measure?focus=bodyweight should scroll to the
+  // bodyweight card, focus today's date, and pop the keyboard for the weight input.
+  useEffect(() => {
+    const focusTarget = searchParams.get("focus");
+    if (focusTarget !== "bodyweight") return;
+
+    setBwLogDate(new Date().toISOString().slice(0, 10));
+
+    // Wait one frame so the bodyweight card has actually rendered.
+    const t = setTimeout(() => {
+      try {
+        bwSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      } catch {
+        /* ignore */
+      }
+      try {
+        bwInputRef.current?.focus({ preventScroll: true });
+      } catch {
+        /* ignore */
+      }
+    }, 60);
+
+    // Clear the query param so revisits don't keep re-focusing.
+    const next = new URLSearchParams(searchParams);
+    next.delete("focus");
+    setSearchParams(next, { replace: true });
+
+    return () => clearTimeout(t);
+  }, [searchParams, setSearchParams]);
 
   const [bwEditRow, setBwEditRow] = useState(null);
   const [bwEditWeight, setBwEditWeight] = useState("");
@@ -423,6 +460,7 @@ export default function MeasurementsPage() {
 
       {/* BODYWEIGHT */}
       <div
+        ref={bwSectionRef}
         style={{
           background: "var(--card)",
           borderRadius: 14,
@@ -430,6 +468,7 @@ export default function MeasurementsPage() {
           border: "1px solid var(--border)",
           marginBottom: 20,
           cursor: "pointer",
+          scrollMarginTop: "calc(16px + var(--safe-area-top))",
         }}
         onClick={() => setBwOverlayOpen(true)}
       >
@@ -449,6 +488,7 @@ export default function MeasurementsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <input
+              ref={bwInputRef}
               style={{
                 ...inputStyle,
                 marginBottom: 0,

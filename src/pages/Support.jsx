@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 import { useToast } from "../components/ToastProvider";
@@ -262,18 +262,18 @@ export default function Support() {
       </div>
 
       <p style={{ marginTop: 20, fontSize: 13, opacity: 0.8 }}>
-        <a
-          href="/privacy.html"
+        <Link
+          to="/privacy"
           style={{ color: "var(--accent)", textDecoration: "underline", marginRight: 12 }}
         >
           Privacy Policy
-        </a>
-        <a
-          href="/terms.html"
+        </Link>
+        <Link
+          to="/terms"
           style={{ color: "var(--accent)", textDecoration: "underline" }}
         >
           Terms of Service
-        </a>
+        </Link>
       </p>
     </div>
   );

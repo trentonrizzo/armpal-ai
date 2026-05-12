@@ -317,11 +317,15 @@ const styles = {
     display: "flex",
     justifyContent: "flex-end",
     padding: 12,
+    // Respect the iOS status bar / notch so the panel header never collides
+    // with the system clock or battery indicators.
+    paddingTop: "calc(12px + env(safe-area-inset-top, 0px))",
+    paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
   },
   panel: {
     width: "100%",
     maxWidth: 420,
-    height: "calc(100vh - 24px)",
+    height: "100%",
     background: "var(--card)",
     border: "1px solid var(--border)",
     borderRadius: 16,

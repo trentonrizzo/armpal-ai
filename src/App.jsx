@@ -18,6 +18,7 @@ import ProfilePage from "./pages/ProfilePage";
 import FriendProfilePage from "./pages/FriendProfilePage";
 import HomePage from "./pages/HomePage";
 import GoalsPage from "./pages/GoalsPage";
+import ProgressPhotos from "./pages/ProgressPhotos";
 import FriendsPage from "./pages/FriendsPage";
 import ChatPage from "./pages/ChatPage";
 import EnableNotifications from "./pages/EnableNotifications";
@@ -370,6 +371,13 @@ function AppContent() {
           <Route path="/home" element={<HomePage />} />
           <Route path="/prs" element={<PRTracker />} />
           <Route path="/measure" element={<MeasurementsPage />} />
+          {/* Backwards-compat alias so old links never 404. */}
+          <Route path="/measurements" element={<Navigate to="/measure" replace />} />
+          {/* Weekly Check-In feature removed from user-facing UI; old links
+              are redirected so any saved bookmark stays safe. The page file
+              remains on disk so backend logic / data are untouched. */}
+          <Route path="/check-in" element={<Navigate to="/" replace />} />
+          <Route path="/progress-photos" element={<ProgressPhotos />} />
           <Route path="/workouts" element={<WorkoutsPage />} />
           <Route path="/workoutlogger" element={<WorkoutLogger />} />
           <Route path="/profile" element={<ProfilePage />} />

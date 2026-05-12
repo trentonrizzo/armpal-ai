@@ -11,6 +11,7 @@ import useUnreadChats from "../hooks/useUnreadChats";
 
 // SMART ANALYTICS (READ-ONLY)
 import SmartAnalytics from "../components/SmartAnalytics";
+import ConsistencyCard from "../components/ConsistencyCard";
 
 // AI entry points hidden for App Store launch — components remain on disk
 // and backend/API logic is untouched, but no UI access points are rendered.
@@ -349,6 +350,9 @@ export default function Dashboard() {
           {rotatingMessage}
         </div>
       </section>
+
+      {/* CONSISTENCY — streak + weekly nudges, derived from existing tables */}
+      <ConsistencyCard />
 
       {/* SMART ANALYTICS — basic progress overview is now free */}
       <div

@@ -5,6 +5,11 @@ import { enablePush, disablePush } from "../lib/push";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../components/ToastProvider";
 import { updateProfile } from "../utils/profile";
+import {
+  getReminderSettings,
+  setReminderSettings,
+  isNativeAvailable as remindersNativeAvailable,
+} from "../services/localReminders";
 
 /* ============================
    TOGGLE PILL
@@ -45,6 +50,117 @@ function TogglePill({ on, disabled, onClick }) {
 }
 
 /* ============================
+   REMINDER ROW
+============================ */
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function ReminderRow({
+  label,
+  hint,
+  cfg,
+  disabled,
+  onToggle,
+  onTime,
+  weekday,
+  onWeekday,
+}) {
+  const on = !!cfg?.on;
+  const hour = cfg?.hour ?? 9;
+  const minute = cfg?.minute ?? 0;
+  const timeValue = `${pad2(hour)}:${pad2(minute)}`;
+
+  return (
+    <div
+      style={{
+        padding: 10,
+        borderRadius: 12,
+        background: "var(--card)",
+        border: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
+          {hint && (
+            <div style={{ fontSize: 11, opacity: 0.6 }}>{hint}</div>
+          )}
+        </div>
+        <TogglePill on={on} disabled={disabled} onClick={onToggle} />
+      </div>
+
+      {on && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          {onWeekday && (
+            <select
+              value={weekday ?? 1}
+              disabled={disabled}
+              onChange={(e) => onWeekday(parseInt(e.target.value, 10))}
+              style={{
+                padding: "6px 8px",
+                borderRadius: 8,
+                background: "var(--card-2)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                fontSize: 13,
+              }}
+            >
+              {WEEKDAY_LABELS.map((lbl, idx) => (
+                // iOS weekday: 1=Sunday..7=Saturday
+                <option key={idx} value={idx + 1}>
+                  {lbl}
+                </option>
+              ))}
+            </select>
+          )}
+          <input
+            type="time"
+            value={timeValue}
+            disabled={disabled}
+            onChange={(e) => {
+              const [h, m] = (e.target.value || "09:00").split(":").map((x) =>
+                parseInt(x, 10)
+              );
+              if (!Number.isNaN(h) && !Number.isNaN(m)) onTime(h, m);
+            }}
+            style={{
+              padding: "6px 8px",
+              borderRadius: 8,
+              background: "var(--card-2)",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+              fontSize: 13,
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================
    SETTINGS OVERLAY
 ============================ */
 
@@ -68,6 +184,12 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
 
+  const remindersSupported = remindersNativeAvailable();
+  const [reminderSettings, setReminderSettingsState] = useState(() =>
+    getReminderSettings(null)
+  );
+  const [reminderBusy, setReminderBusy] = useState(false);
+
   useEffect(() => {
     if (open && initialLegalOpen) {
       setLegalModal("menu");
@@ -86,6 +208,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     supabase.auth.getUser().then(async ({ data }) => {
       const u = data?.user;
       setUser(u);
+      setReminderSettingsState(getReminderSettings(u?.id));
       const supported = typeof Notification !== "undefined";
       setNotifSupported(supported);
       if (supported && u?.id) {
@@ -138,6 +261,47 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     } finally {
       setNotifBusy(false);
     }
+  }
+
+  async function updateReminders(partial) {
+    if (!remindersSupported) return;
+    setReminderBusy(true);
+    try {
+      const next = await setReminderSettings(user?.id || null, partial);
+      setReminderSettingsState(next);
+    } catch (err) {
+      toast.error(err?.message || "Could not update reminders");
+    } finally {
+      setReminderBusy(false);
+    }
+  }
+
+  async function toggleRemindersMaster() {
+    if (!remindersSupported) return;
+    const next = !reminderSettings.enabled;
+    await updateReminders({ enabled: next });
+  }
+
+  async function toggleReminderKind(kind) {
+    const cur = reminderSettings.kinds?.[kind] || {};
+    await updateReminders({
+      enabled: true,
+      kinds: { [kind]: { ...cur, on: !cur.on } },
+    });
+  }
+
+  async function updateReminderTime(kind, hour, minute) {
+    const cur = reminderSettings.kinds?.[kind] || {};
+    await updateReminders({
+      kinds: { [kind]: { ...cur, hour, minute } },
+    });
+  }
+
+  async function updateReminderWeekday(kind, weekday) {
+    const cur = reminderSettings.kinds?.[kind] || {};
+    await updateReminders({
+      kinds: { [kind]: { ...cur, weekday } },
+    });
   }
 
   async function sendPasswordReset() {
@@ -317,6 +481,83 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
               </div>
             )}
           </div>
+
+          {/* REMINDERS (native local notifications) */}
+          {remindersSupported && (
+            <div
+              onClick={() =>
+                setSection(section === "reminders" ? null : "reminders")
+              }
+              style={{
+                marginTop: 14,
+                padding: 14,
+                borderRadius: 14,
+                background: "var(--card-2)",
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>Reminders</div>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                {reminderSettings.enabled ? "On" : "Off"}
+              </div>
+
+              {section === "reminders" && (
+                <div
+                  style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Master toggle */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div style={{ fontSize: 13, opacity: 0.85 }}>
+                      Enable reminders
+                    </div>
+                    <TogglePill
+                      on={!!reminderSettings.enabled}
+                      disabled={reminderBusy}
+                      onClick={toggleRemindersMaster}
+                    />
+                  </div>
+
+                  <div style={{ fontSize: 11, opacity: 0.6, lineHeight: 1.4 }}>
+                    Reminders run locally on your device. You can turn each one off
+                    individually below.
+                  </div>
+
+                  <ReminderRow
+                    label="Workouts"
+                    hint="Daily nudge to log today's workout."
+                    cfg={reminderSettings.kinds.workouts}
+                    disabled={reminderBusy || !reminderSettings.enabled}
+                    onToggle={() => toggleReminderKind("workouts")}
+                    onTime={(h, m) => updateReminderTime("workouts", h, m)}
+                  />
+                  <ReminderRow
+                    label="Weigh-ins"
+                    hint="Daily reminder to log bodyweight."
+                    cfg={reminderSettings.kinds.weighIns}
+                    disabled={reminderBusy || !reminderSettings.enabled}
+                    onToggle={() => toggleReminderKind("weighIns")}
+                    onTime={(h, m) => updateReminderTime("weighIns", h, m)}
+                  />
+                  <ReminderRow
+                    label="Streaks"
+                    hint="Evening nudge if you haven't logged yet."
+                    cfg={reminderSettings.kinds.streaks}
+                    disabled={reminderBusy || !reminderSettings.enabled}
+                    onToggle={() => toggleReminderKind("streaks")}
+                    onTime={(h, m) => updateReminderTime("streaks", h, m)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ACCOUNT */}
           <div
