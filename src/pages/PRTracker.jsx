@@ -1,5 +1,5 @@
 // src/pages/PRTracker.jsx
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 
 // 🔥 ACHIEVEMENTS BUS (ADDED)
@@ -23,8 +23,23 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // icons
-import { FaChevronDown, FaChevronUp, FaEdit, FaTrash } from "react-icons/fa";
+import {
+  FaChevronDown,
+  FaChevronUp,
+  FaEdit,
+  FaTrash,
+  FaTrophy,
+} from "react-icons/fa";
+import { computePowerliftingFromGroups } from "../utils/powerliftingTotal";
 import { useToast } from "../components/ToastProvider";
+
+/** 1 lb = 0.453592 kg (Powerlifting Total card display only) */
+const LB_TO_KG = 0.453592;
+
+function roundKgFromLbs(wLbs) {
+  if (wLbs == null || !Number.isFinite(wLbs)) return null;
+  return Math.round(wLbs * LB_TO_KG * 10) / 10;
+}
 import EmptyState from "../components/EmptyState";
 import { SkeletonCard } from "../components/Skeleton";
 import useMultiSelect from "../hooks/useMultiSelect";
@@ -96,10 +111,34 @@ export default function PRTracker() {
   const [confirmStep, setConfirmStep] = useState(0);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  /** lbs | kg — in-page only; tap Powerlifting card to toggle */
+  const [plDisplayUnit, setPlDisplayUnit] = useState("lbs");
+
   // Drag sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
+
+  const liftRefs = useRef({});
+  const powerlifting = useMemo(
+    () => computePowerliftingFromGroups(groups),
+    [groups]
+  );
+
+  const scrollToLift = useCallback((liftName) => {
+    if (!liftName || ms.active) return;
+    setExpanded((prev) => ({ ...prev, [liftName]: true }));
+    requestAnimationFrame(() => {
+      try {
+        liftRefs.current[liftName]?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+  }, [ms.active]);
 
   /* --------------------------------------------
      LOAD USER & PRs
@@ -308,9 +347,163 @@ export default function PRTracker() {
         margin: "0 auto",
       }}
     >
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
         Personal Records
       </h1>
+
+      {/* Powerlifting total (SBD) — derived from best matching PRs; tap card (not lift rows) for kg/lbs */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Powerlifting total. Tap to switch between pounds and kilograms."
+        onKeyDown={(e) => {
+          if (loading) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setPlDisplayUnit((u) => (u === "lbs" ? "kg" : "lbs"));
+          }
+        }}
+        onClick={() => {
+          if (!loading) setPlDisplayUnit((u) => (u === "lbs" ? "kg" : "lbs"));
+        }}
+        style={{
+          background: "linear-gradient(145deg, var(--card) 0%, var(--card-2) 100%)",
+          borderRadius: 14,
+          padding: "18px 18px 16px",
+          marginBottom: 18,
+          border: "1px solid var(--border)",
+          boxShadow: "0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 8px 24px rgba(0,0,0,0.18)",
+          cursor: loading ? "default" : "pointer",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
+          <FaTrophy
+            style={{
+              fontSize: 18,
+              color: "var(--accent)",
+              opacity: 0.95,
+              flexShrink: 0,
+            }}
+            aria-hidden
+          />
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: "0.12em",
+              color: "var(--text)",
+              opacity: 0.85,
+            }}
+          >
+            POWERLIFTING TOTAL
+          </div>
+        </div>
+        <div
+          style={{
+            fontSize: 30,
+            fontWeight: 800,
+            lineHeight: 1.1,
+            marginBottom: 14,
+            color: "var(--text)",
+          }}
+        >
+          {loading
+            ? "…"
+            : powerlifting.totalLbs != null
+            ? plDisplayUnit === "lbs"
+              ? `${Math.round(powerlifting.totalLbs).toLocaleString()} lbs`
+              : `${roundKgFromLbs(powerlifting.totalLbs).toFixed(1)} kg`
+            : "—"}
+        </div>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          style={{
+            display: "grid",
+            gap: 8,
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          {[
+            {
+              key: "bench",
+              label: "Bench",
+              best: powerlifting.bench,
+            },
+            {
+              key: "squat",
+              label: "Squat",
+              best: powerlifting.squat,
+            },
+            {
+              key: "deadlift",
+              label: "Deadlift",
+              best: powerlifting.deadlift,
+            },
+          ].map(({ key, label, best }) => (
+            <button
+              key={key}
+              type="button"
+              disabled={!best?.liftName || ms.active || loading}
+              onClick={(e) => {
+                e.stopPropagation();
+                scrollToLift(best.liftName);
+              }}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "color-mix(in srgb, var(--card) 88%, transparent)",
+                color: "var(--text)",
+                cursor:
+                  best?.liftName && !ms.active && !loading
+                    ? "pointer"
+                    : "default",
+                opacity: best?.liftName && !ms.active ? 1 : 0.85,
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <span style={{ opacity: 0.75, fontWeight: 600 }}>{label}</span>
+              <span style={{ fontWeight: 700 }}>
+                {loading
+                  ? "…"
+                  : best
+                  ? plDisplayUnit === "lbs"
+                    ? `${best.weight} ${best.unit || "lbs"}`
+                    : `${roundKgFromLbs(best.wLbs).toFixed(1)} kg`
+                  : "—"}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p
+          style={{
+            margin: "12px 0 0",
+            fontSize: 11,
+            opacity: 0.55,
+            lineHeight: 1.35,
+          }}
+        >
+          Total uses your heaviest logged PR for each lift. Tap a lift to open it
+          in the list below.
+          <span style={{ display: "block", marginTop: 4, opacity: 0.42 }}>
+            Tap to switch units.
+          </span>
+        </p>
+      </div>
 
       <button
         onClick={openAddModal}
@@ -361,6 +554,10 @@ export default function PRTracker() {
               return (
                 <SortableItem key={lift} id={lift} disabled={ms.active}>
                   <div
+                    ref={(el) => {
+                      if (el) liftRefs.current[lift] = el;
+                      else delete liftRefs.current[lift];
+                    }}
                     style={{
                       background: "var(--card)",
                       borderRadius: 12,

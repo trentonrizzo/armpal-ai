@@ -155,7 +155,7 @@ export default function ProfileMediaGallery({ userId, isOwnProfile = false }) {
         { user_id: userId, media_type: "photo", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        alert("Daily photo limit reached.");
+        alert("Daily upload limit reached. Try again tomorrow.");
         return;
       }
 

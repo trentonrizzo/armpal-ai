@@ -357,7 +357,7 @@ export default function SmartFoodScanOverlay({
           { user_id: userId, media_type: "photo", file_size_mb: sizeMb }
         );
         if (limitErr || allowed === false) {
-          throw new Error("Daily scan limit reached.");
+          throw new Error("Daily upload limit reached. Try again tomorrow.");
         }
 
         const { error: upErr } = await supabase.storage

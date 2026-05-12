@@ -282,8 +282,23 @@ export async function disableAllReminders(/* userId */) {
 
 export async function setReminderSettings(userId, partial) {
   const current = getReminderSettings(userId);
+  const wasEnablingMaster =
+    partial.enabled === true && current.enabled === false;
+
   const next = deepMergeSettings(current, partial);
   saveReminderSettings(userId, next);
-  await refreshAllReminders(userId);
+  const refresh = await refreshAllReminders(userId);
+
+  // Only roll back on a failed *first* master enable — not when tweaking times
+  // while already enabled (partial often repeats enabled: true from callers).
+  if (
+    wasEnablingMaster &&
+    next.enabled &&
+    (refresh?.reason === "permission-denied" || refresh?.reason === "plugin-missing")
+  ) {
+    const reverted = deepMergeSettings(next, { enabled: false });
+    saveReminderSettings(userId, reverted);
+    return reverted;
+  }
   return next;
 }

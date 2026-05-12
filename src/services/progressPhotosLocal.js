@@ -4,6 +4,10 @@
 // no Firebase, no external service. Photos and their metadata live in
 // IndexedDB on the user's device.
 //
+// IMPORTANT: This module never calls check_media_limits, increment_media_count,
+// or any Supabase RPC. Saving to the vault does not count toward chat/media
+// upload quotas — only "Send to friends" (sendChatImage → chat-images) does.
+//
 // Schema (object store "photos"):
 //   {
 //     id:        string      // generated locally

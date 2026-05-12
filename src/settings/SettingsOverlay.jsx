@@ -9,6 +9,7 @@ import {
   getReminderSettings,
   setReminderSettings,
   isNativeAvailable as remindersNativeAvailable,
+  requestPermission as requestLocalNotificationPermission,
 } from "../services/localReminders";
 
 /* ============================
@@ -276,10 +277,39 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     }
   }
 
-  async function toggleRemindersMaster() {
+  async function toggleRemindersMaster(e) {
+    e?.stopPropagation?.();
     if (!remindersSupported) return;
-    const next = !reminderSettings.enabled;
-    await updateReminders({ enabled: next });
+    const turningOn = !reminderSettings.enabled;
+    if (turningOn) {
+      setReminderBusy(true);
+      try {
+        // Request in direct response to tap so iOS shows the system prompt reliably.
+        const pre = await requestLocalNotificationPermission();
+        if (!pre.granted) {
+          toast.error(
+            "Notifications are off for ArmPal. You can turn them on in Settings → ArmPal → Notifications."
+          );
+          return;
+        }
+        const merged = await setReminderSettings(user?.id || null, {
+          enabled: true,
+        });
+        if (!merged.enabled) {
+          toast.error(
+            "Reminders could not be enabled. Check that local notifications are allowed for ArmPal."
+          );
+          return;
+        }
+        setReminderSettingsState(merged);
+      } catch (err) {
+        toast.error(err?.message || "Could not enable reminders");
+      } finally {
+        setReminderBusy(false);
+      }
+      return;
+    }
+    await updateReminders({ enabled: false });
   }
 
   async function toggleReminderKind(kind) {

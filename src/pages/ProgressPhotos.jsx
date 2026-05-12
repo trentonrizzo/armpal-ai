@@ -2,14 +2,17 @@
 //
 // Private, local-only Progress Photos vault. Completely separate from the
 // Profile photo system. All image bytes live in IndexedDB on this device.
-// Nothing is uploaded.
+// Saving to the vault does not use Supabase or count toward daily upload quotas.
+// Only "Send to friends" uses the chat-images pipeline + chat_photo quota.
 //
 // Features:
 //   - Take photo (camera) + library multi-select
 //   - Per-photo edit note / delete
 //   - Sort control (upload date / photo date, ascending / descending)
-//   - Long-press multi-select with bulk-delete
-//   - Fullscreen viewer with swipe + pinch-zoom (see ProgressPhotoViewer.jsx)
+//   - Explicit "Select" button → multi-select mode (tap to toggle, bulk delete,
+//     send to friends via the existing chat-image system)
+//   - Tap a photo to open the fullscreen viewer (swipe + pinch-zoom + native
+//     iOS long-press preserved on the image itself)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +23,7 @@ import {
   FaImages,
   FaEdit,
   FaCheck,
+  FaPaperPlane,
 } from "react-icons/fa";
 import {
   addProgressPhoto,
@@ -28,12 +32,11 @@ import {
   updateProgressPhotoNote,
 } from "../services/progressPhotosLocal";
 import ProgressPhotoViewer from "../components/ProgressPhotoViewer";
+import ShareProgressPhotosModal from "../components/ShareProgressPhotosModal";
 
 function todayLocalDate() {
   return new Date().toISOString().slice(0, 10);
 }
-
-const LONG_PRESS_MS = 450;
 
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest to oldest" },
@@ -108,8 +111,9 @@ export default function ProgressPhotos() {
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
-  const longPressTimerRef = useRef(null);
-  const longPressFiredRef = useRef(false);
+
+  // Share-to-friends
+  const [shareOpen, setShareOpen] = useState(false);
 
   // ---------- Load + cleanup -----------------------------------------------
 
@@ -292,6 +296,11 @@ export default function ProgressPhotos() {
 
   // ---------- Multi-select -----------------------------------------------
 
+  function enterSelectionMode() {
+    setSelectionMode(true);
+    setSelected(new Set());
+  }
+
   function exitSelectionMode() {
     setSelectionMode(false);
     setSelected(new Set());
@@ -306,36 +315,22 @@ export default function ProgressPhotos() {
     });
   }
 
-  function onCardPointerDown(photo) {
-    longPressFiredRef.current = false;
-    clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = setTimeout(() => {
-      longPressFiredRef.current = true;
-      setSelectionMode(true);
-      setSelected((prev) => {
-        const next = new Set(prev);
-        next.add(photo.id);
-        return next;
-      });
-    }, LONG_PRESS_MS);
-  }
-
-  function onCardPointerUpOrLeave() {
-    clearTimeout(longPressTimerRef.current);
-  }
-
   function onCardClick(photo, displayIndex) {
-    // If a long-press already triggered selection mode, treat this release as
-    // a no-op so we don't immediately open the viewer.
-    if (longPressFiredRef.current) {
-      longPressFiredRef.current = false;
-      return;
-    }
     if (selectionMode) {
       toggleSelected(photo.id);
       return;
     }
     setViewerIndex(displayIndex);
+  }
+
+  const selectedPhotos = useMemo(
+    () => sortedPhotos.filter((p) => selected.has(p.id)),
+    [sortedPhotos, selected]
+  );
+
+  function openShare() {
+    if (selectedPhotos.length === 0) return;
+    setShareOpen(true);
   }
 
   // ---------- Render -------------------------------------------------------
@@ -371,6 +366,24 @@ export default function ProgressPhotos() {
         <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, flex: 1 }}>
           Progress Photos
         </h1>
+        {photos.length > 0 && !selectionMode && !hasPending && (
+          <button
+            type="button"
+            onClick={enterSelectionMode}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "1px solid var(--border)",
+              background: "var(--card-2)",
+              color: "var(--text)",
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Select
+          </button>
+        )}
       </header>
 
       <div
@@ -617,13 +630,34 @@ export default function ProgressPhotos() {
           <div style={{ fontSize: 13, fontWeight: 700 }}>
             {selectedCount} selected
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={exitSelectionMode}
               style={{ ...subtleBtn, padding: "6px 10px" }}
             >
               Cancel
+            </button>
+            <button
+              type="button"
+              onClick={openShare}
+              disabled={selectedCount === 0}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                background: "var(--card)",
+                color: "var(--text)",
+                fontWeight: 800,
+                cursor: selectedCount === 0 ? "default" : "pointer",
+                opacity: selectedCount === 0 ? 0.5 : 1,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <FaPaperPlane />
+              Send
             </button>
             <button
               type="button"
@@ -689,17 +723,10 @@ export default function ProgressPhotos() {
                 <div
                   role="button"
                   tabIndex={0}
-                  onPointerDown={() => onCardPointerDown(p)}
-                  onPointerUp={onCardPointerUpOrLeave}
-                  onPointerLeave={onCardPointerUpOrLeave}
-                  onPointerCancel={onCardPointerUpOrLeave}
-                  onContextMenu={(e) => e.preventDefault()}
                   onClick={() => onCardClick(p, displayIndex)}
                   style={{
                     cursor: "pointer",
                     position: "relative",
-                    userSelect: "none",
-                    WebkitUserSelect: "none",
                   }}
                 >
                   {p.url ? (
@@ -714,6 +741,13 @@ export default function ProgressPhotos() {
                         display: "block",
                         opacity: selectionMode && !isSelected ? 0.78 : 1,
                         transition: "opacity 120ms ease",
+                        // Preserve native iOS long-press (Save/Copy/Share) when
+                        // we're NOT in selection mode. In selection mode we
+                        // suppress it so taps register cleanly.
+                        WebkitTouchCallout: selectionMode ? "none" : "default",
+                        WebkitUserSelect: selectionMode ? "none" : "auto",
+                        userSelect: selectionMode ? "none" : "auto",
+                        pointerEvents: selectionMode ? "none" : "auto",
                       }}
                     />
                   ) : (
@@ -940,6 +974,15 @@ export default function ProgressPhotos() {
           onClose={() => setViewerIndex(null)}
         />
       )}
+
+      {/* Send-to-friends modal (uses the existing chat-images bucket + messages
+          table — no parallel media system) */}
+      <ShareProgressPhotosModal
+        open={shareOpen}
+        photos={selectedPhotos}
+        onClose={() => setShareOpen(false)}
+        onSent={() => exitSelectionMode()}
+      />
     </div>
   );
 }

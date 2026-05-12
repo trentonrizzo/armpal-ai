@@ -1009,10 +1009,10 @@ export default function ChatPage() {
       const sizeMb = file.size ? file.size / (1024 * 1024) : 0;
       const { data: allowed, error: limitErr } = await supabase.rpc(
         "check_media_limits",
-        { user_id: user.id, media_type: "photo", file_size_mb: sizeMb }
+        { user_id: user.id, media_type: "chat_photo", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        toast.error("Daily photo limit reached.");
+        toast.error("Daily upload limit reached. Try again tomorrow.");
         return;
       }
 
@@ -1055,7 +1055,7 @@ export default function ChatPage() {
 
       const { error: incRpcError } = await supabase.rpc("increment_media_count", {
         user_id: user.id,
-        media_type: "photo",
+        media_type: "chat_photo",
       });
       if (incRpcError) console.error(incRpcError);
     } catch (e) {
@@ -1094,7 +1094,7 @@ export default function ChatPage() {
         { user_id: user.id, media_type: "video", file_size_mb: sizeMb }
       );
       if (limitErr || allowed === false) {
-        toast.error("Daily video limit reached.");
+        toast.error("Daily upload limit reached. Try again tomorrow.");
         return;
       }
 
@@ -1280,7 +1280,7 @@ export default function ChatPage() {
       );
       if (limitErr || allowed === false) {
         setSendingAudio(false);
-        toast.error("Daily voice message limit reached.");
+        toast.error("Daily upload limit reached. Try again tomorrow.");
         return;
       }
 
