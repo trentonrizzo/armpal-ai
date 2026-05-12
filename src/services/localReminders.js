@@ -20,7 +20,6 @@ import {
   getLocalNotificationsPlugin,
   checkPermissions,
   requestPermissions,
-  scheduleLocalNotification,
   cancelLocalNotification,
 } from "./nativeLocalNotifications";
 
@@ -113,32 +112,59 @@ export function openAppNotificationSettings() {
   }
 }
 
-function nextDailyAt(hour, minute) {
-  const now = new Date();
-  const next = new Date(now);
-  next.setSeconds(0, 0);
-  next.setHours(hour, minute, 0, 0);
-  if (next.getTime() <= now.getTime()) {
-    next.setDate(next.getDate() + 1);
-  }
-  return next;
-}
+const NUDGE_LOG = "[ArmPal.Nudge]";
 
-async function scheduleOne({ id, title, body, at, repeats, every }) {
-  const res = await scheduleLocalNotification({
-    id,
-    title,
-    body,
-    at,
-    repeats: !!repeats,
-    every,
-    extra: { source: "armpal-local-reminder" },
-  });
-  return !!res?.ok;
-}
+const NUDGE_CONTENT = {
+  workouts: { title: "Track your progress", body: "A short session in ArmPal counts.", defaultH: 19, defaultM: 0 },
+  weighIns: { title: "Log today's weight", body: "Quick log keeps your trend accurate.", defaultH: 7, defaultM: 0 },
+  streaks:  { title: "Don't lose your streak", body: "A quick log today keeps it going.", defaultH: 21, defaultM: 0 },
+};
 
 async function cancelByIds(ids) {
   await cancelLocalNotification(ids);
+}
+
+/**
+ * Schedule a daily repeating nudge using `schedule.on` (hour + minute).
+ * Capacitor treats `at`, `every`, and `on` as mutually exclusive — using `on`
+ * with only hour + minute produces a reliable daily trigger on both iOS and Android.
+ */
+async function scheduleDailyNudge({ id, title, body, hour, minute }) {
+  const plugin = getLocalNotificationsPlugin();
+  if (!plugin) {
+    console.warn(NUDGE_LOG, "scheduleDailyNudge: no plugin", { id });
+    return false;
+  }
+
+  const payload = {
+    id: Number(id),
+    title: String(title).slice(0, 200),
+    body: String(body).slice(0, 500),
+    schedule: {
+      on: { hour, minute },
+      allowWhileIdle: true,
+    },
+    extra: { source: "armpal-daily-nudge" },
+  };
+
+  try {
+    await plugin.schedule({ notifications: [payload] });
+    console.log(NUDGE_LOG, "scheduled daily", {
+      id: payload.id,
+      hour,
+      minute,
+      title,
+    });
+    return true;
+  } catch (err) {
+    console.error(NUDGE_LOG, "schedule FAILED", {
+      id: payload.id,
+      hour,
+      minute,
+      error: err?.message || String(err),
+    });
+    return false;
+  }
 }
 
 async function applyKind(kindKey, kindCfg) {
@@ -146,50 +172,51 @@ async function applyKind(kindKey, kindCfg) {
   if (!id) return false;
 
   await cancelByIds([id]);
-  if (!kindCfg?.on) return false;
 
-  switch (kindKey) {
-    case "workouts":
-      return scheduleOne({
-        id,
-        title: "Track your progress",
-        body: "A short session in ArmPal counts.",
-        at: nextDailyAt(kindCfg.hour ?? 19, kindCfg.minute ?? 0),
-        repeats: true,
-        every: "day",
-      });
-    case "weighIns":
-      return scheduleOne({
-        id,
-        title: "Log today's weight",
-        body: "Quick log keeps your trend accurate.",
-        at: nextDailyAt(kindCfg.hour ?? 7, kindCfg.minute ?? 0),
-        repeats: true,
-        every: "day",
-      });
-    case "weeklyCheckIn":
-      return false;
-    case "streaks":
-      return scheduleOne({
-        id,
-        title: "Don't lose your streak",
-        body: "A quick log today keeps it going.",
-        at: nextDailyAt(kindCfg.hour ?? 21, kindCfg.minute ?? 0),
-        repeats: true,
-        every: "day",
-      });
-    default:
-      return false;
+  if (!kindCfg?.on) {
+    console.log(NUDGE_LOG, "applyKind: OFF", { kind: kindKey, id });
+    return false;
   }
+
+  const content = NUDGE_CONTENT[kindKey];
+  if (!content) {
+    console.warn(NUDGE_LOG, "applyKind: unknown kind", kindKey);
+    return false;
+  }
+
+  const hour = kindCfg.hour ?? content.defaultH;
+  const minute = kindCfg.minute ?? content.defaultM;
+
+  console.log(NUDGE_LOG, "applyKind: scheduling", { kind: kindKey, id, hour, minute });
+
+  const ok = await scheduleDailyNudge({
+    id,
+    title: content.title,
+    body: content.body,
+    hour,
+    minute,
+  });
+
+  console.log(NUDGE_LOG, "applyKind: result", { kind: kindKey, id, ok });
+  return ok;
 }
 
 export async function refreshAllReminders(userId) {
-  if (!isNativeNotificationsSupported()) return { applied: false, reason: "not-native" };
+  console.log(NUDGE_LOG, "refreshAllReminders: START", { userId: userId ?? "anon" });
+
+  if (!isNativeNotificationsSupported()) {
+    console.log(NUDGE_LOG, "refreshAllReminders: SKIP (not native)");
+    return { applied: false, reason: "not-native" };
+  }
   const plugin = getLocalNotificationsPlugin();
-  if (!plugin) return { applied: false, reason: "plugin-missing" };
+  if (!plugin) {
+    console.warn(NUDGE_LOG, "refreshAllReminders: SKIP (no plugin)");
+    return { applied: false, reason: "plugin-missing" };
+  }
 
   const settings = getReminderSettings(userId);
   if (!settings.enabled) {
+    console.log(NUDGE_LOG, "refreshAllReminders: master toggle OFF — cancelling all");
     await disableAllReminders(userId);
     return { applied: false, reason: "disabled" };
   }
@@ -197,7 +224,10 @@ export async function refreshAllReminders(userId) {
   const perm = await checkPermissions();
   if (!perm.granted) {
     const req = await requestPermissions();
-    if (!req.granted) return { applied: false, reason: "permission-denied" };
+    if (!req.granted) {
+      console.warn(NUDGE_LOG, "refreshAllReminders: permission denied");
+      return { applied: false, reason: "permission-denied" };
+    }
   }
 
   await cancelByIds([REMINDER_IDS.weeklyCheckIn]);
@@ -208,6 +238,19 @@ export async function refreshAllReminders(userId) {
     results[k] = await applyKind(k, settings.kinds[k]);
   }
   results.weeklyCheckIn = false;
+
+  console.log(NUDGE_LOG, "refreshAllReminders: DONE", results);
+
+  // Log pending notifications for verification
+  try {
+    const pending = await plugin.getPending();
+    const nudgeIds = new Set(Object.values(REMINDER_IDS));
+    const nudgePending = (pending?.notifications ?? []).filter((n) => nudgeIds.has(n.id));
+    console.log(NUDGE_LOG, "pending nudge notifications", nudgePending);
+  } catch (e) {
+    console.warn(NUDGE_LOG, "getPending failed (non-fatal)", e?.message);
+  }
+
   return { applied: true, results };
 }
 
@@ -234,4 +277,59 @@ export async function setReminderSettings(userId, partial) {
     return reverted;
   }
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// Test: fire a one-shot nudge notification in ~15 seconds (diagnostics only)
+// ---------------------------------------------------------------------------
+
+const NUDGE_TEST_ID = 900_100;
+
+export async function testNudgeIn15s() {
+  console.log(NUDGE_LOG, "testNudgeIn15s: START");
+
+  if (!isNativeNotificationsSupported()) {
+    console.warn(NUDGE_LOG, "testNudgeIn15s: not native");
+    return { ok: false, reason: "not-native" };
+  }
+
+  const plugin = getLocalNotificationsPlugin();
+  if (!plugin) {
+    console.warn(NUDGE_LOG, "testNudgeIn15s: no plugin");
+    return { ok: false, reason: "no-plugin" };
+  }
+
+  const perm = await checkPermissions();
+  if (!perm.granted) {
+    const req = await requestPermissions();
+    if (!req.granted) {
+      console.warn(NUDGE_LOG, "testNudgeIn15s: permission denied");
+      return { ok: false, reason: "permission-denied" };
+    }
+  }
+
+  const fireAt = new Date(Date.now() + 15_000);
+
+  try {
+    await plugin.cancel({ notifications: [{ id: NUDGE_TEST_ID }] });
+    await plugin.schedule({
+      notifications: [
+        {
+          id: NUDGE_TEST_ID,
+          title: "ArmPal nudge test",
+          body: "Settings nudge test — fires in ~15 seconds. Lock the phone.",
+          schedule: { at: fireAt, allowWhileIdle: true },
+          extra: { source: "armpal-nudge-test-15s" },
+        },
+      ],
+    });
+    console.log(NUDGE_LOG, "testNudgeIn15s: SCHEDULED", {
+      id: NUDGE_TEST_ID,
+      fireAt: fireAt.toISOString(),
+    });
+    return { ok: true, fireAt: fireAt.toISOString() };
+  } catch (err) {
+    console.error(NUDGE_LOG, "testNudgeIn15s: FAILED", err?.message || String(err));
+    return { ok: false, reason: err?.message || String(err) };
+  }
 }

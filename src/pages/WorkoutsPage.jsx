@@ -65,10 +65,6 @@ import {
   defaultCustomReminderDatetimeLocal,
   shiftDatetimeLocalByMinutes,
   DEFAULT_CUSTOM_REMINDER_MINUTES,
-  computeWorkoutReminderPreview,
-  testWorkoutReminderPipeline15s,
-  workoutNotificationId,
-  isLocalNotificationsRuntimeUsable,
 } from "../services/workoutLocalNotifications";
 
 // ============================================================
@@ -294,11 +290,6 @@ export default function WorkoutsPage() {
   const [exerciseReps, setExerciseReps] = useState("");
   const [exerciseWeight, setExerciseWeight] = useState("");
 
-  // Workout reminder diagnostics
-  const [reminderPreview, setReminderPreview] = useState(null);
-  const [reminderTestResult, setReminderTestResult] = useState(null);
-  const [reminderTestRunning, setReminderTestRunning] = useState(false);
-
   // Delete confirm modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -496,50 +487,7 @@ export default function WorkoutsPage() {
       }
     }
     setCapMessage("");
-    setReminderPreview(null);
-    setReminderTestResult(null);
-    setReminderTestRunning(false);
     setWorkoutModalOpen(true);
-  }
-
-  function refreshReminderPreview(wid, schedFor, rMode, custAt, custOff) {
-    if (!wid || rMode === "none") {
-      setReminderPreview(null);
-      return;
-    }
-    try {
-      const p = computeWorkoutReminderPreview({
-        workoutId: wid,
-        scheduledFor: schedFor,
-        reminderMode: rMode,
-        customOffsetMinutes: custOff ?? DEFAULT_CUSTOM_REMINDER_MINUTES,
-        customFireAt: custAt,
-      });
-      setReminderPreview(p);
-    } catch {
-      setReminderPreview(null);
-    }
-  }
-
-  async function handleTestThisReminder15s() {
-    const wid = editingWorkout?.id;
-    if (!wid) {
-      setReminderTestResult({ ok: false, reason: "Save the workout first to test." });
-      return;
-    }
-    setReminderTestRunning(true);
-    setReminderTestResult(null);
-    try {
-      const result = await testWorkoutReminderPipeline15s({
-        workoutId: wid,
-        workoutName: workoutName || "Workout",
-      });
-      setReminderTestResult(result);
-    } catch (e) {
-      setReminderTestResult({ ok: false, reason: "exception", nativeError: e?.message });
-    } finally {
-      setReminderTestRunning(false);
-    }
   }
 
   async function saveWorkout() {
@@ -620,7 +568,6 @@ export default function WorkoutsPage() {
           .then((r) => {
             try {
               const sr = r?.syncRes;
-              if (sr) setReminderTestResult(sr);
               if (reminderSnapshot.mode === "none") return;
               if (r?.skipped) {
                 if (r.reason === "preset-needs-schedule") {
@@ -1442,114 +1389,6 @@ export default function WorkoutsPage() {
               One reminder on this device when it is time. If prompted, allow
               notifications — this uses local alerts only (no cloud).
             </p>
-
-            {/* REMINDER DIAGNOSTICS */}
-            {workoutReminderMode !== "none" && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: 10,
-                  borderRadius: 10,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid var(--border)",
-                  fontSize: 11,
-                  lineHeight: 1.5,
-                  opacity: 0.85,
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>Reminder diagnostics</div>
-                {(() => {
-                  const p = computeWorkoutReminderPreview({
-                    workoutId: editingWorkout?.id || "__new__",
-                    scheduledFor: workoutSchedule,
-                    reminderMode: workoutReminderMode,
-                    customOffsetMinutes: DEFAULT_CUSTOM_REMINDER_MINUTES,
-                    customFireAt: workoutReminderCustomAt,
-                  });
-                  const now = new Date();
-                  const parsedSchedule = workoutSchedule ? new Date(
-                    Number(workoutSchedule.slice(0, 4)),
-                    Number(workoutSchedule.slice(5, 7)) - 1,
-                    Number(workoutSchedule.slice(8, 10)),
-                    Number(workoutSchedule.slice(11, 13)),
-                    Number(workoutSchedule.slice(14, 16))
-                  ) : null;
-                  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                  const tzOffset = now.getTimezoneOffset();
-                  return (
-                    <>
-                      <div>Now: {now.toLocaleString()} ({tz}, UTC{tzOffset <= 0 ? "+" : "-"}{String(Math.floor(Math.abs(tzOffset)/60)).padStart(2,"0")}:{String(Math.abs(tzOffset)%60).padStart(2,"0")})</div>
-                      <div>Raw input value: <b>{workoutSchedule || "not set"}</b></div>
-                      <div>Parsed Date: {parsedSchedule ? parsedSchedule.toString() : "N/A"}</div>
-                      <div>24h hour: {parsedSchedule ? parsedSchedule.getHours() : "N/A"} | Local: {parsedSchedule ? parsedSchedule.toLocaleTimeString() : "N/A"}</div>
-                      <div>Will save to DB as: {workoutSchedule ? datetimeLocalToISO(workoutSchedule) : "null"}</div>
-                      <div>Mode: {workoutReminderMode}</div>
-                      <div>Computed fire at: {p.fireAt ? p.fireAt.toLocaleString() : "N/A"}</div>
-                      <div>Fire at 24h hour: {p.fireAt ? p.fireAt.getHours() : "N/A"}</div>
-                      <div style={{ color: p.isFuture ? "#5f5" : "#f55", fontWeight: 700 }}>
-                        {p.fireAt ? (p.isFuture ? "FUTURE (will fire)" : "PAST (will NOT fire)") : "—"}
-                      </div>
-                      <div>Notification ID: {p.notificationId ?? (editingWorkout?.id ? workoutNotificationId(String(editingWorkout.id)) : "N/A (new)")}</div>
-                      {p.reason && <div>Reason: {p.reason}</div>}
-                    </>
-                  );
-                })()}
-
-                {reminderTestResult && (
-                  <details style={{ marginTop: 6 }} open>
-                    <summary style={{ cursor: "pointer", fontWeight: 600 }}>Last test result</summary>
-                    <div style={{ marginTop: 4, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                      <div>
-                        Result:{" "}
-                        <span style={{ color: reminderTestResult.ok && reminderTestResult.scheduled ? "#4ade80" : "#f87171", fontWeight: 700 }}>
-                          {reminderTestResult.ok && reminderTestResult.scheduled
-                            ? "SCHEDULED — lock/background the phone."
-                            : `FAILED — ${reminderTestResult.reason || "unknown"}`}
-                        </span>
-                      </div>
-                      {reminderTestResult.nativeError && (
-                        <div style={{ color: "#f87171" }}>Native error: {reminderTestResult.nativeError}</div>
-                      )}
-                      {reminderTestResult.fireAt && <div>Fires at: {reminderTestResult.fireAt}</div>}
-                      {reminderTestResult.notificationId != null && (
-                        <div>Notification ID: {reminderTestResult.notificationId}</div>
-                      )}
-                      {reminderTestResult.pendingCount != null && (
-                        <div>Pending notifications: {reminderTestResult.pendingCount}</div>
-                      )}
-                    </div>
-                  </details>
-                )}
-
-                {editingWorkout?.id && isLocalNotificationsRuntimeUsable() && (
-                  <button
-                    type="button"
-                    disabled={reminderTestRunning}
-                    onClick={handleTestThisReminder15s}
-                    style={{
-                      marginTop: 8,
-                      padding: "8px 12px",
-                      borderRadius: 999,
-                      border: "1px solid var(--border)",
-                      background: reminderTestRunning ? "var(--border)" : "var(--card-2)",
-                      color: "var(--text)",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: reminderTestRunning ? "not-allowed" : "pointer",
-                      width: "100%",
-                    }}
-                  >
-                    {reminderTestRunning ? "Scheduling..." : "Test THIS workout reminder in 15s"}
-                  </button>
-                )}
-
-                {!editingWorkout?.id && (
-                  <div style={{ marginTop: 6, opacity: 0.5 }}>
-                    Save the workout first to enable the test button.
-                  </div>
-                )}
-              </div>
-            )}
 
             {capMessage ? (
               <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p>

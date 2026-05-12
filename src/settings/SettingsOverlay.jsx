@@ -16,10 +16,7 @@ import {
   checkPermissions,
   requestPermissions,
   nativeLocalPermissionUiLabel,
-  scheduleLocalNotificationTestInOneMinute,
-  explainLocalNotificationsBridgeIssue,
 } from "../services/nativeLocalNotifications";
-import LocalNotificationsNativeDiagnostic from "./LocalNotificationsNativeDiagnostic";
 
 /* ============================
    TOGGLE PILL
@@ -199,13 +196,6 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   function applyLocalPermissionSnapshot(p) {
     if (!p) return;
     setReminderPermDisplay(p.display || "prompt");
-    const detail =
-      (p.nativeError && String(p.nativeError)) ||
-      (p.display === "unavailable" || p.display === "error"
-        ? explainLocalNotificationsBridgeIssue() || ""
-        : "") ||
-      "";
-    setReminderNativeDetail(detail);
   }
 
   const [reminderSettings, setReminderSettingsState] = useState(() =>
@@ -213,8 +203,6 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   );
   const [reminderMasterBusy, setReminderMasterBusy] = useState(false);
   const [reminderPermDisplay, setReminderPermDisplay] = useState("prompt");
-  const [reminderNativeDetail, setReminderNativeDetail] = useState("");
-  const [localTestBusy, setLocalTestBusy] = useState(false);
 
   useEffect(() => {
     if (open && initialLegalOpen) {
@@ -323,33 +311,6 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
       toast.error(err?.message || "Could not update reminders");
       const p = await checkPermissions();
       applyLocalPermissionSnapshot(p);
-    }
-  }
-
-  async function runLocalNotificationTest(e) {
-    e?.stopPropagation?.();
-    if (!remindersSupported || localTestBusy) return;
-    setLocalTestBusy(true);
-    try {
-      const res = await scheduleLocalNotificationTestInOneMinute();
-      if (res?.ok) {
-        toast.success(
-          "Test alert scheduled for about one minute from now. Lock the phone or send ArmPal to the background."
-        );
-        const p = await checkPermissions();
-        applyLocalPermissionSnapshot(p);
-      } else {
-        toast.error(
-          res?.reason === "denied"
-            ? "Local alerts are denied for ArmPal. Use Open Settings below, enable notifications, then try again."
-            : res?.nativeError ||
-                "Could not schedule the test alert. Check notification permission."
-        );
-      }
-    } catch (err) {
-      toast.error(err?.message || "Test schedule failed");
-    } finally {
-      setLocalTestBusy(false);
     }
   }
 
@@ -673,41 +634,6 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     {nativeLocalPermissionUiLabel(reminderPermDisplay)}
                   </div>
 
-                  {reminderNativeDetail ? (
-                    <div
-                      style={{
-                        fontSize: 10,
-                        lineHeight: 1.45,
-                        opacity: 0.88,
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        fontFamily: "ui-monospace, monospace",
-                      }}
-                    >
-                      <strong>Exact reason:</strong> {reminderNativeDetail}
-                    </div>
-                  ) : null}
-
-                  {reminderPermDisplay === "error" && (
-                    <div
-                      style={{
-                        padding: 10,
-                        borderRadius: 10,
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        fontSize: 12,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      Local notification permission check failed. See “Exact reason” above and use
-                      the diagnostics panel. Full error is also in the Xcode / Safari Web Inspector
-                      console (<code style={{ fontSize: 11 }}>[ArmPal.NativeLocalNotifications]</code>
-                      ).
-                    </div>
-                  )}
-
                   {(reminderPermDisplay === "prompt" ||
                     reminderPermDisplay === "prompt-with-rationale") && (
                     <div style={{ fontSize: 11, opacity: 0.58, lineHeight: 1.45 }}>
@@ -716,53 +642,10 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     </div>
                   )}
 
-                  {reminderPermDisplay === "unavailable" && (
-                    <div
-                      style={{
-                        padding: 10,
-                        borderRadius: 10,
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        fontSize: 11,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                        Local notifications are not wired to native iOS in this build.
-                      </div>
-                      <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}>
-                        {reminderNativeDetail || explainLocalNotificationsBridgeIssue() || "Run npx cap sync ios and rebuild from Xcode."}
-                      </div>
-                    </div>
-                  )}
-
                   <div style={{ fontSize: 11, opacity: 0.6, lineHeight: 1.4 }}>
                     Reminders run locally on your device. You can turn each one off individually
                     below.
                   </div>
-
-                  <button
-                    type="button"
-                    disabled={localTestBusy || reminderPermDisplay === "unavailable"}
-                    onClick={runLocalNotificationTest}
-                    style={{
-                      alignSelf: "flex-start",
-                      padding: "8px 14px",
-                      borderRadius: 10,
-                      border: "1px solid var(--border)",
-                      background: "var(--card)",
-                      color: "var(--text)",
-                      fontWeight: 700,
-                      fontSize: 13,
-                      cursor:
-                        localTestBusy || reminderPermDisplay === "unavailable"
-                          ? "not-allowed"
-                          : "pointer",
-                      opacity: reminderPermDisplay === "unavailable" ? 0.5 : 1,
-                    }}
-                  >
-                    {localTestBusy ? "Scheduling…" : "Send test alert in ~1 minute"}
-                  </button>
 
                   {reminderPermDisplay === "denied" && (
                     <div
@@ -824,8 +707,6 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     onToggle={() => toggleReminderKind("streaks")}
                     onTime={(h, m) => updateReminderTime("streaks", h, m)}
                   />
-
-                  {remindersSupported && <LocalNotificationsNativeDiagnostic />}
                 </div>
               )}
             </div>
