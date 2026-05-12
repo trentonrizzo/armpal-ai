@@ -62,6 +62,13 @@ import useNotifications from "./hooks/useNotifications";
 import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
 import InAppBanner from "./components/notifications/InAppBanner";
 import { useTheme } from "./context/ThemeContext";
+import { getReminderSettings } from "./services/localReminders";
+import {
+  bootstrapNativeLocalNotifications,
+  checkPermissions,
+  isNativeNotificationsSupported,
+  requestPermissions,
+} from "./services/nativeLocalNotifications";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -168,6 +175,36 @@ function AuthenticatedLayout({ session }) {
   );
 
   useInAppBannerNotifications(session?.user?.id, isSuppressedFn, setNotifQueue);
+
+  // If the user already turned on local reminders, repair permission after login (native only).
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid || !isNativeNotificationsSupported()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const settings = getReminderSettings(uid);
+        if (!settings.enabled) return;
+        const p = await checkPermissions();
+        if (cancelled) return;
+        if (p.granted || p.display === "denied" || p.display === "unsupported") return;
+        console.log(
+          "[ArmPal.NativeLocalNotifications]",
+          "reminders enabled in preferences but OS permission not granted; requesting"
+        );
+        await requestPermissions();
+      } catch (e) {
+        console.warn(
+          "[ArmPal.NativeLocalNotifications]",
+          "post-login permission repair failed:",
+          e?.message
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
 
   // Load per-account theme from profiles; default to dark + red if missing.
   useEffect(() => {
@@ -479,6 +516,10 @@ export default function App() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    void bootstrapNativeLocalNotifications();
   }, []);
 
   // When logged out, immediately reset theme to default dark + red

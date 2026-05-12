@@ -74,7 +74,7 @@ export default function WorkoutLogger() {
 
   // DELETE WORKOUT
   const handleDeleteWorkout = async (id) => {
-    await deleteWorkoutApi(id);
+    await deleteWorkoutApi(id, user.id);
     setWorkouts((prev) => prev.filter((w) => w.id !== id));
   };
 

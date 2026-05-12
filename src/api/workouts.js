@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { safeStripWorkoutReminderAfterDelete } from "../services/workoutLocalNotifications";
 
 // Get workouts + exercises for user
 export async function getWorkoutsWithExercises(userId) {
@@ -55,12 +56,19 @@ export async function updateWorkout(id, fields) {
   if (error) console.error("Workout update error:", error);
 }
 
-// Delete workout
-export async function deleteWorkout(id) {
-  const { error } = await supabase
-    .from("workouts")
-    .delete()
-    .eq("id", id);
+// Delete workout (Supabase). Optional userId strips local reminder prefs + native cancel.
+export async function deleteWorkout(id, userId = null) {
+  const { error } = await supabase.from("workouts").delete().eq("id", id);
 
-  if (error) console.error("Workout delete error:", error);
+  if (error) {
+    console.error("Workout delete error:", error);
+    return;
+  }
+  try {
+    if (userId != null && id != null) {
+      safeStripWorkoutReminderAfterDelete(userId, id);
+    }
+  } catch (e) {
+    console.warn("[api/workouts] reminder strip after delete:", e?.message);
+  }
 }

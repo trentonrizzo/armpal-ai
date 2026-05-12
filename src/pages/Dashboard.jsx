@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
+import { parseStoredTimestamp, formatStoredTimestamp } from "../utils/workoutTime";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "../components/ToastProvider";
 
@@ -127,11 +128,11 @@ export default function Dashboard() {
     const now = new Date();
 
     const futureWorkouts = data
-      .filter((w) => new Date(w.scheduled_for) > now)
+      .filter((w) => { const d = parseStoredTimestamp(w.scheduled_for); return d && d > now; })
       .sort(
         (a, b) =>
-          new Date(a.scheduled_for).getTime() -
-          new Date(b.scheduled_for).getTime()
+          (parseStoredTimestamp(a.scheduled_for)?.getTime() ?? 0) -
+          (parseStoredTimestamp(b.scheduled_for)?.getTime() ?? 0)
       );
 
     setUpcomingWorkout(futureWorkouts[0] || null);
@@ -631,7 +632,7 @@ export default function Dashboard() {
                 {upcomingWorkout.name}
               </p>
               <p style={{ opacity: 0.8, fontSize: 13, marginTop: 4 }}>
-                {new Date(upcomingWorkout.scheduled_for).toLocaleString()}
+                {formatStoredTimestamp(upcomingWorkout.scheduled_for)}
               </p>
             </>
           ) : (

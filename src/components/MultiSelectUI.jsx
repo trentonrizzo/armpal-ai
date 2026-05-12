@@ -129,7 +129,7 @@ export function DoubleConfirmModal({
   return createPortal(
     <div
       style={cfmBackdrop}
-      onClick={deleting ? undefined : onCancel}
+      onClick={onCancel}
     >
       <div style={cfmCard} onClick={(e) => e.stopPropagation()}>
         {step === 1 && (

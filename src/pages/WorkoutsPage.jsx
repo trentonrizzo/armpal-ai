@@ -57,6 +57,49 @@ import WorkoutConverterOverlay from "../features/workouts/WorkoutConverterOverla
 import { Zap } from "lucide-react";
 import useMultiSelect from "../hooks/useMultiSelect";
 import { getSelectStyle, SelectCheck, ViewBtn, SelectionBar, DoubleConfirmModal } from "../components/MultiSelectUI";
+import {
+  getWorkoutReminderConfig,
+  pruneWorkoutReminderConfigs,
+  safeStripWorkoutReminderAfterDelete,
+  applyWorkoutReminderAfterSave,
+  defaultCustomReminderDatetimeLocal,
+  shiftDatetimeLocalByMinutes,
+  DEFAULT_CUSTOM_REMINDER_MINUTES,
+  computeWorkoutReminderPreview,
+  testWorkoutReminderPipeline15s,
+  workoutNotificationId,
+  isLocalNotificationsRuntimeUsable,
+} from "../services/workoutLocalNotifications";
+
+// ============================================================
+// TIMESTAMP HELPERS
+// ============================================================
+
+// Shared timestamp display helpers — see src/utils/workoutTime.js
+import {
+  parseStoredTimestamp,
+  formatStoredTimestamp,
+  storedTimestampToDatetimeLocal,
+} from "../utils/workoutTime";
+
+/**
+ * Convert a `datetime-local` string (YYYY-MM-DDTHH:mm, local wall-clock)
+ * into a full ISO 8601 string with timezone offset so Supabase/PostgreSQL
+ * stores the correct moment.  Falls through to the raw string if unparseable.
+ */
+function datetimeLocalToISO(dtLocal) {
+  if (!dtLocal) return dtLocal;
+  const d = new Date(
+    Number(dtLocal.slice(0, 4)),
+    Number(dtLocal.slice(5, 7)) - 1,
+    Number(dtLocal.slice(8, 10)),
+    Number(dtLocal.slice(11, 13)),
+    Number(dtLocal.slice(14, 16)),
+    0
+  );
+  if (Number.isNaN(d.getTime())) return dtLocal;
+  return d.toISOString();
+}
 
 // ============================================================
 // EXERCISE WEIGHT FIELD DISPLAY
@@ -241,8 +284,8 @@ export default function WorkoutsPage() {
   const [editingWorkout, setEditingWorkout] = useState(null);
   const [workoutName, setWorkoutName] = useState("");
   const [workoutSchedule, setWorkoutSchedule] = useState("");
-
-  // Exercise modal
+  const [workoutReminderMode, setWorkoutReminderMode] = useState("none");
+  const [workoutReminderCustomAt, setWorkoutReminderCustomAt] = useState("");
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false);
   const [exerciseWorkoutId, setExerciseWorkoutId] = useState(null);
   const [editingExercise, setEditingExercise] = useState(null);
@@ -250,6 +293,11 @@ export default function WorkoutsPage() {
   const [exerciseSets, setExerciseSets] = useState("");
   const [exerciseReps, setExerciseReps] = useState("");
   const [exerciseWeight, setExerciseWeight] = useState("");
+
+  // Workout reminder diagnostics
+  const [reminderPreview, setReminderPreview] = useState(null);
+  const [reminderTestResult, setReminderTestResult] = useState(null);
+  const [reminderTestRunning, setReminderTestRunning] = useState(false);
 
   // Delete confirm modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -351,6 +399,7 @@ export default function WorkoutsPage() {
       return { ...w, exercises };
     });
     setWorkouts(list);
+    pruneWorkoutReminderConfigs(uid, list.map((w) => w.id).filter(Boolean));
   }
 
   // ============================================================
@@ -421,11 +470,76 @@ export default function WorkoutsPage() {
   function openWorkoutModal(workout = null) {
     setEditingWorkout(workout);
     setWorkoutName(workout?.name || "");
-    setWorkoutSchedule(
-      workout?.scheduled_for ? workout.scheduled_for.slice(0, 16) : ""
-    );
+    const rawSf = workout?.scheduled_for;
+    setWorkoutSchedule(storedTimestampToDatetimeLocal(rawSf));
+    setWorkoutReminderMode("none");
+    setWorkoutReminderCustomAt("");
+    if (workout?.id && user?.id) {
+      try {
+        const cfg = getWorkoutReminderConfig(user.id, workout.id) || {};
+        const m = typeof cfg.mode === "string" && cfg.mode ? cfg.mode : "none";
+        setWorkoutReminderMode(m);
+        if (m === "custom") {
+          const at =
+            typeof cfg.customFireAt === "string" && cfg.customFireAt.trim()
+              ? cfg.customFireAt.trim().slice(0, 16)
+              : "";
+          setWorkoutReminderCustomAt(
+            at || defaultCustomReminderDatetimeLocal(60 * 60 * 1000)
+          );
+        } else {
+          setWorkoutReminderCustomAt("");
+        }
+      } catch {
+        setWorkoutReminderMode("none");
+        setWorkoutReminderCustomAt("");
+      }
+    }
     setCapMessage("");
+    setReminderPreview(null);
+    setReminderTestResult(null);
+    setReminderTestRunning(false);
     setWorkoutModalOpen(true);
+  }
+
+  function refreshReminderPreview(wid, schedFor, rMode, custAt, custOff) {
+    if (!wid || rMode === "none") {
+      setReminderPreview(null);
+      return;
+    }
+    try {
+      const p = computeWorkoutReminderPreview({
+        workoutId: wid,
+        scheduledFor: schedFor,
+        reminderMode: rMode,
+        customOffsetMinutes: custOff ?? DEFAULT_CUSTOM_REMINDER_MINUTES,
+        customFireAt: custAt,
+      });
+      setReminderPreview(p);
+    } catch {
+      setReminderPreview(null);
+    }
+  }
+
+  async function handleTestThisReminder15s() {
+    const wid = editingWorkout?.id;
+    if (!wid) {
+      setReminderTestResult({ ok: false, reason: "Save the workout first to test." });
+      return;
+    }
+    setReminderTestRunning(true);
+    setReminderTestResult(null);
+    try {
+      const result = await testWorkoutReminderPipeline15s({
+        workoutId: wid,
+        workoutName: workoutName || "Workout",
+      });
+      setReminderTestResult(result);
+    } catch (e) {
+      setReminderTestResult({ ok: false, reason: "exception", nativeError: e?.message });
+    } finally {
+      setReminderTestRunning(false);
+    }
   }
 
   async function saveWorkout() {
@@ -434,14 +548,32 @@ export default function WorkoutsPage() {
     const payload = {
       user_id: user.id,
       name: workoutName || "Workout",
-      // ✅ FIX: do NOT force UTC via toISOString() (causes -6 hours)
-      scheduled_for: workoutSchedule ? workoutSchedule : null,
+      scheduled_for: workoutSchedule ? datetimeLocalToISO(workoutSchedule) : null,
     };
 
+    const reminderSnapshot = {
+      mode: workoutReminderMode,
+      customAt: workoutReminderCustomAt,
+      legacyOffsetMinutes: DEFAULT_CUSTOM_REMINDER_MINUTES,
+    };
     try {
+      if (user?.id && workoutReminderMode === "custom" && editingWorkout?.id) {
+        const c = getWorkoutReminderConfig(user.id, editingWorkout.id);
+        if (Number(c?.customOffsetMinutes) > 0) {
+          reminderSnapshot.legacyOffsetMinutes = Math.round(Number(c.customOffsetMinutes));
+        }
+      }
+    } catch {
+      /* keep default */
+    }
+
+    try {
+      let savedId = editingWorkout?.id || null;
+
       if (editingWorkout) {
         const { error } = await supabase.from("workouts").update(payload).eq("id", editingWorkout.id);
         if (error) throw error;
+        savedId = editingWorkout.id;
       } else {
         const cap = await checkUsageCap(user.id, "workouts");
         if (!cap.allowed) {
@@ -450,8 +582,13 @@ export default function WorkoutsPage() {
         }
         setCapMessage("");
         payload.position = workouts.length;
-        const { error } = await supabase.from("workouts").insert(payload);
+        const { data: inserted, error } = await supabase
+          .from("workouts")
+          .insert(payload)
+          .select("id")
+          .single();
         if (error) throw error;
+        savedId = inserted?.id || null;
       }
       // FIRST WORKOUT ACHIEVEMENT
       if (!editingWorkout && workouts.length === 0) {
@@ -461,10 +598,68 @@ export default function WorkoutsPage() {
           localStorage.setItem("ach_first_workout", "1");
         }
       }
+
       setWorkoutModalOpen(false);
       setEditingWorkout(null);
       await loadWorkouts(user.id);
       toast.success("Saved");
+
+      if (savedId) {
+        void applyWorkoutReminderAfterSave({
+          userId: user.id,
+          workoutId: savedId,
+          workoutName: payload.name,
+          scheduledFor: workoutSchedule,
+          reminderMode: reminderSnapshot.mode,
+          customOffsetMinutes:
+            reminderSnapshot.mode === "custom"
+              ? reminderSnapshot.legacyOffsetMinutes
+              : DEFAULT_CUSTOM_REMINDER_MINUTES,
+          customFireAt: reminderSnapshot.customAt,
+        })
+          .then((r) => {
+            try {
+              const sr = r?.syncRes;
+              if (sr) setReminderTestResult(sr);
+              if (reminderSnapshot.mode === "none") return;
+              if (r?.skipped) {
+                if (r.reason === "preset-needs-schedule") {
+                  toast.success(
+                    "Add a date and time on the workout to use preset reminders."
+                  );
+                } else if (r.reason === "custom-needs-time") {
+                  toast.success(
+                    "Choose a future reminder time for custom reminders."
+                  );
+                }
+                return;
+              }
+              if (!sr) return;
+              if (sr.reason === "reminder-past") {
+                toast.error(
+                  "Reminder time is already in the past."
+                );
+              } else if (sr.reason === "denied") {
+                toast.error(
+                  "Notifications are off. Enable them in Settings → ArmPal to get workout reminders."
+                );
+              } else if (sr.reason === "schedule-error") {
+                toast.error(
+                  "Could not schedule the reminder. Check notification permissions and try again."
+                );
+              } else if (sr.reason === "bad-date" || sr.reason === "custom-needs-time") {
+                toast.error("Reminder was not scheduled — check the date and time.");
+              } else if (sr.reason === "not-native" || sr.reason === "no-plugin") {
+                toast.success("Scheduled reminders work in the ArmPal iOS app.");
+              } else if (sr.scheduled) {
+                toast.success("Reminder scheduled.");
+              }
+            } catch {
+              /* ignore toast errors */
+            }
+          })
+          .catch(() => {});
+      }
     } catch (e) {
       console.error("saveWorkout failed", e);
       toast.error("Failed to save workout");
@@ -472,7 +667,19 @@ export default function WorkoutsPage() {
   }
 
   async function deleteWorkout(id) {
-    await supabase.from("workouts").delete().eq("id", id);
+    const { error } = await supabase.from("workouts").delete().eq("id", id);
+    if (error) {
+      console.error("[workouts] deleteWorkout supabase:", error);
+      toast.error("Failed to delete workout");
+      throw error;
+    }
+    try {
+      if (user?.id) {
+        safeStripWorkoutReminderAfterDelete(user.id, id);
+      }
+    } catch (e) {
+      console.warn("[workouts] reminder strip after delete:", e?.message);
+    }
     if (user) await loadWorkouts(user.id);
   }
 
@@ -610,14 +817,25 @@ export default function WorkoutsPage() {
   }
 
   async function confirmDelete() {
-    if (!deleteTarget) return;
-    if (deleteTarget.type === "workout") {
-      await deleteWorkout(deleteTarget.id);
-    } else {
-      await deleteExercise(deleteTarget.id, deleteTarget.workoutId);
+    const target = deleteTarget;
+    if (!target) return;
+    try {
+      if (target.type === "workout") {
+        await deleteWorkout(target.id);
+      } else {
+        await deleteExercise(target.id, target.workoutId);
+      }
+    } catch (e) {
+      console.error("[workouts] confirmDelete failed:", e);
+      toast.error(
+        target.type === "workout"
+          ? "Failed to delete workout"
+          : "Failed to delete exercise"
+      );
+    } finally {
+      setDeleteTarget(null);
+      setDeleteModalOpen(false);
     }
-    setDeleteTarget(null);
-    setDeleteModalOpen(false);
   }
 
   async function bulkDeleteWorkouts() {
@@ -625,9 +843,25 @@ export default function WorkoutsPage() {
     setBulkDeleting(true);
     try {
       const ids = [...ms.selected];
-      await supabase.from("exercises").delete().in("workout_id", ids);
+      const { error: exErr } = await supabase.from("exercises").delete().in("workout_id", ids);
+      if (exErr) {
+        console.error("[workouts] bulkDelete exercises:", exErr);
+        throw exErr;
+      }
       const { error } = await supabase.from("workouts").delete().in("id", ids);
-      if (error) throw error;
+      if (error) {
+        console.error("[workouts] bulkDelete workouts:", error);
+        throw error;
+      }
+      if (user?.id) {
+        for (const id of ids) {
+          try {
+            safeStripWorkoutReminderAfterDelete(user.id, id);
+          } catch (e) {
+            console.warn("[workouts] bulk reminder strip:", id, e?.message);
+          }
+        }
+      }
       ms.cancel();
       setConfirmStep(0);
       if (user) await loadWorkouts(user.id);
@@ -645,14 +879,7 @@ export default function WorkoutsPage() {
   // ============================================================
 
   function formatSchedule(value) {
-    if (!value) return "Not scheduled";
-    const d = new Date(value);
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatStoredTimestamp(value);
   }
 
   // ============================================================
@@ -1125,6 +1352,205 @@ export default function WorkoutsPage() {
               value={workoutSchedule}
               onChange={(e) => setWorkoutSchedule(e.target.value)}
             />
+            <label style={labelStyle}>Reminder</label>
+            <select
+              style={inputStyle}
+              value={workoutReminderMode}
+              onChange={(e) => {
+                const v = e.target.value;
+                setWorkoutReminderMode(v);
+                if (v === "custom") {
+                  setWorkoutReminderCustomAt((prev) => {
+                    const p = typeof prev === "string" ? prev.trim() : "";
+                    if (p.length >= 16) return p.slice(0, 16);
+                    return defaultCustomReminderDatetimeLocal(60 * 60 * 1000);
+                  });
+                }
+              }}
+            >
+              <option value="none">None</option>
+              <option value="at">At workout time</option>
+              <option value="m15">15 minutes before</option>
+              <option value="m30">30 minutes before</option>
+              <option value="h1">1 hour before</option>
+              <option value="custom">Custom date and time</option>
+            </select>
+            {workoutReminderMode === "custom" && (
+              <>
+                <label style={{ ...labelStyle, marginTop: 6 }}>Remind at (local time)</label>
+                <input
+                  type="datetime-local"
+                  style={inputStyle}
+                  value={workoutReminderCustomAt || ""}
+                  onChange={(e) => setWorkoutReminderCustomAt(e.target.value || "")}
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    marginTop: 10,
+                  }}
+                >
+                  {[
+                    { m: 1, label: "+1m" },
+                    { m: 2, label: "+2m" },
+                    { m: 7, label: "+7m" },
+                    { m: 15, label: "+15m" },
+                    { m: 43, label: "+43m" },
+                    { m: 60, label: "+1h" },
+                  ].map(({ m, label }) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() =>
+                        setWorkoutReminderCustomAt((prev) =>
+                          shiftDatetimeLocalByMinutes(
+                            prev && String(prev).trim().length >= 10
+                              ? prev
+                              : defaultCustomReminderDatetimeLocal(60 * 1000),
+                            m
+                          )
+                        )
+                      }
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: "1px solid var(--border)",
+                        background: "var(--card-2)",
+                        color: "var(--text)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <p
+              style={{
+                fontSize: 11,
+                opacity: 0.52,
+                marginTop: 6,
+                marginBottom: 0,
+                lineHeight: 1.4,
+              }}
+            >
+              One reminder on this device when it is time. If prompted, allow
+              notifications — this uses local alerts only (no cloud).
+            </p>
+
+            {/* REMINDER DIAGNOSTICS */}
+            {workoutReminderMode !== "none" && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 10,
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid var(--border)",
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  opacity: 0.85,
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Reminder diagnostics</div>
+                {(() => {
+                  const p = computeWorkoutReminderPreview({
+                    workoutId: editingWorkout?.id || "__new__",
+                    scheduledFor: workoutSchedule,
+                    reminderMode: workoutReminderMode,
+                    customOffsetMinutes: DEFAULT_CUSTOM_REMINDER_MINUTES,
+                    customFireAt: workoutReminderCustomAt,
+                  });
+                  const now = new Date();
+                  const parsedSchedule = workoutSchedule ? new Date(
+                    Number(workoutSchedule.slice(0, 4)),
+                    Number(workoutSchedule.slice(5, 7)) - 1,
+                    Number(workoutSchedule.slice(8, 10)),
+                    Number(workoutSchedule.slice(11, 13)),
+                    Number(workoutSchedule.slice(14, 16))
+                  ) : null;
+                  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                  const tzOffset = now.getTimezoneOffset();
+                  return (
+                    <>
+                      <div>Now: {now.toLocaleString()} ({tz}, UTC{tzOffset <= 0 ? "+" : "-"}{String(Math.floor(Math.abs(tzOffset)/60)).padStart(2,"0")}:{String(Math.abs(tzOffset)%60).padStart(2,"0")})</div>
+                      <div>Raw input value: <b>{workoutSchedule || "not set"}</b></div>
+                      <div>Parsed Date: {parsedSchedule ? parsedSchedule.toString() : "N/A"}</div>
+                      <div>24h hour: {parsedSchedule ? parsedSchedule.getHours() : "N/A"} | Local: {parsedSchedule ? parsedSchedule.toLocaleTimeString() : "N/A"}</div>
+                      <div>Will save to DB as: {workoutSchedule ? datetimeLocalToISO(workoutSchedule) : "null"}</div>
+                      <div>Mode: {workoutReminderMode}</div>
+                      <div>Computed fire at: {p.fireAt ? p.fireAt.toLocaleString() : "N/A"}</div>
+                      <div>Fire at 24h hour: {p.fireAt ? p.fireAt.getHours() : "N/A"}</div>
+                      <div style={{ color: p.isFuture ? "#5f5" : "#f55", fontWeight: 700 }}>
+                        {p.fireAt ? (p.isFuture ? "FUTURE (will fire)" : "PAST (will NOT fire)") : "—"}
+                      </div>
+                      <div>Notification ID: {p.notificationId ?? (editingWorkout?.id ? workoutNotificationId(String(editingWorkout.id)) : "N/A (new)")}</div>
+                      {p.reason && <div>Reason: {p.reason}</div>}
+                    </>
+                  );
+                })()}
+
+                {reminderTestResult && (
+                  <details style={{ marginTop: 6 }} open>
+                    <summary style={{ cursor: "pointer", fontWeight: 600 }}>Last test result</summary>
+                    <div style={{ marginTop: 4, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                      <div>
+                        Result:{" "}
+                        <span style={{ color: reminderTestResult.ok && reminderTestResult.scheduled ? "#4ade80" : "#f87171", fontWeight: 700 }}>
+                          {reminderTestResult.ok && reminderTestResult.scheduled
+                            ? "SCHEDULED — lock/background the phone."
+                            : `FAILED — ${reminderTestResult.reason || "unknown"}`}
+                        </span>
+                      </div>
+                      {reminderTestResult.nativeError && (
+                        <div style={{ color: "#f87171" }}>Native error: {reminderTestResult.nativeError}</div>
+                      )}
+                      {reminderTestResult.fireAt && <div>Fires at: {reminderTestResult.fireAt}</div>}
+                      {reminderTestResult.notificationId != null && (
+                        <div>Notification ID: {reminderTestResult.notificationId}</div>
+                      )}
+                      {reminderTestResult.pendingCount != null && (
+                        <div>Pending notifications: {reminderTestResult.pendingCount}</div>
+                      )}
+                    </div>
+                  </details>
+                )}
+
+                {editingWorkout?.id && isLocalNotificationsRuntimeUsable() && (
+                  <button
+                    type="button"
+                    disabled={reminderTestRunning}
+                    onClick={handleTestThisReminder15s}
+                    style={{
+                      marginTop: 8,
+                      padding: "8px 12px",
+                      borderRadius: 999,
+                      border: "1px solid var(--border)",
+                      background: reminderTestRunning ? "var(--border)" : "var(--card-2)",
+                      color: "var(--text)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: reminderTestRunning ? "not-allowed" : "pointer",
+                      width: "100%",
+                    }}
+                  >
+                    {reminderTestRunning ? "Scheduling..." : "Test THIS workout reminder in 15s"}
+                  </button>
+                )}
+
+                {!editingWorkout?.id && (
+                  <div style={{ marginTop: 6, opacity: 0.5 }}>
+                    Save the workout first to enable the test button.
+                  </div>
+                )}
+              </div>
+            )}
+
             {capMessage ? (
               <p style={{ color: "var(--accent)", fontSize: 14, marginTop: 8 }}>{capMessage}</p>
             ) : null}
@@ -1504,7 +1930,10 @@ export default function WorkoutsPage() {
       <DoubleConfirmModal
         count={ms.count}
         step={confirmStep}
-        onCancel={() => setConfirmStep(0)}
+        onCancel={() => {
+          setConfirmStep(0);
+          setBulkDeleting(false);
+        }}
         onContinue={() => setConfirmStep(2)}
         onConfirm={bulkDeleteWorkouts}
         deleting={bulkDeleting}
