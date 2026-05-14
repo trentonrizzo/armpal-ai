@@ -8,6 +8,7 @@ import { PurchaseProvider } from "./context/PurchaseContext";
 import { ToastProvider } from "./components/ToastProvider";
 import { ProfileGateProvider } from "./context/ProfileGateContext";
 import AuthPage from "./AuthPage";
+import ResetPassword from "./pages/ResetPassword";
 
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
@@ -27,7 +28,6 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Support from "./pages/Support";
 import FriendProfile from "./pages/FriendProfile";
-import ResetPassword from "./pages/ResetPassword";
 import CreditsPage from "./pages/CreditsPage";
 import RedeemPage from "./pages/RedeemPage";
 import ReferralsPage from "./pages/ReferralsPage";
@@ -538,29 +538,28 @@ export default function App() {
   return (
     <>
       <RuntimeSplash show={showSplash} />
-      {!ready ? null : (
+      {!ready ? null : !session ? (
         <Routes>
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="*"
             element={
-              !session ? (
-                <AuthPage
-                  initialMode={location?.pathname === "/signup" ? "signup" : undefined}
-                />
-              ) : (
-                <AppProvider>
-                  <PurchaseProvider>
-                    <ToastProvider>
-                      <ProfileGateProvider>
-                        <AuthenticatedLayout session={session} />
-                      </ProfileGateProvider>
-                    </ToastProvider>
-                  </PurchaseProvider>
-                </AppProvider>
-              )
+              <AuthPage
+                initialMode={location?.pathname === "/signup" ? "signup" : undefined}
+              />
             }
           />
         </Routes>
+      ) : (
+        <AppProvider>
+          <PurchaseProvider>
+            <ToastProvider>
+              <ProfileGateProvider>
+                <AuthenticatedLayout session={session} />
+              </ProfileGateProvider>
+            </ToastProvider>
+          </PurchaseProvider>
+        </AppProvider>
       )}
     </>
   );

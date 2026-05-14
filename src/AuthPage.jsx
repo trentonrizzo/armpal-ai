@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import { ensureUserQR } from "./utils/ensureUserQR";
+import { getPasswordResetRedirectUrl } from "./utils/authPublicUrl";
 
 /*
   AuthPage – LOGIN + SIGNUP + FORGOT (RECOVERY SAFE)
@@ -32,24 +33,34 @@ export default function AuthPage({ initialMode }) {
   }, []);
 
   /* ============================
-     BLOCK AUTO LOGIN DURING RECOVERY
+     PASSWORD RECOVERY — send users to canonical /reset-password
+     (preserves hash / PKCE query; avoids stale preview hosts in email flows)
   ============================ */
   useEffect(() => {
     const hash = window.location.hash || "";
     const search = window.location.search || "";
 
+    const path = window.location.pathname || "";
     const isRecovery =
       hash.includes("type=recovery") ||
-      hash.includes("access_token") ||
-      search.includes("code=");
+      (search.includes("code=") && (path === "/" || path === "/login"));
 
-    if (isRecovery) {
-      supabase.auth.signOut({ scope: "local" });
-      setMode("login");
-      setMsg({
-        type: "success",
-        text: "Please set a new password on the reset page.",
-      });
+    if (!isRecovery) return;
+
+    try {
+      const target = new URL(getPasswordResetRedirectUrl());
+      target.hash = window.location.hash || "";
+      target.search = window.location.search || "";
+
+      const cur = new URL(window.location.href);
+      if (cur.origin === target.origin && cur.pathname === "/reset-password") {
+        return;
+      }
+
+      window.location.replace(target.toString());
+    } catch {
+      const fallback = `${getPasswordResetRedirectUrl()}${hash}${search}`;
+      window.location.replace(fallback);
     }
   }, []);
 
@@ -121,7 +132,7 @@ export default function AuthPage({ initialMode }) {
     setMsg(null);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: getPasswordResetRedirectUrl(),
     });
 
     if (error) {
