@@ -21,7 +21,7 @@ import {
   isAchievementFeedbackEnabled,
   setAchievementFeedbackEnabled,
 } from "../features/achievements/feedback";
-import { getPasswordResetRedirectUrl } from "../utils/authPublicUrl";
+import { PASSWORD_RESET_REDIRECT_TO } from "../utils/authPublicUrl";
 
 /* ============================
    TOGGLE PILL
@@ -390,7 +390,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   async function sendPasswordReset() {
     if (!user?.email) return;
 
-    const redirectTo = getPasswordResetRedirectUrl();
+    const redirectTo = PASSWORD_RESET_REDIRECT_TO;
 
     const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
       redirectTo,

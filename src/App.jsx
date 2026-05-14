@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useCallback, useEffect, useState, lazy, Suspense } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useParams, useNavigate, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
@@ -8,8 +8,8 @@ import { PurchaseProvider } from "./context/PurchaseContext";
 import { ToastProvider } from "./components/ToastProvider";
 import { ProfileGateProvider } from "./context/ProfileGateContext";
 import AuthPage from "./AuthPage";
-import ResetPassword from "./pages/ResetPassword";
 
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
 import MeasurementsPage from "./pages/MeasurementsPage";
@@ -62,6 +62,13 @@ import useNotifications from "./hooks/useNotifications";
 import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
 import InAppBanner from "./components/notifications/InAppBanner";
 import { useTheme } from "./context/ThemeContext";
+import {
+  isResetPasswordRoute,
+  logResetAuthState,
+  markPasswordRecoveryFlow,
+  passwordRecoveryNeedsCanonicalResetPath,
+  recoveryTokensPresentInUrl,
+} from "./utils/recoveryUrl";
 import { getReminderSettings } from "./services/localReminders";
 import {
   bootstrapNativeLocalNotifications,
@@ -326,11 +333,16 @@ function AuthenticatedLayout({ session }) {
     if (!session?.user?.id || typeof window === "undefined") return;
     if (!onboardingLoaded) return;
     if (onboardingCompleted) return;
+    if (recoveryTokensPresentInUrl()) return;
 
     const needsProfileFlag =
       sessionStorage.getItem("armpal_needs_profile_setup") === "1";
 
     if (needsProfileFlag && location.pathname !== "/profile") {
+      if (isResetPasswordRoute()) {
+        console.log("[RESET FLOW] blocked redirect to profile during recovery");
+        return;
+      }
       navigate("/profile", { replace: true });
     }
   }, [session?.user?.id, onboardingLoaded, onboardingCompleted, location.pathname, navigate]);
@@ -403,6 +415,8 @@ function AppContent() {
         }
       >
         <Routes>
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/reset-password/*" element={<ResetPassword />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/signup" element={<Navigate to="/" replace />} />
           <Route path="/home" element={<HomePage />} />
@@ -434,7 +448,6 @@ function AppContent() {
           <Route path="/chat/group/:groupId" element={<ChatPage />} />
           <Route path="/chat/:friendId" element={<ChatPage />} />
           <Route path="/enable-notifications" element={<EnableNotifications />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/support" element={<Support />} />
@@ -500,31 +513,78 @@ function AppContent() {
 
 export default function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const { setTheme, setAccent } = useTheme();
-  usePresence(session?.user);
-  useNotifications(session?.user?.id);
+  const onPublicReset = isResetPasswordRoute();
+
+  useLayoutEffect(() => {
+    if (typeof window !== "undefined" && window.location.pathname === "/reset-password") {
+      return;
+    }
+    if (typeof window === "undefined") return;
+    if (!passwordRecoveryNeedsCanonicalResetPath()) return;
+    console.log("[RESET FLOW]", "recovery link detected");
+    const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
+    window.history.replaceState(null, "", `/reset-password${suffix}`);
+    console.log("[RESET FLOW]", "forcing reset-password route");
+    navigate(`/reset-password${suffix}`, { replace: true });
+  }, [navigate]);
+
+  usePresence(onPublicReset ? null : session?.user);
+  useNotifications(onPublicReset ? undefined : session?.user?.id);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
       setReady(true);
       setTimeout(() => setShowSplash(false), 1200);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      logResetAuthState(event);
+
+      const isResetPwRoute =
+        typeof window !== "undefined" &&
+        (window.location.pathname === "/reset-password" ||
+          window.location.pathname.startsWith("/reset-password/") ||
+          window.location.href.includes("type=recovery") ||
+          window.location.href.includes("type%3Drecovery") ||
+          recoveryTokensPresentInUrl());
+
+      if (isResetPwRoute && event === "SIGNED_IN") {
+        console.log("[RESET FLOW] skipping normal auth redirect");
+      }
+
+      if (event === "PASSWORD_RECOVERY" && s && typeof window !== "undefined") {
+        markPasswordRecoveryFlow();
+        if (window.location.pathname !== "/reset-password") {
+          const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
+          window.history.replaceState(null, "", `/reset-password${suffix}`);
+          navigate(`/reset-password${suffix}`, { replace: true });
+        }
+      } else if (event === "SIGNED_IN" && s && typeof window !== "undefined" && recoveryTokensPresentInUrl()) {
+        markPasswordRecoveryFlow();
+        if (window.location.pathname !== "/reset-password") {
+          const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
+          window.history.replaceState(null, "", `/reset-password${suffix}`);
+          navigate(`/reset-password${suffix}`, { replace: true });
+        }
+      }
+      setSession(s);
+    });
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     void bootstrapNativeLocalNotifications();
   }, []);
 
-  // When logged out, immediately reset theme to default dark + red
-  // so previous user's theme does not leak into the next session.
+  // Logged-out theme defaults — skip during any recovery flow / URL tokens.
   useEffect(() => {
+    if (isResetPasswordRoute()) return;
     if (!session) {
       setTheme("dark");
       setAccent("red");
@@ -537,10 +597,13 @@ export default function App() {
 
   return (
     <>
-      <RuntimeSplash show={showSplash} />
-      {!ready ? null : !session ? (
+      <RuntimeSplash show={showSplash && !onPublicReset} />
+      {!ready && !onPublicReset ? null : onPublicReset ? (
+        <ResetPassword />
+      ) : !session ? (
         <Routes>
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/reset-password/*" element={<ResetPassword />} />
           <Route
             path="*"
             element={

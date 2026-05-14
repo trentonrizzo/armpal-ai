@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "../supabaseClient";
+import { isResetPasswordRoute } from "../utils/recoveryUrl";
 import {
   bootPurchases,
   checkEntitlements,
@@ -158,6 +159,7 @@ export function PurchaseProvider({ children }) {
     let cancelled = false;
 
     async function onSession(session) {
+      if (isResetPasswordRoute()) return;
       const uid = session?.user?.id ?? null;
       if (sessionUserIdRef.current === uid && uid !== null) return;
       sessionUserIdRef.current = uid;

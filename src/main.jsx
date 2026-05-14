@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import App from "./App";
+import RootRoutes from "./RootRoutes";
 import "./index.css";
 
 // Boot Apple IAP as early as possible on native iOS (no-op on web).
@@ -10,8 +10,6 @@ import "./services/purchaseManager";
 
 // 🔥 THEME PROVIDER (GLOBAL)
 import { ThemeProvider } from "./context/ThemeContext";
-import OnboardingProvider from "./onboarding/OnboardingProvider";
-
 // ======================================================
 // ✅ SERVICE WORKER — IOS SAFE UPDATE HANDLING (KEEP)
 // ======================================================
@@ -38,9 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
       <BrowserRouter>
-        <OnboardingProvider>
-          <App />
-        </OnboardingProvider>
+        <RootRoutes />
       </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>

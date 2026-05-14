@@ -15,6 +15,12 @@ import {
   ONBOARDING_PHASE_TOUR,
   ONBOARDING_STEPS,
 } from "./onboardingSteps";
+import {
+  isRecoveryFlow,
+  isResetPasswordRoute,
+  logResetAuthState,
+  recoveryTokensPresentInUrl,
+} from "../utils/recoveryUrl";
 
 const OnboardingContext = createContext(null);
 
@@ -48,6 +54,8 @@ export default function OnboardingProvider({ children }) {
   // Load profile and decide if onboarding is required, but short‑circuit entirely
   // if the account has an explicit onboarding_completed flag (database is source of truth).
   useEffect(() => {
+    if (isResetPasswordRoute()) return;
+
     let cancelled = false;
 
     async function loadForUser(user) {
@@ -138,17 +146,24 @@ export default function OnboardingProvider({ children }) {
 
     // Initial load (handles page refresh / session restore).
     supabase.auth.getUser().then(({ data }) => {
+      logResetAuthState("ONBOARDING_GET_USER");
+      if (isResetPasswordRoute() || isRecoveryFlow()) return;
       setCurrentUserId(data?.user?.id || null);
       loadForUser(data?.user || null);
     });
 
-    // React to login/logout.
-    const { data: sub } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setCurrentUserId(session?.user?.id || null);
-        loadForUser(session?.user || null);
+    // React to login/logout — skip during password recovery (temporary session).
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      logResetAuthState(event);
+      if (event === "PASSWORD_RECOVERY" || isResetPasswordRoute() || isRecoveryFlow()) {
+        if (event === "SIGNED_IN" && isResetPasswordRoute()) {
+          console.log("[RESET FLOW] skipping normal auth redirect");
+        }
+        return;
       }
-    );
+      setCurrentUserId(session?.user?.id || null);
+      loadForUser(session?.user || null);
+    });
 
     return () => {
       cancelled = true;
@@ -159,6 +174,8 @@ export default function OnboardingProvider({ children }) {
   // Force route for onboarding steps when active.
   useEffect(() => {
     if (!currentStep || isComplete) return;
+    if (isResetPasswordRoute() || isRecoveryFlow()) return;
+    if (recoveryTokensPresentInUrl()) return;
 
     const targetRoute = currentStep.route;
     if (!targetRoute) {
@@ -182,8 +199,9 @@ export default function OnboardingProvider({ children }) {
   useEffect(() => {
     if (!profileLoaded || !profileNeedsOnboarding) return;
     if (onboardingCompleted) return;
-    // Do not force /profile?onboarding=true during the tour phase.
     if (phase === ONBOARDING_PHASE_TOUR) return;
+    if (isResetPasswordRoute() || isRecoveryFlow()) return;
+    if (recoveryTokensPresentInUrl()) return;
     // Allow public legal/support pages without redirect.
     const isPublicPage = [
       "/privacy",
@@ -200,6 +218,10 @@ export default function OnboardingProvider({ children }) {
     const hasFlag = searchParams.get("onboarding") === "true";
 
     if (!isOnProfile || !hasFlag) {
+      if (isResetPasswordRoute()) {
+        console.log("[RESET FLOW] blocked redirect to profile during recovery");
+        return;
+      }
       navigate("/profile?onboarding=true", { replace: true });
     }
   }, [

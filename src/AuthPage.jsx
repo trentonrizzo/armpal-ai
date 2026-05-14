@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import { ensureUserQR } from "./utils/ensureUserQR";
-import { getPasswordResetRedirectUrl } from "./utils/authPublicUrl";
+import { getPasswordResetRedirectUrl, PASSWORD_RESET_REDIRECT_TO } from "./utils/authPublicUrl";
 
 /*
   AuthPage – LOGIN + SIGNUP + FORGOT (RECOVERY SAFE)
@@ -10,7 +10,7 @@ import { getPasswordResetRedirectUrl } from "./utils/authPublicUrl";
   ✅ Signup works
   ✅ Reset email works
   ✅ Recovery links DO NOT auto-login
-  ✅ Redirects to /reset-password
+  ✅ Redirects to reset-password.html
 */
 
 export default function AuthPage({ initialMode }) {
@@ -33,7 +33,7 @@ export default function AuthPage({ initialMode }) {
   }, []);
 
   /* ============================
-     PASSWORD RECOVERY — send users to canonical /reset-password
+     PASSWORD RECOVERY — send users to canonical reset-password.html
      (preserves hash / PKCE query; avoids stale preview hosts in email flows)
   ============================ */
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function AuthPage({ initialMode }) {
       target.search = window.location.search || "";
 
       const cur = new URL(window.location.href);
-      if (cur.origin === target.origin && cur.pathname === "/reset-password") {
+      if (cur.origin === target.origin && cur.pathname === "/reset-password.html") {
         return;
       }
 
@@ -131,8 +131,9 @@ export default function AuthPage({ initialMode }) {
     setLoading(true);
     setMsg(null);
 
+    const redirectTo = PASSWORD_RESET_REDIRECT_TO;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: getPasswordResetRedirectUrl(),
+      redirectTo,
     });
 
     if (error) {

@@ -1,5 +1,6 @@
 // src/utils/profile.js
 import { supabase } from "../supabaseClient";
+import { isResetPasswordRoute } from "./recoveryUrl";
 
 /* ============================================================
    FETCH CURRENT USER
@@ -121,6 +122,10 @@ export async function requireUsername(navigate) {
   }
 
   if (!profile?.username || profile.username.trim() === "") {
+    if (isResetPasswordRoute()) {
+      console.log("[RESET FLOW] blocked redirect to profile during recovery");
+      return false;
+    }
     navigate("/profile");
     return false;
   }
