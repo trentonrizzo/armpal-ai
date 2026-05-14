@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { useToast } from "../components/ToastProvider";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 
 export default function StrengthCalculator() {
   const [liftName, setLiftName] = useState("");
@@ -136,6 +137,12 @@ export default function StrengthCalculator() {
 
       if (toast?.success) {
         toast.success("Estimated PR Saved");
+      }
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        if (auth?.user?.id) safeRunAchievementEvaluation(auth.user.id, {});
+      } catch {
+        /* ignore */
       }
     } catch (err) {
       console.error("Estimated PR save failed:", err);

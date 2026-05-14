@@ -5,6 +5,8 @@ import { FaShare, FaTimes, FaChevronRight } from "react-icons/fa";
 import EmptyState from "../EmptyState";
 import { normalizeWorkoutForShare } from "../../utils/workoutShare";
 import { useToast } from "../ToastProvider";
+import { bumpWorkoutShareCount } from "../../features/achievements/shareStats";
+import { safeRunAchievementEvaluation } from "../../features/achievements/runner";
 
 /* =====================================================================================
    ARMPAL — WORKOUT SHARE OVERLAY (DOES NOT MODIFY WorkoutsPage.jsx)
@@ -807,6 +809,8 @@ async function sendSelectedWorkouts(toast, exitShareMode, workouts, userId, sele
   }
 
   if (toast?.success) toast.success("Workout sent");
+  bumpWorkoutShareCount(userId, inserts.length);
+  safeRunAchievementEvaluation(userId, {});
   // CLEAN EXIT
   exitShareMode();
 }

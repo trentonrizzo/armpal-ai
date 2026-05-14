@@ -13,6 +13,7 @@ import { FaArrowLeft } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 import { useToast } from "../components/ToastProvider";
 import { countProgressPhotosSince } from "../services/progressPhotosLocal";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 
 function todayLocalDate() {
   return new Date().toISOString().slice(0, 10);
@@ -120,6 +121,7 @@ export default function WeeklyCheckIn() {
             unit: "lbs",
             logged_at: isoLogged,
           });
+          safeRunAchievementEvaluation(user.id, {});
         } catch (err) {
           console.warn("[checkin] bodyweight passthrough failed:", err?.message);
         }
@@ -132,6 +134,7 @@ export default function WeeklyCheckIn() {
       setBodyweight("");
       setNotes("");
       toast?.success?.("Check-in saved");
+      safeRunAchievementEvaluation(user.id, {});
     } catch (err) {
       toast?.error?.(err?.message || "Could not save check-in");
     } finally {

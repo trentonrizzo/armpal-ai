@@ -3,6 +3,8 @@ import { supabase } from "../../supabaseClient";
 import EmptyState from "../EmptyState";
 import { normalizeWorkoutForShare } from "../../utils/workoutShare";
 import { useToast } from "../ToastProvider";
+import { bumpWorkoutShareCount } from "../../features/achievements/shareStats";
+import { safeRunAchievementEvaluation } from "../../features/achievements/runner";
 
 /**
  * ShareWorkoutsModal (WORKING UI + WORKING SEND)
@@ -273,6 +275,8 @@ export default function ShareWorkoutsModal({ open, onClose }) {
 
       // Close on success + toast
       if (toast?.success) toast.success("Workout sent");
+      bumpWorkoutShareCount(uid, friendIds.length * payloads.length);
+      safeRunAchievementEvaluation(uid, {});
       close();
     } catch (e) {
       console.error("WORKOUT SHARE SEND ERROR:", e);

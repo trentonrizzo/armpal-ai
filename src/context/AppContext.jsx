@@ -3,6 +3,7 @@ import React, { createContext, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap } from "../utils/usageLimits";
 import { ensureUserQR } from "../utils/ensureUserQR";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 
 export const AppContext = createContext();
 
@@ -72,6 +73,11 @@ export const AppProvider = ({ children }) => {
 
     if (!error && data) {
       setPRs((prev) => [...prev, data[0]]);
+      try {
+        safeRunAchievementEvaluation(user.id, {});
+      } catch {
+        /* ignore */
+      }
       return { success: true };
     }
     return { success: false };
@@ -91,6 +97,11 @@ export const AppProvider = ({ children }) => {
       setPRs((prev) =>
         prev.map((p) => (p.id === id ? { ...p, ...data[0] } : p))
       );
+      try {
+        if (user?.id) safeRunAchievementEvaluation(user.id, {});
+      } catch {
+        /* ignore */
+      }
     }
   }
 

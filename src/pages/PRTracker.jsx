@@ -2,9 +2,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 
-// 🔥 ACHIEVEMENTS BUS (ADDED)
-import { achievementBus } from "../utils/achievementBus";
 import { checkUsageCap } from "../utils/usageLimits";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 
 // dnd-kit
 import {
@@ -165,7 +164,7 @@ export default function PRTracker() {
 
     if (error) {
       console.error("PR LOAD ERROR:", error.message);
-      return;
+      return [];
     }
 
     // Group by lift
@@ -183,6 +182,7 @@ export default function PRTracker() {
     }));
 
     setGroups(finalGroups);
+    return finalGroups;
   }
 
   /* --------------------------------------------
@@ -251,17 +251,6 @@ export default function PRTracker() {
     };
 
     try {
-      // PREVIOUS BEST (for NEW PR detection)
-      const { data: previous } = await supabase
-        .from("prs")
-        .select("weight")
-        .eq("user_id", user.id)
-        .eq("lift_name", prLift)
-        .order("weight", { ascending: false })
-        .limit(1);
-
-      const previousBest = previous?.[0]?.weight ?? null;
-
       if (editingPR) {
         const { error } = await supabase.from("prs").update(payload).eq("id", editingPR.id);
         if (error) throw error;
@@ -274,26 +263,17 @@ export default function PRTracker() {
         setCapMessage("");
         const { error } = await supabase.from("prs").insert(payload);
         if (error) throw error;
-
-        // 🔥 FIRST PR EVER
-        if (groups.length === 0) {
-          achievementBus.emit({ type: "FIRST_PR" });
-        }
-
-        // 🔥 NEW PR BEAT
-        if (!previousBest || Number(prWeight) > previousBest) {
-          achievementBus.emit({
-            type: "NEW_PR",
-            exercise: prLift,
-            value: Number(prWeight),
-            diff: previousBest
-              ? Number(prWeight) - previousBest
-              : Number(prWeight),
-          });
-        }
       }
 
-      await loadPRs(user.id);
+      const finalGroups = await loadPRs(user.id);
+      const totalPrRows = Array.isArray(finalGroups)
+        ? finalGroups.reduce((s, gr) => s + (gr.entries?.length || 0), 0)
+        : 0;
+      safeRunAchievementEvaluation(user.id, {
+        prGroups: Array.isArray(finalGroups) ? finalGroups : undefined,
+        totalPrRows,
+      });
+
       setModalOpen(false);
       toast.success("PR saved");
     } catch (e) {
@@ -866,114 +846,3 @@ const labelStyle = {
   opacity: 0.85,
   marginBottom: 4,
 };
-
-
-/* ============================================================================
-   ACHIEVEMENT + DEBUG EXTENSIONS (NON-DESTRUCTIVE)
-   -----------------------------------------------------------------------------
-   NOTE TO FUTURE DEV (YOU):
-   - Everything below this point is ADDITIVE ONLY
-   - No existing logic above is modified or depended on
-   - This section intentionally exists to:
-       1. Keep file length >= original (no silent truncation)
-       2. Provide future hooks for achievements, debugging, and analytics
-       3. Make behavior explicit and readable when you come back months later
-
-   You can delete or refactor this section later WITHOUT affecting core PR logic.
-============================================================================ */
-
-/* --------------------------------------------
-   ACHIEVEMENT TYPE CONSTANTS
-   (centralized for safety + autocomplete)
---------------------------------------------- */
-
-const ACHIEVEMENT_TYPES = {
-  FIRST_PR: "FIRST_PR",
-  NEW_PR: "NEW_PR",
-  FIRST_WORKOUT: "FIRST_WORKOUT",
-  FIRST_MEASUREMENT: "FIRST_MEASUREMENT",
-  FIRST_BODYWEIGHT: "FIRST_BODYWEIGHT",
-};
-
-/* --------------------------------------------
-   SAFE EMIT HELPERS
-   These wrappers exist so that:
-   - achievementBus calls never throw
-   - logging can be enabled/disabled centrally
---------------------------------------------- */
-
-function safeEmitAchievement(payload) {
-  try {
-    if (!payload || !payload.type) return;
-    achievementBus.emit(payload);
-
-    // DEBUG (disable anytime)
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[ACHIEVEMENT EMIT]", payload);
-    }
-  } catch (err) {
-    console.error("ACHIEVEMENT EMIT FAILED", err);
-  }
-}
-
-/* --------------------------------------------
-   FUTURE: PR STREAK CALCULATION (NOT ACTIVE)
-   This is intentionally NOT wired yet.
---------------------------------------------- */
-
-function calculatePRStreak(prGroups) {
-  if (!Array.isArray(prGroups) || prGroups.length === 0) return 0;
-
-  // Example future logic:
-  // - iterate days
-  // - count consecutive PR days
-  // - return streak length
-
-  let streak = 0;
-  // placeholder
-  return streak;
-}
-
-/* --------------------------------------------
-   FUTURE: PR INSIGHT GENERATION (NOT ACTIVE)
---------------------------------------------- */
-
-function generatePRInsights(liftName, entries) {
-  if (!entries || entries.length < 2) return null;
-
-  const latest = entries[0];
-  const first = entries[entries.length - 1];
-
-  return {
-    lift: liftName,
-    totalGain: latest.weight - first.weight,
-    sessions: entries.length,
-    startedAt: first.date,
-    lastPR: latest.date,
-  };
-}
-
-/* --------------------------------------------
-   DEBUG UTILITIES (SAFE TO REMOVE)
---------------------------------------------- */
-
-function debugLogPRGroups(groups) {
-  if (process.env.NODE_ENV === "production") return;
-
-  console.group("[PR GROUP DEBUG]");
-  groups.forEach((g) => {
-    console.log(g.lift_name, g.entries.length);
-  });
-  console.groupEnd();
-}
-
-/* --------------------------------------------
-   WHY THIS FILE IS LONG (INTENTIONAL)
-   -----------------------------------------------------------------------------
-   - Prevents accidental future truncation
-   - Makes diffs obvious in GitHub
-   - Gives space for future PR-related features
-   - Keeps ALL PR logic co-located
-
-   This section is not dead code — it is RESERVED SPACE.
---------------------------------------------- */

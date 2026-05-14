@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { AiOutlineBell } from "react-icons/ai";
+import { FaTrophy } from "react-icons/fa";
+import { listAchievementUnlocks } from "../../features/achievements/persistence";
+import { getAchievement, RARITY } from "../../features/achievements/definitions";
+import { ACHIEVEMENT_UNLOCK_EVENT } from "../../features/achievements/runner";
 
 export default function NotificationsBell() {
   const navigate = useNavigate();
@@ -11,6 +15,9 @@ export default function NotificationsBell() {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [readSet, setReadSet] = useState(() => new Set());
+  const [tab, setTab] = useState("notifs");
+  const [achievements, setAchievements] = useState([]);
+  const [achLoading, setAchLoading] = useState(false);
 
   const unreadCount = useMemo(() => {
     if (!user?.id) return 0;
@@ -70,6 +77,28 @@ export default function NotificationsBell() {
       setLoading(false);
     }
   }, [user?.id]);
+
+  const loadAchievements = useCallback(async () => {
+    if (!user?.id) return;
+    setAchLoading(true);
+    try {
+      const rows = await listAchievementUnlocks(user.id);
+      setAchievements(rows || []);
+    } catch (e) {
+      console.error("Achievements load failed", e);
+    } finally {
+      setAchLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+    const fn = () => {
+      loadAchievements();
+    };
+    window.addEventListener(ACHIEVEMENT_UNLOCK_EVENT, fn);
+    return () => window.removeEventListener(ACHIEVEMENT_UNLOCK_EVENT, fn);
+  }, [user?.id, loadAchievements]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -172,11 +201,17 @@ export default function NotificationsBell() {
     }
   }
 
+  async function refreshAll() {
+    await refresh();
+    await loadAchievements();
+  }
+
   function handleOpen() {
     const wasOpen = open;
     setOpen((v) => !v);
     if (!wasOpen) {
       markAllRead();
+      loadAchievements();
     }
   }
 
@@ -207,9 +242,37 @@ export default function NotificationsBell() {
               </button>
             </div>
 
-            <button type="button" onClick={refresh} disabled={loading} style={styles.refreshBtn}>
-              {loading ? "Refreshing…" : "Refresh"}
+            <button
+              type="button"
+              onClick={refreshAll}
+              disabled={loading || achLoading}
+              style={styles.refreshBtn}
+            >
+              {loading || achLoading ? "Refreshing…" : "Refresh"}
             </button>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <button
+                type="button"
+                onClick={() => setTab("notifs")}
+                style={{
+                  ...styles.tabBtn,
+                  ...(tab === "notifs" ? styles.tabBtnOn : {}),
+                }}
+              >
+                Updates
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("achievements")}
+                style={{
+                  ...styles.tabBtn,
+                  ...(tab === "achievements" ? styles.tabBtnOn : {}),
+                }}
+              >
+                Achievements
+              </button>
+            </div>
 
             {canPostGlobal && (
               <div style={styles.adminBox}>
@@ -239,6 +302,8 @@ export default function NotificationsBell() {
               </div>
             )}
 
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              {tab === "notifs" ? (
             <div style={styles.list}>
               {items.length === 0 ? (
                 <div style={styles.empty}>No notifications yet.</div>
@@ -266,6 +331,45 @@ export default function NotificationsBell() {
                     </button>
                   );
                 })
+              )}
+            </div>
+              ) : (
+            <div style={styles.list}>
+              {achLoading ? (
+                <div style={styles.empty}>Loading achievements…</div>
+              ) : achievements.length === 0 ? (
+                <div style={styles.empty}>No achievements unlocked yet.</div>
+              ) : (
+                achievements.map((row) => {
+                  const def = getAchievement(row.id);
+                  if (!def) return null;
+                  return (
+                    <div key={row.id} style={styles.achCard}>
+                      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <div style={styles.achIcon}>
+                          <FaTrophy size={18} style={{ color: "var(--accent)" }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={styles.itemTitle}>{def.title}</div>
+                          <div style={styles.itemBody}>{def.description}</div>
+                          <div
+                            style={{
+                              marginTop: 6,
+                              fontSize: 11,
+                              color: "var(--text-dim)",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {RARITY[def.rarity]?.label || "Common"} ·{" "}
+                            {new Date(row.unlocked_at).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
               )}
             </div>
           </div>
@@ -404,8 +508,42 @@ const styles = {
     fontWeight: 900,
     cursor: "pointer",
   },
-  list: { overflow: "auto", paddingRight: 4 },
+  list: { flex: 1, overflow: "auto", paddingRight: 4, minHeight: 0 },
   empty: { color: "var(--text-dim)", fontSize: 14 },
+  tabBtn: {
+    flex: 1,
+    padding: "10px 8px",
+    borderRadius: 12,
+    border: "1px solid var(--border)",
+    background: "var(--card-2)",
+    color: "var(--text)",
+    fontWeight: 800,
+    fontSize: 13,
+    cursor: "pointer",
+  },
+  tabBtnOn: {
+    borderColor: "var(--accent)",
+    background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+  },
+  achCard: {
+    padding: 12,
+    borderRadius: 12,
+    border: "1px solid color-mix(in srgb, var(--accent) 22%, var(--border))",
+    background: "var(--card-2)",
+    marginBottom: 10,
+    boxShadow: "inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent)",
+  },
+  achIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    background: "color-mix(in srgb, var(--accent) 14%, transparent)",
+    border: "1px solid color-mix(in srgb, var(--accent) 28%, transparent)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   item: {
     width: "100%",
     textAlign: "left",

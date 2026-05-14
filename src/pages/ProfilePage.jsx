@@ -67,6 +67,7 @@ import {
 
 import SettingsOverlay from "../settings/SettingsOverlay";
 import ProfileVisibilityOverlay from "../components/profile/ProfileVisibilityOverlay";
+import AchievementShowcase from "../features/achievements/AchievementShowcase";
 import { useToast } from "../components/ToastProvider";
 import { SkeletonLine, SkeletonAvatar } from "../components/Skeleton";
 import useProfileReactions, { REACTION_KEYS } from "../hooks/useProfileReactions";
@@ -1649,6 +1650,11 @@ export default function ProfilePage() {
               onClick={() => navigate("/goals")}
             />
           </div>
+        </BigCard>
+
+        <BigCard>
+          <SectionTitle>Achievements</SectionTitle>
+          <AchievementShowcase userId={user?.id} />
         </BigCard>
 
         {/* =========================================================================================

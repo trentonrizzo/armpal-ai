@@ -16,6 +16,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
 import {
   FaArrowLeft,
   FaTrash,
@@ -31,6 +32,7 @@ import {
   deleteProgressPhoto,
   updateProgressPhotoNote,
 } from "../services/progressPhotosLocal";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import ProgressPhotoViewer from "../components/ProgressPhotoViewer";
 import ShareProgressPhotosModal from "../components/ShareProgressPhotosModal";
 
@@ -219,6 +221,16 @@ export default function ProgressPhotos() {
       }
       if (saved.length > 0) {
         setPhotos((prev) => [...saved, ...prev]);
+        try {
+          const { data: auth } = await supabase.auth.getUser();
+          const uid = auth?.user?.id;
+          if (uid) {
+            const all = await listProgressPhotos();
+            safeRunAchievementEvaluation(uid, { progressPhotoCount: all.length });
+          }
+        } catch {
+          /* ignore */
+        }
       }
       setPendingFiles([]);
       setPendingNote("");

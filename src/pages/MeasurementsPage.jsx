@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 
 // dnd-kit
 import {
@@ -396,15 +397,20 @@ export default function MeasurementsPage() {
     const trimmedNotes = ""; // inline form currently has no notes field
     const notes = trimmedNotes || null;
 
-    await supabase.from("bodyweight_logs").insert({
+    const { error } = await supabase.from("bodyweight_logs").insert({
       user_id: user.id,
       weight: n,
       unit: "lbs",
       logged_at: iso,
       notes,
     });
+    if (error) {
+      console.error("bodyweight insert", error);
+      return;
+    }
 
     await reloadBodyweight(user.id);
+    safeRunAchievementEvaluation(user.id, {});
     setBwInput("");
   }
 

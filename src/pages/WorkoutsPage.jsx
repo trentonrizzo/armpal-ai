@@ -16,10 +16,10 @@
 // ============================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { achievementBus } from "../utils/achievementBus";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { getDisplayText, buildDisplayText } from "../utils/displayText";
 import { supabase } from "../supabaseClient";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import {
   DndContext,
   closestCenter,
@@ -438,7 +438,6 @@ export default function WorkoutsPage() {
     const oldIndex = list.findIndex((e) => e.id === active.id);
     const newIndex = list.findIndex((e) => e.id === over.id);
     const reordered = arrayMove(list, oldIndex, newIndex);
-    achievementBus.emit({ type: "FIRST_WORKOUT" });
 
     const { error } = await supabase
       .from("workouts")
@@ -517,6 +516,7 @@ export default function WorkoutsPage() {
 
     try {
       let savedId = editingWorkout?.id || null;
+      const wasEditing = !!editingWorkout;
 
       if (editingWorkout) {
         const { error } = await supabase.from("workouts").update(payload).eq("id", editingWorkout.id);
@@ -538,18 +538,15 @@ export default function WorkoutsPage() {
         if (error) throw error;
         savedId = inserted?.id || null;
       }
-      // FIRST WORKOUT ACHIEVEMENT
-      if (!editingWorkout && workouts.length === 0) {
-        const alreadyFired = localStorage.getItem("ach_first_workout");
-        if (!editingWorkout && !alreadyFired) {
-          achievementBus.emit({ type: "FIRST_WORKOUT" });
-          localStorage.setItem("ach_first_workout", "1");
-        }
-      }
 
       setWorkoutModalOpen(false);
       setEditingWorkout(null);
       await loadWorkouts(user.id);
+      if (user?.id) {
+        safeRunAchievementEvaluation(user.id, {
+          workoutCount: wasEditing ? undefined : workouts.length + 1,
+        });
+      }
       toast.success("Saved");
 
       if (savedId) {

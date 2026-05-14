@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import { parseStoredTimestamp, formatStoredTimestamp } from "../utils/workoutTime";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "../components/ToastProvider";
@@ -212,15 +213,23 @@ export default function Dashboard() {
 
     const estimated = Math.round(calculated1RM);
 
-    await supabase.rpc("save_estimated_pr", {
+    const { error: rpcErr } = await supabase.rpc("save_estimated_pr", {
       p_lift_name: exerciseName,
       p_estimated_weight: estimated,
       p_input_weight: Number(weightInput),
       p_input_reps: Number(repsInput),
       p_unit: "lb",
     });
+    if (rpcErr) {
+      if (toast?.error) toast.error(rpcErr.message || "Failed to save PR");
+      return;
+    }
 
     fetchBestPR(exerciseName, estimated);
+
+    if (user?.id) {
+      safeRunAchievementEvaluation(user.id, {});
+    }
 
     if (toast?.success) {
       toast.success("PR saved");

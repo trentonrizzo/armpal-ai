@@ -17,6 +17,10 @@ import {
   requestPermissions,
   nativeLocalPermissionUiLabel,
 } from "../services/nativeLocalNotifications";
+import {
+  isAchievementFeedbackEnabled,
+  setAchievementFeedbackEnabled,
+} from "../features/achievements/feedback";
 
 /* ============================
    TOGGLE PILL
@@ -190,6 +194,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
+  const [achFeedbackOn, setAchFeedbackOn] = useState(true);
 
   const remindersSupported = isNativeNotificationsSupported();
 
@@ -240,6 +245,11 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
       if (isNativeNotificationsSupported()) {
         const lp = await checkPermissions();
         applyLocalPermissionSnapshot(lp);
+      }
+      try {
+        setAchFeedbackOn(isAchievementFeedbackEnabled());
+      } catch {
+        setAchFeedbackOn(true);
       }
     });
   }, [open]);
@@ -572,6 +582,42 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                 />
               </div>
             )}
+          </div>
+
+          {/* ACHIEVEMENT FEEDBACK (in-app only; does not affect push or reminders) */}
+          <div
+            style={{
+              marginTop: 14,
+              padding: 14,
+              borderRadius: 14,
+              background: "var(--card-2)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800 }}>Achievement sounds & haptics</div>
+                <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.35, marginTop: 4 }}>
+                  Short in-app chime and vibration when a badge unlocks. Does not use push or
+                  workout reminders.
+                </div>
+              </div>
+              <TogglePill
+                on={achFeedbackOn}
+                onClick={() => {
+                  const next = !achFeedbackOn;
+                  setAchFeedbackOn(next);
+                  setAchievementFeedbackEnabled(next);
+                }}
+              />
+            </div>
           </div>
 
           {/* REMINDERS (native local notifications) */}

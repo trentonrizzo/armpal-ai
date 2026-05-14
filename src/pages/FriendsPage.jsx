@@ -8,6 +8,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import { useNavigate, useLocation } from "react-router-dom";
 import FriendQRModal from "../components/friends/FriendQRModal";
 import { useToast } from "../components/ToastProvider";
@@ -670,6 +671,7 @@ export default function FriendsPage() {
           r.id === otherId ? { ...r, relationshipStatus: "friends", requestId: undefined } : r
         )
       );
+      safeRunAchievementEvaluation(user.id, { friendCount: undefined });
     } catch (e) {
       console.error(e);
     }
@@ -725,6 +727,7 @@ export default function FriendsPage() {
     const { error } = await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
     if (!error) toast.success("Friend added");
     await loadAllFriends(user.id);
+    if (!error) safeRunAchievementEvaluation(user.id, { friendCount: undefined });
   }
 
   async function declineRequest(rowId) {
