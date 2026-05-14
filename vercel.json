@@ -6,6 +6,10 @@
 
   "routes": [
     {
+      "src": "/reset-password.html",
+      "dest": "/reset-password.html"
+    },
+    {
       "src": "/privacy",
       "dest": "/privacy.html"
     },

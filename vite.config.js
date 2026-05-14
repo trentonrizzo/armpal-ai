@@ -51,15 +51,19 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
 
+        /** Do not precache standalone password reset (must bypass PWA shell). */
+        globIgnores: ["**/reset-password.html"],
+
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/reset-password\.html$/],
 
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
 
         runtimeCaching: [
-          // HTML / SPA navigation
+          // HTML / SPA navigation (never treat standalone reset as SPA shell)
           {
-            urlPattern: ({ request }) => request.mode === "navigate",
+            urlPattern: ({ request, url }) =>
+              request.mode === "navigate" && !/^\/reset-password\.html$/i.test(url.pathname || ""),
             handler: "NetworkFirst",
             options: {
               cacheName: "html-cache",
