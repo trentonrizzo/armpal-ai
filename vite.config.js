@@ -55,7 +55,11 @@ export default defineConfig({
         globIgnores: ["**/reset-password.html"],
 
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/reset-password\.html$/],
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/reset-password\.html$/,
+          /^\/reset-password$/,
+        ],
 
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
 
@@ -63,7 +67,9 @@ export default defineConfig({
           // HTML / SPA navigation (never treat standalone reset as SPA shell)
           {
             urlPattern: ({ request, url }) =>
-              request.mode === "navigate" && !/^\/reset-password\.html$/i.test(url.pathname || ""),
+              request.mode === "navigate" &&
+              !/^\/reset-password\.html$/i.test(url.pathname || "") &&
+              !/^\/reset-password$/i.test(url.pathname || ""),
             handler: "NetworkFirst",
             options: {
               cacheName: "html-cache",

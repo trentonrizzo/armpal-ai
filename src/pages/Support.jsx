@@ -3,12 +3,20 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 import { useToast } from "../components/ToastProvider";
+import { isPasswordResetStandalone } from "../utils/recoveryUrl";
 
 export default function Support() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
   const backToSettingsLegal = () => {
+    if (isPasswordResetStandalone()) {
+      console.log("[RESET FLOW] blocked redirect to /profile during reset", {
+        pathname: window.location.pathname,
+        href: window.location.href,
+      });
+      return;
+    }
     navigate("/profile", {
       replace: true,
       state: { openSettings: true, openLegal: true },
@@ -21,6 +29,13 @@ export default function Support() {
     }
     if (typeof window !== "undefined" && window.history.length > 1) {
       navigate(-1);
+      return;
+    }
+    if (isPasswordResetStandalone()) {
+      console.log("[RESET FLOW] blocked redirect to /profile during reset", {
+        pathname: window.location.pathname,
+        href: window.location.href,
+      });
       return;
     }
     navigate("/profile", { replace: true, state: { openSettings: true, openLegal: true } });

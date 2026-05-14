@@ -9,7 +9,6 @@ import { ToastProvider } from "./components/ToastProvider";
 import { ProfileGateProvider } from "./context/ProfileGateContext";
 import AuthPage from "./AuthPage";
 
-import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
 import MeasurementsPage from "./pages/MeasurementsPage";
@@ -63,6 +62,7 @@ import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
 import InAppBanner from "./components/notifications/InAppBanner";
 import { useTheme } from "./context/ThemeContext";
 import {
+  isPasswordResetStandalone,
   isResetPasswordRoute,
   logResetAuthState,
   markPasswordRecoveryFlow,
@@ -339,8 +339,11 @@ function AuthenticatedLayout({ session }) {
       sessionStorage.getItem("armpal_needs_profile_setup") === "1";
 
     if (needsProfileFlag && location.pathname !== "/profile") {
-      if (isResetPasswordRoute()) {
-        console.log("[RESET FLOW] blocked redirect to profile during recovery");
+      if (isPasswordResetStandalone() || isResetPasswordRoute()) {
+        console.log("[RESET FLOW] blocked redirect to /profile during reset", {
+          pathname: window.location.pathname,
+          href: window.location.href,
+        });
         return;
       }
       navigate("/profile", { replace: true });
@@ -415,8 +418,6 @@ function AppContent() {
         }
       >
         <Routes>
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/reset-password/*" element={<ResetPassword />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/signup" element={<Navigate to="/" replace />} />
           <Route path="/home" element={<HomePage />} />
@@ -521,6 +522,9 @@ export default function App() {
   const onPublicReset = isResetPasswordRoute();
 
   useLayoutEffect(() => {
+    if (typeof window !== "undefined" && window.location.pathname.endsWith("reset-password.html")) {
+      return;
+    }
     if (typeof window !== "undefined" && window.location.pathname === "/reset-password") {
       return;
     }
@@ -528,10 +532,8 @@ export default function App() {
     if (!passwordRecoveryNeedsCanonicalResetPath()) return;
     console.log("[RESET FLOW]", "recovery link detected");
     const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-    window.history.replaceState(null, "", `/reset-password${suffix}`);
-    console.log("[RESET FLOW]", "forcing reset-password route");
-    navigate(`/reset-password${suffix}`, { replace: true });
-  }, [navigate]);
+    window.location.replace(`${window.location.origin}/reset-password.html${suffix}`);
+  }, []);
 
   usePresence(onPublicReset ? null : session?.user);
   useNotifications(onPublicReset ? undefined : session?.user?.id);
@@ -548,7 +550,8 @@ export default function App() {
 
       const isResetPwRoute =
         typeof window !== "undefined" &&
-        (window.location.pathname === "/reset-password" ||
+        (window.location.pathname.endsWith("reset-password.html") ||
+          window.location.pathname === "/reset-password" ||
           window.location.pathname.startsWith("/reset-password/") ||
           window.location.href.includes("type=recovery") ||
           window.location.href.includes("type%3Drecovery") ||
@@ -560,23 +563,21 @@ export default function App() {
 
       if (event === "PASSWORD_RECOVERY" && s && typeof window !== "undefined") {
         markPasswordRecoveryFlow();
-        if (window.location.pathname !== "/reset-password") {
+        if (!window.location.pathname.endsWith("reset-password.html")) {
           const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-          window.history.replaceState(null, "", `/reset-password${suffix}`);
-          navigate(`/reset-password${suffix}`, { replace: true });
+          window.location.replace(`${window.location.origin}/reset-password.html${suffix}`);
         }
       } else if (event === "SIGNED_IN" && s && typeof window !== "undefined" && recoveryTokensPresentInUrl()) {
         markPasswordRecoveryFlow();
-        if (window.location.pathname !== "/reset-password") {
+        if (!window.location.pathname.endsWith("reset-password.html")) {
           const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-          window.history.replaceState(null, "", `/reset-password${suffix}`);
-          navigate(`/reset-password${suffix}`, { replace: true });
+          window.location.replace(`${window.location.origin}/reset-password.html${suffix}`);
         }
       }
       setSession(s);
     });
     return () => listener.subscription.unsubscribe();
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     void bootstrapNativeLocalNotifications();
@@ -599,11 +600,20 @@ export default function App() {
     <>
       <RuntimeSplash show={showSplash && !onPublicReset} />
       {!ready && !onPublicReset ? null : onPublicReset ? (
-        <ResetPassword />
+        <div
+          style={{
+            minHeight: "100dvh",
+            background: "#000",
+            color: "#fff",
+            display: "grid",
+            placeItems: "center",
+            fontFamily: "system-ui, sans-serif",
+          }}
+        >
+          <p style={{ margin: 0 }}>Opening password reset…</p>
+        </div>
       ) : !session ? (
         <Routes>
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/reset-password/*" element={<ResetPassword />} />
           <Route
             path="*"
             element={

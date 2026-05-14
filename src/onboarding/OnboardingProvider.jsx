@@ -16,6 +16,7 @@ import {
   ONBOARDING_STEPS,
 } from "./onboardingSteps";
 import {
+  isPasswordResetStandalone,
   isRecoveryFlow,
   isResetPasswordRoute,
   logResetAuthState,
@@ -54,7 +55,7 @@ export default function OnboardingProvider({ children }) {
   // Load profile and decide if onboarding is required, but short‑circuit entirely
   // if the account has an explicit onboarding_completed flag (database is source of truth).
   useEffect(() => {
-    if (isResetPasswordRoute()) return;
+    if (isPasswordResetStandalone() || isResetPasswordRoute()) return;
 
     let cancelled = false;
 
@@ -147,7 +148,7 @@ export default function OnboardingProvider({ children }) {
     // Initial load (handles page refresh / session restore).
     supabase.auth.getUser().then(({ data }) => {
       logResetAuthState("ONBOARDING_GET_USER");
-      if (isResetPasswordRoute() || isRecoveryFlow()) return;
+      if (isPasswordResetStandalone() || isResetPasswordRoute() || isRecoveryFlow()) return;
       setCurrentUserId(data?.user?.id || null);
       loadForUser(data?.user || null);
     });
@@ -155,7 +156,7 @@ export default function OnboardingProvider({ children }) {
     // React to login/logout — skip during password recovery (temporary session).
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       logResetAuthState(event);
-      if (event === "PASSWORD_RECOVERY" || isResetPasswordRoute() || isRecoveryFlow()) {
+      if (event === "PASSWORD_RECOVERY" || isPasswordResetStandalone() || isResetPasswordRoute() || isRecoveryFlow()) {
         if (event === "SIGNED_IN" && isResetPasswordRoute()) {
           console.log("[RESET FLOW] skipping normal auth redirect");
         }
@@ -174,7 +175,7 @@ export default function OnboardingProvider({ children }) {
   // Force route for onboarding steps when active.
   useEffect(() => {
     if (!currentStep || isComplete) return;
-    if (isResetPasswordRoute() || isRecoveryFlow()) return;
+    if (isPasswordResetStandalone() || isResetPasswordRoute() || isRecoveryFlow()) return;
     if (recoveryTokensPresentInUrl()) return;
 
     const targetRoute = currentStep.route;
@@ -200,7 +201,7 @@ export default function OnboardingProvider({ children }) {
     if (!profileLoaded || !profileNeedsOnboarding) return;
     if (onboardingCompleted) return;
     if (phase === ONBOARDING_PHASE_TOUR) return;
-    if (isResetPasswordRoute() || isRecoveryFlow()) return;
+    if (isPasswordResetStandalone() || isResetPasswordRoute() || isRecoveryFlow()) return;
     if (recoveryTokensPresentInUrl()) return;
     // Allow public legal/support pages without redirect.
     const isPublicPage = [
@@ -218,8 +219,11 @@ export default function OnboardingProvider({ children }) {
     const hasFlag = searchParams.get("onboarding") === "true";
 
     if (!isOnProfile || !hasFlag) {
-      if (isResetPasswordRoute()) {
-        console.log("[RESET FLOW] blocked redirect to profile during recovery");
+      if (isPasswordResetStandalone() || isResetPasswordRoute() || isRecoveryFlow()) {
+        console.log("[RESET FLOW] blocked redirect to /profile during reset", {
+          pathname: window.location.pathname,
+          href: window.location.href,
+        });
         return;
       }
       navigate("/profile?onboarding=true", { replace: true });

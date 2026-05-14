@@ -4,6 +4,14 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
 
+  "redirects": [
+    {
+      "source": "/reset-password",
+      "destination": "/reset-password.html",
+      "permanent": true
+    }
+  ],
+
   "routes": [
     {
       "src": "/reset-password.html",

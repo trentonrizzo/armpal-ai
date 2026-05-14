@@ -1,8 +1,7 @@
 import React, { useEffect, useLayoutEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import OnboardingProvider from "./onboarding/OnboardingProvider";
 import App from "./App";
-import ResetPassword from "./pages/ResetPassword";
 import {
   isResetPasswordRoute,
   logResetAuthState,
@@ -12,36 +11,64 @@ import {
 } from "./utils/recoveryUrl";
 
 /**
- * First-line public reset: never mount onboarding or main app shell for recovery.
+ * Recovery always hard-navigates to the standalone /reset-password.html document
+ * (never mount React reset or app shell for that flow).
  */
 export default function RootRoutes() {
   const location = useLocation();
-  const navigate = useNavigate();
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
     if (recoveryTokensPresentInUrl() || window.location.href.includes("type=recovery")) {
       markPasswordRecoveryFlow();
     }
+
+    const p = window.location.pathname || "";
+    const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
+    const dest = `${window.location.origin}/reset-password.html${suffix}`;
+
+    // PWA served index.html for /reset-password.html — same path, wrong document (SPA shell meta).
+    const spaShell =
+      typeof document !== "undefined" &&
+      document.querySelector('meta[name="ap-spa-shell"]')?.getAttribute("content") === "1";
+    if (p.endsWith("reset-password.html") && spaShell) {
+      const u = new URL(window.location.href);
+      u.searchParams.set("__ap_nc", String(Date.now()));
+      window.location.replace(u.toString());
+      return;
+    }
+
     if (!passwordRecoveryNeedsCanonicalResetPath()) return;
     logResetAuthState("ROOT_CANONICALIZE_RECOVERY_URL");
-    const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-    window.history.replaceState(null, "", `/reset-password${suffix}`);
-    navigate(`/reset-password${suffix}`, { replace: true });
-  }, [navigate]);
+    window.location.replace(dest);
+  }, []);
 
   useEffect(() => {
     logResetAuthState("ROOT_RENDER");
   }, [location.pathname, location.search, location.hash]);
 
-  if (isResetPasswordRoute()) {
-    const p = typeof window !== "undefined" ? window.location.pathname || "" : "";
-    if (p === "/reset-password" || p.startsWith("/reset-password/")) {
-      console.log("[RESET FLOW] reset route loaded");
-    } else {
-      console.log("[RESET FLOW] recovery detected");
-    }
-    return <ResetPassword />;
+  const showResetLoadingBridge =
+    typeof window !== "undefined" &&
+    isResetPasswordRoute() &&
+    !window.location.pathname.endsWith("reset-password.html");
+
+  if (showResetLoadingBridge) {
+    return (
+      <div
+        style={{
+          minHeight: "100dvh",
+          background: "#000",
+          color: "#fff",
+          display: "grid",
+          placeItems: "center",
+          fontFamily: "system-ui, sans-serif",
+          padding: 24,
+          textAlign: "center",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 16 }}>Opening password reset…</p>
+      </div>
+    );
   }
 
   return (
