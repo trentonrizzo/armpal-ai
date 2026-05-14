@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useCallback, useEffect, useLayoutEffect, useState, lazy, Suspense } from "react";
+import React, { useCallback, useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useParams, useNavigate, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
@@ -64,9 +64,6 @@ import { useTheme } from "./context/ThemeContext";
 import {
   isPasswordResetStandalone,
   isResetPasswordRoute,
-  logResetAuthState,
-  markPasswordRecoveryFlow,
-  passwordRecoveryNeedsCanonicalResetPath,
   recoveryTokensPresentInUrl,
 } from "./utils/recoveryUrl";
 import { getReminderSettings } from "./services/localReminders";
@@ -519,24 +516,9 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const { setTheme, setAccent } = useTheme();
-  const onPublicReset = isResetPasswordRoute();
 
-  useLayoutEffect(() => {
-    if (typeof window !== "undefined" && window.location.pathname.endsWith("reset-password.html")) {
-      return;
-    }
-    if (typeof window !== "undefined" && window.location.pathname === "/reset-password") {
-      return;
-    }
-    if (typeof window === "undefined") return;
-    if (!passwordRecoveryNeedsCanonicalResetPath()) return;
-    console.log("[RESET FLOW]", "recovery link detected");
-    const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-    window.location.replace(`${window.location.origin}/reset-password.html${suffix}`);
-  }, []);
-
-  usePresence(onPublicReset ? null : session?.user);
-  useNotifications(onPublicReset ? undefined : session?.user?.id);
+  usePresence(session?.user);
+  useNotifications(session?.user?.id);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -545,35 +527,7 @@ export default function App() {
       setTimeout(() => setShowSplash(false), 1200);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
-      logResetAuthState(event);
-
-      const isResetPwRoute =
-        typeof window !== "undefined" &&
-        (window.location.pathname.endsWith("reset-password.html") ||
-          window.location.pathname === "/reset-password" ||
-          window.location.pathname.startsWith("/reset-password/") ||
-          window.location.href.includes("type=recovery") ||
-          window.location.href.includes("type%3Drecovery") ||
-          recoveryTokensPresentInUrl());
-
-      if (isResetPwRoute && event === "SIGNED_IN") {
-        console.log("[RESET FLOW] skipping normal auth redirect");
-      }
-
-      if (event === "PASSWORD_RECOVERY" && s && typeof window !== "undefined") {
-        markPasswordRecoveryFlow();
-        if (!window.location.pathname.endsWith("reset-password.html")) {
-          const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-          window.location.replace(`${window.location.origin}/reset-password.html${suffix}`);
-        }
-      } else if (event === "SIGNED_IN" && s && typeof window !== "undefined" && recoveryTokensPresentInUrl()) {
-        markPasswordRecoveryFlow();
-        if (!window.location.pathname.endsWith("reset-password.html")) {
-          const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-          window.location.replace(`${window.location.origin}/reset-password.html${suffix}`);
-        }
-      }
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
     });
     return () => listener.subscription.unsubscribe();
@@ -598,21 +552,8 @@ export default function App() {
 
   return (
     <>
-      <RuntimeSplash show={showSplash && !onPublicReset} />
-      {!ready && !onPublicReset ? null : onPublicReset ? (
-        <div
-          style={{
-            minHeight: "100dvh",
-            background: "#000",
-            color: "#fff",
-            display: "grid",
-            placeItems: "center",
-            fontFamily: "system-ui, sans-serif",
-          }}
-        >
-          <p style={{ margin: 0 }}>Opening password reset…</p>
-        </div>
-      ) : !session ? (
+      <RuntimeSplash show={showSplash} />
+      {!ready ? null : !session ? (
         <Routes>
           <Route
             path="*"

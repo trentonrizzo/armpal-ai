@@ -1,12 +1,13 @@
 /**
  * Canonical public URL for Supabase password recovery redirectTo.
- * Standalone static page (not the React SPA) so Safari / PWA session cannot hijack the flow.
+ * Static document only — never the React SPA.
  *
  * Supabase Dashboard → Authentication → URL Configuration → Redirect URLs (add both):
- * https://www.armpal.net/reset-password.html
- * https://armpal.net/reset-password.html
+ * https://www.armpal.net/password-reset-standalone.html
+ * https://armpal.net/password-reset-standalone.html
  */
-export const PASSWORD_RESET_REDIRECT_TO = "https://www.armpal.net/reset-password.html";
+export const PASSWORD_RESET_REDIRECT_TO =
+  "https://www.armpal.net/password-reset-standalone.html";
 
 const ARM_PAL_PRODUCTION_ORIGIN = "https://www.armpal.net";
 
@@ -14,9 +15,6 @@ function stripTrailingSlash(s) {
   return String(s || "").replace(/\/+$/, "");
 }
 
-/**
- * @returns {string} Origin only, e.g. https://www.armpal.net — no path, no trailing slash.
- */
 export function getPublicSiteOrigin() {
   try {
     const raw =
@@ -41,10 +39,6 @@ export function getPublicSiteOrigin() {
   return stripTrailingSlash(ARM_PAL_PRODUCTION_ORIGIN);
 }
 
-/**
- * Full redirect URL passed to `resetPasswordForEmail({ redirectTo })`.
- * Always the production reset page (never Capacitor / localhost / preview origins).
- */
 export function getPasswordResetRedirectUrl() {
   return PASSWORD_RESET_REDIRECT_TO;
 }

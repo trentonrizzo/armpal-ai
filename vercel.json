@@ -7,15 +7,20 @@
   "redirects": [
     {
       "source": "/reset-password",
-      "destination": "/reset-password.html",
+      "destination": "/password-reset-standalone.html",
+      "permanent": true
+    },
+    {
+      "source": "/reset-password.html",
+      "destination": "/password-reset-standalone.html",
       "permanent": true
     }
   ],
 
   "routes": [
     {
-      "src": "/reset-password.html",
-      "dest": "/reset-password.html"
+      "src": "/password-reset-standalone.html",
+      "dest": "/password-reset-standalone.html"
     },
     {
       "src": "/privacy",

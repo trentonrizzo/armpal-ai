@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
       .trim()
       .replace(/\/+$/, "");
 
-    const redirectTo = siteBase ? `${siteBase}/reset-password.html` : "";
+    const redirectTo = siteBase ? `${siteBase}/password-reset-standalone.html` : "";
 
     if (!redirectTo) {
       return res.status(500).json({

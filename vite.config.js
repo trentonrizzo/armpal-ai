@@ -9,7 +9,6 @@ export default defineConfig({
     react(),
 
     VitePWA({
-      // 🚫 DO NOT AUTO REGISTER (iOS BUG SOURCE)
       registerType: "prompt",
       injectRegister: false,
 
@@ -43,20 +42,17 @@ export default defineConfig({
         ],
       },
 
-      // ✅ iOS-SAFE WORKBOX CONFIG
       workbox: {
         cleanupOutdatedCaches: true,
-
-        // 🔥 FORCE NEW BUILDS TO TAKE OVER
         skipWaiting: true,
         clientsClaim: true,
 
-        /** Do not precache standalone password reset (must bypass PWA shell). */
-        globIgnores: ["**/reset-password.html"],
+        globIgnores: ["**/password-reset-standalone.html", "**/reset-password.html"],
 
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [
           /^\/api\//,
+          /^\/password-reset-standalone\.html$/,
           /^\/reset-password\.html$/,
           /^\/reset-password$/,
         ],
@@ -64,12 +60,15 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
 
         runtimeCaching: [
-          // HTML / SPA navigation (never treat standalone reset as SPA shell)
           {
-            urlPattern: ({ request, url }) =>
-              request.mode === "navigate" &&
-              !/^\/reset-password\.html$/i.test(url.pathname || "") &&
-              !/^\/reset-password$/i.test(url.pathname || ""),
+            urlPattern: ({ request, url }) => {
+              const path = url.pathname || "";
+              if (request.mode !== "navigate") return false;
+              if (/^\/password-reset-standalone\.html$/i.test(path)) return false;
+              if (/^\/reset-password\.html$/i.test(path)) return false;
+              if (/^\/reset-password$/i.test(path)) return false;
+              return true;
+            },
             handler: "NetworkFirst",
             options: {
               cacheName: "html-cache",
@@ -77,18 +76,15 @@ export default defineConfig({
             },
           },
 
-          // JS / CSS
           {
             urlPattern: ({ request }) =>
-              request.destination === "script" ||
-              request.destination === "style",
+              request.destination === "script" || request.destination === "style",
             handler: "NetworkFirst",
             options: {
               cacheName: "asset-cache",
             },
           },
 
-          // Images
           {
             urlPattern: ({ request }) => request.destination === "image",
             handler: "CacheFirst",
@@ -103,7 +99,6 @@ export default defineConfig({
         ],
       },
 
-      // ✅ DEV MODE: NO SW AT ALL
       devOptions: {
         enabled: false,
       },

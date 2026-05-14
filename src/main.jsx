@@ -6,24 +6,22 @@ import "./index.css";
 
 import {
   isPasswordResetStandalone,
+  markPasswordRecoveryFlow,
   passwordRecoveryNeedsCanonicalResetPath,
   recoveryTokensPresentInUrl,
 } from "./utils/recoveryUrl";
 
-// Boot Apple IAP as early as possible on native iOS (no-op on web).
 import "./services/purchaseManager";
 
-// 🔥 THEME PROVIDER (GLOBAL)
 import { ThemeProvider } from "./context/ThemeContext";
-// ======================================================
-// ✅ SERVICE WORKER — IOS SAFE UPDATE HANDLING (KEEP)
-// ======================================================
 import { registerSW } from "virtual:pwa-register";
 
-async function maybeEjectResetPasswordSpaHijack() {
+const STANDALONE_RESET = "/password-reset-standalone.html";
+
+async function ejectStandaloneFromSpaShell() {
   if (typeof window === "undefined") return false;
   const p = window.location.pathname || "";
-  if (!p.endsWith("reset-password.html")) return false;
+  if (!p.endsWith("password-reset-standalone.html")) return false;
   const spaShell =
     typeof document !== "undefined" &&
     document.querySelector('meta[name="ap-spa-shell"]')?.getAttribute("content") === "1";
@@ -51,18 +49,19 @@ async function maybeEjectResetPasswordSpaHijack() {
 }
 
 async function boot() {
-  if (await maybeEjectResetPasswordSpaHijack()) return;
+  if (await ejectStandaloneFromSpaShell()) return;
 
   const p = window.location.pathname || "";
   const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-  const dest = `${window.location.origin}/reset-password.html${suffix}`;
+  const dest = `${window.location.origin}${STANDALONE_RESET}${suffix}`;
 
   if (
-    !p.endsWith("reset-password.html") &&
+    !p.endsWith("password-reset-standalone.html") &&
     (passwordRecoveryNeedsCanonicalResetPath() ||
       recoveryTokensPresentInUrl() ||
       isPasswordResetStandalone())
   ) {
+    markPasswordRecoveryFlow();
     window.location.replace(dest);
     return;
   }

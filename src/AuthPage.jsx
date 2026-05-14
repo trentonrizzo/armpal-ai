@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
 import { ensureUserQR } from "./utils/ensureUserQR";
-import { getPasswordResetRedirectUrl, PASSWORD_RESET_REDIRECT_TO } from "./utils/authPublicUrl";
+import { PASSWORD_RESET_REDIRECT_TO } from "./utils/authPublicUrl";
 
 /*
-  AuthPage – LOGIN + SIGNUP + FORGOT (RECOVERY SAFE)
+  AuthPage – LOGIN + SIGNUP + FORGOT
 
-  ✅ Login works
-  ✅ Signup works
-  ✅ Reset email works
-  ✅ Recovery links DO NOT auto-login
-  ✅ Redirects to reset-password.html
+  Password recovery is handled before the SPA mounts (see src/main.jsx → password-reset-standalone.html).
 */
 
 export default function AuthPage({ initialMode }) {
@@ -29,38 +25,6 @@ export default function AuthPage({ initialMode }) {
     const ref = params.get("ref");
     if (ref && typeof localStorage !== "undefined") {
       localStorage.setItem("armpal_referral_ref", ref);
-    }
-  }, []);
-
-  /* ============================
-     PASSWORD RECOVERY — send users to canonical reset-password.html
-     (preserves hash / PKCE query; avoids stale preview hosts in email flows)
-  ============================ */
-  useEffect(() => {
-    const hash = window.location.hash || "";
-    const search = window.location.search || "";
-
-    const path = window.location.pathname || "";
-    const isRecovery =
-      hash.includes("type=recovery") ||
-      (search.includes("code=") && (path === "/" || path === "/login"));
-
-    if (!isRecovery) return;
-
-    try {
-      const target = new URL(getPasswordResetRedirectUrl());
-      target.hash = window.location.hash || "";
-      target.search = window.location.search || "";
-
-      const cur = new URL(window.location.href);
-      if (cur.origin === target.origin && cur.pathname === "/reset-password.html") {
-        return;
-      }
-
-      window.location.replace(target.toString());
-    } catch {
-      const fallback = `${getPasswordResetRedirectUrl()}${hash}${search}`;
-      window.location.replace(fallback);
     }
   }, []);
 
