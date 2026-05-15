@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 import { ensureUserQR } from "./utils/ensureUserQR";
-import { PASSWORD_RESET_REDIRECT_TO } from "./utils/authPublicUrl";
+import { getPasswordResetRedirectUrl } from "./utils/authPublicUrl";
 
 /*
   AuthPage – LOGIN + SIGNUP + FORGOT
-
-  Password recovery is handled before the SPA mounts (see src/main.jsx → password-reset-standalone.html).
 */
 
 export default function AuthPage({ initialMode }) {
+  const [searchParams] = useSearchParams();
   const [mode, setMode] = useState(initialMode || "login"); // login | signup | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +27,15 @@ export default function AuthPage({ initialMode }) {
       localStorage.setItem("armpal_referral_ref", ref);
     }
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("passwordReset") === "success") {
+      setMsg({
+        type: "success",
+        text: "Your password was updated. Sign in with your new password.",
+      });
+    }
+  }, [searchParams]);
 
   /* ============================
      LOGIN
@@ -95,7 +104,13 @@ export default function AuthPage({ initialMode }) {
     setLoading(true);
     setMsg(null);
 
-    const redirectTo = PASSWORD_RESET_REDIRECT_TO;
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/reset-password`
+        : getPasswordResetRedirectUrl();
+
+    console.log("[PasswordRecovery] sending resetPasswordForEmail", { redirectTo });
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,
     });
@@ -105,7 +120,7 @@ export default function AuthPage({ initialMode }) {
     } else {
       setMsg({
         type: "success",
-        text: "Password reset email sent. Check your inbox.",
+        text: "Password reset email sent. Open the link and set your new password.",
       });
       setMode("login");
     }

@@ -3,8 +3,8 @@ import OnboardingProvider from "./onboarding/OnboardingProvider";
 import App from "./App";
 
 /**
- * Password recovery is handled only by public/password-reset-standalone.html
- * (hard navigation from main.jsx before the SPA boots). No React reset routes here.
+ * Root routes: onboarding wraps the main app. Password reset uses dedicated
+ * React Router paths `/reset-password` and `/reset-password.html`.
  */
 export default function RootRoutes() {
   return (

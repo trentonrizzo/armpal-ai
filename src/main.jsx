@@ -4,19 +4,13 @@ import { BrowserRouter } from "react-router-dom";
 import RootRoutes from "./RootRoutes";
 import "./index.css";
 
-import {
-  isPasswordResetStandalone,
-  markPasswordRecoveryFlow,
-  passwordRecoveryNeedsCanonicalResetPath,
-  recoveryTokensPresentInUrl,
-} from "./utils/recoveryUrl";
-
 import "./services/purchaseManager";
+import { registerPasswordRecoveryDeepLinkListener } from "./services/passwordRecoveryDeepLink";
 
 import { ThemeProvider } from "./context/ThemeContext";
 import { registerSW } from "virtual:pwa-register";
 
-const STANDALONE_RESET = "/password-reset-standalone.html";
+registerPasswordRecoveryDeepLinkListener();
 
 async function ejectStandaloneFromSpaShell() {
   if (typeof window === "undefined") return false;
@@ -50,21 +44,6 @@ async function ejectStandaloneFromSpaShell() {
 
 async function boot() {
   if (await ejectStandaloneFromSpaShell()) return;
-
-  const p = window.location.pathname || "";
-  const suffix = `${window.location.search || ""}${window.location.hash || ""}`;
-  const dest = `${window.location.origin}${STANDALONE_RESET}${suffix}`;
-
-  if (
-    !p.endsWith("password-reset-standalone.html") &&
-    (passwordRecoveryNeedsCanonicalResetPath() ||
-      recoveryTokensPresentInUrl() ||
-      isPasswordResetStandalone())
-  ) {
-    markPasswordRecoveryFlow();
-    window.location.replace(dest);
-    return;
-  }
 
   registerSW({
     immediate: true,

@@ -8,6 +8,7 @@ import { PurchaseProvider } from "./context/PurchaseContext";
 import { ToastProvider } from "./components/ToastProvider";
 import { ProfileGateProvider } from "./context/ProfileGateContext";
 import AuthPage from "./AuthPage";
+import ResetPassword from "./pages/ResetPassword";
 
 import Dashboard from "./pages/Dashboard";
 import PRTracker from "./pages/PRTracker";
@@ -62,6 +63,7 @@ import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
 import InAppBanner from "./components/notifications/InAppBanner";
 import { useTheme } from "./context/ThemeContext";
 import {
+  isPasswordRecoveryUrl,
   isPasswordResetStandalone,
   isResetPasswordRoute,
   recoveryTokensPresentInUrl,
@@ -330,6 +332,7 @@ function AuthenticatedLayout({ session }) {
     if (!session?.user?.id || typeof window === "undefined") return;
     if (!onboardingLoaded) return;
     if (onboardingCompleted) return;
+    if (isPasswordRecoveryUrl()) return;
     if (recoveryTokensPresentInUrl()) return;
 
     const needsProfileFlag =
@@ -527,11 +530,30 @@ export default function App() {
       setTimeout(() => setShowSplash(false), 1200);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") {
+        console.log("[PasswordRecovery] PASSWORD_RECOVERY event received (App bootstrap)");
+        const path = typeof window !== "undefined" ? window.location.pathname || "" : "";
+        if (path !== "/reset-password" && !path.endsWith("/reset-password.html")) {
+          navigate(
+            `/reset-password${window.location.search || ""}${window.location.hash || ""}`,
+            { replace: true }
+          );
+        }
+      }
       setSession(s);
     });
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!ready || typeof window === "undefined") return;
+    const path = location.pathname || "";
+    if (path === "/reset-password" || path.endsWith("/reset-password.html")) return;
+    if (!isPasswordRecoveryUrl()) return;
+    console.log("[PasswordRecovery] canonicalizing recovery URL to /reset-password");
+    navigate(`/reset-password${location.search || ""}${location.hash || ""}`, { replace: true });
+  }, [ready, location.pathname, location.search, location.hash, navigate]);
 
   useEffect(() => {
     void bootstrapNativeLocalNotifications();
@@ -553,27 +575,31 @@ export default function App() {
   return (
     <>
       <RuntimeSplash show={showSplash} />
-      {!ready ? null : !session ? (
+      {!ready ? null : (
         <Routes>
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/reset-password.html" element={<ResetPassword />} />
           <Route
             path="*"
             element={
-              <AuthPage
-                initialMode={location?.pathname === "/signup" ? "signup" : undefined}
-              />
+              !session ? (
+                <AuthPage
+                  initialMode={location?.pathname === "/signup" ? "signup" : undefined}
+                />
+              ) : (
+                <AppProvider>
+                  <PurchaseProvider>
+                    <ToastProvider>
+                      <ProfileGateProvider>
+                        <AuthenticatedLayout session={session} />
+                      </ProfileGateProvider>
+                    </ToastProvider>
+                  </PurchaseProvider>
+                </AppProvider>
+              )
             }
           />
         </Routes>
-      ) : (
-        <AppProvider>
-          <PurchaseProvider>
-            <ToastProvider>
-              <ProfileGateProvider>
-                <AuthenticatedLayout session={session} />
-              </ProfileGateProvider>
-            </ToastProvider>
-          </PurchaseProvider>
-        </AppProvider>
       )}
     </>
   );

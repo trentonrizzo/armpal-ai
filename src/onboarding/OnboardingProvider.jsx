@@ -55,7 +55,7 @@ export default function OnboardingProvider({ children }) {
   // Load profile and decide if onboarding is required, but short‑circuit entirely
   // if the account has an explicit onboarding_completed flag (database is source of truth).
   useEffect(() => {
-    if (isPasswordResetStandalone() || isResetPasswordRoute()) return;
+    if (isResetPasswordRoute()) return;
 
     let cancelled = false;
 
@@ -205,6 +205,8 @@ export default function OnboardingProvider({ children }) {
     if (recoveryTokensPresentInUrl()) return;
     // Allow public legal/support pages without redirect.
     const isPublicPage = [
+      "/reset-password",
+      "/reset-password.html",
       "/privacy",
       "/privacy.html",
       "/terms",
