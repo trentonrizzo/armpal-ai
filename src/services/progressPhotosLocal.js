@@ -84,14 +84,23 @@ export async function addProgressPhoto({ blob, date, note }) {
   return row;
 }
 
+export function isProgressPhotosStorageAvailable() {
+  return isBrowser();
+}
+
 export async function listProgressPhotos() {
   if (!isBrowser()) return [];
-  const db = await openDb();
-  const userId = await getCurrentUserId();
-  const all = await reqToPromise(tx(db, "readonly").getAll());
-  return (all || [])
-    .filter((row) => row.userId === userId)
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  try {
+    const db = await openDb();
+    const userId = await getCurrentUserId();
+    const all = await reqToPromise(tx(db, "readonly").getAll());
+    return (all || [])
+      .filter((row) => row.userId === userId)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  } catch (err) {
+    console.warn("[progress-photos] list failed:", err?.message || err);
+    throw err;
+  }
 }
 
 export async function deleteProgressPhoto(id) {

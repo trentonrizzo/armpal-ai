@@ -31,10 +31,13 @@ import {
   listProgressPhotos,
   deleteProgressPhoto,
   updateProgressPhotoNote,
+  isProgressPhotosStorageAvailable,
 } from "../services/progressPhotosLocal";
 import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import ProgressPhotoViewer from "../components/ProgressPhotoViewer";
 import ShareProgressPhotosModal from "../components/ShareProgressPhotosModal";
+import ProgressPhotosBrowserNotice from "../components/progressPhotos/ProgressPhotosBrowserNotice";
+import { shouldShowProgressPhotosBrowserNotice } from "../utils/platformEnvironment";
 
 function todayLocalDate() {
   return new Date().toISOString().slice(0, 10);
@@ -92,7 +95,10 @@ export default function ProgressPhotos() {
 
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [missingBlobCount, setMissingBlobCount] = useState(0);
   const [sortMode, setSortMode] = useState("newest");
+  const showBrowserNotice = shouldShowProgressPhotosBrowserNotice();
 
   // Pending upload batch
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -123,13 +129,40 @@ export default function ProgressPhotos() {
     let cancelled = false;
     async function load() {
       try {
+        setLoadError(null);
+        if (!isProgressPhotosStorageAvailable()) {
+          if (!cancelled) {
+            setPhotos([]);
+            setMissingBlobCount(0);
+            setLoadError("Photo storage is not available in this environment.");
+          }
+          return;
+        }
         const all = await listProgressPhotos();
         if (cancelled) return;
-        const withUrls = all.map((row) => ({
-          ...row,
-          url: row.blob ? URL.createObjectURL(row.blob) : null,
-        }));
+        let missing = 0;
+        const withUrls = all.map((row) => {
+          if (!row.blob) {
+            missing += 1;
+            return { ...row, url: null, missingBlob: true };
+          }
+          return {
+            ...row,
+            url: URL.createObjectURL(row.blob),
+            missingBlob: false,
+          };
+        });
+        setMissingBlobCount(missing);
         setPhotos(withUrls);
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("[progress-photos] vault load failed:", err?.message || err);
+          setPhotos([]);
+          setMissingBlobCount(0);
+          setLoadError(
+            "We couldn't read your progress photos from this device. Try refreshing, or use the ArmPal iOS app for more reliable storage."
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -169,6 +202,11 @@ export default function ProgressPhotos() {
   const sortedPhotos = useMemo(
     () => sortPhotos(photos, sortMode),
     [photos, sortMode]
+  );
+
+  const viewablePhotos = useMemo(
+    () => sortedPhotos.filter((p) => p.url && !p.missingBlob),
+    [sortedPhotos]
   );
 
   // ---------- File pickers ------------------------------------------------
@@ -327,16 +365,21 @@ export default function ProgressPhotos() {
     });
   }
 
-  function onCardClick(photo, displayIndex) {
+  function onCardClick(photo) {
     if (selectionMode) {
       toggleSelected(photo.id);
       return;
     }
-    setViewerIndex(displayIndex);
+    if (!photo.url || photo.missingBlob) return;
+    const idx = viewablePhotos.findIndex((p) => p.id === photo.id);
+    if (idx >= 0) setViewerIndex(idx);
   }
 
   const selectedPhotos = useMemo(
-    () => sortedPhotos.filter((p) => selected.has(p.id)),
+    () =>
+      sortedPhotos.filter(
+        (p) => selected.has(p.id) && p.url && p.blob && !p.missingBlob
+      ),
     [sortedPhotos, selected]
   );
 
@@ -397,6 +440,8 @@ export default function ProgressPhotos() {
           </button>
         )}
       </header>
+
+      {showBrowserNotice ? <ProgressPhotosBrowserNotice /> : null}
 
       <div
         style={{
@@ -692,21 +737,67 @@ export default function ProgressPhotos() {
         </div>
       )}
 
-      {/* Gallery */}
-      {loading ? (
-        <div style={{ fontSize: 13, opacity: 0.7 }}>Loading…</div>
-      ) : sortedPhotos.length === 0 ? (
+      {loadError ? (
         <div
           style={{
             fontSize: 13,
-            opacity: 0.7,
+            lineHeight: 1.5,
+            color: "var(--text-dim)",
+            padding: 14,
+            marginBottom: 12,
+            borderRadius: 12,
+            border: "1px solid var(--border)",
+            background: "var(--card-2)",
+          }}
+        >
+          {loadError}
+        </div>
+      ) : null}
+
+      {missingBlobCount > 0 && !loading && !loadError ? (
+        <div
+          style={{
+            fontSize: 12,
+            lineHeight: 1.45,
+            color: "var(--text-dim)",
+            padding: "10px 12px",
+            marginBottom: 12,
+            borderRadius: 10,
+            border: "1px solid var(--border)",
+            background: "var(--card)",
+          }}
+        >
+          {missingBlobCount === 1
+            ? "One saved entry could not be loaded from local storage. You can remove it and add the photo again."
+            : `${missingBlobCount} saved entries could not be loaded from local storage. You can remove them and add the photos again.`}
+        </div>
+      ) : null}
+
+      {/* Gallery */}
+      {loading ? (
+        <div style={{ fontSize: 13, opacity: 0.7 }}>Loading…</div>
+      ) : loadError ? null : sortedPhotos.length === 0 ? (
+        <div
+          style={{
+            fontSize: 13,
+            opacity: 0.85,
+            lineHeight: 1.5,
+            color: "var(--text-dim)",
             padding: 16,
             textAlign: "center",
             border: "1px dashed var(--border)",
             borderRadius: 12,
           }}
         >
-          No photos yet. Use "Take photo" or "Choose from library" to add your first one.
+          <div style={{ marginBottom: 6 }}>No progress photos on this device yet.</div>
+          <div>
+            Use &quot;Take photo&quot; or &quot;Choose from library&quot; to add your first one.
+          </div>
+          {showBrowserNotice ? (
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>
+              In browser mode, photos stay on this device and may not survive clearing site data.
+            </div>
+          ) : null}
         </div>
       ) : (
         <div
@@ -716,7 +807,7 @@ export default function ProgressPhotos() {
             gap: 10,
           }}
         >
-          {sortedPhotos.map((p, displayIndex) => {
+          {sortedPhotos.map((p) => {
             const isSelected = selected.has(p.id);
             return (
               <div
@@ -735,7 +826,7 @@ export default function ProgressPhotos() {
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() => onCardClick(p, displayIndex)}
+                  onClick={() => onCardClick(p)}
                   style={{
                     cursor: "pointer",
                     position: "relative",
@@ -768,8 +859,20 @@ export default function ProgressPhotos() {
                         width: "100%",
                         aspectRatio: "1 / 1",
                         background: "var(--card-2)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 10,
+                        textAlign: "center",
+                        fontSize: 11,
+                        lineHeight: 1.35,
+                        color: "var(--text-dim)",
                       }}
-                    />
+                    >
+                      {p.missingBlob
+                        ? "Photo unavailable on this device"
+                        : "Preview unavailable"}
+                    </div>
                   )}
 
                   {selectionMode && (
@@ -979,9 +1082,9 @@ export default function ProgressPhotos() {
       )}
 
       {/* Fullscreen viewer */}
-      {viewerIndex !== null && sortedPhotos[viewerIndex] && (
+      {viewerIndex !== null && viewablePhotos[viewerIndex] && (
         <ProgressPhotoViewer
-          photos={sortedPhotos}
+          photos={viewablePhotos}
           startIndex={viewerIndex}
           onClose={() => setViewerIndex(null)}
         />
