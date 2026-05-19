@@ -4,7 +4,7 @@ import { FaTrophy } from "react-icons/fa";
 import { ACHIEVEMENTS, ACHIEVEMENT_IDS, RARITY } from "./definitions";
 import { listAchievementUnlocks } from "./persistence";
 import { rarityPulseStyle } from "./feedback";
-import { ACHIEVEMENT_UNLOCK_EVENT } from "./runner";
+import { ACHIEVEMENT_UNLOCK_EVENT, reconcileAchievementUnlocks } from "./runner";
 
 /**
  * Profile badges: earned + locked preview, tap for description.
@@ -16,14 +16,15 @@ export default function AchievementShowcase({ userId }) {
   const reload = useCallback(async () => {
     if (!userId) return;
     try {
+      await reconcileAchievementUnlocks(userId);
       const rows = await listAchievementUnlocks(userId);
       const m = new Map();
       for (const r of rows) {
         m.set(r.id, r.unlocked_at);
       }
       setUnlocked(m);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.warn("[achievements] showcase load failed:", e?.message || e);
     }
   }, [userId]);
 

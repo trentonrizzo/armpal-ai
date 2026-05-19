@@ -5,7 +5,10 @@ import { AiOutlineBell } from "react-icons/ai";
 import { FaTrophy } from "react-icons/fa";
 import { listAchievementUnlocks } from "../../features/achievements/persistence";
 import { getAchievement, RARITY } from "../../features/achievements/definitions";
-import { ACHIEVEMENT_UNLOCK_EVENT } from "../../features/achievements/runner";
+import {
+  ACHIEVEMENT_UNLOCK_EVENT,
+  reconcileAchievementUnlocks,
+} from "../../features/achievements/runner";
 
 export default function NotificationsBell() {
   const navigate = useNavigate();
@@ -82,6 +85,7 @@ export default function NotificationsBell() {
     if (!user?.id) return;
     setAchLoading(true);
     try {
+      await reconcileAchievementUnlocks(user.id);
       const rows = await listAchievementUnlocks(user.id);
       setAchievements(rows || []);
     } catch (e) {

@@ -1,7 +1,11 @@
 import { ACHIEVEMENT_IDS, ACHIEVEMENTS } from "./definitions";
 
-/** @param {Record<string, any>} snapshot @param {Set<string>} unlocked */
+/** @param {Record<string, any>} snapshot @param {Map<string, string>} unlocked */
 export function computeNewAchievementIds(snapshot, unlocked) {
+  const unlockedMap =
+    unlocked instanceof Map
+      ? unlocked
+      : new Map(Object.entries(unlocked || {}));
   const pl = snapshot.powerlifting || {};
   const bench = pl.bench?.wLbs ?? null;
   const squat = pl.squat?.wLbs ?? null;
@@ -19,7 +23,7 @@ export function computeNewAchievementIds(snapshot, unlocked) {
   const next = [];
 
   const want = (id) => {
-    if (unlocked.has(id)) return;
+    if (unlockedMap.has(id)) return;
     if (!ACHIEVEMENTS[id]) return;
     next.push(id);
   };
