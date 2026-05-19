@@ -22,6 +22,8 @@ import {
   setAchievementFeedbackEnabled,
 } from "../features/achievements/feedback";
 import { getPasswordResetRedirectUrl } from "../utils/authPublicUrl";
+import CoachingCard from "../components/coaching/CoachingCard";
+import CoachingRequestModal from "../components/coaching/CoachingRequestModal";
 
 /* ============================
    TOGGLE PILL
@@ -191,6 +193,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [legalModal, setLegalModal] = useState(null); // "menu" | "privacy" | "terms" | null
+  const [coachingOpen, setCoachingOpen] = useState(false);
 
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -828,6 +831,13 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
             )}
           </div>
 
+          <div style={{ marginTop: 14 }}>
+            <CoachingCard
+              compact
+              onRequestClick={() => setCoachingOpen(true)}
+            />
+          </div>
+
           {/* LEGAL (always visible button, very obvious) */}
           <div
             onClick={() => setLegalModal("menu")}
@@ -1431,6 +1441,11 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
           </div>
         </div>
       )}
+
+      <CoachingRequestModal
+        open={coachingOpen}
+        onClose={() => setCoachingOpen(false)}
+      />
     </>
   );
 }

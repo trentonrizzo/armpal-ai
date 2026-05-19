@@ -19,6 +19,7 @@ export function isPasswordRecoveryUrl() {
     path === "/reset-password" ||
     path === "/reset-password.html" ||
     href.includes("type=recovery") ||
+    search.includes("token_hash=") ||
     search.includes("code=") ||
     hash.includes("access_token=") ||
     hash.includes("refresh_token=")
@@ -57,6 +58,7 @@ export function recoveryTokensPresentInUrl() {
     const hb = hash.startsWith("#") ? hash.slice(1) : hash;
     const hp = new URLSearchParams(hb);
     if (hp.get("type") === "recovery") return true;
+    if (hp.has("token_hash")) return true;
     if (hp.has("access_token") || hp.has("refresh_token")) return true;
   } catch {
     /* ignore */
@@ -65,6 +67,7 @@ export function recoveryTokensPresentInUrl() {
   try {
     const sp = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
     if (sp.get("type") === "recovery") return true;
+    if (sp.has("token_hash")) return true;
     if (sp.has("access_token") || sp.has("refresh_token")) return true;
   } catch {
     /* ignore */

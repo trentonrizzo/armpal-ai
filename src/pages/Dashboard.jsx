@@ -14,6 +14,8 @@ import useUnreadChats from "../hooks/useUnreadChats";
 // SMART ANALYTICS (READ-ONLY)
 import SmartAnalytics from "../components/SmartAnalytics";
 import ConsistencyCard from "../components/ConsistencyCard";
+import CoachingCard from "../components/coaching/CoachingCard";
+import CoachingRequestModal from "../components/coaching/CoachingRequestModal";
 
 // AI entry points hidden for App Store launch — components remain on disk
 // and backend/API logic is untouched, but no UI access points are rendered.
@@ -69,6 +71,7 @@ export default function Dashboard() {
 
   // Upcoming workout
   const [upcomingWorkout, setUpcomingWorkout] = useState(null);
+  const [coachingOpen, setCoachingOpen] = useState(false);
 
   useEffect(() => {
     loadUserAndData();
@@ -364,6 +367,8 @@ export default function Dashboard() {
       {/* CONSISTENCY — streak + weekly nudges, derived from existing tables */}
       <ConsistencyCard />
 
+      <CoachingCard onRequestClick={() => setCoachingOpen(true)} />
+
       {/* SMART ANALYTICS — basic progress overview is now free */}
       <div
         role="button"
@@ -657,6 +662,10 @@ export default function Dashboard() {
 
       {/* AI chat button + overlay hidden for App Store launch — backend untouched. */}
 
+      <CoachingRequestModal
+        open={coachingOpen}
+        onClose={() => setCoachingOpen(false)}
+      />
     </div>
   );
 }

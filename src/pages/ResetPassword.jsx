@@ -1,28 +1,42 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useLayoutEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "../supabaseClient";
-import { clearPasswordRecoveryFlow, isPasswordRecoveryUrl } from "../utils/recoveryUrl";
+import { clearPasswordRecoveryFlow } from "../utils/recoveryUrl";
 
-function hasRecoveryTokensInUrl() {
-  if (typeof window === "undefined") return false;
-  const s = window.location.search || "";
-  const h = window.location.hash || "";
-  return (
-    s.includes("code=") ||
-    h.includes("access_token=") ||
-    h.includes("refresh_token=") ||
-    s.includes("type=recovery") ||
-    h.includes("type=recovery")
-  );
+const UPDATE_USER_MS = 10000;
+
+const INVALID_LINK_MSG = "This reset link is invalid or has expired.";
+
+/**
+ * Exactly one exchangeCodeForSession per auth code per JS context (e.g. Strict Mode
+ * remount resets refs, so we dedupe the network call here).
+ */
+const exchangeCodeResultByCode = new Map();
+
+function getExchangeCodeForSessionOnce(code) {
+  let p = exchangeCodeResultByCode.get(code);
+  if (p) return p;
+
+  p = (async () => {
+    log("exchangeCodeForSession (once per code)", { codePrefix: code.slice(0, 8) + "…" });
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      log("exchangeCodeForSession failed", error.message);
+      return { ok: false };
+    }
+    const { data: confirmed } = await supabase.auth.getSession();
+    if (confirmed?.session) {
+      log("session established after exchange");
+      return { ok: true };
+    }
+    log("exchange returned no error but no session");
+    return { ok: false };
+  })();
+
+  exchangeCodeResultByCode.set(code, p);
+  return p;
 }
 
-function isResetPasswordPathname() {
-  if (typeof window === "undefined") return false;
-  const path = window.location.pathname || "";
-  return path === "/reset-password" || path === "/reset-password.html" || path.endsWith("/reset-password.html");
-}
-
-function logRecovery(tag, extra) {
+function log(tag, extra) {
   try {
     if (extra !== undefined) console.log(`[PasswordRecovery] ${tag}`, extra);
     else console.log(`[PasswordRecovery] ${tag}`);
@@ -31,53 +45,49 @@ function logRecovery(tag, extra) {
   }
 }
 
-function stripRecoveryFromUrl() {
-  if (typeof window === "undefined") return;
-  try {
-    const u = new URL(window.location.href);
-    u.search = "";
-    u.hash = "";
-    window.history.replaceState({}, document.title, u.pathname);
-    logRecovery("cleared URL search + hash (tokens removed from address bar)", {
-      pathname: u.pathname,
-    });
-  } catch (e) {
-    logRecovery("stripRecoveryFromUrl failed", e?.message || e);
-  }
+function withTimeout(ms, label) {
+  return new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms));
 }
 
-/** Fire-and-forget; never blocks redirect. Timeout so hung signOut cannot stall the tab. */
-function signOutNonBlocking() {
-  logRecovery("signOut started (non-blocking, timeout-protected)");
-  const started = Date.now();
-  void (async () => {
-    try {
-      await Promise.race([
-        supabase.auth.signOut(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("signOut_timeout")), 2800)
-        ),
-      ]);
-      logRecovery("signOut finished", { ms: Date.now() - started });
-    } catch (e) {
-      logRecovery("signOut failed or timed out (ignored for redirect)", e?.message || e);
-    }
-  })();
+function readQueryParams(search) {
+  const q = search.startsWith("?") ? search.slice(1) : search;
+  return new URLSearchParams(q);
 }
 
-function redirectToLoginSuccess() {
-  const dest = `${window.location.origin}/login?passwordReset=success`;
-  logRecovery("redirecting to login (hard navigation)", { dest });
-  try {
-    window.location.replace(dest);
-  } catch (e) {
-    logRecovery("location.replace failed, trying assign", e?.message || e);
-    window.location.assign(dest);
+function readHashParams(hash) {
+  const h = hash.startsWith("#") ? hash.slice(1) : hash;
+  return new URLSearchParams(h);
+}
+
+/** Snapshot once: PKCE / magic-link style `code` from query (and hash if present). */
+function snapshotRecoveryParams() {
+  if (typeof window === "undefined") return null;
+  const search = window.location.search || "";
+  const hash = window.location.hash || "";
+  const pathname = window.location.pathname || "";
+  const searchParams = readQueryParams(search);
+  const hashParams = readHashParams(hash);
+  const code = searchParams.get("code") || hashParams.get("code") || "";
+  const hasCode = code.length > 0;
+  return { pathname, search, hash, code, hasCode };
+}
+
+async function establishRecoverySession(snap) {
+  const { data: existing } = await supabase.auth.getSession();
+  if (existing?.session) {
+    log("session already present");
+    return { ok: true };
   }
+
+  if (!snap?.hasCode) {
+    log("missing code query param");
+    return { ok: false };
+  }
+
+  return getExchangeCodeForSessionOnce(snap.code);
 }
 
 export default function ResetPassword() {
-  const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -86,129 +96,80 @@ export default function ResetPassword() {
   const [sessionReady, setSessionReady] = useState(false);
   const [initDone, setInitDone] = useState(false);
 
-  /** After successful updateUser: ignore auth listener + avoid duplicate submit. */
-  const passwordUpdateCompleteRef = useRef(false);
+  const snapRef = useRef(null);
+  const doneRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  /** True after a successful session (existing session or exchangeCodeForSession ok) for this mount. */
+  const exchangeCompletedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!snapRef.current) snapRef.current = snapshotRecoveryParams();
+    log("snapshot", {
+      hasCode: snapRef.current?.hasCode,
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function init() {
-      if (passwordUpdateCompleteRef.current) return;
+    (async () => {
+      if (exchangeCompletedRef.current) {
+        if (!cancelled && !doneRef.current) {
+          setSessionReady(true);
+          setInitDone(true);
+        }
+        log("init skipped: exchange already completed");
+        return;
+      }
 
-      setError(null);
-      logRecovery("ResetPassword init", {
-        href: window.location.href,
-        pathname: window.location.pathname,
-        search: window.location.search,
-        hashLen: (window.location.hash || "").length,
-      });
+      const snap = snapRef.current;
+      if (!snap?.hasCode) {
+        if (!cancelled) {
+          setError(INVALID_LINK_MSG);
+          setSessionReady(false);
+          setInitDone(true);
+        }
+        log("init: no code in URL");
+        return;
+      }
 
-      const search = window.location.search || "";
-      const hash = window.location.hash || "";
-      const qs = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-      const code = qs.get("code");
-
-      let exchangeErrMsg = null;
       try {
-        if (code) {
-          logRecovery("calling exchangeCodeForSession(code)");
-          const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (exErr) throw exErr;
+        const { ok } = await establishRecoverySession(snap);
+        if (cancelled || doneRef.current) return;
+
+        if (ok) {
+          exchangeCompletedRef.current = true;
+          setSessionReady(true);
+          setError(null);
+          log("session ready");
+        } else {
+          setError(INVALID_LINK_MSG);
+          setSessionReady(false);
         }
       } catch (e) {
-        exchangeErrMsg = e?.message || String(e);
-        logRecovery("exchangeCodeForSession failed", exchangeErrMsg);
+        if (!cancelled && !doneRef.current) {
+          log("init error", e?.message);
+          setError(INVALID_LINK_MSG);
+          setSessionReady(false);
+        }
+      } finally {
+        if (!cancelled && !doneRef.current) setInitDone(true);
+        log("init complete");
       }
+    })();
 
-      const {
-        data: { session },
-        error: sessErr,
-      } = await supabase.auth.getSession();
-      if (cancelled || passwordUpdateCompleteRef.current) return;
-
-      if (sessErr) {
-        logRecovery("getSession error", sessErr.message);
-      }
-
-      if (session) {
-        logRecovery("session present after init", { userId: session.user?.id });
-        setSessionReady(true);
-      } else if (hasRecoveryTokensInUrl()) {
-        logRecovery("no session yet; showing form (URL still has recovery material)");
-        setSessionReady(true);
-        if (exchangeErrMsg) setError(exchangeErrMsg);
-      } else {
-        setSessionReady(false);
-        setError(
-          exchangeErrMsg ||
-            sessErr?.message ||
-            "This reset link is invalid or has expired. Request a new reset email."
-        );
-      }
-
-      if (!cancelled && !passwordUpdateCompleteRef.current) setInitDone(true);
-    }
-
-    void init();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      if (passwordUpdateCompleteRef.current) {
-        logRecovery("auth event ignored (password update already completed)", {
-          event,
-          hasSession: !!session,
-        });
-        return;
-      }
-
-      logRecovery("onAuthStateChange", {
-        event,
-        hasSession: !!session,
-        pathname: typeof window !== "undefined" ? window.location.pathname : "",
-      });
-
-      if (event === "PASSWORD_RECOVERY") {
-        logRecovery("PASSWORD_RECOVERY event received");
-        setSessionReady(true);
-        const path = window.location.pathname || "";
-        if (path !== "/reset-password" && !path.endsWith("/reset-password.html")) {
-          navigate(`/reset-password${window.location.search || ""}${window.location.hash || ""}`, {
-            replace: true,
-          });
-        }
-      }
-
-      if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED")) {
-        if (isPasswordRecoveryUrl() || hasRecoveryTokensInUrl() || isResetPasswordPathname()) {
-          logRecovery("session-related event on recovery URL → sessionReady true", { event });
-          setSessionReady(true);
-        }
-      }
-    });
-    return () => {
-      data.subscription.unsubscribe();
-    };
-  }, [navigate]);
-
-  const handleSubmit = useCallback(
+  const onSubmit = useCallback(
     async (e) => {
       e.preventDefault();
-      if (passwordUpdateCompleteRef.current) {
-        logRecovery("submit ignored (already completed)");
-        return;
-      }
-      if (submitInFlightRef.current) {
-        logRecovery("submit ignored (already in flight)");
-        return;
-      }
+      if (doneRef.current || submitInFlightRef.current) return;
 
       setError(null);
-
       if (password.length < 8) {
         setError("Password must be at least 8 characters.");
         return;
@@ -220,61 +181,46 @@ export default function ResetPassword() {
 
       submitInFlightRef.current = true;
       setLoading(true);
-      logRecovery("submit started", {
-        pathname: window.location.pathname,
-        search: window.location.search,
-        hashLen: (window.location.hash || "").length,
-        loading: true,
-      });
+      log("updateUser start");
 
       try {
-        const {
-          data: { session: preSession },
-        } = await supabase.auth.getSession();
-        logRecovery("pre-updateUser getSession", { sessionExists: !!preSession });
+        const result = await Promise.race([
+          supabase.auth.updateUser({ password: password.trim() }),
+          withTimeout(UPDATE_USER_MS, "update_user_timeout"),
+        ]);
 
-        logRecovery("updateUser started");
-        const { error: upErr } = await supabase.auth.updateUser({ password: password.trim() });
-        if (upErr) {
-          logRecovery("updateUser failed", upErr.message);
-          setError(upErr.message);
+        if (result?.error) {
+          setError(result.error.message);
+          log("updateUser failed", result.error.message);
           return;
         }
 
-        logRecovery("updateUser succeeded — treating reset as COMPLETE");
-
-        // Stop listener + init paths from mutating state; prevents races with signOut / TOKEN_REFRESHED.
-        passwordUpdateCompleteRef.current = true;
-
+        log("updateUser ok");
+        doneRef.current = true;
         clearPasswordRecoveryFlow();
-        stripRecoveryFromUrl();
-
-        // Do not await signOut — it triggers global auth churn and remounts; redirect is independent.
-        signOutNonBlocking();
-
+        void supabase.auth.signOut().catch(() => {});
         setSuccess(true);
         setLoading(false);
-        logRecovery("loading cleared (success path)", { loading: false });
-
-        // Primary exit: full navigation (avoids React Router / remount races after session clears).
-        redirectToLoginSuccess();
+        window.location.replace(`${window.location.origin}/login?passwordReset=success`);
       } catch (err) {
-        logRecovery("submit unexpected error", err?.message || err);
-        setError(err?.message || String(err));
-        setLoading(false);
+        const m = err?.message || String(err);
+        if (m === "update_user_timeout") {
+          setError("Password update timed out. Please request a new reset email.");
+          log("updateUser timeout");
+        } else {
+          setError(m || "Could not update password.");
+          log("updateUser error", m);
+        }
       } finally {
         submitInFlightRef.current = false;
-        // Success path already set loading false before hard redirect; ensure no stuck spinner if replace is slow.
-        setLoading((prev) => {
-          if (prev) logRecovery("loading state forced false (finally)", { wasLoading: prev });
-          return false;
-        });
+        setLoading(false);
       }
     },
     [password, confirmPassword]
   );
 
-  const showForm = initDone && sessionReady && !success;
+  const showForm = initDone && sessionReady && !success && !doneRef.current;
+  const showPreparing = !initDone;
 
   return (
     <div style={styles.page}>
@@ -284,15 +230,12 @@ export default function ResetPassword() {
 
         {error && <div style={styles.error}>{error}</div>}
         {success && (
-          <div style={styles.success}>
-            Password updated. Redirecting to sign in…
-          </div>
+          <div style={styles.success}>Password updated. Redirecting to sign in…</div>
         )}
-
-        {!initDone && <p style={styles.muted}>Preparing secure reset…</p>}
+        {showPreparing && <p style={styles.muted}>Preparing secure recovery session...</p>}
 
         {showForm && (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={onSubmit}>
             <label style={styles.label} htmlFor="ap-new-pw">
               New Password
             </label>

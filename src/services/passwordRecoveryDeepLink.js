@@ -7,6 +7,7 @@ function isRecoveryAppUrl(url) {
     u.includes("reset-password") ||
     u.includes("type=recovery") ||
     u.includes("type%3drecovery") ||
+    u.includes("token_hash=") ||
     u.includes("code=") ||
     u.includes("access_token") ||
     u.includes("refresh_token")
