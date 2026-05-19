@@ -146,12 +146,25 @@ export default function OnboardingProvider({ children }) {
     }
 
     // Initial load (handles page refresh / session restore).
-    supabase.auth.getUser().then(({ data }) => {
-      logResetAuthState("ONBOARDING_GET_USER");
-      if (isPasswordResetStandalone() || isResetPasswordRoute() || isRecoveryFlow()) return;
-      setCurrentUserId(data?.user?.id || null);
-      loadForUser(data?.user || null);
-    });
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        logResetAuthState("ONBOARDING_GET_USER");
+        if (isPasswordResetStandalone() || isResetPasswordRoute() || isRecoveryFlow()) {
+          setProfileLoaded(true);
+          setPhase("complete");
+          return;
+        }
+        setCurrentUserId(data?.user?.id || null);
+        loadForUser(data?.user || null);
+      })
+      .catch((err) => {
+        console.warn("[Onboarding] getUser failed (non-fatal):", err?.message || err);
+        if (!cancelled) {
+          setProfileLoaded(true);
+          setPhase("complete");
+        }
+      });
 
     // React to login/logout — skip during password recovery (temporary session).
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {

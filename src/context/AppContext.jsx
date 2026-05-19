@@ -26,11 +26,16 @@ export const AppProvider = ({ children }) => {
   // ============================
   useEffect(() => {
     async function loadUser() {
-      const { data } = await supabase.auth.getUser();
-      setUser(data?.user || null);
-      if (data?.user) {
-        ensureUserQR(supabase);
-        scheduleAchievementReconcile(data.user.id);
+      try {
+        const { data } = await supabase.auth.getUser();
+        setUser(data?.user || null);
+        if (data?.user) {
+          ensureUserQR(supabase);
+          scheduleAchievementReconcile(data.user.id);
+        }
+      } catch (err) {
+        console.warn("[AppContext] getUser failed (non-fatal):", err?.message || err);
+        setUser(null);
       }
     }
     loadUser();

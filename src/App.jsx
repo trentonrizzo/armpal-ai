@@ -75,6 +75,10 @@ import {
   isNativeNotificationsSupported,
   requestPermissions,
 } from "./services/nativeLocalNotifications";
+import {
+  AUTH_BOOTSTRAP_FORCE_READY_MS,
+  bootstrapAuthSession,
+} from "./utils/authBootstrap";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -524,11 +528,37 @@ export default function App() {
   useNotifications(session?.user?.id);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    let cancelled = false;
+    let splashTimer = null;
+
+    const dismissSplash = (immediate = false) => {
+      if (splashTimer) clearTimeout(splashTimer);
+      splashTimer = setTimeout(() => {
+        if (!cancelled) setShowSplash(false);
+      }, immediate ? 0 : 1200);
+    };
+
+    const finishBootstrap = (s, { timedOut = false, error = null } = {}) => {
+      if (cancelled) return;
       setSession(s);
       setReady(true);
-      setTimeout(() => setShowSplash(false), 1200);
-    });
+      if (timedOut) {
+        console.warn(
+          "[App] auth session bootstrap timed out; continuing without blocking UI"
+        );
+        dismissSplash(true);
+      } else {
+        if (error) {
+          console.warn("[App] auth session bootstrap error:", error.message);
+        }
+        dismissSplash(false);
+      }
+    };
+
+    void (async () => {
+      const { session: s, timedOut, error } = await bootstrapAuthSession();
+      finishBootstrap(s, { timedOut, error });
+    })();
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
       if (event === "PASSWORD_RECOVERY") {
@@ -541,10 +571,29 @@ export default function App() {
           );
         }
       }
-      setSession(s);
+      if (!cancelled) setSession(s);
     });
-    return () => listener.subscription.unsubscribe();
+
+    return () => {
+      cancelled = true;
+      if (splashTimer) clearTimeout(splashTimer);
+      listener.subscription.unsubscribe();
+    };
   }, [navigate]);
+
+  // Absolute failsafe: never leave splash / blank shell up indefinitely.
+  useEffect(() => {
+    const force = setTimeout(() => {
+      setReady((prev) => {
+        if (!prev) {
+          console.warn("[App] auth bootstrap force-ready failsafe fired");
+        }
+        return true;
+      });
+      setShowSplash(false);
+    }, AUTH_BOOTSTRAP_FORCE_READY_MS);
+    return () => clearTimeout(force);
+  }, []);
 
   useEffect(() => {
     if (!ready || typeof window === "undefined") return;

@@ -167,7 +167,16 @@ export function PurchaseProvider({ children }) {
       await resolveSubscriptionState();
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => onSession(session));
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => onSession(session))
+      .catch((err) => {
+        console.warn("[PurchaseContext] getSession failed (non-fatal):", err?.message || err);
+        if (!cancelled) {
+          applyFreeState();
+          setInitializing(false);
+        }
+      });
 
     const {
       data: { subscription },
