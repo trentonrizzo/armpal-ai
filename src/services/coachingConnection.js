@@ -1,48 +1,14 @@
 import { supabase } from "../supabaseClient";
-import {
-  OFFICIAL_COACHING_HANDLE,
-  OFFICIAL_COACHING_USER_ID,
-} from "../config/officialCoachingAccount";
+import { getOfficialCoachingAccount } from "./officialCoachingAccount";
+import { getOrCreateConversation } from "../utils/getOrCreateConversation";
 
 /** @typedef {'connected'|'pending_sent'|'pending_received'|'none'|'self'|'unavailable'} CoachingConnectionStatus */
-
-/**
- * Resolve the official ArmPal coaching profile from env id or handle.
- * @returns {Promise<{ id: string, display_name?: string, handle?: string, username?: string, avatar_url?: string, is_official?: boolean } | null>}
- */
-export async function resolveOfficialCoachingProfile() {
-  try {
-    if (OFFICIAL_COACHING_USER_ID) {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, display_name, handle, username, avatar_url, is_official")
-        .eq("id", OFFICIAL_COACHING_USER_ID)
-        .maybeSingle();
-      if (!error && data?.id) return data;
-    }
-
-    const handle = (OFFICIAL_COACHING_HANDLE || "").replace(/^@+/, "");
-    if (!handle) return null;
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, display_name, handle, username, avatar_url, is_official")
-      .ilike("handle", handle)
-      .maybeSingle();
-
-    if (error || !data?.id) return null;
-    return data;
-  } catch (err) {
-    console.warn("[coaching] resolveOfficialCoachingProfile failed:", err?.message || err);
-    return null;
-  }
-}
 
 /**
  * @returns {Promise<{ status: CoachingConnectionStatus, profile: object | null }>}
  */
 export async function getOfficialCoachingConnectionStatus(currentUserId) {
-  const profile = await resolveOfficialCoachingProfile();
+  const profile = await getOfficialCoachingAccount();
   if (!profile?.id) return { status: "unavailable", profile: null };
   if (!currentUserId) return { status: "unavailable", profile };
   if (currentUserId === profile.id) return { status: "self", profile };
@@ -98,8 +64,73 @@ export async function getOfficialCoachingConnectionStatus(currentUserId) {
   }
 }
 
+async function ensureCoachingFriendship(currentUserId, officialId, status) {
+  if (status === "connected") return true;
+
+  if (status === "pending_received") {
+    try {
+      const { data: reqRows } = await supabase
+        .from("friend_requests")
+        .select("id, sender_id, receiver_id")
+        .eq("sender_id", officialId)
+        .eq("receiver_id", currentUserId)
+        .eq("status", "pending")
+        .limit(1);
+
+      const req = reqRows?.[0];
+      if (req?.sender_id && req?.receiver_id) {
+        await supabase.from("friends").insert({
+          user_id: req.sender_id,
+          friend_id: req.receiver_id,
+          status: "accepted",
+        });
+        await supabase.from("friend_requests").delete().eq("id", req.id);
+        return true;
+      }
+    } catch (err) {
+      console.warn("[coaching] accept incoming request failed:", err?.message || err);
+    }
+  }
+
+  if (status === "none" || status === "pending_sent") {
+    try {
+      const { error: friendErr } = await supabase.from("friends").insert({
+        user_id: currentUserId,
+        friend_id: officialId,
+        status: "accepted",
+      });
+
+      if (!friendErr) {
+        await supabase
+          .from("friend_requests")
+          .delete()
+          .or(
+            `and(sender_id.eq.${currentUserId},receiver_id.eq.${officialId}),and(sender_id.eq.${officialId},receiver_id.eq.${currentUserId})`
+          );
+        return true;
+      }
+
+      if (status === "none") {
+        const { error: reqErr } = await supabase.from("friend_requests").insert({
+          sender_id: currentUserId,
+          receiver_id: officialId,
+          status: "pending",
+        });
+
+        if (!reqErr || /duplicate|unique|already exists/i.test(reqErr.message || "")) {
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("[coaching] ensure friendship failed:", err?.message || err);
+    }
+  }
+
+  return status === "pending_sent" || status === "pending_received";
+}
+
 /**
- * Connect with the official coaching account (friend request or profile/chat navigation).
+ * Connect with the official coaching account and open a DM thread.
  * @returns {Promise<{ ok: boolean, message: string, profile: object | null, navigateTo: string | null, status: CoachingConnectionStatus }>}
  */
 export async function connectWithOfficialCoachingAccount(currentUserId) {
@@ -108,7 +139,7 @@ export async function connectWithOfficialCoachingAccount(currentUserId) {
   if (!profile?.id) {
     return {
       ok: false,
-      message: "Official coaching account is not available right now.",
+      message: "Official coaching is temporarily offline.",
       profile: null,
       navigateTo: null,
       status: "unavailable",
@@ -125,61 +156,31 @@ export async function connectWithOfficialCoachingAccount(currentUserId) {
     };
   }
 
+  await ensureCoachingFriendship(currentUserId, profile.id, status);
+
+  try {
+    await getOrCreateConversation(currentUserId, profile.id);
+  } catch (err) {
+    console.warn("[coaching] conversation setup failed:", err?.message || err);
+  }
+
+  const chatPath = `/chat/${profile.id}`;
+
   if (status === "connected") {
     return {
       ok: true,
-      message: "You are already connected.",
+      message: "",
       profile,
-      navigateTo: `/chat/${profile.id}`,
+      navigateTo: chatPath,
       status,
     };
   }
 
-  if (status === "pending_sent" || status === "pending_received") {
-    return {
-      ok: true,
-      message: "Friend request already pending.",
-      profile,
-      navigateTo: `/friend/${profile.id}`,
-      status,
-    };
-  }
-
-  try {
-    const { error: insertErr } = await supabase.from("friend_requests").insert({
-      sender_id: currentUserId,
-      receiver_id: profile.id,
-      status: "pending",
-    });
-
-    if (insertErr) {
-      if (/duplicate|unique|already exists/i.test(insertErr.message || "")) {
-        return {
-          ok: true,
-          message: "Friend request already pending.",
-          profile,
-          navigateTo: `/friend/${profile.id}`,
-          status: "pending_sent",
-        };
-      }
-      throw insertErr;
-    }
-
-    return {
-      ok: true,
-      message: "Friend request sent.",
-      profile,
-      navigateTo: `/friend/${profile.id}`,
-      status: "pending_sent",
-    };
-  } catch (err) {
-    console.error("[coaching] connect failed:", err);
-    return {
-      ok: false,
-      message: "Could not send connection request. Try again from Friends.",
-      profile,
-      navigateTo: `/friend/${profile.id}`,
-      status: "none",
-    };
-  }
+  return {
+    ok: true,
+    message: status === "pending_sent" ? "Friend request already pending." : "Opening chat…",
+    profile,
+    navigateTo: chatPath,
+    status: status === "none" ? "connected" : status,
+  };
 }

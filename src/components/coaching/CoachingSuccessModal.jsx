@@ -3,11 +3,9 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../ToastProvider";
-import {
-  connectWithOfficialCoachingAccount,
-  resolveOfficialCoachingProfile,
-} from "../../services/coachingConnection";
-import { OFFICIAL_COACHING_HANDLE } from "../../config/officialCoachingAccount";
+import { connectWithOfficialCoachingAccount } from "../../services/coachingConnection";
+import { getOfficialCoachingAccount } from "../../services/officialCoachingAccount";
+import { OFFICIAL_NAME_STYLE } from "../../utils/officialStyle";
 
 const OVERLAY = {
   position: "fixed",
@@ -58,6 +56,16 @@ const BTN_SECONDARY = {
   fontWeight: 700,
 };
 
+const officialPill = {
+  padding: "4px 10px",
+  borderRadius: 999,
+  border: "1px solid #d4af37",
+  background: "rgba(212,175,55,0.12)",
+  color: "#d4af37",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
 export default function CoachingSuccessModal({ open, onClose }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -71,7 +79,7 @@ export default function CoachingSuccessModal({ open, onClose }) {
     let cancelled = false;
 
     void (async () => {
-      const p = await resolveOfficialCoachingProfile();
+      const p = await getOfficialCoachingAccount();
       if (!cancelled) setProfile(p);
     })();
 
@@ -93,10 +101,8 @@ export default function CoachingSuccessModal({ open, onClose }) {
   if (!open) return null;
 
   const accountLabel =
-    profile?.display_name ||
-    profile?.handle ||
-    profile?.username ||
-    `@${OFFICIAL_COACHING_HANDLE}`;
+    profile?.display_name || profile?.username || profile?.handle || "ArmPal";
+  const accountHandle = profile?.handle || profile?.username || "";
 
   async function handleConnect() {
     if (connectInFlightRef.current || connecting) return;
@@ -236,9 +242,28 @@ export default function CoachingSuccessModal({ open, onClose }) {
                 />
               )}
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 15 }}>{accountLabel}</div>
-                {profile?.handle ? (
-                  <div style={{ fontSize: 12, color: "var(--text-dim)" }}>@{profile.handle}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 15,
+                      ...(profile?.is_official ? OFFICIAL_NAME_STYLE : {}),
+                    }}
+                  >
+                    {accountLabel}
+                  </div>
+                  {profile?.is_official ? <span style={officialPill}>Official</span> : null}
+                </div>
+                {accountHandle ? (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-dim)",
+                      ...(profile?.is_official ? OFFICIAL_NAME_STYLE : {}),
+                    }}
+                  >
+                    @{accountHandle}
+                  </div>
                 ) : null}
               </div>
             </div>
