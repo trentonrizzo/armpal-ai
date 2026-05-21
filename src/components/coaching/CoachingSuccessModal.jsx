@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../ToastProvider";
-import { connectWithOfficialCoachingAccount } from "../../services/coachingConnection";
+import { sendFriendRequestToUser } from "../../services/friendRequests";
 import { OFFICIAL_NAME_STYLE } from "../../utils/officialStyle";
 
 const OVERLAY = {
@@ -101,12 +101,7 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
     isArmPalUsername(profile?.handle);
 
   async function handleConnect() {
-    if (connectInFlightRef.current || connecting) return;
-
-    if (!profile?.id) {
-      toast.error("Official ArmPal account not found.");
-      return;
-    }
+    if (connectInFlightRef.current || connecting || !profile?.id) return;
 
     connectInFlightRef.current = true;
     setConnecting(true);
@@ -121,19 +116,18 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
         return;
       }
 
-      const result = await connectWithOfficialCoachingAccount(userId, profile.id);
+      const result = await sendFriendRequestToUser(userId, profile.id);
 
-      if (result.message) {
-        if (result.ok) toast.success(result.message);
-        else toast.error(result.message);
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
       }
 
-      if (result.ok) {
-        onClose?.();
-      }
+      if (result.message) toast.success(result.message);
+      onClose?.();
     } catch (err) {
-      console.error("[coaching] connect flow failed:", err);
-      toast.error("Something went wrong. Please try again.");
+      console.error("[coaching] friend request failed:", err);
+      toast.error("Error sending request.");
     } finally {
       connectInFlightRef.current = false;
       setConnecting(false);
@@ -185,16 +179,11 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
             id="coaching-success-title"
             style={{ fontSize: 22, fontWeight: 900, margin: "0 0 8px", lineHeight: 1.2 }}
           >
-            Request Sent
+            Connect with ArmPal
           </h2>
 
-          <p style={{ margin: "0 0 14px", fontSize: 14, lineHeight: 1.5, color: "var(--text-dim)" }}>
-            Your coaching request has been submitted successfully.
-          </p>
-
-          <p style={{ margin: "0 0 16px", fontSize: 14, lineHeight: 1.55, color: "var(--text)" }}>
-            You can also connect directly with the official ArmPal coaching account inside the app
-            for easier communication, fitness advice, coaching updates, and follow-up support.
+          <p style={{ margin: "0 0 16px", fontSize: 14, lineHeight: 1.55, color: "var(--text-dim)" }}>
+            Send a friend request to the official ArmPal account.
           </p>
 
           <div
@@ -216,7 +205,7 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
                 marginBottom: 6,
               }}
             >
-              Official ArmPal Coaching Account
+              Official ArmPal Account
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {profile?.avatar_url ? (
@@ -287,7 +276,7 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
                     animation: "coachingSpin 0.7s linear infinite",
                   }}
                 />
-                Connecting…
+                Sending…
               </>
             ) : (
               "Connect on ArmPal"
