@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../ToastProvider";
 import { submitCoachingRequest } from "../../services/coachingRequests";
+import CoachingSuccessModal from "./CoachingSuccessModal";
 
 const EXPERIENCE_LEVELS = ["Beginner", "Intermediate", "Advanced"];
 const SUBMIT_COOLDOWN_MS = 4000;
@@ -81,6 +82,7 @@ const EMPTY_FORM = {
 
 export default function CoachingRequestModal({ open, onClose }) {
   const toast = useToast();
+  const [phase, setPhase] = useState("form");
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldError, setFieldError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -88,25 +90,40 @@ export default function CoachingRequestModal({ open, onClose }) {
   const lastSubmitAtRef = useRef(0);
 
   useEffect(() => {
-    if (!open) return;
-    setForm(EMPTY_FORM);
-    setFieldError("");
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [open]);
+    if (!open) {
+      setPhase("form");
+      return;
+    }
+    if (phase === "form") {
+      setForm(EMPTY_FORM);
+      setFieldError("");
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "";
+      };
+    }
+    return undefined;
+  }, [open, phase]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || phase !== "form") return;
     const onKey = (e) => {
       if (e.key === "Escape" && !submitting) onClose?.();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, submitting]);
+  }, [open, phase, onClose, submitting]);
+
+  function handleCloseAll() {
+    setPhase("form");
+    onClose?.();
+  }
 
   if (!open) return null;
+
+  if (phase === "success") {
+    return <CoachingSuccessModal open onClose={handleCloseAll} />;
+  }
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -162,7 +179,7 @@ export default function CoachingRequestModal({ open, onClose }) {
 
       lastSubmitAtRef.current = Date.now();
       toast.success("Request submitted. Trent will contact you soon.");
-      onClose?.();
+      setPhase("success");
     } catch (err) {
       console.error("[coaching] submit failed", err);
       toast.error("Something went wrong. Please try again.");
