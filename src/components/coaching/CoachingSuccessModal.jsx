@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../ToastProvider";
 import { connectWithOfficialCoachingAccount } from "../../services/coachingConnection";
-import { getOfficialCoachingAccount } from "../../services/officialCoachingAccount";
 import { OFFICIAL_NAME_STYLE } from "../../utils/officialStyle";
 
 const OVERLAY = {
@@ -66,25 +64,19 @@ const officialPill = {
   fontWeight: 900,
 };
 
-export default function CoachingSuccessModal({ open, onClose }) {
-  const navigate = useNavigate();
+function isArmPalUsername(value) {
+  return String(value || "").trim().toUpperCase() === "ARMPAL";
+}
+
+export default function CoachingSuccessModal({ open, profile, onClose }) {
   const toast = useToast();
-  const [profile, setProfile] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const connectInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     document.body.style.overflow = "hidden";
-    let cancelled = false;
-
-    void (async () => {
-      const p = await getOfficialCoachingAccount();
-      if (!cancelled) setProfile(p);
-    })();
-
     return () => {
-      cancelled = true;
       document.body.style.overflow = "";
     };
   }, [open]);
@@ -102,10 +94,20 @@ export default function CoachingSuccessModal({ open, onClose }) {
 
   const accountLabel =
     profile?.display_name || profile?.username || profile?.handle || "ArmPal";
-  const accountHandle = profile?.handle || profile?.username || "";
+  const accountHandle = profile?.handle || profile?.username || "ARMPAL";
+  const showOfficialBadge =
+    profile?.is_official === true ||
+    isArmPalUsername(profile?.username) ||
+    isArmPalUsername(profile?.handle);
 
   async function handleConnect() {
     if (connectInFlightRef.current || connecting) return;
+
+    if (!profile?.id) {
+      toast.error("Official ArmPal account not found.");
+      return;
+    }
+
     connectInFlightRef.current = true;
     setConnecting(true);
 
@@ -119,16 +121,15 @@ export default function CoachingSuccessModal({ open, onClose }) {
         return;
       }
 
-      const result = await connectWithOfficialCoachingAccount(userId);
+      const result = await connectWithOfficialCoachingAccount(userId, profile.id);
 
       if (result.message) {
         if (result.ok) toast.success(result.message);
         else toast.error(result.message);
       }
 
-      onClose?.();
-      if (result.navigateTo) {
-        navigate(result.navigateTo);
+      if (result.ok) {
+        onClose?.();
       }
     } catch (err) {
       console.error("[coaching] connect flow failed:", err);
@@ -247,29 +248,32 @@ export default function CoachingSuccessModal({ open, onClose }) {
                     style={{
                       fontWeight: 800,
                       fontSize: 15,
-                      ...(profile?.is_official ? OFFICIAL_NAME_STYLE : {}),
+                      ...(showOfficialBadge ? OFFICIAL_NAME_STYLE : {}),
                     }}
                   >
                     {accountLabel}
                   </div>
-                  {profile?.is_official ? <span style={officialPill}>Official</span> : null}
+                  {showOfficialBadge ? <span style={officialPill}>Official</span> : null}
                 </div>
-                {accountHandle ? (
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--text-dim)",
-                      ...(profile?.is_official ? OFFICIAL_NAME_STYLE : {}),
-                    }}
-                  >
-                    @{accountHandle}
-                  </div>
-                ) : null}
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-dim)",
+                    ...(showOfficialBadge ? OFFICIAL_NAME_STYLE : {}),
+                  }}
+                >
+                  @{accountHandle}
+                </div>
               </div>
             </div>
           </div>
 
-          <button type="button" style={BTN_PRIMARY} disabled={connecting} onClick={handleConnect}>
+          <button
+            type="button"
+            style={BTN_PRIMARY}
+            disabled={connecting || !profile?.id}
+            onClick={handleConnect}
+          >
             {connecting ? (
               <>
                 <span

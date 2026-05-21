@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../ToastProvider";
 import { submitCoachingRequest } from "../../services/coachingRequests";
+import { getArmPalOfficialProfile } from "../../services/officialCoachingAccount";
 import CoachingSuccessModal from "./CoachingSuccessModal";
 
 const EXPERIENCE_LEVELS = ["Beginner", "Intermediate", "Advanced"];
@@ -83,6 +84,7 @@ const EMPTY_FORM = {
 export default function CoachingRequestModal({ open, onClose }) {
   const toast = useToast();
   const [phase, setPhase] = useState("form");
+  const [armPalProfile, setArmPalProfile] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldError, setFieldError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +94,7 @@ export default function CoachingRequestModal({ open, onClose }) {
   useEffect(() => {
     if (!open) {
       setPhase("form");
+      setArmPalProfile(null);
       return;
     }
     if (phase === "form") {
@@ -122,7 +125,9 @@ export default function CoachingRequestModal({ open, onClose }) {
   if (!open) return null;
 
   if (phase === "success") {
-    return <CoachingSuccessModal open onClose={handleCloseAll} />;
+    return (
+      <CoachingSuccessModal open profile={armPalProfile} onClose={handleCloseAll} />
+    );
   }
 
   function setField(key, value) {
@@ -179,6 +184,12 @@ export default function CoachingRequestModal({ open, onClose }) {
 
       lastSubmitAtRef.current = Date.now();
       toast.success("Request submitted. Trent will contact you soon.");
+
+      const profile = await getArmPalOfficialProfile();
+      setArmPalProfile(profile);
+      if (!profile) {
+        toast.error("Official ArmPal account not found.");
+      }
       setPhase("success");
     } catch (err) {
       console.error("[coaching] submit failed", err);

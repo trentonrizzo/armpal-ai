@@ -1,30 +1,29 @@
 import { supabase } from "../supabaseClient";
 
-const OFFICIAL_PROFILE_SELECT =
+const ARMPAL_PROFILE_SELECT =
   "id, display_name, handle, username, avatar_url, is_official, is_coaching_account";
 
 /**
- * Fetch the official ArmPal coaching profile from Supabase.
+ * Fetch the official @ARMPAL profile by username (case-insensitive).
  * @returns {Promise<object | null>}
  */
-export async function getOfficialCoachingAccount() {
+export async function getArmPalOfficialProfile() {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select(OFFICIAL_PROFILE_SELECT)
-      .eq("is_official", true)
-      .eq("is_coaching_account", true)
+      .select(ARMPAL_PROFILE_SELECT)
+      .ilike("username", "ARMPAL")
       .limit(1)
       .maybeSingle();
 
     if (error) {
-      console.warn("[coaching] getOfficialCoachingAccount failed:", error.message);
+      console.warn("[coaching] getArmPalOfficialProfile failed:", error.message);
       return null;
     }
 
     return data?.id ? data : null;
   } catch (err) {
-    console.warn("[coaching] getOfficialCoachingAccount failed:", err?.message || err);
+    console.warn("[coaching] getArmPalOfficialProfile failed:", err?.message || err);
     return null;
   }
 }

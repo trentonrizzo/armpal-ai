@@ -15,6 +15,7 @@ import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
 import { getRecommended } from "../utils/recommendedFriends";
 import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
+import { sendFriendRequestToUser } from "../services/friendRequests";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
@@ -584,30 +585,17 @@ export default function FriendsPage() {
 
   async function addFriendRequest(profile) {
     if (!user?.id || !profile?.id) return;
-    if (profile.id === user.id) {
-      const msg = "You can't add yourself.";
-      setErrorMsg(msg);
-      toast.error(msg);
-      return;
-    }
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      const { error: insertErr } = await supabase.from("friend_requests").insert({
-        sender_id: user.id,
-        receiver_id: profile.id,
-        status: "pending",
-      });
-      if (insertErr) {
-        console.error("friend_requests insert error:", insertErr);
-        const msg = "Error sending request.";
-        setErrorMsg(msg);
-        toast.error(msg);
+      const result = await sendFriendRequestToUser(user.id, profile.id);
+      if (!result.ok) {
+        setErrorMsg(result.message);
+        toast.error(result.message);
         return;
       }
-      const successText = "Friend request sent.";
-      setSuccessMsg(successText);
-      toast.success(successText);
+      setSuccessMsg(result.message);
+      toast.success(result.message);
       await loadPendingRequests(user.id);
       const { data: newRows } = await supabase
         .from("friend_requests")
@@ -619,7 +607,12 @@ export default function FriendsPage() {
       setSearchResults((prev) =>
         prev.map((r) =>
           r.id === profile.id
-            ? { ...r, relationshipStatus: "pending_outgoing", requestId: newId }
+            ? {
+                ...r,
+                relationshipStatus:
+                  result.status === "friends" ? "friends" : "pending_outgoing",
+                requestId: newId,
+              }
             : r
         )
       );
