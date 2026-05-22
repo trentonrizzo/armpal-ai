@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { supabase } from "../../supabaseClient";
 import { useToast } from "../ToastProvider";
 import { submitCoachingRequest } from "../../services/coachingRequests";
-import { getArmPalOfficialProfile } from "../../services/officialCoachingAccount";
+import { getOfficialArmPalProfile } from "../../services/officialCoachingAccount";
 import CoachingSuccessModal from "./CoachingSuccessModal";
 
 const EXPERIENCE_LEVELS = ["Beginner", "Intermediate", "Advanced"];
@@ -183,7 +183,8 @@ export default function CoachingRequestModal({ open, onClose }) {
       });
 
       lastSubmitAtRef.current = Date.now();
-      const profile = await getArmPalOfficialProfile();
+      const profile = await getOfficialArmPalProfile();
+      console.log("Official ArmPal lookup result:", profile);
       setOfficialUser(profile);
       setPhase("success");
     } catch (err) {

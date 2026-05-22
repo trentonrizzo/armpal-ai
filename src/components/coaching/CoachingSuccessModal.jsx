@@ -7,6 +7,7 @@ import {
   getFriendRequestStatus,
   sendFriendRequestToUser,
 } from "../../services/friendRequests";
+import { getOfficialArmPalProfile } from "../../services/officialCoachingAccount";
 import { OFFICIAL_NAME_STYLE } from "../../utils/officialStyle";
 
 const OVERLAY = {
@@ -76,16 +77,37 @@ const officialPill = {
   fontWeight: 900,
 };
 
-function isArmPalUsername(value) {
-  return String(value || "").trim().toUpperCase() === "ARMPAL";
+function isArmPalIdentity(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase()
+    .includes("armpal");
 }
 
-export default function CoachingSuccessModal({ open, profile, onClose }) {
+export default function CoachingSuccessModal({ open, profile: profileProp, onClose }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const [profile, setProfile] = useState(profileProp);
   const [friendStatus, setFriendStatus] = useState("none");
   const [busy, setBusy] = useState(false);
   const actionInFlightRef = useRef(false);
+
+  useEffect(() => {
+    setProfile(profileProp);
+  }, [profileProp]);
+
+  useEffect(() => {
+    if (!open || profile?.id) return;
+    let cancelled = false;
+    void (async () => {
+      const found = await getOfficialArmPalProfile();
+      if (!cancelled && found?.id) setProfile(found);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, profile?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -130,20 +152,22 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
 
   const accountLabel =
     profile?.display_name || profile?.username || profile?.handle || "ArmPal";
-  const accountHandle = profile?.handle || profile?.username || "ARMPAL";
+  const accountHandle = (profile?.handle || profile?.username || "ARMPAL").replace(/^@+/, "");
   const showOfficialBadge =
     profile?.is_official === true ||
-    isArmPalUsername(profile?.username) ||
-    isArmPalUsername(profile?.handle);
+    isArmPalIdentity(profile?.username) ||
+    isArmPalIdentity(profile?.handle) ||
+    isArmPalIdentity(profile?.display_name);
 
   const primaryLabel =
     friendStatus === "friends"
       ? "View Profile"
       : friendStatus === "pending_sent"
       ? "Request Sent"
-      : "Add Official Account";
+      : "Add Friend";
 
-  const primaryDisabled = !profile?.id || busy;
+  const primaryDisabled =
+    !profile?.id || busy || friendStatus === "pending_sent";
 
   function openOfficialProfile() {
     if (!profile?.id) return;
@@ -151,13 +175,13 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
     navigate(`/friend/${profile.id}`);
   }
 
-  async function handlePrimaryAction() {
+  async function handleAddFriend() {
     if (actionInFlightRef.current || busy || !profile?.id) return;
-
-    if (friendStatus === "friends" || friendStatus === "pending_sent") {
+    if (friendStatus === "friends") {
       openOfficialProfile();
       return;
     }
+    if (friendStatus === "pending_sent") return;
 
     actionInFlightRef.current = true;
     setBusy(true);
@@ -172,22 +196,22 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
         return;
       }
 
-      const result = await sendFriendRequestToUser(userId, profile.id, {
-        successMessage: "Friend request sent.",
-        alreadySentMessage: "Friend request already sent.",
-        alreadyFriendsMessage: "You're already connected.",
-      });
+      const result = await sendFriendRequestToUser(userId, profile.id);
 
       if (!result.ok) {
         toast.error(result.message);
         return;
       }
 
-      setFriendStatus(result.status === "friends" ? "friends" : "pending_sent");
+      if (result.status === "friends") {
+        setFriendStatus("friends");
+      } else {
+        setFriendStatus("pending_sent");
+      }
+
       if (result.message) toast.success(result.message);
-      openOfficialProfile();
     } catch (err) {
-      console.error("[coaching] add official account failed:", err);
+      console.error("[coaching] add friend failed:", err);
       toast.error("Error sending request.");
     } finally {
       actionInFlightRef.current = false;
@@ -318,7 +342,7 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
                       ...(showOfficialBadge ? OFFICIAL_NAME_STYLE : {}),
                     }}
                   >
-                    @{accountHandle}
+                    @{accountHandle.toUpperCase()}
                   </div>
                 </div>
               </div>
@@ -335,17 +359,15 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
                 color: "var(--text-dim)",
               }}
             >
-              Official ArmPal account unavailable.
+              Couldn&apos;t load official account. Search @ARMPAL in Add Friends.
             </div>
           )}
 
           <button
             type="button"
-            style={
-              friendStatus === "pending_sent" ? BTN_DISABLED : BTN_PRIMARY
-            }
+            style={friendStatus === "pending_sent" ? BTN_DISABLED : BTN_PRIMARY}
             disabled={primaryDisabled}
-            onClick={handlePrimaryAction}
+            onClick={handleAddFriend}
           >
             {busy ? (
               <>
@@ -367,9 +389,20 @@ export default function CoachingSuccessModal({ open, profile, onClose }) {
             )}
           </button>
 
+          {profile?.id ? (
+            <button
+              type="button"
+              style={BTN_SECONDARY}
+              disabled={busy}
+              onClick={openOfficialProfile}
+            >
+              View Profile
+            </button>
+          ) : null}
+
           <button
             type="button"
-            style={BTN_SECONDARY}
+            style={{ ...BTN_SECONDARY, marginTop: profile?.id ? 10 : 0 }}
             disabled={busy}
             onClick={() => onClose?.()}
           >
