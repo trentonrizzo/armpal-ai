@@ -79,6 +79,7 @@ import {
   AUTH_BOOTSTRAP_FORCE_READY_MS,
   bootstrapAuthSession,
 } from "./utils/authBootstrap";
+import { syncCurrentSession } from "./lib/accountManager";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -542,6 +543,9 @@ export default function App() {
       if (cancelled) return;
       setSession(s);
       setReady(true);
+      if (s?.user?.id) {
+        void syncCurrentSession();
+      }
       if (timedOut) {
         console.warn(
           "[App] auth session bootstrap timed out; continuing without blocking UI"
@@ -572,6 +576,15 @@ export default function App() {
         }
       }
       if (!cancelled) setSession(s);
+      if (
+        s?.user?.id &&
+        (event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED" ||
+          event === "INITIAL_SESSION" ||
+          event === "USER_UPDATED")
+      ) {
+        void syncCurrentSession();
+      }
     });
 
     return () => {

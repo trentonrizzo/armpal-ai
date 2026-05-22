@@ -3,12 +3,18 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 import { ensureUserQR } from "./utils/ensureUserQR";
 import { getPasswordResetRedirectUrl } from "./utils/authPublicUrl";
+import { syncCurrentSession } from "./lib/accountManager";
 
 /*
   AuthPage – LOGIN + SIGNUP + FORGOT
 */
 
-export default function AuthPage({ initialMode }) {
+export default function AuthPage({
+  initialMode,
+  addAccountMode = false,
+  onAddAccountCancel,
+  onAddAccountSuccess,
+}) {
   const [searchParams] = useSearchParams();
   const [mode, setMode] = useState(initialMode || "login"); // login | signup | forgot
   const [email, setEmail] = useState("");
@@ -44,13 +50,18 @@ export default function AuthPage({ initialMode }) {
     setLoading(true);
     setMsg(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
       setMsg({ type: "error", text: error.message });
+    } else if (data?.session) {
+      await syncCurrentSession();
+      if (addAccountMode) {
+        onAddAccountSuccess?.();
+      }
     }
 
     setLoading(false);
@@ -76,14 +87,30 @@ export default function AuthPage({ initialMode }) {
     if (error) {
       setMsg({ type: "error", text: error.message });
     } else {
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !addAccountMode) {
         sessionStorage.setItem("armpal_needs_profile_setup", "1");
       }
-      setMsg({
-        type: "success",
-        text: "Account created! Check your email to verify.",
-      });
-      setMode("login");
+      if (addAccountMode) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          await syncCurrentSession();
+          onAddAccountSuccess?.();
+        } else {
+          setMsg({
+            type: "success",
+            text: "Account created! Verify your email, then sign in.",
+          });
+          setMode("login");
+        }
+      } else {
+        setMsg({
+          type: "success",
+          text: "Account created! Check your email to verify.",
+        });
+        setMode("login");
+      }
       setPassword("");
       setConfirm("");
       ensureUserQR(supabase);
@@ -132,9 +159,15 @@ export default function AuthPage({ initialMode }) {
      UI
   ============================ */
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={styles.logo}>ArmPal</h1>
+    <div style={addAccountMode ? styles.pageEmbedded : styles.page}>
+      <div style={addAccountMode ? styles.cardEmbedded : styles.card}>
+        <h1 style={styles.logo}>{addAccountMode ? "Sign in to add account" : "ArmPal"}</h1>
+
+        {addAccountMode ? (
+          <button type="button" onClick={() => onAddAccountCancel?.()} style={styles.link}>
+            Cancel
+          </button>
+        ) : null}
 
         {msg && (
           <div style={msg.type === "error" ? styles.error : styles.success}>
@@ -265,12 +298,25 @@ const styles = {
     alignItems: "center",
     color: "white",
   },
+  pageEmbedded: {
+    minHeight: "auto",
+    background: "transparent",
+    display: "block",
+    color: "var(--text)",
+  },
   card: {
     width: "100%",
     maxWidth: 420,
     background: "#0b0b0c",
     padding: 20,
     borderRadius: 16,
+  },
+  cardEmbedded: {
+    width: "100%",
+    maxWidth: "none",
+    background: "transparent",
+    padding: "8px 16px 20px",
+    borderRadius: 0,
   },
   logo: { fontSize: 32, fontWeight: 900, marginBottom: 10 },
   input: {

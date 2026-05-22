@@ -24,6 +24,8 @@ import {
 import { getPasswordResetRedirectUrl } from "../utils/authPublicUrl";
 import CoachingCard from "../components/coaching/CoachingCard";
 import CoachingRequestModal from "../components/coaching/CoachingRequestModal";
+import AccountSwitcher from "../components/AccountSwitcher";
+import { removeSavedAccount } from "../lib/accountManager";
 
 /* ============================
    TOGGLE PILL
@@ -416,6 +418,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
       if (error) throw error;
 
       await supabase.auth.signOut();
+      if (user?.id) removeSavedAccount(user.id);
       toast.success("Account deleted");
       setShowDeleteConfirm(false);
       onClose();
@@ -778,6 +781,10 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
 
             {section === "account" && (
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+                <AccountSwitcher onSwitchComplete={onClose} />
+
+                <div style={{ height: 14 }} />
+
                 <div style={{ opacity: 0.6 }}>Email</div>
                 <div>{user?.email}</div>
 
