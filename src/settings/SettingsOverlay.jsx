@@ -25,7 +25,12 @@ import { getPasswordResetRedirectUrl } from "../utils/authPublicUrl";
 import CoachingCard from "../components/coaching/CoachingCard";
 import CoachingRequestModal from "../components/coaching/CoachingRequestModal";
 import AccountSwitcher from "../components/AccountSwitcher";
-import { removeSavedAccount } from "../lib/accountManager";
+import {
+  getSavedAccountById,
+  removeSavedAccount,
+  syncCurrentSession,
+} from "../lib/accountManager";
+import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
 
 /* ============================
    TOGGLE PILL
@@ -196,6 +201,8 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [legalModal, setLegalModal] = useState(null); // "menu" | "privacy" | "terms" | null
   const [coachingOpen, setCoachingOpen] = useState(false);
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const [currentAccountPreview, setCurrentAccountPreview] = useState(null);
 
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -233,6 +240,37 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     supabase.auth.getUser().then(async ({ data }) => {
       const u = data?.user;
       setUser(u);
+      if (u?.id) {
+        await syncCurrentSession();
+        const saved = getSavedAccountById(u.id);
+        if (saved) {
+          setCurrentAccountPreview(saved);
+        } else {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("display_name, username, handle, avatar_url, role, is_official, is_coaching_account")
+            .eq("id", u.id)
+            .maybeSingle();
+          setCurrentAccountPreview({
+            userId: u.id,
+            email: u.email || "",
+            displayName:
+              profile?.display_name ||
+              profile?.username ||
+              profile?.handle ||
+              u.email?.split("@")[0] ||
+              "Account",
+            avatarUrl: profile?.avatar_url || "",
+            username: profile?.username || "",
+            handle: profile?.handle || "",
+            role: profile?.role || "",
+            isOfficial: !!profile?.is_official,
+            isCoaching: !!profile?.is_coaching_account,
+          });
+        }
+      } else {
+        setCurrentAccountPreview(null);
+      }
       setReminderSettingsState(getReminderSettings(u?.id));
       const supported = typeof Notification !== "undefined";
       setNotifSupported(supported);
@@ -781,17 +819,8 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
 
             {section === "account" && (
               <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
-                <AccountSwitcher onSwitchComplete={onClose} />
-
-                <div style={{ height: 14 }} />
-
                 <div style={{ opacity: 0.6 }}>Email</div>
                 <div>{user?.email}</div>
-
-                <div style={{ height: 10 }} />
-
-                <div style={{ opacity: 0.6 }}>User ID</div>
-                <div style={{ fontSize: 12 }}>{user?.id}</div>
 
                 <div style={{ height: 14 }} />
 
@@ -897,6 +926,92 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
               marginTop: 12,
             }}
           >
+            {currentAccountPreview ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  marginBottom: 10,
+                  borderRadius: 14,
+                  background: "var(--card-2)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    border: "1px solid var(--border)",
+                    background: "var(--card)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {currentAccountPreview.avatarUrl ? (
+                    <img
+                      src={currentAccountPreview.avatarUrl}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : null}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 14,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      ...(currentAccountPreview.isOfficial ||
+                      `${currentAccountPreview.username || ""}${currentAccountPreview.handle || ""}`
+                        .toLowerCase()
+                        .includes("armpal")
+                        ? OFFICIAL_NAME_STYLE
+                        : {}),
+                    }}
+                  >
+                    {currentAccountPreview.displayName}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.65,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {currentAccountPreview.handle
+                      ? `@${currentAccountPreview.handle}`
+                      : currentAccountPreview.username
+                      ? `@${currentAccountPreview.username}`
+                      : currentAccountPreview.email}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => setShowAccountSwitcher(true)}
+              style={{
+                width: "100%",
+                padding: 13,
+                borderRadius: 14,
+                background: "var(--card-2)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+                fontWeight: 800,
+                marginBottom: 8,
+              }}
+            >
+              Switch Account
+            </button>
+
             <button
               onClick={() => setShowLogoutConfirm(true)}
               style={{
@@ -1452,6 +1567,22 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
       <CoachingRequestModal
         open={coachingOpen}
         onClose={() => setCoachingOpen(false)}
+      />
+
+      <AccountSwitcher
+        open={showAccountSwitcher}
+        onClose={() => setShowAccountSwitcher(false)}
+        onSwitchComplete={async () => {
+          setShowAccountSwitcher(false);
+          const {
+            data: { user: nextUser },
+          } = await supabase.auth.getUser();
+          setUser(nextUser || null);
+          if (nextUser?.id) {
+            await syncCurrentSession();
+            setCurrentAccountPreview(getSavedAccountById(nextUser.id));
+          }
+        }}
       />
     </>
   );

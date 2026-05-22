@@ -22,7 +22,12 @@ function writeAccounts(accounts) {
 }
 
 function normalizeAccount(entry) {
-  if (!entry?.userId || !entry?.access_token || !entry?.refresh_token) return null;
+  if (!entry?.userId) return null;
+
+  const accessToken = String(entry.access_token || entry.accessToken || "").trim();
+  const refreshToken = String(entry.refresh_token || entry.refreshToken || "").trim();
+  if (!accessToken || !refreshToken) return null;
+
   return {
     userId: String(entry.userId),
     email: entry.email || "",
@@ -33,10 +38,21 @@ function normalizeAccount(entry) {
     role: entry.role || "",
     isOfficial: !!entry.isOfficial,
     isCoaching: !!entry.isCoaching,
-    access_token: entry.access_token,
-    refresh_token: entry.refresh_token,
-    savedAt: entry.savedAt || Date.now(),
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    savedAt: Number(entry.savedAt) || Date.now(),
   };
+}
+
+function dedupeAccounts(accounts) {
+  const byId = new Map();
+  accounts.forEach((account) => {
+    const existing = byId.get(account.userId);
+    if (!existing || (account.savedAt || 0) >= (existing.savedAt || 0)) {
+      byId.set(account.userId, account);
+    }
+  });
+  return Array.from(byId.values()).sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
 }
 
 /**
@@ -44,10 +60,18 @@ function normalizeAccount(entry) {
  */
 export function getSavedAccounts() {
   if (typeof localStorage === "undefined") return [];
-  return safeParseAccounts(localStorage.getItem(SAVED_ACCOUNTS_STORAGE_KEY))
+
+  const normalized = safeParseAccounts(localStorage.getItem(SAVED_ACCOUNTS_STORAGE_KEY))
     .map(normalizeAccount)
-    .filter(Boolean)
-    .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    .filter(Boolean);
+
+  const deduped = dedupeAccounts(normalized);
+
+  if (deduped.length !== normalized.length) {
+    writeAccounts(deduped);
+  }
+
+  return deduped;
 }
 
 /**
@@ -95,8 +119,7 @@ export async function saveCurrentAccount(session, profile) {
 
   if (!nextEntry) return;
 
-  const withoutDup = accounts.filter((a) => a.userId !== userId);
-  writeAccounts([nextEntry, ...withoutDup]);
+  writeAccounts(dedupeAccounts([nextEntry, ...accounts.filter((a) => a.userId !== userId)]));
 }
 
 /**
@@ -113,14 +136,15 @@ export async function syncCurrentSession() {
 
     let profile = null;
     try {
-      const { data } = await supabase
+      const { data, error: profileError } = await supabase
         .from("profiles")
         .select(
           "display_name, username, handle, avatar_url, role, is_official, is_coaching_account"
         )
         .eq("id", session.user.id)
         .maybeSingle();
-      profile = data || null;
+
+      if (!profileError) profile = data || null;
     } catch (profileErr) {
       console.warn("[accountManager] profile fetch failed:", profileErr?.message || profileErr);
     }
@@ -138,7 +162,11 @@ export async function syncCurrentSession() {
 export async function switchToAccount(account) {
   const normalized = normalizeAccount(account);
   if (!normalized) {
-    throw new Error("Invalid saved account");
+    throw new Error("Session expired. Please log in again.");
+  }
+
+  if (!normalized.access_token || !normalized.refresh_token) {
+    throw new Error("Session expired. Please log in again.");
   }
 
   await syncCurrentSession();
@@ -149,6 +177,9 @@ export async function switchToAccount(account) {
   });
 
   if (error) {
+    if (/invalid|expired|refresh|jwt|token|session/i.test(error.message || "")) {
+      throw new Error("Session expired. Please log in again.");
+    }
     throw error;
   }
 
@@ -158,7 +189,7 @@ export async function switchToAccount(account) {
     return data.session;
   }
 
-  return null;
+  throw new Error("Session expired. Please log in again.");
 }
 
 /**
@@ -170,4 +201,13 @@ export function removeSavedAccount(userId) {
   const next = getSavedAccounts().filter((a) => a.userId !== userId);
   writeAccounts(next);
   return next;
+}
+
+/**
+ * @param {string} userId
+ * @returns {object | null}
+ */
+export function getSavedAccountById(userId) {
+  if (!userId) return null;
+  return getSavedAccounts().find((a) => a.userId === userId) || null;
 }
