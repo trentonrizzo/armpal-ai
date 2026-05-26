@@ -137,7 +137,6 @@ export default function CoachingRequestModal({ open, onClose }) {
 
   function validate() {
     if (!form.name.trim()) return "Name is required.";
-    if (!form.instagram.trim()) return "Instagram username is required.";
     if (!form.goal.trim()) return "Main goal is required.";
     if (!form.experience) return "Experience level is required.";
     return "";
@@ -301,7 +300,7 @@ export default function CoachingRequestModal({ open, onClose }) {
             />
 
             <label style={LABEL} htmlFor="coaching-instagram">
-              Instagram Username <span style={{ color: "var(--accent)" }}>*</span>
+              Instagram @ (optional)
             </label>
             <input
               id="coaching-instagram"
