@@ -7,7 +7,10 @@ import {
   getFriendRequestStatus,
   sendFriendRequestToUser,
 } from "../../services/friendRequests";
-import { getOfficialArmPalProfile } from "../../services/officialCoachingAccount";
+import {
+  getOfficialArmPalProfile,
+  OFFICIAL_ARMPAL_PROFILE_ID,
+} from "../../services/officialCoachingAccount";
 import { OFFICIAL_NAME_STYLE } from "../../utils/officialStyle";
 
 const OVERLAY = {
@@ -77,14 +80,6 @@ const officialPill = {
   fontWeight: 900,
 };
 
-function isArmPalIdentity(value) {
-  return String(value || "")
-    .trim()
-    .replace(/^@+/, "")
-    .toLowerCase()
-    .includes("armpal");
-}
-
 export default function CoachingSuccessModal({ open, profile: profileProp, onClose }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -94,20 +89,17 @@ export default function CoachingSuccessModal({ open, profile: profileProp, onClo
   const actionInFlightRef = useRef(false);
 
   useEffect(() => {
-    setProfile(profileProp);
-  }, [profileProp]);
-
-  useEffect(() => {
-    if (!open || profile?.id) return;
+    if (!open) return;
+    if (profileProp?.id) setProfile(profileProp);
     let cancelled = false;
     void (async () => {
       const found = await getOfficialArmPalProfile();
-      if (!cancelled && found?.id) setProfile(found);
+      if (!cancelled) setProfile(found);
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, profile?.id]);
+  }, [open, profileProp]);
 
   useEffect(() => {
     if (!open) return;
@@ -118,7 +110,7 @@ export default function CoachingSuccessModal({ open, profile: profileProp, onClo
   }, [open]);
 
   useEffect(() => {
-    if (!open || !profile?.id) {
+    if (!open) {
       setFriendStatus("none");
       return;
     }
@@ -130,14 +122,14 @@ export default function CoachingSuccessModal({ open, profile: profileProp, onClo
       } = await supabase.auth.getSession();
       const userId = session?.user?.id;
       if (!userId || cancelled) return;
-      const status = await getFriendRequestStatus(userId, profile.id);
+      const status = await getFriendRequestStatus(userId, OFFICIAL_ARMPAL_PROFILE_ID);
       if (!cancelled) setFriendStatus(status);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [open, profile?.id]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -150,33 +142,26 @@ export default function CoachingSuccessModal({ open, profile: profileProp, onClo
 
   if (!open) return null;
 
-  const accountLabel =
-    profile?.display_name || profile?.username || profile?.handle || "ArmPal";
-  const accountHandle = (profile?.handle || profile?.username || "ARMPAL").replace(/^@+/, "");
-  const showOfficialBadge =
-    profile?.is_official === true ||
-    isArmPalIdentity(profile?.username) ||
-    isArmPalIdentity(profile?.handle) ||
-    isArmPalIdentity(profile?.display_name);
+  const officialProfileId = profile?.id || OFFICIAL_ARMPAL_PROFILE_ID;
+  const accountLabel = profile?.display_name || "ARMPAL";
+  const accountHandle = (profile?.handle || profile?.username || "armpal").replace(/^@+/, "");
 
   const primaryLabel =
     friendStatus === "friends"
       ? "View Profile"
       : friendStatus === "pending_sent"
-      ? "Request Sent"
+      ? "Friend Request Sent"
       : "Add Friend";
 
-  const primaryDisabled =
-    !profile?.id || busy || friendStatus === "pending_sent";
+  const primaryDisabled = busy || friendStatus === "pending_sent";
 
   function openOfficialProfile() {
-    if (!profile?.id) return;
     onClose?.();
-    navigate(`/friend/${profile.id}`);
+    navigate(`/friend/${officialProfileId}`);
   }
 
   async function handleAddFriend() {
-    if (actionInFlightRef.current || busy || !profile?.id) return;
+    if (actionInFlightRef.current || busy) return;
     if (friendStatus === "friends") {
       openOfficialProfile();
       return;
@@ -196,7 +181,7 @@ export default function CoachingSuccessModal({ open, profile: profileProp, onClo
         return;
       }
 
-      const result = await sendFriendRequestToUser(userId, profile.id);
+      const result = await sendFriendRequestToUser(userId, officialProfileId);
 
       if (!result.ok) {
         toast.error(result.message);
@@ -276,92 +261,85 @@ export default function CoachingSuccessModal({ open, profile: profileProp, onClo
             for easier communication, fitness advice, coaching updates, and follow-up support.
           </p>
 
-          {profile?.id ? (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: "var(--card-2)",
+              border: "1px solid var(--border)",
+              marginBottom: 18,
+            }}
+          >
             <div
               style={{
-                padding: "12px 14px",
-                borderRadius: 12,
-                background: "var(--card-2)",
-                border: "1px solid var(--border)",
-                marginBottom: 18,
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: 0.6,
+                textTransform: "uppercase",
+                color: "var(--text-dim)",
+                marginBottom: 6,
               }}
             >
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: 0.6,
-                  textTransform: "uppercase",
-                  color: "var(--text-dim)",
-                  marginBottom: 6,
-                }}
-              >
-                Official ArmPal Coaching Account
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {profile.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt=""
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 999,
-                      objectFit: "cover",
-                      border: "1px solid var(--border)",
-                    }}
-                  />
-                ) : (
+              Official ArmPal Coaching Account
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt=""
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 999,
+                    objectFit: "cover",
+                    border: "1px solid var(--border)",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 999,
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 900,
+                    fontSize: 16,
+                    color: "var(--accent)",
+                  }}
+                  aria-hidden
+                >
+                  A
+                </div>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 999,
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                    }}
-                  />
-                )}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <div
-                      style={{
-                        fontWeight: 800,
-                        fontSize: 15,
-                        ...(showOfficialBadge ? OFFICIAL_NAME_STYLE : {}),
-                      }}
-                    >
-                      {accountLabel}
-                    </div>
-                    {showOfficialBadge ? <span style={officialPill}>Official</span> : null}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--text-dim)",
-                      ...(showOfficialBadge ? OFFICIAL_NAME_STYLE : {}),
+                      fontWeight: 800,
+                      fontSize: 15,
+                      ...OFFICIAL_NAME_STYLE,
                     }}
                   >
-                    @{accountHandle.toUpperCase()}
+                    {accountLabel}
                   </div>
+                  <span style={officialPill}>Official</span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-dim)",
+                    ...OFFICIAL_NAME_STYLE,
+                  }}
+                >
+                  @{accountHandle}
                 </div>
               </div>
             </div>
-          ) : (
-            <div
-              style={{
-                padding: "12px 14px",
-                borderRadius: 12,
-                background: "var(--card-2)",
-                border: "1px solid var(--border)",
-                marginBottom: 18,
-                fontSize: 13,
-                color: "var(--text-dim)",
-              }}
-            >
-              Couldn&apos;t load official account. Search @ARMPAL in Add Friends.
-            </div>
-          )}
+          </div>
 
           <button
             type="button"
@@ -389,20 +367,18 @@ export default function CoachingSuccessModal({ open, profile: profileProp, onClo
             )}
           </button>
 
-          {profile?.id ? (
-            <button
-              type="button"
-              style={BTN_SECONDARY}
-              disabled={busy}
-              onClick={openOfficialProfile}
-            >
-              View Profile
-            </button>
-          ) : null}
+          <button
+            type="button"
+            style={BTN_SECONDARY}
+            disabled={busy}
+            onClick={openOfficialProfile}
+          >
+            View Profile
+          </button>
 
           <button
             type="button"
-            style={{ ...BTN_SECONDARY, marginTop: profile?.id ? 10 : 0 }}
+            style={BTN_SECONDARY}
             disabled={busy}
             onClick={() => onClose?.()}
           >

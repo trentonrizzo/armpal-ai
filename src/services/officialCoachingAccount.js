@@ -1,109 +1,46 @@
 import { supabase } from "../supabaseClient";
 
+export const OFFICIAL_ARMPAL_PROFILE_ID = "d281c04d-338f-4809-8709-03e7594a074c";
+
 const OFFICIAL_PROFILE_SELECT =
   "id, display_name, handle, username, avatar_url, is_official, is_coaching_account, role";
 
-function pickProfile(data) {
-  if (Array.isArray(data)) return data.find((row) => row?.id) || null;
-  return data?.id ? data : null;
-}
-
-async function runLookup(label, queryPromise) {
-  try {
-    const { data, error } = await queryPromise;
-    if (error) {
-      console.warn(`[coaching] official lookup (${label}) failed:`, error.message);
-      return null;
-    }
-    return pickProfile(data);
-  } catch (err) {
-    console.warn(`[coaching] official lookup (${label}) failed:`, err?.message || err);
-    return null;
-  }
-}
+const OFFICIAL_PROFILE_FALLBACK = {
+  id: OFFICIAL_ARMPAL_PROFILE_ID,
+  display_name: "ARMPAL",
+  handle: "armpal",
+  username: "armpal",
+  avatar_url: null,
+  is_official: true,
+  is_coaching_account: true,
+};
 
 /**
- * Flexible official @ARMPAL profile lookup (same profiles table as Add Friend).
- * @returns {Promise<object | null>}
+ * Official @armpal coaching profile (direct profiles.id lookup).
+ * @returns {Promise<object>}
  */
 export async function getOfficialArmPalProfile() {
-  const lookups = [
-    [
-      "flags",
-      supabase
-        .from("profiles")
-        .select(OFFICIAL_PROFILE_SELECT)
-        .eq("is_official", true)
-        .eq("is_coaching_account", true)
-        .limit(1)
-        .maybeSingle(),
-    ],
-    [
-      "handle-exact",
-      supabase
-        .from("profiles")
-        .select(OFFICIAL_PROFILE_SELECT)
-        .ilike("handle", "armpal")
-        .limit(1)
-        .maybeSingle(),
-    ],
-    [
-      "username-exact",
-      supabase
-        .from("profiles")
-        .select(OFFICIAL_PROFILE_SELECT)
-        .ilike("username", "armpal")
-        .limit(1)
-        .maybeSingle(),
-    ],
-    [
-      "handle-contains",
-      supabase
-        .from("profiles")
-        .select(OFFICIAL_PROFILE_SELECT)
-        .ilike("handle", "%armpal%")
-        .limit(1)
-        .maybeSingle(),
-    ],
-    [
-      "username-contains",
-      supabase
-        .from("profiles")
-        .select(OFFICIAL_PROFILE_SELECT)
-        .ilike("username", "%armpal%")
-        .limit(1)
-        .maybeSingle(),
-    ],
-    [
-      "display-name",
-      supabase
-        .from("profiles")
-        .select(OFFICIAL_PROFILE_SELECT)
-        .ilike("display_name", "%armpal%")
-        .limit(1)
-        .maybeSingle(),
-    ],
-    [
-      "official-flag",
-      supabase
-        .from("profiles")
-        .select(OFFICIAL_PROFILE_SELECT)
-        .eq("is_official", true)
-        .limit(1)
-        .maybeSingle(),
-    ],
-  ];
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(OFFICIAL_PROFILE_SELECT)
+      .eq("id", OFFICIAL_ARMPAL_PROFILE_ID)
+      .maybeSingle();
 
-  for (const [label, queryPromise] of lookups) {
-    const profile = await runLookup(label, queryPromise);
-    if (profile?.id) {
-      console.log("Official ArmPal lookup result:", profile);
-      return profile;
+    if (error) {
+      console.warn("[coaching] official profile fetch failed:", error.message);
     }
+
+    if (data?.id) {
+      console.log("Official ArmPal lookup result:", data);
+      return data;
+    }
+  } catch (err) {
+    console.warn("[coaching] official profile fetch failed:", err?.message || err);
   }
 
-  console.log("Official ArmPal lookup result:", null);
-  return null;
+  console.log("Official ArmPal lookup result:", OFFICIAL_PROFILE_FALLBACK);
+  return OFFICIAL_PROFILE_FALLBACK;
 }
 
 /** @deprecated Use getOfficialArmPalProfile */
