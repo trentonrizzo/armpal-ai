@@ -17,28 +17,10 @@ export function getPushApiUrl(path = API_ROUTE) {
  * Never throws; returns response JSON.
  */
 export async function sendPushToUser({ userId, title, body, data = {} }) {
-  if (!userId) {
+  if (!userId && !data?.recipientId) {
     console.warn(LOG, "PUSH REQUEST START skipped — missing userId");
     return { ok: false, error: "missing_user_id" };
   }
-
-  const requestBody = { userId, title, body, data };
-  const url = getPushApiUrl(API_ROUTE);
-
-  console.log(LOG, "PUSH REQUEST START", {
-    route: API_ROUTE,
-    apnsCore: "/api/send-apns-push",
-    url,
-    userId,
-    title,
-    bodyPreview: String(body || "").slice(0, 80),
-    dataType: data?.type || null,
-    platform: typeof Capacitor !== "undefined" ? Capacitor.getPlatform() : "web",
-    isNative: typeof Capacitor !== "undefined" && Capacitor.isNativePlatform(),
-    windowOrigin: typeof window !== "undefined" ? window.location?.origin : null,
-    publicSiteOrigin: getPublicSiteOrigin(),
-  });
-  console.log(LOG, "calling sendPushToUser", { requestBody });
 
   try {
     const {
@@ -47,11 +29,47 @@ export async function sendPushToUser({ userId, title, body, data = {} }) {
     const accessToken = session?.access_token;
     const authUserId = session?.user?.id || null;
 
-    console.log(LOG, "CURRENT AUTH USER", authUserId);
-    console.log(LOG, "PUSH TARGET USER", userId);
+    let pushTargetUserId = userId;
 
-    if (authUserId && userId && authUserId !== userId) {
-      console.log(LOG, "push targets recipient (not self)", { authUserId, recipientId: userId });
+    if (data?.type === "chat_message") {
+      const resolvedRecipientId = data.recipientId || userId;
+      if (!resolvedRecipientId || resolvedRecipientId === authUserId) {
+        console.error("[ArmPal.Push] INVALID SELF TARGET BLOCKED", {
+          senderId: authUserId,
+          resolvedRecipientId,
+          conversationId: data.conversationId || null,
+        });
+        return { ok: false, error: "invalid_self_target", reason: "self_target" };
+      }
+      pushTargetUserId = resolvedRecipientId;
+    }
+
+    const requestBody = { userId: pushTargetUserId, title, body, data };
+    const url = getPushApiUrl(API_ROUTE);
+
+    console.log(LOG, "PUSH REQUEST START", {
+      route: API_ROUTE,
+      apnsCore: "/api/send-apns-push",
+      url,
+      userId: pushTargetUserId,
+      title,
+      bodyPreview: String(body || "").slice(0, 80),
+      dataType: data?.type || null,
+      platform: typeof Capacitor !== "undefined" ? Capacitor.getPlatform() : "web",
+      isNative: typeof Capacitor !== "undefined" && Capacitor.isNativePlatform(),
+      windowOrigin: typeof window !== "undefined" ? window.location?.origin : null,
+      publicSiteOrigin: getPublicSiteOrigin(),
+    });
+    console.log(LOG, "calling sendPushToUser", { requestBody });
+
+    console.log(LOG, "CURRENT AUTH USER", authUserId);
+    console.log(LOG, "PUSH TARGET USER", pushTargetUserId);
+
+    if (authUserId && pushTargetUserId && authUserId !== pushTargetUserId) {
+      console.log(LOG, "push targets recipient (not self)", {
+        authUserId,
+        recipientId: pushTargetUserId,
+      });
     }
 
     if (!accessToken) {

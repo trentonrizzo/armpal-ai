@@ -3,6 +3,35 @@ import { sendPushToUser } from "./sendPush";
 
 const LOG = "[ArmPal.Push]";
 
+/**
+ * Resolve the true push recipient for a 1:1 chat message.
+ * Never returns the sender — message receiver_id is preferred over route params.
+ */
+export function resolveChatPushRecipient({
+  senderId,
+  messageReceiverId = null,
+  routeFriendId = null,
+  friendProfileId = null,
+}) {
+  if (!senderId) return null;
+
+  const candidates = [messageReceiverId, routeFriendId, friendProfileId].filter(Boolean);
+
+  for (const candidateId of candidates) {
+    if (candidateId !== senderId) {
+      return candidateId;
+    }
+  }
+
+  console.error("[ArmPal.Push] INVALID SELF TARGET BLOCKED", {
+    senderId,
+    messageReceiverId,
+    routeFriendId,
+    friendProfileId,
+  });
+  return null;
+}
+
 export function sanitizePushBody(text, max = 140) {
   return String(text || "")
     .replace(/\s+/g, " ")
@@ -35,12 +64,45 @@ export async function notifyChatMessagePush({
   text = "",
   conversationId = null,
   messageId = null,
+  messageReceiverId = null,
+  routeFriendId = null,
+  friendProfileId = null,
 }) {
-  if (!recipientId || !senderId || recipientId === senderId) {
-    return { ok: false, skipped: true, reason: "self_or_missing" };
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  const authSenderId = authUser?.id || senderId || null;
+
+  const resolvedRecipientId = resolveChatPushRecipient({
+    senderId: authSenderId,
+    messageReceiverId: messageReceiverId || recipientId,
+    routeFriendId,
+    friendProfileId,
+  });
+
+  console.log("[ArmPal.Push] FINAL PUSH TARGET", {
+    senderId: authSenderId,
+    resolvedRecipientId,
+    conversationId,
+    messageReceiverId: messageReceiverId || recipientId || null,
+    routeFriendId,
+    friendProfileId,
+  });
+
+  if (!resolvedRecipientId || !authSenderId) {
+    return { ok: false, skipped: true, reason: "missing_participants" };
   }
 
-  const title = senderName || (await fetchProfileLabel(senderId));
+  if (resolvedRecipientId === authSenderId) {
+    console.error("[ArmPal.Push] INVALID SELF TARGET BLOCKED", {
+      senderId: authSenderId,
+      resolvedRecipientId,
+      conversationId,
+    });
+    return { ok: false, skipped: true, reason: "self_target" };
+  }
+
+  const title = senderName || (await fetchProfileLabel(authSenderId));
   let body = "Sent you a message";
 
   switch (kind) {
@@ -64,13 +126,13 @@ export async function notifyChatMessagePush({
   }
 
   return sendPushToUser({
-    userId: recipientId,
+    userId: resolvedRecipientId,
     title,
     body,
     data: {
       type: "chat_message",
-      senderId,
-      recipientId,
+      senderId: authSenderId,
+      recipientId: resolvedRecipientId,
       conversationId,
       messageId,
     },

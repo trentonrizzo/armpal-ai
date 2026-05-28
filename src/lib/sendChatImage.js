@@ -122,6 +122,8 @@ export async function sendImageToFriend({ senderId, friendId, file, fileName }) 
           kind: "photo",
           conversationId: friendId,
           messageId: inserted?.id || null,
+          messageReceiverId: inserted?.receiver_id || friendId,
+          routeFriendId: friendId,
         });
         console.log("[ArmPal.Push] PUSH REQUEST RESPONSE", responseData);
       } catch (err) {

@@ -14,19 +14,25 @@ function validatePushAuthorization(userId, recipientId, data = {}) {
 
   if (type === "test_push") {
     if (recipientId !== userId) return { ok: false, error: "Test push must target self" };
-    return { ok: true };
-  }
-
-  if (recipientId === userId) {
-    return { ok: false, error: "Cannot push to self" };
+    return { ok: true, pushTargetUserId: userId };
   }
 
   if (type === "chat_message") {
     if (data.senderId !== userId) return { ok: false, error: "senderId mismatch" };
-    if (data.recipientId && data.recipientId !== recipientId) {
-      return { ok: false, error: "recipientId mismatch" };
+    if (!data.recipientId) return { ok: false, error: "Missing data.recipientId" };
+    if (data.recipientId === userId) return { ok: false, error: "Cannot push to self" };
+    if (recipientId && recipientId !== data.recipientId) {
+      console.warn(LOG, "chat push body.userId != data.recipientId — using data.recipientId", {
+        bodyUserId: recipientId,
+        dataRecipientId: data.recipientId,
+        authUserId: userId,
+      });
     }
-    return { ok: true };
+    return { ok: true, pushTargetUserId: data.recipientId };
+  }
+
+  if (recipientId === userId) {
+    return { ok: false, error: "Cannot push to self" };
   }
 
   if (type === "friend_request") {
@@ -105,16 +111,32 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: authz.error, sent: 0, failed: 0 });
   }
 
+  const pushTargetUserId =
+    data?.type === "chat_message" ? data.recipientId : recipientId;
+
   console.log(LOG, "CURRENT AUTH USER", user.id);
-  console.log(LOG, "PUSH TARGET USER", recipientId);
+  console.log(LOG, "PUSH TARGET USER", pushTargetUserId);
+  console.log("[ArmPal.Push] FINAL PUSH TARGET", {
+    senderId: user.id,
+    resolvedRecipientId: pushTargetUserId,
+    conversationId: data?.conversationId || null,
+  });
+
+  if (pushTargetUserId === user.id) {
+    console.error("[ArmPal.Push] INVALID SELF TARGET BLOCKED", {
+      senderId: user.id,
+      resolvedRecipientId: pushTargetUserId,
+    });
+    return res.status(403).json({ error: "Cannot push to self", sent: 0, failed: 0 });
+  }
 
   const result = await sendApnsToUser({
-    userId: recipientId,
+    userId: pushTargetUserId,
     title,
     body: messageBody,
     data: {
       ...data,
-      recipientId,
+      recipientId: pushTargetUserId,
     },
   });
 

@@ -384,15 +384,31 @@ export default function ChatPage() {
   const toast = useToast();
   const isGroup = !!groupId;
 
-  async function notifyRecipient(receiverId, inAppBody, pushKind, pushExtra = {}) {
-    if (!receiverId || receiverId === user?.id) return;
+  async function notifyRecipient(inAppBody, pushKind, pushExtra = {}) {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    const senderId = authUser?.id || user?.id || null;
+    const messageReceiverId =
+      pushExtra.messageReceiverId || pushExtra.receiverId || friendId || friend?.id || null;
 
-    console.log("[ArmPal.Push] CURRENT AUTH USER", user?.id);
-    console.log("[ArmPal.Push] PUSH TARGET USER", receiverId);
+    if (!senderId || !messageReceiverId || messageReceiverId === senderId) {
+      if (messageReceiverId === senderId) {
+        console.error("[ArmPal.Push] INVALID SELF TARGET BLOCKED", {
+          senderId,
+          resolvedRecipientId: messageReceiverId,
+          conversationId: friendId || pushExtra.conversationId || null,
+        });
+      }
+      return;
+    }
+
+    console.log("[ArmPal.Push] CURRENT AUTH USER", senderId);
+    console.log("[ArmPal.Push] PUSH TARGET USER", messageReceiverId);
 
     try {
       const result = await supabase.from("notifications").insert({
-        user_id: receiverId,
+        user_id: messageReceiverId,
         title: "New Message",
         body: inAppBody || "New message",
         link: "/messages",
@@ -401,19 +417,22 @@ export default function ChatPage() {
     } catch (_) {}
 
     console.log("[ArmPal.Push] PUSH REQUEST START", {
-      recipientId: receiverId,
-      senderId: user?.id,
+      recipientId: messageReceiverId,
+      senderId,
     });
 
     try {
       const responseData = await notifyChatMessagePush({
-        senderId: user?.id,
-        recipientId: receiverId,
+        senderId,
+        recipientId: messageReceiverId,
         senderName: myDisplayName,
         kind: pushKind,
         text: pushExtra.text || inAppBody,
         conversationId: friendId || pushExtra.conversationId || null,
         messageId: pushExtra.messageId || null,
+        messageReceiverId,
+        routeFriendId: friendId || null,
+        friendProfileId: friend?.id || null,
       });
       console.log("[ArmPal.Push] PUSH REQUEST RESPONSE", responseData);
     } catch (err) {
@@ -712,6 +731,15 @@ export default function ChatPage() {
       mounted = false;
     };
   }, [friendId, groupId, isGroup]);
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Load Pro status once for the current user (used for video gating).
   useEffect(() => {
@@ -1029,7 +1057,11 @@ export default function ChatPage() {
         console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
           messageId: inserted?.id || null,
         });
-        notifyRecipient(friendId, payload, "text", { text: payload, messageId: inserted?.id });
+        notifyRecipient(payload, "text", {
+          text: payload,
+          messageId: inserted?.id,
+          messageReceiverId: inserted?.receiver_id || friendId,
+        });
       }
     } catch (e) {
       const msg = e?.message || "Send failed";
@@ -1111,7 +1143,10 @@ export default function ChatPage() {
         console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
           messageId: inserted?.id || null,
         });
-        notifyRecipient(friendId, "Sent an image", "photo", { messageId: inserted?.id });
+        notifyRecipient("Sent an image", "photo", {
+          messageId: inserted?.id,
+          messageReceiverId: inserted?.receiver_id || friendId,
+        });
       }
 
       const { error: incRpcError } = await supabase.rpc("increment_media_count", {
@@ -1214,7 +1249,10 @@ export default function ChatPage() {
         console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
           messageId: inserted?.id || null,
         });
-        notifyRecipient(friendId, "Sent a video", "video", { messageId: inserted?.id });
+        notifyRecipient("Sent a video", "video", {
+          messageId: inserted?.id,
+          messageReceiverId: inserted?.receiver_id || friendId,
+        });
       }
 
       const { error: incRpcError } = await supabase.rpc("increment_media_count", {
@@ -1418,7 +1456,10 @@ export default function ChatPage() {
         console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
           messageId: inserted?.id || null,
         });
-        notifyRecipient(friendId, "Sent a voice message", "audio", { messageId: inserted?.id });
+        notifyRecipient("Sent a voice message", "audio", {
+          messageId: inserted?.id,
+          messageReceiverId: inserted?.receiver_id || friendId,
+        });
       }
 
       setRecordedBlob(null);
