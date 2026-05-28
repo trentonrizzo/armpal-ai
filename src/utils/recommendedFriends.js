@@ -1,8 +1,16 @@
 /**
- * Recommended Friends: fetch from discovery_profiles, compute match_score, return top 20.
- * Not pro-gated. All users have access.
+ * Recommended Friends: fetch from public profiles, compute match_score, return top 20.
+ * Uses profiles (age, city, state, interests, profile_visibility) — not discovery_profiles.
  */
 import { supabase } from "../supabaseClient";
+
+const WARN_KEY = "armpal_recommended_friends_warned";
+
+function warnOnce(message, detail) {
+  if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(WARN_KEY)) return;
+  if (typeof sessionStorage !== "undefined") sessionStorage.setItem(WARN_KEY, "1");
+  console.warn("[recommendedFriends]", message, detail || "");
+}
 
 function normalizeStr(s) {
   return (s && String(s).trim().toLowerCase()) || "";
@@ -47,62 +55,80 @@ function computeMatch(myRow, otherRow) {
   return { matchScore, matchReasons: reasons };
 }
 
+function isMissingTableError(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return msg.includes("discovery_profiles") || msg.includes("schema cache") || msg.includes("does not exist");
+}
+
 /**
  * @param {string} userId - current user id
- * @returns {Promise<{ list: Array<{ user_id, age, city, state, interests, match_score, match_reasons, display_name?, username?, avatar_url? }>, count: number }>}
+ * @returns {Promise<{ list: Array<object>, count: number }>}
  */
 export async function getRecommended(userId) {
   if (!userId) return { list: [], count: 0 };
 
   try {
-    const { data: myRow } = await supabase
-      .from("discovery_profiles")
-      .select("age, city, state, interests")
-      .eq("user_id", userId)
+    const { data: myRow, error: myErr } = await supabase
+      .from("profiles")
+      .select("id, age, city, state, interests, profile_visibility")
+      .eq("id", userId)
       .maybeSingle();
 
-    const { data: others, error: othersError } = await supabase
-      .from("discovery_profiles")
-      .select("user_id, age, city, state, interests")
-      .neq("user_id", userId)
-      .eq("visibility", "public");
+    if (myErr) {
+      if (!isMissingTableError(myErr)) warnOnce("my profile lookup failed", myErr.message);
+      return { list: [], count: 0 };
+    }
+
+    let others = [];
+    let othersError = null;
+
+    let othersRes = await supabase
+      .from("profiles")
+      .select(
+        "id, age, city, state, interests, profile_visibility, display_name, username, avatar_url, is_official"
+      )
+      .neq("id", userId)
+      .eq("profile_visibility", "public");
+
+    if (othersRes.error && /profile_visibility|column/i.test(othersRes.error.message || "")) {
+      othersRes = await supabase
+        .from("profiles")
+        .select("id, age, city, state, interests, display_name, username, avatar_url, is_official")
+        .neq("id", userId);
+    }
+
+    others = othersRes.data;
+    othersError = othersRes.error;
 
     if (othersError) {
-      console.error("recommendedFriends getRecommended:", othersError);
+      if (!isMissingTableError(othersError)) warnOnce("recommended query failed", othersError.message);
       return { list: [], count: 0 };
     }
 
     const rows = others || [];
     const withScore = rows.map((row) => {
       const { matchScore, matchReasons } = computeMatch(myRow || {}, row);
-      return { ...row, match_score: matchScore, match_reasons: matchReasons };
+      return {
+        user_id: row.id,
+        age: row.age,
+        city: row.city,
+        state: row.state,
+        interests: row.interests,
+        match_score: matchScore,
+        match_reasons: matchReasons,
+        display_name: row.display_name,
+        username: row.username,
+        avatar_url: row.avatar_url,
+        is_official: row.is_official,
+      };
     });
 
     withScore.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
     const top20 = withScore.slice(0, 20);
-    const userIds = top20.map((r) => r.user_id).filter(Boolean);
 
-    if (userIds.length === 0) return { list: [], count: 0 };
-
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, display_name, username, avatar_url, is_official")
-      .in("id", userIds);
-
-    const profileMap = {};
-    (profiles || []).forEach((p) => (profileMap[p.id] = p));
-
-    const list = top20.map((r) => ({
-      ...r,
-      display_name: profileMap[r.user_id]?.display_name,
-      username: profileMap[r.user_id]?.username,
-      avatar_url: profileMap[r.user_id]?.avatar_url,
-      is_official: profileMap[r.user_id]?.is_official,
-    }));
-
-    return { list, count: list.length };
+    return { list: top20, count: top20.length };
   } catch (e) {
-    console.error("getRecommended error", e);
+    if (!isMissingTableError(e)) warnOnce("getRecommended error", e?.message || e);
     return { list: [], count: 0 };
   }
 }

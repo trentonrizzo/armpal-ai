@@ -38,6 +38,9 @@ export default async function handler(req, res) {
     data,
   });
 
-  const status = result.error && result.sent === 0 && result.failed === 0 ? 503 : 200;
+  const status =
+    result.reason === "no_tokens" || (result.error && result.sent === 0 && result.failed === 0)
+      ? 404
+      : 200;
   return res.status(status).json(result);
 }

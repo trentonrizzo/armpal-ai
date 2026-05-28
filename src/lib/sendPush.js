@@ -45,6 +45,15 @@ export async function sendPushToUser({ userId, title, body, data = {} }) {
       data: { session },
     } = await supabase.auth.getSession();
     const accessToken = session?.access_token;
+    const authUserId = session?.user?.id || null;
+
+    console.log(LOG, "CURRENT AUTH USER", authUserId);
+    console.log(LOG, "PUSH TARGET USER", userId);
+
+    if (authUserId && userId && authUserId !== userId) {
+      console.log(LOG, "push targets recipient (not self)", { authUserId, recipientId: userId });
+    }
+
     if (!accessToken) {
       const err = { ok: false, error: "not_authenticated", url };
       console.error(LOG, "PUSH REQUEST FAILED", err);

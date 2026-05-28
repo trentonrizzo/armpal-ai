@@ -129,10 +129,25 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
 
   const { data: tokens, error: tokenErr } = await supabase
     .from("push_tokens")
-    .select("id, token")
+    .select("id, token, enabled, platform, user_id")
     .eq("user_id", userId)
     .eq("enabled", true)
     .eq("platform", "ios");
+
+  const tokenCount = tokens?.length || 0;
+
+  console.log(API_LOG, "TOKENS QUERY RESULT", {
+    recipientId: userId,
+    tokenCount,
+    rows: (tokens || []).map((t) => ({
+      id: t.id,
+      user_id: t.user_id,
+      enabled: t.enabled,
+      platform: t.platform,
+      tokenPreview: String(t.token || "").slice(0, 10),
+    })),
+    queryError: tokenErr?.message || null,
+  });
 
   if (tokenErr) {
     console.error(API_LOG, "APNS FAILURE", { reason: "token_lookup_failed", message: tokenErr.message });
@@ -140,13 +155,31 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
   }
 
   console.log(API_LOG, "RECIPIENT TOKENS", {
-    count: tokens?.length || 0,
+    count: tokenCount,
     previews: (tokens || []).map((t) => String(t.token || "").slice(0, 10)),
   });
 
-  if (!tokens?.length) {
-    console.error(API_LOG, "NO TOKENS FOUND", { userId });
-    return { ok: true, sent: 0, failed: 0, reason: "no_tokens", tokenCount: 0 };
+  if (!tokenCount) {
+    const { data: allRows } = await supabase
+      .from("push_tokens")
+      .select("id, enabled, platform, user_id")
+      .eq("user_id", userId);
+
+    console.error(API_LOG, "NO TOKENS FOUND", {
+      userId,
+      anyRowsForUser: allRows?.length || 0,
+      anyRowsPreview: (allRows || []).map((r) => ({
+        id: r.id,
+        enabled: r.enabled,
+        platform: r.platform,
+        user_id: r.user_id,
+      })),
+      hint:
+        allRows?.length > 0
+          ? "Token rows exist but none match enabled=true AND platform=ios"
+          : "No push_tokens rows for this user_id — recipient must open app while logged in as that account",
+    });
+    return { ok: false, sent: 0, failed: 0, reason: "no_tokens", tokenCount: 0 };
   }
 
   const jwt = createApnsJwt(

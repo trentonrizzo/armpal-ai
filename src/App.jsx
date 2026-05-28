@@ -81,7 +81,7 @@ import {
   bootstrapAuthSession,
 } from "./utils/authBootstrap";
 import { syncCurrentSession } from "./lib/accountManager";
-import { initPushNotifications, attachApnsPushListeners } from "./lib/pushNotifications";
+import { initPushNotifications, attachApnsPushListeners, rebindApnsTokenForUser } from "./lib/pushNotifications";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -644,11 +644,23 @@ export default function App() {
       pushInitUserRef.current = null;
       return;
     }
-    if (pushInitUserRef.current === userId) return;
+
+    const accountChanged = pushInitUserRef.current !== userId;
     pushInitUserRef.current = userId;
-    console.log("[ArmPal.APNs] App session ready — starting initPushNotifications", { userId });
-    void initPushNotifications(session.user);
-  }, [session?.user?.id, session?.user]);
+
+    console.log("[ArmPal.APNs] App session ready — push init/rebind", {
+      userId,
+      accountChanged,
+    });
+
+    void (async () => {
+      if (accountChanged) {
+        await initPushNotifications(session.user);
+      } else {
+        await rebindApnsTokenForUser(userId);
+      }
+    })();
+  }, [session?.user?.id]);
 
   // Logged-out theme defaults — skip during any recovery flow / URL tokens.
   useEffect(() => {

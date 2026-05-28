@@ -386,6 +386,10 @@ export default function ChatPage() {
 
   async function notifyRecipient(receiverId, inAppBody, pushKind, pushExtra = {}) {
     if (!receiverId || receiverId === user?.id) return;
+
+    console.log("[ArmPal.Push] CURRENT AUTH USER", user?.id);
+    console.log("[ArmPal.Push] PUSH TARGET USER", receiverId);
+
     try {
       const result = await supabase.from("notifications").insert({
         user_id: receiverId,

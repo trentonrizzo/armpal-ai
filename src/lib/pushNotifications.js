@@ -64,12 +64,23 @@ export async function attachApnsPushListeners() {
       lastRegisteredToken = value;
       logStep("APNs registration SUCCESS", { token: value });
       devNotify("APNs token registered");
-      const userId = activeUserId;
-      if (!userId) {
-        logWarn("registration success but no active user id yet — token not saved");
-        return;
-      }
-      void savePushToken(value, userId);
+      void (async () => {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const authUserId = user?.id || activeUserId;
+        console.log("[ArmPal.Push] TOKEN SAVE auth user", {
+          authUserId,
+          activeUserId,
+          match: authUserId === activeUserId,
+        });
+        if (!authUserId) {
+          logWarn("registration success but no auth user — token not saved");
+          return;
+        }
+        activeUserId = authUserId;
+        await savePushToken(value, authUserId);
+      })();
     });
 
     await PushNotifications.addListener("registrationError", (err) => {
@@ -130,6 +141,11 @@ export async function savePushToken(token, userId) {
     tokenPreview: `${token.slice(0, 8)}…${token.slice(-8)}`,
   });
 
+  console.log("[ArmPal.Push] SAVING TOKEN FOR USER", {
+    userId,
+    tokenPreview: `${token.slice(0, 10)}…`,
+  });
+
   const { error } = await supabase.from("push_tokens").upsert(
     {
       user_id: userId,
@@ -150,6 +166,71 @@ export async function savePushToken(token, userId) {
   logStep("token save SUCCESS");
   devNotify("Push token saved");
   return { ok: true };
+}
+
+/**
+ * Re-associate the current device APNs token with the signed-in user (account switch).
+ */
+export async function rebindApnsTokenForUser(userId) {
+  if (!userId || !isNativeApnsSupported()) {
+    return { ok: false, reason: "unsupported_or_missing_user" };
+  }
+
+  activeUserId = userId;
+  console.log("[ArmPal.Push] REBIND TOKEN FOR USER", { userId });
+
+  if (lastRegisteredToken) {
+    return savePushToken(lastRegisteredToken, userId);
+  }
+
+  return initPushNotifications({ id: userId }, { force: true });
+}
+
+/**
+ * DEV: inspect push token state for the current or specified user.
+ */
+export async function getPushTokenDebugInfo(userId) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const authUserId = user?.id || null;
+  const targetUserId = userId || authUserId;
+
+  let rows = [];
+  let lookupError = null;
+
+  if (targetUserId) {
+    const { data, error } = await supabase
+      .from("push_tokens")
+      .select("id, token, enabled, platform, updated_at, user_id")
+      .eq("user_id", targetUserId);
+    rows = data || [];
+    lookupError = error?.message || null;
+  }
+
+  const enabledIos = rows.filter((r) => r.enabled && r.platform === "ios");
+
+  return {
+    authUserId,
+    targetUserId,
+    activeUserId,
+    authMatchesTarget: authUserId === targetUserId,
+    lastRegisteredTokenPreview: lastRegisteredToken
+      ? `${lastRegisteredToken.slice(0, 10)}…${lastRegisteredToken.slice(-6)}`
+      : null,
+    dbRowCount: rows.length,
+    enabledIosCount: enabledIos.length,
+    hasEnabledIosRow: enabledIos.length > 0,
+    rows: rows.map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      enabled: r.enabled,
+      platform: r.platform,
+      tokenPreview: `${String(r.token || "").slice(0, 10)}…`,
+      updated_at: r.updated_at,
+    })),
+    lookupError,
+  };
 }
 
 export async function getApnsPushStatus(userId) {

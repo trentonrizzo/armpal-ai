@@ -6,6 +6,7 @@ import {
   attachApnsPushListeners,
   disableApnsPush,
   getApnsPushStatus,
+  getPushTokenDebugInfo,
   initPushNotifications,
   isNativeApnsSupported,
 } from "../lib/pushNotifications";
@@ -218,7 +219,19 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const [nativeApnsMode, setNativeApnsMode] = useState(false);
   const [apnsPermission, setApnsPermission] = useState("unknown");
   const [apnsHasToken, setApnsHasToken] = useState(false);
+  const [pushDebugInfo, setPushDebugInfo] = useState(null);
   const [achFeedbackOn, setAchFeedbackOn] = useState(true);
+
+  const showPushDebugTools =
+    import.meta.env.DEV || import.meta.env.VITE_PUSH_DEBUG === "true";
+
+  async function refreshPushDebugInfo(userId) {
+    const uid = userId || user?.id;
+    if (!uid) return;
+    const info = await getPushTokenDebugInfo(uid);
+    setPushDebugInfo(info);
+    console.log("[ArmPal.Push] DEBUG INFO", info);
+  }
 
   const remindersSupported = isNativeNotificationsSupported();
 
@@ -301,6 +314,9 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
         setApnsPermission(apnsStatus.permission);
         setApnsHasToken(apnsStatus.hasToken);
         setNotifEnabled(apnsStatus.permission === "granted" && apnsStatus.hasToken);
+        if (showPushDebugTools && u?.id) {
+          await refreshPushDebugInfo(u.id);
+        }
       } else {
         const supported = typeof Notification !== "undefined";
         setNotifSupported(supported);
@@ -403,12 +419,17 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     if (!user?.id) return;
     setNotifBusy(true);
     try {
+      console.log("[ArmPal.Push] TEST PUSH TO SELF START", { userId: user.id });
       const result = await notifyTestPush(user.id);
-      if (result.ok) {
-        toast.success("Test push sent");
+      console.log("[ArmPal.Push] TEST PUSH TO SELF RESPONSE", result);
+      if (result.ok && result.sent > 0) {
+        toast.success(`Test push delivered (${result.sent})`);
+      } else if (result.reason === "no_tokens") {
+        toast.error("No push token saved for this account. Stay logged in and reopen Settings.");
       } else {
-        toast.error(result.error || "Test push failed");
+        toast.error(result.error || result.reason || "Test push failed");
       }
+      await refreshPushDebugInfo(user.id);
     } finally {
       setNotifBusy(false);
     }
@@ -702,7 +723,55 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     toggleNotifications();
                   }}
                 />
-                {import.meta.env.DEV && nativeApnsMode && user?.id ? (
+                {showPushDebugTools && nativeApnsMode && user?.id ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: 10,
+                      borderRadius: 10,
+                      border: "1px dashed var(--border)",
+                      background: "var(--card)",
+                      fontSize: 11,
+                      lineHeight: 1.45,
+                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, marginBottom: 6 }}>Push debug (dev)</div>
+                    <div>Auth user: {pushDebugInfo?.authUserId || user.id}</div>
+                    <div>
+                      Token preview:{" "}
+                      {pushDebugInfo?.lastRegisteredTokenPreview || apnsHasToken ? "registered" : "none"}
+                    </div>
+                    <div>
+                      push_tokens rows: {pushDebugInfo?.dbRowCount ?? "…"} (enabled iOS:{" "}
+                      {pushDebugInfo?.enabledIosCount ?? "…"})
+                    </div>
+                    <div>
+                      Row for current user:{" "}
+                      {pushDebugInfo?.hasEnabledIosRow ? "yes" : pushDebugInfo ? "no" : "…"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void refreshPushDebugInfo(user.id);
+                      }}
+                      style={{
+                        marginTop: 8,
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid var(--border)",
+                        background: "var(--card-2)",
+                        color: "var(--text-dim)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Refresh push debug
+                    </button>
+                  </div>
+                ) : null}
+                {showPushDebugTools && nativeApnsMode && user?.id ? (
                   <button
                     type="button"
                     disabled={notifBusy}
@@ -724,7 +793,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                       opacity: notifBusy ? 0.6 : 1,
                     }}
                   >
-                    Send test push (dev)
+                    Send Test Push To Me
                   </button>
                 ) : null}
               </div>

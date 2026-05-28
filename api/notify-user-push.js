@@ -105,6 +105,9 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: authz.error, sent: 0, failed: 0 });
   }
 
+  console.log(LOG, "CURRENT AUTH USER", user.id);
+  console.log(LOG, "PUSH TARGET USER", recipientId);
+
   const result = await sendApnsToUser({
     userId: recipientId,
     title,
@@ -115,6 +118,9 @@ export default async function handler(req, res) {
     },
   });
 
-  const status = result.error && result.sent === 0 && result.failed === 0 ? 503 : 200;
+  const status =
+    result.reason === "no_tokens" || (result.error && result.sent === 0 && result.failed === 0)
+      ? 404
+      : 200;
   return res.status(status).json(result);
 }
