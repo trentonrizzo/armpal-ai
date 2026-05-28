@@ -6,7 +6,9 @@ const LOG = "[ArmPal.APNs]";
 
 let listenersAttached = false;
 let listenersAttachPromise = null;
+let authSyncAttached = false;
 let activeUserId = null;
+let lastSyncedAuthUserId = null;
 let lastRegisteredToken = null;
 
 function logStep(message, extra) {
@@ -80,6 +82,7 @@ export async function attachApnsPushListeners() {
         }
         activeUserId = authUserId;
         await savePushToken(value, authUserId);
+        lastSyncedAuthUserId = authUserId;
       })();
     });
 
@@ -126,6 +129,57 @@ export async function attachApnsPushListeners() {
 }
 
 /**
+ * DEV: log push_tokens ownership for the current auth user.
+ */
+export async function logCurrentPushTokenState() {
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabase.auth.getUser();
+  const authUserId = user?.id || null;
+
+  let rows = [];
+  let queryError = null;
+
+  if (authUserId) {
+    const { data, error } = await supabase
+      .from("push_tokens")
+      .select("id, user_id, token, enabled, platform, created_at, updated_at")
+      .eq("user_id", authUserId)
+      .order("updated_at", { ascending: false });
+
+    rows = data || [];
+    queryError = error?.message || null;
+  }
+
+  const payload = {
+    authUserId,
+    activeUserId,
+    lastSyncedAuthUserId,
+    authMatchesActive: authUserId === activeUserId,
+    authMatchesLastSync: authUserId === lastSyncedAuthUserId,
+    lastRegisteredTokenPreview: lastRegisteredToken
+      ? `${lastRegisteredToken.slice(0, 10)}…${lastRegisteredToken.slice(-6)}`
+      : null,
+    rowCount: rows.length,
+    rows: rows.map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      user_idMatchesAuth: r.user_id === authUserId,
+      enabled: r.enabled,
+      platform: r.platform,
+      tokenPreview: `${String(r.token || "").slice(0, 10)}…`,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    })),
+    queryError: queryError || authErr?.message || null,
+  };
+
+  console.log("[ArmPal.Push] CURRENT PUSH TOKEN STATE", payload);
+  return payload;
+}
+
+/**
  * Persist an APNs device token for the signed-in user.
  * @param {string} token
  * @param {string} userId
@@ -136,26 +190,45 @@ export async function savePushToken(token, userId) {
     return { ok: false, error: "missing_token_or_user" };
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const authUserId = user?.id || null;
+
+  if (authUserId && authUserId !== userId) {
+    console.warn("[ArmPal.Push] TOKEN SAVE USER MISMATCH — using auth user id", {
+      requestedUserId: userId,
+      authUserId,
+    });
+    userId = authUserId;
+  }
+
   logStep("Saving APNs token to Supabase push_tokens…", {
     userId,
     tokenPreview: `${token.slice(0, 8)}…${token.slice(-8)}`,
   });
 
-  console.log("[ArmPal.Push] SAVING TOKEN FOR USER", {
-    userId,
+  console.log("[ArmPal.Push] UPSERT push_tokens", {
+    user_id: userId,
+    platform: "ios",
+    enabled: true,
     tokenPreview: `${token.slice(0, 10)}…`,
   });
 
-  const { error } = await supabase.from("push_tokens").upsert(
-    {
-      user_id: userId,
-      token,
-      platform: "ios",
-      enabled: true,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,token" }
-  );
+  const { data: upserted, error } = await supabase
+    .from("push_tokens")
+    .upsert(
+      {
+        user_id: userId,
+        token,
+        platform: "ios",
+        enabled: true,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,token" }
+    )
+    .select("id, user_id, created_at, updated_at")
+    .maybeSingle();
 
   if (error) {
     logWarn("token save FAILURE", error.message);
@@ -163,27 +236,102 @@ export async function savePushToken(token, userId) {
     return { ok: false, error: error.message };
   }
 
+  console.log("[ArmPal.Push] TOKEN SAVE SUCCESS", {
+    user_id: userId,
+    rowId: upserted?.id || null,
+    created_at: upserted?.created_at || null,
+    updated_at: upserted?.updated_at || null,
+    tokenPreview: `${token.slice(0, 10)}…`,
+  });
+
+  lastSyncedAuthUserId = userId;
+  activeUserId = userId;
   logStep("token save SUCCESS");
   devNotify("Push token saved");
-  return { ok: true };
+  void logCurrentPushTokenState();
+  return { ok: true, userId, rowId: upserted?.id || null };
+}
+
+/**
+ * Bind the current device APNs token to the CURRENT auth user (account switch safe).
+ */
+export async function syncPushTokenToAuthUser(options = {}) {
+  if (!isNativeApnsSupported()) {
+    return { ok: false, reason: "not_ios" };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const authUserId = user?.id || null;
+
+  if (!authUserId) {
+    console.warn("[ArmPal.Push] syncPushTokenToAuthUser — no auth user");
+    return { ok: false, reason: "no_auth_user" };
+  }
+
+  if (options.expectedUserId && options.expectedUserId !== authUserId) {
+    console.warn("[ArmPal.Push] syncPushTokenToAuthUser — session/auth mismatch", {
+      expectedUserId: options.expectedUserId,
+      authUserId,
+    });
+  }
+
+  const force = !!options.force;
+  if (!force && lastSyncedAuthUserId === authUserId && lastRegisteredToken) {
+    console.log("[ArmPal.Push] syncPushTokenToAuthUser — already synced", { authUserId });
+    return { ok: true, skipped: true, userId: authUserId };
+  }
+
+  activeUserId = authUserId;
+  console.log("[ArmPal.Push] SYNC TOKEN TO AUTH USER", {
+    authUserId,
+    previousSyncedUserId: lastSyncedAuthUserId,
+    hasDeviceToken: !!lastRegisteredToken,
+  });
+
+  if (lastRegisteredToken) {
+    return savePushToken(lastRegisteredToken, authUserId);
+  }
+
+  return initPushNotifications({ id: authUserId }, { force: true });
 }
 
 /**
  * Re-associate the current device APNs token with the signed-in user (account switch).
  */
 export async function rebindApnsTokenForUser(userId) {
-  if (!userId || !isNativeApnsSupported()) {
-    return { ok: false, reason: "unsupported_or_missing_user" };
-  }
+  return syncPushTokenToAuthUser({ force: true, expectedUserId: userId });
+}
 
-  activeUserId = userId;
-  console.log("[ArmPal.Push] REBIND TOKEN FOR USER", { userId });
+/**
+ * Listen for auth changes and re-bind device token to the new account.
+ */
+export function attachPushAuthSync() {
+  if (authSyncAttached) return;
+  authSyncAttached = true;
 
-  if (lastRegisteredToken) {
-    return savePushToken(lastRegisteredToken, userId);
-  }
+  supabase.auth.onAuthStateChange((event, session) => {
+    const userId = session?.user?.id;
+    if (!userId || !isNativeApnsSupported()) return;
 
-  return initPushNotifications({ id: userId }, { force: true });
+    const userChanged = lastSyncedAuthUserId !== userId;
+    const shouldSync =
+      userChanged ||
+      event === "SIGNED_IN" ||
+      event === "INITIAL_SESSION" ||
+      event === "USER_UPDATED";
+
+    if (!shouldSync) return;
+
+    console.log("[ArmPal.Push] AUTH CHANGE — sync push token", {
+      event,
+      userId,
+      previousSyncedUserId: lastSyncedAuthUserId,
+    });
+
+    void syncPushTokenToAuthUser({ force: userChanged, expectedUserId: userId });
+  });
 }
 
 /**
@@ -348,6 +496,8 @@ export async function initPushNotifications(user, options = {}) {
 
     if (lastRegisteredToken && activeUserId === user.id) {
       await savePushToken(lastRegisteredToken, user.id);
+    } else if (lastRegisteredToken) {
+      await syncPushTokenToAuthUser({ force: true, expectedUserId: user.id });
     }
 
     return { ok: true, permission: perm.receive };

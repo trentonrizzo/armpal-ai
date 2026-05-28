@@ -142,8 +142,19 @@ export async function notifyFriendAcceptPush({
 }
 
 export async function notifyTestPush(userId) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const targetUserId = user?.id || userId;
+
+  console.log("[ArmPal.Push] notifyTestPush", {
+    requestedUserId: userId,
+    authUserId: user?.id || null,
+    targetUserId,
+  });
+
   return sendPushToUser({
-    userId,
+    userId: targetUserId,
     title: "ArmPal Test",
     body: "Push notifications are working",
     data: { type: "test_push" },

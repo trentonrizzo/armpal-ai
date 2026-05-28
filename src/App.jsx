@@ -81,7 +81,7 @@ import {
   bootstrapAuthSession,
 } from "./utils/authBootstrap";
 import { syncCurrentSession } from "./lib/accountManager";
-import { initPushNotifications, attachApnsPushListeners, rebindApnsTokenForUser } from "./lib/pushNotifications";
+import { initPushNotifications, attachApnsPushListeners, attachPushAuthSync, syncPushTokenToAuthUser } from "./lib/pushNotifications";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -634,6 +634,7 @@ export default function App() {
   useEffect(() => {
     void bootstrapNativeLocalNotifications();
     void attachApnsPushListeners();
+    attachPushAuthSync();
   }, []);
 
   const pushInitUserRef = useRef(null);
@@ -656,9 +657,8 @@ export default function App() {
     void (async () => {
       if (accountChanged) {
         await initPushNotifications(session.user);
-      } else {
-        await rebindApnsTokenForUser(userId);
       }
+      await syncPushTokenToAuthUser({ force: accountChanged, expectedUserId: userId });
     })();
   }, [session?.user?.id]);
 

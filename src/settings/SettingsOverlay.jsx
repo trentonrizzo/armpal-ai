@@ -9,6 +9,8 @@ import {
   getPushTokenDebugInfo,
   initPushNotifications,
   isNativeApnsSupported,
+  logCurrentPushTokenState,
+  syncPushTokenToAuthUser,
 } from "../lib/pushNotifications";
 import { notifyTestPush } from "../lib/pushDelivery";
 import { useTheme } from "../context/ThemeContext";
@@ -415,21 +417,44 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     }
   }
 
-  async function sendDevTestPush() {
+  async function debugMyPushTokens() {
     if (!user?.id) return;
     setNotifBusy(true);
     try {
-      console.log("[ArmPal.Push] TEST PUSH TO SELF START", { userId: user.id });
-      const result = await notifyTestPush(user.id);
-      console.log("[ArmPal.Push] TEST PUSH TO SELF RESPONSE", result);
+      await syncPushTokenToAuthUser({ force: true });
+      await logCurrentPushTokenState();
+      await refreshPushDebugInfo(user.id);
+      toast.success("Push token rows logged to console");
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
+  async function sendDevTestPushToMyself() {
+    setNotifBusy(true);
+    try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser?.id) {
+        toast.error("Not signed in");
+        return;
+      }
+
+      await syncPushTokenToAuthUser({ force: true, expectedUserId: authUser.id });
+
+      console.log("[ArmPal.Push] TEST PUSH TO MYSELF START", { authUserId: authUser.id });
+      const result = await notifyTestPush(authUser.id);
+      console.log("[ArmPal.Push] TEST PUSH TO MYSELF RESPONSE", result);
+
       if (result.ok && result.sent > 0) {
         toast.success(`Test push delivered (${result.sent})`);
       } else if (result.reason === "no_tokens") {
-        toast.error("No push token saved for this account. Stay logged in and reopen Settings.");
+        toast.error("No push token for this account. Tap Debug My Push Tokens first.");
       } else {
         toast.error(result.error || result.reason || "Test push failed");
       }
-      await refreshPushDebugInfo(user.id);
+      await refreshPushDebugInfo(authUser.id);
     } finally {
       setNotifBusy(false);
     }
@@ -752,6 +777,29 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     </div>
                     <button
                       type="button"
+                      disabled={notifBusy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void debugMyPushTokens();
+                      }}
+                      style={{
+                        marginTop: 8,
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        border: "1px solid var(--border)",
+                        background: "var(--card-2)",
+                        color: "var(--text)",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: notifBusy ? "default" : "pointer",
+                        opacity: notifBusy ? 0.6 : 1,
+                      }}
+                    >
+                      Debug My Push Tokens
+                    </button>
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         void refreshPushDebugInfo(user.id);
@@ -777,7 +825,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     disabled={notifBusy}
                     onClick={(e) => {
                       e.stopPropagation();
-                      void sendDevTestPush();
+                      void sendDevTestPushToMyself();
                     }}
                     style={{
                       marginTop: 10,
@@ -793,7 +841,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                       opacity: notifBusy ? 0.6 : 1,
                     }}
                   >
-                    Send Test Push To Me
+                    Send Test Push To Myself
                   </button>
                 ) : null}
               </div>
@@ -1752,6 +1800,11 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
           if (nextUser?.id) {
             await syncCurrentSession();
             setCurrentAccountPreview(getSavedAccountById(nextUser.id));
+            await syncPushTokenToAuthUser({ force: true, expectedUserId: nextUser.id });
+            await logCurrentPushTokenState();
+            if (showPushDebugTools) {
+              await refreshPushDebugInfo(nextUser.id);
+            }
           }
         }}
       />
