@@ -5,10 +5,7 @@ const LOG = "[ArmPal.Push.Server]";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const WEBHOOK_SECRET =
-  Deno.env.get("SEND_PUSH_WEBHOOK_SECRET") ??
-  Deno.env.get("MESSAGE_PUSH_WEBHOOK_SECRET") ??
-  "";
+const SEND_PUSH_SECRET = Deno.env.get("SEND_PUSH_SECRET") ?? "";
 const APNS_API_URL =
   Deno.env.get("ARMPAL_APNS_API_URL") ?? "https://www.armpal.net/api/send-apns-push";
 const PUSH_INTERNAL_SECRET = Deno.env.get("PUSH_INTERNAL_SECRET") ?? "";
@@ -78,15 +75,9 @@ function formatMessageBody(record: MessageRecord) {
   };
 }
 
-function extractBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
-  const match = auth.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() ?? "";
-}
-
-function extractWebhookSecret(req: Request) {
+function extractProvidedSecret(req: Request) {
   return (
-    extractBearerToken(req) ||
+    req.headers.get("x-arm-pal-push-secret")?.trim() ||
     req.headers.get("x-send-push-secret")?.trim() ||
     req.headers.get("x-message-push-secret")?.trim() ||
     ""
@@ -97,18 +88,26 @@ async function resolveExpectedWebhookSecrets(
   admin: ReturnType<typeof createClient> | null
 ) {
   const secrets = new Set<string>();
-  if (WEBHOOK_SECRET) secrets.add(WEBHOOK_SECRET);
+  if (SEND_PUSH_SECRET) secrets.add(SEND_PUSH_SECRET);
+  if (PUSH_INTERNAL_SECRET) secrets.add(PUSH_INTERNAL_SECRET);
 
   if (!admin) return secrets;
 
-  const keys = ["send_push_secret", "send_push_webhook_secret", "message_push_webhook_secret"];
+  const keys = [
+    "send_push_secret",
+    "send_push_webhook_secret",
+    "message_push_webhook_secret",
+  ];
   const { data, error } = await admin
     .from("app_settings")
     .select("key,value")
     .in("key", keys);
 
   if (error) {
-    console.error(LOG, "auth failure", { reason: "app_settings_lookup_failed", message: error.message });
+    console.error(LOG, "auth failed", {
+      reason: "app_settings_lookup_failed",
+      message: error.message,
+    });
     return secrets;
   }
 
@@ -124,29 +123,36 @@ async function authorizeWebhook(
   req: Request,
   admin: ReturnType<typeof createClient> | null
 ): Promise<{ ok: true } | { ok: false; reason: string; status: number }> {
-  const provided = extractWebhookSecret(req);
   const expectedSecrets = await resolveExpectedWebhookSecrets(admin);
 
   if (!expectedSecrets.size) {
+    console.error(LOG, "auth failed", {
+      reason: "missing SEND_PUSH_SECRET and PUSH_INTERNAL_SECRET edge secrets",
+    });
     return {
       ok: false,
-      reason: "webhook_secret_not_configured — set SEND_PUSH_WEBHOOK_SECRET or app_settings.send_push_secret",
+      reason: "missing SEND_PUSH_SECRET or PUSH_INTERNAL_SECRET",
       status: 500,
     };
   }
 
+  const provided = extractProvidedSecret(req);
   if (!provided) {
+    console.error(LOG, "auth failed", { reason: "missing x-arm-pal-push-secret header" });
     return {
       ok: false,
-      reason: "missing Authorization Bearer token (or x-send-push-secret header)",
+      reason: "missing x-arm-pal-push-secret header",
       status: 401,
     };
   }
 
   if (!expectedSecrets.has(provided)) {
+    console.error(LOG, "auth failed", {
+      reason: "secret mismatch — sync app_settings.send_push_secret with SEND_PUSH_SECRET",
+    });
     return {
       ok: false,
-      reason: "secret mismatch — verify SEND_PUSH_WEBHOOK_SECRET matches app_settings.send_push_secret",
+      reason: "secret mismatch",
       status: 401,
     };
   }
@@ -408,21 +414,17 @@ Deno.serve(async (req) => {
 
   console.log(LOG, "webhook received", {
     method: req.method,
-    hasAuthorization: Boolean(req.headers.get("authorization") ?? req.headers.get("Authorization")),
-    hasLegacySecretHeader: Boolean(
-      req.headers.get("x-send-push-secret") ?? req.headers.get("x-message-push-secret")
-    ),
+    hasPushSecretHeader: Boolean(req.headers.get("x-arm-pal-push-secret")),
   });
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    console.error(LOG, "auth failure", { reason: "missing_supabase_env" });
+    console.error(LOG, "auth failed", { reason: "missing_supabase_env" });
     return jsonResponse({ ok: false, error: "misconfigured" }, 500);
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const auth = await authorizeWebhook(req, admin);
   if (!auth.ok) {
-    console.error(LOG, "auth failure", { reason: auth.reason });
     return jsonResponse({ ok: false, error: "unauthorized", reason: auth.reason }, auth.status);
   }
 
