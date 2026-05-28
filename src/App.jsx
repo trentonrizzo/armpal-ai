@@ -80,7 +80,7 @@ import {
   bootstrapAuthSession,
 } from "./utils/authBootstrap";
 import { syncCurrentSession } from "./lib/accountManager";
-import { initPushNotifications } from "./lib/pushNotifications";
+import { initPushNotifications, attachApnsPushListeners } from "./lib/pushNotifications";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -620,6 +620,7 @@ export default function App() {
 
   useEffect(() => {
     void bootstrapNativeLocalNotifications();
+    void attachApnsPushListeners();
   }, []);
 
   const pushInitUserRef = useRef(null);
@@ -632,6 +633,7 @@ export default function App() {
     }
     if (pushInitUserRef.current === userId) return;
     pushInitUserRef.current = userId;
+    console.log("[ArmPal.APNs] App session ready — starting initPushNotifications", { userId });
     void initPushNotifications(session.user);
   }, [session?.user?.id, session?.user]);
 

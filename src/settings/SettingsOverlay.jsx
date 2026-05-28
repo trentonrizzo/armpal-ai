@@ -2,6 +2,14 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { enablePush, disablePush } from "../lib/push";
+import {
+  attachApnsPushListeners,
+  disableApnsPush,
+  getApnsPushStatus,
+  initPushNotifications,
+  isNativeApnsSupported,
+} from "../lib/pushNotifications";
+import { sendPushToUser } from "../lib/sendPush";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../components/ToastProvider";
 import { updateProfile } from "../utils/profile";
@@ -207,6 +215,9 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const [notifSupported, setNotifSupported] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifBusy, setNotifBusy] = useState(false);
+  const [nativeApnsMode, setNativeApnsMode] = useState(false);
+  const [apnsPermission, setApnsPermission] = useState("unknown");
+  const [apnsHasToken, setApnsHasToken] = useState(false);
   const [achFeedbackOn, setAchFeedbackOn] = useState(true);
 
   const remindersSupported = isNativeNotificationsSupported();
@@ -272,18 +283,42 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
         setCurrentAccountPreview(null);
       }
       setReminderSettingsState(getReminderSettings(u?.id));
-      const supported = typeof Notification !== "undefined";
-      setNotifSupported(supported);
-      if (supported && u?.id) {
-        const perm = Notification.permission === "granted";
-        const { data: subs } = await supabase
-          .from("push_subscriptions")
-          .select("id")
-          .eq("user_id", u.id)
-          .limit(1);
-        setNotifEnabled(perm && subs?.length > 0);
-      } else if (supported) {
-        setNotifEnabled(Notification.permission === "granted");
+
+      const nativeApns = isNativeApnsSupported();
+      setNativeApnsMode(nativeApns);
+
+      if (nativeApns) {
+        setNotifSupported(true);
+        await attachApnsPushListeners();
+        if (u?.id) {
+          await initPushNotifications(u, { force: true });
+        }
+        let apnsStatus = await getApnsPushStatus(u?.id);
+        for (let i = 0; i < 6 && u?.id && !apnsStatus.hasToken; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          apnsStatus = await getApnsPushStatus(u.id);
+        }
+        setApnsPermission(apnsStatus.permission);
+        setApnsHasToken(apnsStatus.hasToken);
+        setNotifEnabled(apnsStatus.permission === "granted" && apnsStatus.hasToken);
+      } else {
+        const supported = typeof Notification !== "undefined";
+        setNotifSupported(supported);
+        if (supported && u?.id) {
+          const perm = Notification.permission === "granted";
+          const { data: subs } = await supabase
+            .from("push_subscriptions")
+            .select("id")
+            .eq("user_id", u.id)
+            .limit(1);
+          setNotifEnabled(perm && subs?.length > 0);
+        } else if (supported) {
+          setNotifEnabled(Notification.permission === "granted");
+        } else {
+          setNotifEnabled(false);
+        }
+        setApnsPermission("unsupported");
+        setApnsHasToken(false);
       }
 
       if (isNativeNotificationsSupported()) {
@@ -323,6 +358,21 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
 
     setNotifBusy(true);
     try {
+      if (nativeApnsMode) {
+        if (notifEnabled) {
+          await disableApnsPush(user.id);
+          setNotifEnabled(false);
+          setApnsHasToken(false);
+        } else {
+          await initPushNotifications(user, { force: true });
+          const apnsStatus = await getApnsPushStatus(user.id);
+          setApnsPermission(apnsStatus.permission);
+          setApnsHasToken(apnsStatus.hasToken);
+          setNotifEnabled(apnsStatus.permission === "granted" && apnsStatus.hasToken);
+        }
+        return;
+      }
+
       if (notifEnabled) {
         await disablePush(user.id);
         setNotifEnabled(false);
@@ -347,6 +397,39 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     } finally {
       setNotifBusy(false);
     }
+  }
+
+  async function sendDevTestPush() {
+    if (!user?.id) return;
+    setNotifBusy(true);
+    try {
+      const result = await sendPushToUser({
+        userId: user.id,
+        title: "ArmPal Test",
+        body: "Push notifications are working",
+        data: { type: "test_push" },
+      });
+      if (result.ok) {
+        toast.success("Test push sent");
+      } else {
+        toast.error(result.error || "Test push failed");
+      }
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
+  function cloudActivityLabel() {
+    if (nativeApnsMode) {
+      if (apnsPermission === "granted" && apnsHasToken) return "Cloud activity: On";
+      if (apnsPermission === "granted") return "Cloud activity: Registering…";
+      if (apnsPermission === "denied") return "Cloud activity: Off (denied)";
+      return "Cloud activity: Off";
+    }
+    if (notifSupported) {
+      return notifEnabled ? "Cloud activity: On" : "Cloud activity: Off";
+    }
+    return "Cloud activity: Unsupported";
   }
 
   async function updateReminders(partial) {
@@ -589,11 +672,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
             <div style={{ fontWeight: 800 }}>Notifications</div>
             <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.35 }}>
               <div>
-                {notifSupported
-                  ? notifEnabled
-                    ? "Cloud activity: On"
-                    : "Cloud activity: Off"
-                  : "Cloud activity: Unsupported"}
+                {cloudActivityLabel()}
               </div>
               {remindersSupported && (
                 <div style={{ marginTop: 2, opacity: 0.75 }}>
@@ -613,9 +692,12 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     marginBottom: 10,
                   }}
                 >
-                  Cloud activity uses your browser’s push permission. On-device reminders use
-                  iOS/Android local notifications (see Reminders below) and work even when cloud
-                  push is unavailable.
+                  Cloud activity uses{" "}
+                  {nativeApnsMode
+                    ? "Apple Push Notifications on this device."
+                    : "your browser’s push permission."}{" "}
+                  On-device reminders use iOS/Android local notifications (see Reminders below) and
+                  work even when cloud push is unavailable.
                 </div>
                 <TogglePill
                   on={notifEnabled}
@@ -625,6 +707,31 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
                     toggleNotifications();
                   }}
                 />
+                {import.meta.env.DEV && nativeApnsMode && user?.id ? (
+                  <button
+                    type="button"
+                    disabled={notifBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void sendDevTestPush();
+                    }}
+                    style={{
+                      marginTop: 10,
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: "1px solid var(--border)",
+                      background: "var(--card)",
+                      color: "var(--text)",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: notifBusy ? "default" : "pointer",
+                      opacity: notifBusy ? 0.6 : 1,
+                    }}
+                  >
+                    Send test push (dev)
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
