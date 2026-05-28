@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
 import http2 from "node:http2";
 
-const LOG = "[ArmPal.Push]";
+const API_LOG = "[ArmPal.Push.API]";
 
 function normalizePrivateKey(key) {
   return String(key || "").replace(/\\n/g, "\n").trim();
@@ -96,6 +96,21 @@ function getApnsEnv() {
  * Send APNs alert to all enabled iOS tokens for a user (server-side only).
  */
 export async function sendApnsToUser({ userId, title, body, data = {} }) {
+  console.log(API_LOG, "ROUTE HIT", { handler: "sendApnsToUser", userId });
+
+  const requestBody = { userId, title, body, data };
+  console.log(API_LOG, "BODY", requestBody);
+
+  if (!userId) {
+    console.error(API_LOG, "APNS FAILURE", { reason: "missing_userId" });
+    return { ok: false, error: "Missing userId", sent: 0, failed: 0 };
+  }
+
+  if (!title && !body) {
+    console.error(API_LOG, "APNS FAILURE", { reason: "missing_title_or_body" });
+    return { ok: false, error: "Missing title/body", sent: 0, failed: 0 };
+  }
+
   const env = getApnsEnv();
 
   if (
@@ -106,19 +121,13 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     !env.SUPABASE_URL ||
     !env.SUPABASE_SERVICE_ROLE_KEY
   ) {
-    console.warn(LOG, "apns error", { reason: "not_configured" });
+    console.error(API_LOG, "APNS FAILURE", { reason: "apns_not_configured" });
     return { ok: false, error: "APNs not configured", sent: 0, failed: 0 };
-  }
-
-  if (!userId) {
-    return { ok: false, error: "Missing userId", sent: 0, failed: 0 };
   }
 
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-  console.log(LOG, "Supabase token lookup", { userId, table: "push_tokens" });
-
-  const { data: tokenRows, error: tokenErr } = await supabase
+  const { data: tokens, error: tokenErr } = await supabase
     .from("push_tokens")
     .select("id, token")
     .eq("user_id", userId)
@@ -126,19 +135,17 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     .eq("platform", "ios");
 
   if (tokenErr) {
-    console.warn(LOG, "apns error", { reason: "token_lookup_failed", message: tokenErr.message });
+    console.error(API_LOG, "APNS FAILURE", { reason: "token_lookup_failed", message: tokenErr.message });
     return { ok: false, error: tokenErr.message, sent: 0, failed: 0 };
   }
 
-  const tokenCount = tokenRows?.length || 0;
-  console.log(LOG, "tokens found", {
-    userId,
-    tokenCount,
-    tokenIds: (tokenRows || []).map((r) => r.id),
+  console.log(API_LOG, "RECIPIENT TOKENS", {
+    count: tokens?.length || 0,
+    previews: (tokens || []).map((t) => String(t.token || "").slice(0, 10)),
   });
 
-  if (!tokenCount) {
-    console.warn(LOG, "push failed", { reason: "no_tokens", userId });
+  if (!tokens?.length) {
+    console.error(API_LOG, "NO TOKENS FOUND", { userId });
     return { ok: true, sent: 0, failed: 0, reason: "no_tokens", tokenCount: 0 };
   }
 
@@ -148,7 +155,7 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     normalizePrivateKey(env.APNS_PRIVATE_KEY)
   );
 
-  const apnsPayload = {
+  const payload = {
     aps: {
       alert: {
         title: title || "ArmPal",
@@ -159,42 +166,36 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     ...data,
   };
 
-  const useSandbox = env.APNS_USE_SANDBOX;
-  console.log(LOG, "apns request start", {
+  console.log(API_LOG, "APNS SEND START", {
     userId,
-    tokenCount,
+    tokenCount: tokens.length,
     topic: env.APNS_BUNDLE_ID,
-    sandbox: useSandbox,
-    title,
-    bodyPreview: String(body || "").slice(0, 120),
+    sandbox: env.APNS_USE_SANDBOX,
   });
+  console.log(API_LOG, "PAYLOAD", payload);
 
   let sent = 0;
   let failed = 0;
   const results = [];
 
-  for (const row of tokenRows) {
-    const tokenPreview = `${String(row.token).slice(0, 8)}…${String(row.token).slice(-8)}`;
+  for (const row of tokens) {
     try {
       const result = await sendApnsNotification({
         deviceToken: row.token,
         jwt,
         topic: env.APNS_BUNDLE_ID,
-        payload: apnsPayload,
-        useSandbox,
-      });
-
-      console.log(LOG, "APNs HTTP status", {
-        tokenId: row.id,
-        tokenPreview,
-        status: result.status,
-        body: result.body || "",
+        payload,
+        useSandbox: env.APNS_USE_SANDBOX,
       });
 
       if (result.status === 200) {
         sent += 1;
-        results.push({ ok: true, tokenId: row.id });
-        console.log(LOG, "apns success", { tokenId: row.id, tokenPreview });
+        results.push({ ok: true, tokenId: row.id, status: result.status });
+        console.log(API_LOG, "APNS SUCCESS", {
+          tokenId: row.id,
+          status: result.status,
+          body: result.body || "",
+        });
       } else {
         failed += 1;
         results.push({
@@ -203,9 +204,8 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
           status: result.status,
           body: result.body,
         });
-        console.warn(LOG, "apns error", {
+        console.error(API_LOG, "APNS FAILURE", {
           tokenId: row.id,
-          tokenPreview,
           status: result.status,
           body: result.body,
         });
@@ -220,19 +220,9 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     } catch (err) {
       failed += 1;
       results.push({ ok: false, tokenId: row.id, error: err?.message || String(err) });
-      console.warn(LOG, "apns error", {
-        tokenId: row.id,
-        tokenPreview,
-        error: err?.message || String(err),
-      });
+      console.error(API_LOG, "APNS FAILURE", err);
     }
   }
 
-  if (sent > 0) {
-    console.log(LOG, "push sent", { userId, sent, failed, tokenCount });
-  } else {
-    console.warn(LOG, "push failed", { userId, sent, failed, tokenCount, results });
-  }
-
-  return { ok: sent > 0 || failed === 0, sent, failed, tokenCount, results };
+  return { ok: sent > 0 || failed === 0, sent, failed, tokenCount: tokens.length, results };
 }

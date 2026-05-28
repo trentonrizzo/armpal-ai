@@ -23,7 +23,7 @@ import React, {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { firePush, notifyChatMessagePush, debugGlobalChatPush } from "../lib/pushDelivery";
+import { notifyChatMessagePush } from "../lib/pushDelivery";
 import {
   FiArrowLeft,
   FiSend,
@@ -396,8 +396,13 @@ export default function ChatPage() {
       if (import.meta.env.DEV) console.log("[NOTIFICATION INSERT RESULT]", result);
     } catch (_) {}
 
-    firePush("chat", () =>
-      notifyChatMessagePush({
+    console.log("[ArmPal.Push] PUSH REQUEST START", {
+      recipientId: receiverId,
+      senderId: user?.id,
+    });
+
+    try {
+      const responseData = await notifyChatMessagePush({
         senderId: user?.id,
         recipientId: receiverId,
         senderName: myDisplayName,
@@ -405,18 +410,11 @@ export default function ChatPage() {
         text: pushExtra.text || inAppBody,
         conversationId: friendId || pushExtra.conversationId || null,
         messageId: pushExtra.messageId || null,
-      })
-    );
-
-    debugGlobalChatPush({
-      senderId: user?.id,
-      recipientId: receiverId,
-      senderName: myDisplayName,
-      kind: pushKind,
-      text: pushExtra.text || inAppBody,
-      conversationId: friendId || pushExtra.conversationId || null,
-      messageId: pushExtra.messageId || null,
-    });
+      });
+      console.log("[ArmPal.Push] PUSH REQUEST RESPONSE", responseData);
+    } catch (err) {
+      console.error("[ArmPal.Push] PUSH REQUEST FAILED", err);
+    }
   }
 
   // ----------------------------------------------------------
@@ -1005,6 +1003,15 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
+        console.log("[ArmPal.Push] SEND MESSAGE START", {
+          senderId: user.id,
+          recipientId: friendId,
+          textPreview: payload?.slice?.(0, 40),
+          hasImage: false,
+          hasVoice: false,
+          hasVideo: false,
+          hasWorkout: false,
+        });
         const { data: inserted } = await supabase
           .from("messages")
           .insert({
@@ -1015,6 +1022,9 @@ export default function ChatPage() {
           })
           .select("id")
           .single();
+        console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
+          messageId: inserted?.id || null,
+        });
         notifyRecipient(friendId, payload, "text", { text: payload, messageId: inserted?.id });
       }
     } catch (e) {
@@ -1075,6 +1085,15 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
+        console.log("[ArmPal.Push] SEND MESSAGE START", {
+          senderId: user.id,
+          recipientId: friendId,
+          textPreview: null,
+          hasImage: true,
+          hasVoice: false,
+          hasVideo: false,
+          hasWorkout: false,
+        });
         const { data: inserted } = await supabase
           .from("messages")
           .insert({
@@ -1085,6 +1104,9 @@ export default function ChatPage() {
           })
           .select("id")
           .single();
+        console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
+          messageId: inserted?.id || null,
+        });
         notifyRecipient(friendId, "Sent an image", "photo", { messageId: inserted?.id });
       }
 
@@ -1166,6 +1188,15 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
+        console.log("[ArmPal.Push] SEND MESSAGE START", {
+          senderId: user.id,
+          recipientId: friendId,
+          textPreview: null,
+          hasImage: false,
+          hasVoice: false,
+          hasVideo: true,
+          hasWorkout: false,
+        });
         const { data: inserted } = await supabase
           .from("messages")
           .insert({
@@ -1176,6 +1207,9 @@ export default function ChatPage() {
           })
           .select("id")
           .single();
+        console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
+          messageId: inserted?.id || null,
+        });
         notifyRecipient(friendId, "Sent a video", "video", { messageId: inserted?.id });
       }
 
@@ -1357,6 +1391,15 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
+        console.log("[ArmPal.Push] SEND MESSAGE START", {
+          senderId: user.id,
+          recipientId: friendId,
+          textPreview: null,
+          hasImage: false,
+          hasVoice: true,
+          hasVideo: false,
+          hasWorkout: false,
+        });
         const { data: inserted } = await supabase
           .from("messages")
           .insert({
@@ -1368,6 +1411,9 @@ export default function ChatPage() {
           })
           .select("id")
           .single();
+        console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
+          messageId: inserted?.id || null,
+        });
         notifyRecipient(friendId, "Sent a voice message", "audio", { messageId: inserted?.id });
       }
 

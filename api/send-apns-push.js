@@ -3,37 +3,41 @@ import { handlePushCorsPreflight, setPushCorsHeaders } from "./lib/pushCors.js";
 
 export const config = { runtime: "nodejs" };
 
-const LOG = "[ArmPal.Push]";
+const API_LOG = "[ArmPal.Push.API]";
 
 export default async function handler(req, res) {
   setPushCorsHeaders(req, res);
   if (handlePushCorsPreflight(req, res)) return;
 
+  console.log(API_LOG, "ROUTE HIT", { route: "/api/send-apns-push", method: req.method });
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  console.log(LOG, "backend route hit", { route: "send-apns-push" });
-
   const internalSecret = process.env.PUSH_INTERNAL_SECRET;
   if (internalSecret && req.headers["x-push-secret"] !== internalSecret) {
-    console.warn(LOG, "push failed", { reason: "unauthorized_secret" });
+    console.error(API_LOG, "APNS FAILURE", { reason: "unauthorized_secret" });
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { userId, title, body, data = {} } = req.body || {};
+  const body = req.body || {};
+  console.log(API_LOG, "BODY", body);
+
+  const { userId, title, body: messageBody, data = {} } = body;
+
   if (!userId) {
+    console.error(API_LOG, "APNS FAILURE", { reason: "missing_userId" });
     return res.status(400).json({ error: "Missing userId", sent: 0, failed: 0 });
   }
 
-  console.log(LOG, "backend route payload", {
+  const result = await sendApnsToUser({
     userId,
     title,
-    bodyPreview: String(body || "").slice(0, 120),
-    dataType: data?.type || null,
+    body: messageBody,
+    data,
   });
 
-  const result = await sendApnsToUser({ userId, title, body, data });
   const status = result.error && result.sent === 0 && result.failed === 0 ? 503 : 200;
   return res.status(status).json(result);
 }

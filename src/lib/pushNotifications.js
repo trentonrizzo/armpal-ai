@@ -77,6 +77,7 @@ export async function attachApnsPushListeners() {
     });
 
     await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+      console.log("[ArmPal.Push] FOREGROUND PUSH RECEIVED", notification);
       logStep("pushNotificationReceived (foreground/background delivery)", notification);
       try {
         const title =
@@ -98,6 +99,7 @@ export async function attachApnsPushListeners() {
     });
 
     await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+      console.log("[ArmPal.Push] PUSH OPENED", action);
       logStep("pushNotificationActionPerformed (push tapped)", action);
     });
 

@@ -1,5 +1,5 @@
 import { supabase } from "../supabaseClient";
-import { sendPushToUser, TEST_PUSH_GLOBAL } from "./sendPush";
+import { sendPushToUser } from "./sendPush";
 
 const LOG = "[ArmPal.Push]";
 
@@ -24,43 +24,6 @@ export async function fetchProfileLabel(userId) {
   }
 }
 
-/** Fire-and-forget push with standard logging. Never throws. */
-export function firePush(logLabel, promiseFactory) {
-  console.log(LOG, `${logLabel} push requested`);
-  void (async () => {
-    try {
-      console.log(LOG, "calling sendPushToUser", { label: logLabel });
-      const result = await promiseFactory();
-      if (result?.ok && result?.summary?.sent > 0) {
-        console.log(LOG, "push sent", { label: logLabel, summary: result.summary, url: result.url });
-      } else if (result?.ok && result?.summary?.reason === "no_tokens") {
-        console.warn(LOG, "push failed", {
-          label: logLabel,
-          reason: "no_tokens",
-          summary: result.summary,
-          url: result.url,
-        });
-      } else if (result?.ok) {
-        console.warn(LOG, "push failed", {
-          label: logLabel,
-          reason: "zero_sent",
-          summary: result.summary,
-          url: result.url,
-        });
-      } else {
-        console.warn(LOG, "push failed", {
-          label: logLabel,
-          error: result?.error,
-          summary: result?.summary,
-          url: result?.url,
-        });
-      }
-    } catch (err) {
-      console.warn(LOG, "push failed", { label: logLabel, error: err?.message || err });
-    }
-  })();
-}
-
 /**
  * @param {'text'|'photo'|'video'|'audio'|'workout'|'fallback'} kind
  */
@@ -74,7 +37,7 @@ export async function notifyChatMessagePush({
   messageId = null,
 }) {
   if (!recipientId || !senderId || recipientId === senderId) {
-    return { ok: false, skipped: true };
+    return { ok: false, skipped: true, reason: "self_or_missing" };
   }
 
   const title = senderName || (await fetchProfileLabel(senderId));
@@ -114,60 +77,6 @@ export async function notifyChatMessagePush({
   });
 }
 
-/**
- * Temporary debug duplicate send after chat messages.
- * Calls the same backend route again with explicit TEST_PUSH_GLOBAL logging.
- */
-export function debugGlobalChatPush({
-  senderId,
-  recipientId,
-  senderName,
-  kind = "fallback",
-  text = "",
-  conversationId = null,
-  messageId = null,
-}) {
-  if (!recipientId || !senderId || recipientId === senderId) return;
-
-  void (async () => {
-    const title = senderName || (await fetchProfileLabel(senderId));
-    let body = "Sent you a message";
-    switch (kind) {
-      case "text":
-        body = sanitizePushBody(text) || body;
-        break;
-      case "photo":
-        body = "📷 Sent a photo";
-        break;
-      case "video":
-        body = "🎥 Sent a video";
-        break;
-      case "audio":
-        body = "🎤 Sent a voice message";
-        break;
-      case "workout":
-        body = "💪 Shared a workout";
-        break;
-      default:
-        break;
-    }
-
-    await TEST_PUSH_GLOBAL({
-      userId: recipientId,
-      title,
-      body,
-      data: {
-        type: "chat_message",
-        senderId,
-        recipientId,
-        conversationId,
-        messageId,
-        debug: "TEST_PUSH_GLOBAL",
-      },
-    });
-  })();
-}
-
 export async function notifyFriendRequestPush({
   senderId,
   recipientId,
@@ -177,19 +86,27 @@ export async function notifyFriendRequestPush({
     return { ok: false, skipped: true };
   }
 
-  const senderName = await fetchProfileLabel(senderId);
+  console.log(LOG, "FRIEND REQUEST PUSH START", { senderId, recipientId, requestId });
 
-  return sendPushToUser({
-    userId: recipientId,
-    title: "ArmPal",
-    body: `${senderName} sent you a friend request`,
-    data: {
-      type: "friend_request",
-      senderId,
-      recipientId,
-      requestId,
-    },
-  });
+  try {
+    const senderName = await fetchProfileLabel(senderId);
+    const responseData = await sendPushToUser({
+      userId: recipientId,
+      title: "ArmPal",
+      body: `${senderName} sent you a friend request`,
+      data: {
+        type: "friend_request",
+        senderId,
+        recipientId,
+        requestId,
+      },
+    });
+    console.log(LOG, "FRIEND REQUEST PUSH RESPONSE", responseData);
+    return responseData;
+  } catch (err) {
+    console.error(LOG, "FRIEND REQUEST PUSH FAILED", err);
+    return { ok: false, error: err?.message || String(err) };
+  }
 }
 
 export async function notifyFriendAcceptPush({
@@ -201,19 +118,27 @@ export async function notifyFriendAcceptPush({
     return { ok: false, skipped: true };
   }
 
-  const accepterName = await fetchProfileLabel(accepterId);
+  console.log(LOG, "FRIEND ACCEPT PUSH START", { accepterId, originalSenderId, requestId });
 
-  return sendPushToUser({
-    userId: originalSenderId,
-    title: "ArmPal",
-    body: `${accepterName} accepted your friend request`,
-    data: {
-      type: "friend_accept",
-      accepterId,
-      originalSenderId,
-      requestId,
-    },
-  });
+  try {
+    const accepterName = await fetchProfileLabel(accepterId);
+    const responseData = await sendPushToUser({
+      userId: originalSenderId,
+      title: "ArmPal",
+      body: `${accepterName} accepted your friend request`,
+      data: {
+        type: "friend_accept",
+        accepterId,
+        originalSenderId,
+        requestId,
+      },
+    });
+    console.log(LOG, "FRIEND ACCEPT PUSH RESPONSE", responseData);
+    return responseData;
+  } catch (err) {
+    console.error(LOG, "FRIEND ACCEPT PUSH FAILED", err);
+    return { ok: false, error: err?.message || String(err) };
+  }
 }
 
 export async function notifyTestPush(userId) {
@@ -222,5 +147,12 @@ export async function notifyTestPush(userId) {
     title: "ArmPal Test",
     body: "Push notifications are working",
     data: { type: "test_push" },
+  });
+}
+
+/** Fire-and-forget wrapper for non-chat events. */
+export function firePush(_label, promiseFactory) {
+  void promiseFactory().catch((err) => {
+    console.error(LOG, "PUSH REQUEST FAILED", err);
   });
 }

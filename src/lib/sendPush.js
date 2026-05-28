@@ -3,39 +3,40 @@ import { supabase } from "../supabaseClient";
 import { getPublicSiteOrigin } from "../utils/authPublicUrl";
 
 const LOG = "[ArmPal.Push]";
+const API_ROUTE = "/api/notify-user-push";
 
 /** Absolute API URL — Capacitor native cannot use relative /api paths. */
-export function getPushApiUrl(path = "/api/notify-user-push") {
+export function getPushApiUrl(path = API_ROUTE) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const base = getPublicSiteOrigin();
   return `${base}${normalizedPath}`;
 }
 
 /**
- * Send a push notification via authenticated server route (no secrets in client).
- * @returns {Promise<{ ok: boolean, summary?: object, error?: string, url?: string }>}
+ * Send push via authenticated route → server APNs core (/api/send-apns-push logic).
+ * Never throws; returns response JSON.
  */
 export async function sendPushToUser({ userId, title, body, data = {} }) {
   if (!userId) {
-    console.warn(LOG, "frontend send start skipped — missing userId");
+    console.warn(LOG, "PUSH REQUEST START skipped — missing userId");
     return { ok: false, error: "missing_user_id" };
   }
 
   const requestBody = { userId, title, body, data };
-  const url = getPushApiUrl("/api/notify-user-push");
-  const platform = typeof Capacitor !== "undefined" ? Capacitor.getPlatform() : "web";
-  const isNative = typeof Capacitor !== "undefined" && Capacitor.isNativePlatform();
+  const url = getPushApiUrl(API_ROUTE);
 
-  console.log(LOG, "frontend send start", {
+  console.log(LOG, "PUSH REQUEST START", {
+    route: API_ROUTE,
+    apnsCore: "/api/send-apns-push",
     url,
-    platform,
-    isNative,
-    windowOrigin: typeof window !== "undefined" ? window.location?.origin : null,
-    publicSiteOrigin: getPublicSiteOrigin(),
     userId,
     title,
     bodyPreview: String(body || "").slice(0, 80),
     dataType: data?.type || null,
+    platform: typeof Capacitor !== "undefined" ? Capacitor.getPlatform() : "web",
+    isNative: typeof Capacitor !== "undefined" && Capacitor.isNativePlatform(),
+    windowOrigin: typeof window !== "undefined" ? window.location?.origin : null,
+    publicSiteOrigin: getPublicSiteOrigin(),
   });
   console.log(LOG, "calling sendPushToUser", { requestBody });
 
@@ -45,8 +46,9 @@ export async function sendPushToUser({ userId, title, body, data = {} }) {
     } = await supabase.auth.getSession();
     const accessToken = session?.access_token;
     if (!accessToken) {
-      console.warn(LOG, "frontend send response — not authenticated");
-      return { ok: false, error: "not_authenticated", url };
+      const err = { ok: false, error: "not_authenticated", url };
+      console.error(LOG, "PUSH REQUEST FAILED", err);
+      return err;
     }
 
     const res = await fetch(url, {
@@ -59,58 +61,38 @@ export async function sendPushToUser({ userId, title, body, data = {} }) {
     });
 
     const detail = await res.text().catch(() => "");
-    let summary = {};
+    let responseData = {};
     try {
-      summary = detail ? JSON.parse(detail) : {};
+      responseData = detail ? JSON.parse(detail) : {};
     } catch {
-      summary = { raw: detail };
+      responseData = { raw: detail };
     }
 
-    console.log(LOG, "frontend send response", {
+    console.log(LOG, "PUSH REQUEST RESPONSE", {
       url,
       status: res.status,
       ok: res.ok,
-      summary,
+      responseData,
       rawPreview: detail.slice(0, 500),
     });
 
     if (!res.ok) {
-      console.warn(LOG, "push failed", {
-        reason: "http_error",
+      console.error(LOG, "PUSH REQUEST FAILED", {
         status: res.status,
-        error: summary?.error || detail,
-        summary,
+        error: responseData?.error || detail,
+        responseData,
       });
-      return { ok: false, error: summary?.error || detail || `HTTP ${res.status}`, summary, url };
+      return {
+        ok: false,
+        error: responseData?.error || detail || `HTTP ${res.status}`,
+        ...responseData,
+        url,
+      };
     }
 
-    if (summary.sent > 0) {
-      console.log(LOG, "push sent", summary);
-    } else {
-      console.warn(LOG, "push failed", {
-        reason: summary.reason || summary.error || "zero_sent",
-        summary,
-      });
-    }
-
-    return { ok: res.ok, summary, url };
+    return { ok: true, ...responseData, url };
   } catch (err) {
-    console.warn(LOG, "push failed", {
-      reason: "fetch_exception",
-      error: err?.message || String(err),
-      url,
-    });
+    console.error(LOG, "PUSH REQUEST FAILED", err);
     return { ok: false, error: err?.message || String(err), url };
   }
-}
-
-/**
- * Temporary debug helper — duplicate push send with explicit logging.
- * Safe to no-op if the primary send already succeeded.
- */
-export async function TEST_PUSH_GLOBAL({ userId, title, body, data = {} }) {
-  console.log(LOG, "TEST_PUSH_GLOBAL start", { userId, title, body, data });
-  const result = await sendPushToUser({ userId, title, body, data });
-  console.log(LOG, "TEST_PUSH_GLOBAL result", result);
-  return result;
 }

@@ -4,6 +4,7 @@ import { handlePushCorsPreflight, setPushCorsHeaders } from "./lib/pushCors.js";
 
 export const config = { runtime: "nodejs" };
 
+const API_LOG = "[ArmPal.Push.API]";
 const LOG = "[ArmPal.Push]";
 
 function validatePushAuthorization(userId, recipientId, data = {}) {
@@ -51,15 +52,18 @@ export default async function handler(req, res) {
   setPushCorsHeaders(req, res);
   if (handlePushCorsPreflight(req, res)) return;
 
+  console.log(API_LOG, "ROUTE HIT", { route: "/api/notify-user-push", method: req.method });
+  console.log(LOG, "backend route hit", {
+    origin: req.headers.origin || null,
+    userAgent: req.headers["user-agent"] || null,
+  });
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  console.log(LOG, "backend route hit", {
-    method: req.method,
-    origin: req.headers.origin || null,
-    userAgent: req.headers["user-agent"] || null,
-  });
+  const body = req.body || {};
+  console.log(API_LOG, "BODY", body);
 
   const authHeader = req.headers.authorization || "";
   const accessToken = authHeader.startsWith("Bearer ")
@@ -70,11 +74,7 @@ export default async function handler(req, res) {
   const supabaseKey = SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !supabaseKey || !accessToken) {
-    console.warn(LOG, "backend route auth missing", {
-      hasSupabaseUrl: !!SUPABASE_URL,
-      hasKey: !!supabaseKey,
-      hasToken: !!accessToken,
-    });
+    console.error(API_LOG, "APNS FAILURE", { reason: "unauthorized_missing_auth" });
     return res.status(401).json({ error: "Unauthorized", sent: 0, failed: 0 });
   }
 
@@ -88,33 +88,27 @@ export default async function handler(req, res) {
   } = await supabase.auth.getUser();
 
   if (userErr || !user?.id) {
-    console.warn(LOG, "backend route auth failed", userErr?.message || "no user");
+    console.error(API_LOG, "APNS FAILURE", { reason: "auth_failed", message: userErr?.message });
     return res.status(401).json({ error: "Unauthorized", sent: 0, failed: 0 });
   }
 
-  const { userId: recipientId, title, body, data = {} } = req.body || {};
-  console.log(LOG, "backend route payload", {
-    actorId: user.id,
-    recipientId,
-    title,
-    bodyPreview: String(body || "").slice(0, 120),
-    dataType: data?.type || null,
-  });
+  const { userId: recipientId, title, body: messageBody, data = {} } = body;
 
   if (!recipientId) {
+    console.error(API_LOG, "APNS FAILURE", { reason: "missing_recipientId" });
     return res.status(400).json({ error: "Missing userId", sent: 0, failed: 0 });
   }
 
   const authz = validatePushAuthorization(user.id, recipientId, data);
   if (!authz.ok) {
-    console.warn(LOG, "push failed", { reason: "authorization", error: authz.error });
+    console.error(API_LOG, "APNS FAILURE", { reason: "authorization", error: authz.error });
     return res.status(403).json({ error: authz.error, sent: 0, failed: 0 });
   }
 
   const result = await sendApnsToUser({
     userId: recipientId,
     title,
-    body,
+    body: messageBody,
     data: {
       ...data,
       recipientId,
