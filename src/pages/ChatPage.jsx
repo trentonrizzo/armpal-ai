@@ -23,6 +23,7 @@ import React, {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { sendPushToUser } from "../lib/sendPush";
 import {
   FiArrowLeft,
   FiSend,
@@ -383,17 +384,30 @@ export default function ChatPage() {
   const toast = useToast();
   const isGroup = !!groupId;
 
-  async function notifyRecipient(receiverId, title, body, link) {
-    if (!receiverId) return;
+  async function notifyRecipient(receiverId, inAppBody, pushPreview, pushData = {}) {
+    if (!receiverId || receiverId === user?.id) return;
     try {
       const result = await supabase.from("notifications").insert({
         user_id: receiverId,
-        title: title || "New Message",
-        body: body || "New message",
-        link: link ?? "/messages",
+        title: "New Message",
+        body: inAppBody || "New message",
+        link: "/messages",
       });
       if (import.meta.env.DEV) console.log("[NOTIFICATION INSERT RESULT]", result);
     } catch (_) {}
+
+    const preview = pushPreview || inAppBody || "Sent you a message";
+    void sendPushToUser({
+      userId: receiverId,
+      title: "New ArmPal message",
+      body: `${myDisplayName}: ${preview}`,
+      data: {
+        type: "chat_message",
+        senderId: user?.id,
+        conversationId: friendId || null,
+        ...pushData,
+      },
+    });
   }
 
   // ----------------------------------------------------------
@@ -401,6 +415,7 @@ export default function ChatPage() {
   // ----------------------------------------------------------
 
   const [user, setUser] = useState(null);
+  const [myDisplayName, setMyDisplayName] = useState("Someone");
   const [isPro, setIsPro] = useState(false);
   const [friend, setFriend] = useState(null);
   const [group, setGroup] = useState(null);
@@ -693,11 +708,14 @@ export default function ChatPage() {
     (async () => {
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("is_pro")
+        .select("is_pro, display_name, username, handle")
         .eq("id", user.id)
         .maybeSingle();
       if (!error) {
         setIsPro(!!profile?.is_pro);
+        setMyDisplayName(
+          profile?.display_name || profile?.username || profile?.handle || "Someone"
+        );
       }
     })();
   }, [user?.id]);
@@ -984,7 +1002,7 @@ export default function ChatPage() {
           group_id: null,
           text: payload,
         });
-        notifyRecipient(friendId, "New Message", payload, "/messages");
+        notifyRecipient(friendId, payload, payload);
       }
     } catch (e) {
       const msg = e?.message || "Send failed";
@@ -1050,7 +1068,7 @@ export default function ChatPage() {
           group_id: null,
           image_url: data.publicUrl,
         });
-        notifyRecipient(friendId, "New Message", "Sent an image", "/messages");
+        notifyRecipient(friendId, "Sent an image", "Sent you a message");
       }
 
       const { error: incRpcError } = await supabase.rpc("increment_media_count", {
@@ -1137,7 +1155,7 @@ export default function ChatPage() {
           group_id: null,
           video_url: data.publicUrl,
         });
-        notifyRecipient(friendId, "New Message", "Sent a video", "/messages");
+        notifyRecipient(friendId, "Sent a video", "Sent you a message");
       }
 
       const { error: incRpcError } = await supabase.rpc("increment_media_count", {
@@ -1325,7 +1343,7 @@ export default function ChatPage() {
           audio_url: data.publicUrl,
           audio_duration: recordDuration,
         });
-        notifyRecipient(friendId, "New Message", "Sent a voice message", "/messages");
+        notifyRecipient(friendId, "Sent a voice message", "Sent you a message");
       }
 
       setRecordedBlob(null);

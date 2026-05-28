@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useCallback, useEffect, useState, lazy, Suspense } from "react";
+import React, { useCallback, useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useParams, useNavigate, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 
@@ -80,6 +80,7 @@ import {
   bootstrapAuthSession,
 } from "./utils/authBootstrap";
 import { syncCurrentSession } from "./lib/accountManager";
+import { initPushNotifications } from "./lib/pushNotifications";
 
 /* ============================
    ACHIEVEMENT OVERLAY (FIX)
@@ -620,6 +621,19 @@ export default function App() {
   useEffect(() => {
     void bootstrapNativeLocalNotifications();
   }, []);
+
+  const pushInitUserRef = useRef(null);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      pushInitUserRef.current = null;
+      return;
+    }
+    if (pushInitUserRef.current === userId) return;
+    pushInitUserRef.current = userId;
+    void initPushNotifications(session.user);
+  }, [session?.user?.id, session?.user]);
 
   // Logged-out theme defaults — skip during any recovery flow / URL tokens.
   useEffect(() => {

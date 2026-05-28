@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { sendPushToUser } from "../lib/sendPush";
 
 /** @typedef {'friends'|'pending_sent'|'pending_received'|'none'|'self'} FriendRequestStatus */
 
@@ -90,6 +91,31 @@ export async function sendFriendRequestToUser(currentUserId, receiverId, message
       console.error("friend_requests insert error:", insertErr);
       return { ok: false, message: "Error sending request.", status: "none" };
     }
+
+    void (async () => {
+      try {
+        const { data: senderProfile } = await supabase
+          .from("profiles")
+          .select("display_name, username, handle")
+          .eq("id", currentUserId)
+          .maybeSingle();
+        const senderName =
+          senderProfile?.display_name ||
+          senderProfile?.username ||
+          senderProfile?.handle ||
+          "Someone";
+        await sendPushToUser({
+          userId: receiverId,
+          title: "New friend request",
+          body: `${senderName} sent you a friend request`,
+          data: { type: "friend_request", senderId: currentUserId },
+        });
+      } catch (pushErr) {
+        if (import.meta.env.DEV) {
+          console.warn("[friendRequests] push notify failed:", pushErr?.message || pushErr);
+        }
+      }
+    })();
 
     return { ok: true, message: successMessage, status: "pending_sent" };
   } catch (err) {
