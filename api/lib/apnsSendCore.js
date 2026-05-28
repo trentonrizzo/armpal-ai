@@ -4,16 +4,6 @@ import http2 from "node:http2";
 
 const LOG = "[ArmPal.Push]";
 
-function logStep(message, extra) {
-  if (extra !== undefined) console.log(LOG, message, extra);
-  else console.log(LOG, message);
-}
-
-function logWarn(message, extra) {
-  if (extra !== undefined) console.warn(LOG, message, extra);
-  else console.warn(LOG, message);
-}
-
 function normalizePrivateKey(key) {
   return String(key || "").replace(/\\n/g, "\n").trim();
 }
@@ -116,7 +106,7 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     !env.SUPABASE_URL ||
     !env.SUPABASE_SERVICE_ROLE_KEY
   ) {
-    logWarn("APNs not configured");
+    console.warn(LOG, "apns error", { reason: "not_configured" });
     return { ok: false, error: "APNs not configured", sent: 0, failed: 0 };
   }
 
@@ -126,6 +116,8 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
 
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
+  console.log(LOG, "Supabase token lookup", { userId, table: "push_tokens" });
+
   const { data: tokenRows, error: tokenErr } = await supabase
     .from("push_tokens")
     .select("id, token")
@@ -134,13 +126,20 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     .eq("platform", "ios");
 
   if (tokenErr) {
-    logWarn("token lookup failed", tokenErr.message);
+    console.warn(LOG, "apns error", { reason: "token_lookup_failed", message: tokenErr.message });
     return { ok: false, error: tokenErr.message, sent: 0, failed: 0 };
   }
 
-  if (!tokenRows?.length) {
-    logStep("no enabled tokens for user", { userId });
-    return { ok: true, sent: 0, failed: 0, reason: "no_tokens" };
+  const tokenCount = tokenRows?.length || 0;
+  console.log(LOG, "tokens found", {
+    userId,
+    tokenCount,
+    tokenIds: (tokenRows || []).map((r) => r.id),
+  });
+
+  if (!tokenCount) {
+    console.warn(LOG, "push failed", { reason: "no_tokens", userId });
+    return { ok: true, sent: 0, failed: 0, reason: "no_tokens", tokenCount: 0 };
   }
 
   const jwt = createApnsJwt(
@@ -160,28 +159,53 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     ...data,
   };
 
+  const useSandbox = env.APNS_USE_SANDBOX;
+  console.log(LOG, "apns request start", {
+    userId,
+    tokenCount,
+    topic: env.APNS_BUNDLE_ID,
+    sandbox: useSandbox,
+    title,
+    bodyPreview: String(body || "").slice(0, 120),
+  });
+
   let sent = 0;
   let failed = 0;
   const results = [];
 
   for (const row of tokenRows) {
+    const tokenPreview = `${String(row.token).slice(0, 8)}…${String(row.token).slice(-8)}`;
     try {
       const result = await sendApnsNotification({
         deviceToken: row.token,
         jwt,
         topic: env.APNS_BUNDLE_ID,
         payload: apnsPayload,
-        useSandbox: env.APNS_USE_SANDBOX,
+        useSandbox,
+      });
+
+      console.log(LOG, "APNs HTTP status", {
+        tokenId: row.id,
+        tokenPreview,
+        status: result.status,
+        body: result.body || "",
       });
 
       if (result.status === 200) {
         sent += 1;
         results.push({ ok: true, tokenId: row.id });
+        console.log(LOG, "apns success", { tokenId: row.id, tokenPreview });
       } else {
         failed += 1;
         results.push({
           ok: false,
           tokenId: row.id,
+          status: result.status,
+          body: result.body,
+        });
+        console.warn(LOG, "apns error", {
+          tokenId: row.id,
+          tokenPreview,
           status: result.status,
           body: result.body,
         });
@@ -191,17 +215,24 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
             .from("push_tokens")
             .update({ enabled: false, updated_at: new Date().toISOString() })
             .eq("id", row.id);
-          logWarn("disabled invalid token", { tokenId: row.id, status: result.status });
         }
       }
     } catch (err) {
       failed += 1;
       results.push({ ok: false, tokenId: row.id, error: err?.message || String(err) });
+      console.warn(LOG, "apns error", {
+        tokenId: row.id,
+        tokenPreview,
+        error: err?.message || String(err),
+      });
     }
   }
 
-  if (sent > 0) logStep("push sent", { userId, sent, failed });
-  else if (failed > 0) logWarn("push failed", { userId, sent, failed });
+  if (sent > 0) {
+    console.log(LOG, "push sent", { userId, sent, failed, tokenCount });
+  } else {
+    console.warn(LOG, "push failed", { userId, sent, failed, tokenCount, results });
+  }
 
-  return { ok: sent > 0 || failed === 0, sent, failed, results };
+  return { ok: sent > 0 || failed === 0, sent, failed, tokenCount, results };
 }

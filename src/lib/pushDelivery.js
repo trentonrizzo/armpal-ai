@@ -1,5 +1,5 @@
 import { supabase } from "../supabaseClient";
-import { sendPushToUser } from "./sendPush";
+import { sendPushToUser, TEST_PUSH_GLOBAL } from "./sendPush";
 
 const LOG = "[ArmPal.Push]";
 
@@ -29,15 +29,31 @@ export function firePush(logLabel, promiseFactory) {
   console.log(LOG, `${logLabel} push requested`);
   void (async () => {
     try {
+      console.log(LOG, "calling sendPushToUser", { label: logLabel });
       const result = await promiseFactory();
       if (result?.ok && result?.summary?.sent > 0) {
-        console.log(LOG, "push sent", { label: logLabel, summary: result.summary });
+        console.log(LOG, "push sent", { label: logLabel, summary: result.summary, url: result.url });
+      } else if (result?.ok && result?.summary?.reason === "no_tokens") {
+        console.warn(LOG, "push failed", {
+          label: logLabel,
+          reason: "no_tokens",
+          summary: result.summary,
+          url: result.url,
+        });
       } else if (result?.ok) {
-        if (import.meta.env.DEV) {
-          console.log(LOG, "push dispatch complete", { label: logLabel, summary: result.summary });
-        }
+        console.warn(LOG, "push failed", {
+          label: logLabel,
+          reason: "zero_sent",
+          summary: result.summary,
+          url: result.url,
+        });
       } else {
-        console.warn(LOG, "push failed", { label: logLabel, error: result?.error, summary: result?.summary });
+        console.warn(LOG, "push failed", {
+          label: logLabel,
+          error: result?.error,
+          summary: result?.summary,
+          url: result?.url,
+        });
       }
     } catch (err) {
       console.warn(LOG, "push failed", { label: logLabel, error: err?.message || err });
@@ -96,6 +112,60 @@ export async function notifyChatMessagePush({
       messageId,
     },
   });
+}
+
+/**
+ * Temporary debug duplicate send after chat messages.
+ * Calls the same backend route again with explicit TEST_PUSH_GLOBAL logging.
+ */
+export function debugGlobalChatPush({
+  senderId,
+  recipientId,
+  senderName,
+  kind = "fallback",
+  text = "",
+  conversationId = null,
+  messageId = null,
+}) {
+  if (!recipientId || !senderId || recipientId === senderId) return;
+
+  void (async () => {
+    const title = senderName || (await fetchProfileLabel(senderId));
+    let body = "Sent you a message";
+    switch (kind) {
+      case "text":
+        body = sanitizePushBody(text) || body;
+        break;
+      case "photo":
+        body = "📷 Sent a photo";
+        break;
+      case "video":
+        body = "🎥 Sent a video";
+        break;
+      case "audio":
+        body = "🎤 Sent a voice message";
+        break;
+      case "workout":
+        body = "💪 Shared a workout";
+        break;
+      default:
+        break;
+    }
+
+    await TEST_PUSH_GLOBAL({
+      userId: recipientId,
+      title,
+      body,
+      data: {
+        type: "chat_message",
+        senderId,
+        recipientId,
+        conversationId,
+        messageId,
+        debug: "TEST_PUSH_GLOBAL",
+      },
+    });
+  })();
 }
 
 export async function notifyFriendRequestPush({

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendApnsToUser } from "./lib/apnsSendCore.js";
+import { handlePushCorsPreflight, setPushCorsHeaders } from "./lib/pushCors.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -47,9 +48,18 @@ function validatePushAuthorization(userId, recipientId, data = {}) {
 }
 
 export default async function handler(req, res) {
+  setPushCorsHeaders(req, res);
+  if (handlePushCorsPreflight(req, res)) return;
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
+
+  console.log(LOG, "backend route hit", {
+    method: req.method,
+    origin: req.headers.origin || null,
+    userAgent: req.headers["user-agent"] || null,
+  });
 
   const authHeader = req.headers.authorization || "";
   const accessToken = authHeader.startsWith("Bearer ")
@@ -60,6 +70,11 @@ export default async function handler(req, res) {
   const supabaseKey = SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !supabaseKey || !accessToken) {
+    console.warn(LOG, "backend route auth missing", {
+      hasSupabaseUrl: !!SUPABASE_URL,
+      hasKey: !!supabaseKey,
+      hasToken: !!accessToken,
+    });
     return res.status(401).json({ error: "Unauthorized", sent: 0, failed: 0 });
   }
 
@@ -73,26 +88,28 @@ export default async function handler(req, res) {
   } = await supabase.auth.getUser();
 
   if (userErr || !user?.id) {
-    console.warn(LOG, "auth failed", userErr?.message || "no user");
+    console.warn(LOG, "backend route auth failed", userErr?.message || "no user");
     return res.status(401).json({ error: "Unauthorized", sent: 0, failed: 0 });
   }
 
   const { userId: recipientId, title, body, data = {} } = req.body || {};
+  console.log(LOG, "backend route payload", {
+    actorId: user.id,
+    recipientId,
+    title,
+    bodyPreview: String(body || "").slice(0, 120),
+    dataType: data?.type || null,
+  });
+
   if (!recipientId) {
     return res.status(400).json({ error: "Missing userId", sent: 0, failed: 0 });
   }
 
   const authz = validatePushAuthorization(user.id, recipientId, data);
   if (!authz.ok) {
-    console.warn(LOG, "push authorization rejected", authz.error);
+    console.warn(LOG, "push failed", { reason: "authorization", error: authz.error });
     return res.status(403).json({ error: authz.error, sent: 0, failed: 0 });
   }
-
-  console.log(LOG, "notify-user-push requested", {
-    actorId: user.id,
-    recipientId,
-    type: data?.type || null,
-  });
 
   const result = await sendApnsToUser({
     userId: recipientId,

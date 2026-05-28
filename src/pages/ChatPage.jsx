@@ -23,7 +23,7 @@ import React, {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { firePush, notifyChatMessagePush } from "../lib/pushDelivery";
+import { firePush, notifyChatMessagePush, debugGlobalChatPush } from "../lib/pushDelivery";
 import {
   FiArrowLeft,
   FiSend,
@@ -407,6 +407,16 @@ export default function ChatPage() {
         messageId: pushExtra.messageId || null,
       })
     );
+
+    debugGlobalChatPush({
+      senderId: user?.id,
+      recipientId: receiverId,
+      senderName: myDisplayName,
+      kind: pushKind,
+      text: pushExtra.text || inAppBody,
+      conversationId: friendId || pushExtra.conversationId || null,
+      messageId: pushExtra.messageId || null,
+    });
   }
 
   // ----------------------------------------------------------
