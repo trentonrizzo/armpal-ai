@@ -56,6 +56,7 @@ import BottomNav from "./components/BottomNav/BottomNav";
 import ShareWorkoutsModal from "./components/workouts/ShareWorkoutsModal";
 import { FaShare } from "react-icons/fa";
 import NotificationsBell from "./components/notifications/NotificationsBell";
+import { useToast } from "./components/ToastProvider";
 
 import usePresence from "./hooks/usePresence";
 import useNotifications from "./hooks/useNotifications";
@@ -169,6 +170,7 @@ function AuthenticatedLayout({ session }) {
   const [notifQueue, setNotifQueue] = useState([]);
   const location = useLocation();
   const navigate = useNavigate();
+  const toast = useToast();
   const { setTheme, setAccent } = useTheme();
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [onboardingLoaded, setOnboardingLoaded] = useState(false);
@@ -187,6 +189,17 @@ function AuthenticatedLayout({ session }) {
   );
 
   useInAppBannerNotifications(session?.user?.id, isSuppressedFn, setNotifQueue);
+
+  useEffect(() => {
+    const onForegroundPush = (event) => {
+      const title = event?.detail?.title || "ArmPal";
+      const body = event?.detail?.body || "";
+      if (body) toast.success(`${title}: ${body}`);
+      else toast.success(title);
+    };
+    window.addEventListener("armpal-apns-foreground", onForegroundPush);
+    return () => window.removeEventListener("armpal-apns-foreground", onForegroundPush);
+  }, [toast]);
 
   // If the user already turned on local reminders, repair permission after login (native only).
   useEffect(() => {

@@ -5,6 +5,7 @@ import { normalizeWorkoutForShare } from "../../utils/workoutShare";
 import { useToast } from "../ToastProvider";
 import { bumpWorkoutShareCount } from "../../features/achievements/shareStats";
 import { safeRunAchievementEvaluation } from "../../features/achievements/runner";
+import { firePush, fetchProfileLabel, notifyChatMessagePush } from "../../lib/pushDelivery";
 
 /**
  * ShareWorkoutsModal (WORKING UI + WORKING SEND)
@@ -274,6 +275,19 @@ export default function ShareWorkoutsModal({ open, onClose }) {
       }
 
       // Close on success + toast
+      const senderName = await fetchProfileLabel(uid);
+      for (const fid of friendIds) {
+        firePush("chat", () =>
+          notifyChatMessagePush({
+            senderId: uid,
+            recipientId: fid,
+            senderName,
+            kind: "workout",
+            conversationId: fid,
+          })
+        );
+      }
+
       if (toast?.success) toast.success("Workout sent");
       bumpWorkoutShareCount(uid, friendIds.length * payloads.length);
       safeRunAchievementEvaluation(uid, {});

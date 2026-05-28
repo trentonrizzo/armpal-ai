@@ -23,7 +23,7 @@ import React, {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { sendPushToUser } from "../lib/sendPush";
+import { firePush, notifyChatMessagePush } from "../lib/pushDelivery";
 import {
   FiArrowLeft,
   FiSend,
@@ -384,7 +384,7 @@ export default function ChatPage() {
   const toast = useToast();
   const isGroup = !!groupId;
 
-  async function notifyRecipient(receiverId, inAppBody, pushPreview, pushData = {}) {
+  async function notifyRecipient(receiverId, inAppBody, pushKind, pushExtra = {}) {
     if (!receiverId || receiverId === user?.id) return;
     try {
       const result = await supabase.from("notifications").insert({
@@ -396,18 +396,17 @@ export default function ChatPage() {
       if (import.meta.env.DEV) console.log("[NOTIFICATION INSERT RESULT]", result);
     } catch (_) {}
 
-    const preview = pushPreview || inAppBody || "Sent you a message";
-    void sendPushToUser({
-      userId: receiverId,
-      title: "New ArmPal message",
-      body: `${myDisplayName}: ${preview}`,
-      data: {
-        type: "chat_message",
+    firePush("chat", () =>
+      notifyChatMessagePush({
         senderId: user?.id,
-        conversationId: friendId || null,
-        ...pushData,
-      },
-    });
+        recipientId: receiverId,
+        senderName: myDisplayName,
+        kind: pushKind,
+        text: pushExtra.text || inAppBody,
+        conversationId: friendId || pushExtra.conversationId || null,
+        messageId: pushExtra.messageId || null,
+      })
+    );
   }
 
   // ----------------------------------------------------------
@@ -996,13 +995,17 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
-        await supabase.from("messages").insert({
-          sender_id: user.id,
-          receiver_id: friendId,
-          group_id: null,
-          text: payload,
-        });
-        notifyRecipient(friendId, payload, payload);
+        const { data: inserted } = await supabase
+          .from("messages")
+          .insert({
+            sender_id: user.id,
+            receiver_id: friendId,
+            group_id: null,
+            text: payload,
+          })
+          .select("id")
+          .single();
+        notifyRecipient(friendId, payload, "text", { text: payload, messageId: inserted?.id });
       }
     } catch (e) {
       const msg = e?.message || "Send failed";
@@ -1062,13 +1065,17 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
-        await supabase.from("messages").insert({
-          sender_id: user.id,
-          receiver_id: friendId,
-          group_id: null,
-          image_url: data.publicUrl,
-        });
-        notifyRecipient(friendId, "Sent an image", "Sent you a message");
+        const { data: inserted } = await supabase
+          .from("messages")
+          .insert({
+            sender_id: user.id,
+            receiver_id: friendId,
+            group_id: null,
+            image_url: data.publicUrl,
+          })
+          .select("id")
+          .single();
+        notifyRecipient(friendId, "Sent an image", "photo", { messageId: inserted?.id });
       }
 
       const { error: incRpcError } = await supabase.rpc("increment_media_count", {
@@ -1149,13 +1156,17 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
-        await supabase.from("messages").insert({
-          sender_id: user.id,
-          receiver_id: friendId,
-          group_id: null,
-          video_url: data.publicUrl,
-        });
-        notifyRecipient(friendId, "Sent a video", "Sent you a message");
+        const { data: inserted } = await supabase
+          .from("messages")
+          .insert({
+            sender_id: user.id,
+            receiver_id: friendId,
+            group_id: null,
+            video_url: data.publicUrl,
+          })
+          .select("id")
+          .single();
+        notifyRecipient(friendId, "Sent a video", "video", { messageId: inserted?.id });
       }
 
       const { error: incRpcError } = await supabase.rpc("increment_media_count", {
@@ -1336,14 +1347,18 @@ export default function ChatPage() {
         });
         if (groupMsgErr) console.error("GROUP MESSAGE INSERT ERROR:", groupMsgErr);
       } else {
-        await supabase.from("messages").insert({
-          sender_id: user.id,
-          receiver_id: friendId,
-          group_id: null,
-          audio_url: data.publicUrl,
-          audio_duration: recordDuration,
-        });
-        notifyRecipient(friendId, "Sent a voice message", "Sent you a message");
+        const { data: inserted } = await supabase
+          .from("messages")
+          .insert({
+            sender_id: user.id,
+            receiver_id: friendId,
+            group_id: null,
+            audio_url: data.publicUrl,
+            audio_duration: recordDuration,
+          })
+          .select("id")
+          .single();
+        notifyRecipient(friendId, "Sent a voice message", "audio", { messageId: inserted?.id });
       }
 
       setRecordedBlob(null);

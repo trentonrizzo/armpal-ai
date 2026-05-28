@@ -1,19 +1,30 @@
+import { supabase } from "../supabaseClient";
+
+const LOG = "[ArmPal.Push]";
+
 /**
- * Client helper — request server-side APNs delivery for a user.
- * Fails silently in production UI; warns in dev.
+ * Send a push notification via authenticated server route (no secrets in client).
  * @returns {Promise<{ ok: boolean, summary?: object, error?: string }>}
  */
 export async function sendPushToUser({ userId, title, body, data = {} }) {
   if (!userId) return { ok: false, error: "missing_user_id" };
 
   try {
-    const headers = { "Content-Type": "application/json" };
-    const secret = import.meta.env.VITE_PUSH_INTERNAL_SECRET;
-    if (secret) headers["x-push-secret"] = secret;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      if (import.meta.env.DEV) console.warn(LOG, "push failed — not authenticated");
+      return { ok: false, error: "not_authenticated" };
+    }
 
-    const res = await fetch("/api/send-apns-push", {
+    const res = await fetch("/api/notify-user-push", {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({ userId, title, body, data }),
     });
 
@@ -26,20 +37,19 @@ export async function sendPushToUser({ userId, title, body, data = {} }) {
     }
 
     if (!res.ok) {
-      if (import.meta.env.DEV) {
-        console.warn("[push] send failed:", res.status, summary);
-      }
+      console.warn(LOG, "push failed", res.status, summary?.error || summary);
       return { ok: false, error: summary?.error || detail || `HTTP ${res.status}`, summary };
     }
 
-    if (import.meta.env.DEV) {
-      console.log("[push] send success:", summary);
+    if (summary.sent > 0) {
+      console.log(LOG, "push sent", summary);
+    } else if (import.meta.env.DEV) {
+      console.log(LOG, "push dispatch complete", summary);
     }
+
     return { ok: true, summary };
   } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn("[push] send error:", err?.message || err);
-    }
+    console.warn(LOG, "push failed", err?.message || err);
     return { ok: false, error: err?.message || String(err) };
   }
 }

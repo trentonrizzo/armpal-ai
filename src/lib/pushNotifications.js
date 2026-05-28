@@ -78,6 +78,23 @@ export async function attachApnsPushListeners() {
 
     await PushNotifications.addListener("pushNotificationReceived", (notification) => {
       logStep("pushNotificationReceived (foreground/background delivery)", notification);
+      try {
+        const title =
+          notification?.title ||
+          notification?.notification?.title ||
+          notification?.data?.title ||
+          "ArmPal";
+        const body =
+          notification?.body ||
+          notification?.notification?.body ||
+          notification?.data?.body ||
+          "";
+        window.dispatchEvent(
+          new CustomEvent("armpal-apns-foreground", { detail: { title, body } })
+        );
+      } catch {
+        /* ignore */
+      }
     });
 
     await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {

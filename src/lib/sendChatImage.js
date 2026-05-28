@@ -7,6 +7,7 @@
 // preserved as-is.
 
 import { supabase } from "../supabaseClient";
+import { firePush, fetchProfileLabel, notifyChatMessagePush } from "./pushDelivery";
 
 const BUCKET_IMAGES = "chat-images";
 
@@ -79,18 +80,33 @@ export async function sendImageToFriend({ senderId, friendId, file, fileName }) 
       return { ok: false, error: "Image URL unavailable." };
     }
 
-    const { error: insErr } = await supabase.from("messages").insert({
-      sender_id: senderId,
-      receiver_id: friendId,
-      group_id: null,
-      image_url: pubData.publicUrl,
-    });
+    const { data: inserted, error: insErr } = await supabase
+      .from("messages")
+      .insert({
+        sender_id: senderId,
+        receiver_id: friendId,
+        group_id: null,
+        image_url: pubData.publicUrl,
+      })
+      .select("id")
+      .single();
     if (insErr) {
       return { ok: false, error: insErr.message || "Could not send." };
     }
 
     // Best-effort side-effects (do not fail the send if these error).
-    notifyRecipient(friendId, "New Message", "Sent an image", "/messages");
+    notifyRecipient(friendId, "Sent an image", "/messages");
+    const senderName = await fetchProfileLabel(senderId);
+    firePush("chat", () =>
+      notifyChatMessagePush({
+        senderId,
+        recipientId: friendId,
+        senderName,
+        kind: "photo",
+        conversationId: friendId,
+        messageId: inserted?.id || null,
+      })
+    );
     try {
       await supabase.rpc("increment_media_count", {
         user_id: senderId,

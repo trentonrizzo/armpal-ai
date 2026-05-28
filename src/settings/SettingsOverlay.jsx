@@ -9,7 +9,7 @@ import {
   initPushNotifications,
   isNativeApnsSupported,
 } from "../lib/pushNotifications";
-import { sendPushToUser } from "../lib/sendPush";
+import { notifyTestPush } from "../lib/pushDelivery";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../components/ToastProvider";
 import { updateProfile } from "../utils/profile";
@@ -403,12 +403,7 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
     if (!user?.id) return;
     setNotifBusy(true);
     try {
-      const result = await sendPushToUser({
-        userId: user.id,
-        title: "ArmPal Test",
-        body: "Push notifications are working",
-        data: { type: "test_push" },
-      });
+      const result = await notifyTestPush(user.id);
       if (result.ok) {
         toast.success("Test push sent");
       } else {

@@ -15,7 +15,7 @@ import { useToast } from "../components/ToastProvider";
 import EmptyState from "../components/EmptyState";
 import { getRecommended } from "../utils/recommendedFriends";
 import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
-import { sendFriendRequestToUser } from "../services/friendRequests";
+import { sendFriendRequestToUser, acceptFriendRequestById, acceptPendingFriendRow } from "../services/friendRequests";
 
 export default function FriendsPage() {
   const navigate = useNavigate();
@@ -651,12 +651,13 @@ export default function FriendsPage() {
         .single();
       if (!req?.sender_id || !req?.receiver_id) return;
       const otherId = req.receiver_id === user.id ? req.sender_id : req.receiver_id;
-      await supabase.from("friends").insert({
-        user_id: req.sender_id,
-        friend_id: req.receiver_id,
-        status: "accepted",
-      });
-      await supabase.from("friend_requests").delete().eq("id", requestId);
+
+      const result = await acceptFriendRequestById(user.id, requestId);
+      if (!result.ok) {
+        console.error(result.error || "Accept failed");
+        return;
+      }
+
       await loadAllFriends(user.id);
       await loadPendingRequests(user.id);
       setSearchResults((prev) =>
@@ -717,10 +718,11 @@ export default function FriendsPage() {
   // -------------------------------------------------------------------
   async function acceptRequest(rowId) {
     if (!user?.id) return;
-    const { error } = await supabase.from("friends").update({ status: "accepted" }).eq("id", rowId);
-    if (!error) toast.success("Friend added");
+    const result = await acceptPendingFriendRow(user.id, rowId);
+    if (result.ok) toast.success("Friend added");
+    else if (result.error) console.error(result.error);
     await loadAllFriends(user.id);
-    if (!error) safeRunAchievementEvaluation(user.id, { friendCount: undefined });
+    if (result.ok) safeRunAchievementEvaluation(user.id, { friendCount: undefined });
   }
 
   async function declineRequest(rowId) {

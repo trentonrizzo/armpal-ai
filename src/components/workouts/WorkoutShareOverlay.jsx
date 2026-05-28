@@ -7,6 +7,7 @@ import { normalizeWorkoutForShare } from "../../utils/workoutShare";
 import { useToast } from "../ToastProvider";
 import { bumpWorkoutShareCount } from "../../features/achievements/shareStats";
 import { safeRunAchievementEvaluation } from "../../features/achievements/runner";
+import { firePush, fetchProfileLabel, notifyChatMessagePush } from "../../lib/pushDelivery";
 
 /* =====================================================================================
    ARMPAL — WORKOUT SHARE OVERLAY (DOES NOT MODIFY WorkoutsPage.jsx)
@@ -806,6 +807,19 @@ async function sendSelectedWorkouts(toast, exitShareMode, workouts, userId, sele
     console.error("Workout share failed:", error);
     if (toast?.error) toast.error("Failed to send workout");
     return;
+  }
+
+  const senderName = await fetchProfileLabel(userId);
+  for (const friendId of selectedFriendIds) {
+    firePush("chat", () =>
+      notifyChatMessagePush({
+        senderId: userId,
+        recipientId: friendId,
+        senderName,
+        kind: "workout",
+        conversationId: friendId,
+      })
+    );
   }
 
   if (toast?.success) toast.success("Workout sent");
