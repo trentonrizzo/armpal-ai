@@ -7,7 +7,6 @@ import { normalizeWorkoutForShare } from "../../utils/workoutShare";
 import { useToast } from "../ToastProvider";
 import { bumpWorkoutShareCount } from "../../features/achievements/shareStats";
 import { safeRunAchievementEvaluation } from "../../features/achievements/runner";
-import { firePush, fetchProfileLabel, notifyChatMessagePush } from "../../lib/pushDelivery";
 
 /* =====================================================================================
    ARMPAL — WORKOUT SHARE OVERLAY (DOES NOT MODIFY WorkoutsPage.jsx)
@@ -809,19 +808,7 @@ async function sendSelectedWorkouts(toast, exitShareMode, workouts, userId, sele
     return;
   }
 
-  const senderName = await fetchProfileLabel(userId);
-  for (const friendId of selectedFriendIds) {
-    firePush("chat", () =>
-      notifyChatMessagePush({
-        senderId: userId,
-        recipientId: friendId,
-        senderName,
-        kind: "workout",
-        conversationId: friendId,
-      })
-    );
-  }
-
+  // Server-side push fires on messages INSERT (message-push edge function).
   if (toast?.success) toast.success("Workout sent");
   bumpWorkoutShareCount(userId, inserts.length);
   safeRunAchievementEvaluation(userId, {});

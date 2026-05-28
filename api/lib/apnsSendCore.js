@@ -95,19 +95,20 @@ function getApnsEnv() {
 /**
  * Send APNs alert to all enabled iOS tokens for a user (server-side only).
  */
-export async function sendApnsToUser({ userId, title, body, data = {} }) {
-  console.log(API_LOG, "ROUTE HIT", { handler: "sendApnsToUser", userId });
+export async function sendApnsToUser({ userId, title, body, data = {}, logPrefix }) {
+  const LOG = logPrefix || API_LOG;
+  console.log(LOG, "ROUTE HIT", { handler: "sendApnsToUser", userId });
 
   const requestBody = { userId, title, body, data };
-  console.log(API_LOG, "BODY", requestBody);
+  console.log(LOG, "BODY", requestBody);
 
   if (!userId) {
-    console.error(API_LOG, "APNS FAILURE", { reason: "missing_userId" });
+    console.error(LOG, "APNs failure", { reason: "missing_userId" });
     return { ok: false, error: "Missing userId", sent: 0, failed: 0 };
   }
 
   if (!title && !body) {
-    console.error(API_LOG, "APNS FAILURE", { reason: "missing_title_or_body" });
+    console.error(LOG, "APNs failure", { reason: "missing_title_or_body" });
     return { ok: false, error: "Missing title/body", sent: 0, failed: 0 };
   }
 
@@ -121,7 +122,7 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     !env.SUPABASE_URL ||
     !env.SUPABASE_SERVICE_ROLE_KEY
   ) {
-    console.error(API_LOG, "APNS FAILURE", { reason: "apns_not_configured" });
+    console.error(LOG, "APNs failure", { reason: "apns_not_configured" });
     return { ok: false, error: "APNs not configured", sent: 0, failed: 0 };
   }
 
@@ -136,7 +137,9 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
 
   const tokenCount = tokens?.length || 0;
 
-  console.log(API_LOG, "TOKENS QUERY RESULT", {
+  console.log(LOG, "recipient resolved", { recipientId: userId });
+
+  console.log(LOG, "TOKENS QUERY RESULT", {
     recipientId: userId,
     tokenCount,
     rows: (tokens || []).map((t) => ({
@@ -150,11 +153,12 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
   });
 
   if (tokenErr) {
-    console.error(API_LOG, "APNS FAILURE", { reason: "token_lookup_failed", message: tokenErr.message });
+    console.error(LOG, "APNs failure", { reason: "token_lookup_failed", message: tokenErr.message });
     return { ok: false, error: tokenErr.message, sent: 0, failed: 0 };
   }
 
-  console.log(API_LOG, "RECIPIENT TOKENS", {
+  console.log(LOG, "token count", {
+    recipientId: userId,
     count: tokenCount,
     previews: (tokens || []).map((t) => String(t.token || "").slice(0, 10)),
   });
@@ -165,7 +169,7 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
       .select("id, enabled, platform, user_id")
       .eq("user_id", userId);
 
-    console.error(API_LOG, "NO TOKENS FOUND", {
+    console.error(LOG, "APNs failure", {
       userId,
       anyRowsForUser: allRows?.length || 0,
       anyRowsPreview: (allRows || []).map((r) => ({
@@ -199,13 +203,13 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     ...data,
   };
 
-  console.log(API_LOG, "APNS SEND START", {
+  console.log(LOG, "APNS SEND START", {
     userId,
     tokenCount: tokens.length,
     topic: env.APNS_BUNDLE_ID,
     sandbox: env.APNS_USE_SANDBOX,
   });
-  console.log(API_LOG, "PAYLOAD", payload);
+  console.log(LOG, "PAYLOAD", payload);
 
   let sent = 0;
   let failed = 0;
@@ -224,7 +228,7 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
       if (result.status === 200) {
         sent += 1;
         results.push({ ok: true, tokenId: row.id, status: result.status });
-        console.log(API_LOG, "APNS SUCCESS", {
+        console.log(LOG, "APNs success", {
           tokenId: row.id,
           status: result.status,
           body: result.body || "",
@@ -237,7 +241,7 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
           status: result.status,
           body: result.body,
         });
-        console.error(API_LOG, "APNS FAILURE", {
+        console.error(LOG, "APNs failure", {
           tokenId: row.id,
           status: result.status,
           body: result.body,
@@ -253,7 +257,7 @@ export async function sendApnsToUser({ userId, title, body, data = {} }) {
     } catch (err) {
       failed += 1;
       results.push({ ok: false, tokenId: row.id, error: err?.message || String(err) });
-      console.error(API_LOG, "APNS FAILURE", err);
+      console.error(LOG, "APNs failure", err);
     }
   }
 

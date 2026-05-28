@@ -2,7 +2,6 @@ import { supabase } from "../supabaseClient";
 import {
   firePush,
   notifyFriendAcceptPush,
-  notifyFriendRequestPush,
 } from "../lib/pushDelivery";
 
 /** @typedef {'friends'|'pending_sent'|'pending_received'|'none'|'self'} FriendRequestStatus */
@@ -100,13 +99,7 @@ export async function sendFriendRequestToUser(currentUserId, receiverId, message
       return { ok: false, message: "Error sending request.", status: "none" };
     }
 
-    firePush("friend request", () =>
-      notifyFriendRequestPush({
-        senderId: currentUserId,
-        recipientId: receiverId,
-        requestId: inserted?.id || null,
-      })
-    );
+    // Server-side push fires on friend_requests INSERT (message-push edge function).
 
     return { ok: true, message: successMessage, status: "pending_sent" };
   } catch (err) {

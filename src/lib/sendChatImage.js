@@ -7,7 +7,6 @@
 // preserved as-is.
 
 import { supabase } from "../supabaseClient";
-import { fetchProfileLabel, notifyChatMessagePush } from "./pushDelivery";
 
 const BUCKET_IMAGES = "chat-images";
 
@@ -80,16 +79,6 @@ export async function sendImageToFriend({ senderId, friendId, file, fileName }) 
       return { ok: false, error: "Image URL unavailable." };
     }
 
-    console.log("[ArmPal.Push] SEND MESSAGE START", {
-      senderId,
-      recipientId: friendId,
-      textPreview: null,
-      hasImage: true,
-      hasVoice: false,
-      hasVideo: false,
-      hasWorkout: false,
-    });
-
     const { data: inserted, error: insErr } = await supabase
       .from("messages")
       .insert({
@@ -98,38 +87,14 @@ export async function sendImageToFriend({ senderId, friendId, file, fileName }) 
         group_id: null,
         image_url: pubData.publicUrl,
       })
-      .select("id")
+      .select("id, receiver_id")
       .single();
     if (insErr) {
       return { ok: false, error: insErr.message || "Could not send." };
     }
 
-    console.log("[ArmPal.Push] MESSAGE INSERT SUCCESS", {
-      messageId: inserted?.id || null,
-    });
-
-    // Best-effort side-effects (do not fail the send if these error).
-    notifyRecipient(friendId, "Sent an image", "/messages");
-    const senderName = await fetchProfileLabel(senderId);
-
-    if (senderId !== friendId) {
-      console.log("[ArmPal.Push] PUSH REQUEST START", { recipientId: friendId, senderId });
-      try {
-        const responseData = await notifyChatMessagePush({
-          senderId,
-          recipientId: friendId,
-          senderName,
-          kind: "photo",
-          conversationId: friendId,
-          messageId: inserted?.id || null,
-          messageReceiverId: inserted?.receiver_id || friendId,
-          routeFriendId: friendId,
-        });
-        console.log("[ArmPal.Push] PUSH REQUEST RESPONSE", responseData);
-      } catch (err) {
-        console.error("[ArmPal.Push] PUSH REQUEST FAILED", err);
-      }
-    }
+    // In-app notification only — APNs is sent server-side on messages INSERT.
+    notifyRecipient(inserted?.receiver_id || friendId, "Sent an image", "/messages");
     try {
       await supabase.rpc("increment_media_count", {
         user_id: senderId,
