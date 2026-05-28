@@ -15,6 +15,32 @@ function isDuplicateKeyError(error) {
   return code === "23505" || code === 409 || /duplicate/i.test(error?.message || "");
 }
 
+/** When remote schema is missing, skip Supabase calls and use local storage only. */
+let remoteAchievementsUnavailable = false;
+let remoteAchievementsWarningLogged = false;
+
+function isRemoteSchemaUnavailableError(error) {
+  const message = String(error?.message || "");
+  return (
+    error?.code === "42P01" ||
+    error?.code === "PGRST205" ||
+    /could not find (the )?table.*user_achievements/i.test(message) ||
+    /could not find column.*achievement_id/i.test(message) ||
+    /relation.*user_achievements.*does not exist/i.test(message)
+  );
+}
+
+function markRemoteAchievementsUnavailable(error, context) {
+  remoteAchievementsUnavailable = true;
+  if (!remoteAchievementsWarningLogged) {
+    remoteAchievementsWarningLogged = true;
+    console.warn(
+      `[achievements] remote sync disabled (${context}):`,
+      error?.message || error
+    );
+  }
+}
+
 /**
  * Use the authenticated session user id so RLS and local keys stay aligned.
  * @returns {Promise<string | null>}
@@ -64,7 +90,7 @@ function applyLocalPayloadToMap(map, raw) {
 
 async function fetchRemoteUnlockedMap(userId) {
   const map = new Map();
-  if (!userId) return map;
+  if (!userId || remoteAchievementsUnavailable) return map;
 
   const effectiveUserId = await resolveAchievementUserId(userId);
   if (!effectiveUserId) return map;
@@ -81,6 +107,10 @@ async function fetchRemoteUnlockedMap(userId) {
       .eq("user_id", effectiveUserId);
 
     if (error) {
+      if (isRemoteSchemaUnavailableError(error)) {
+        markRemoteAchievementsUnavailable(error, "load");
+        return map;
+      }
       console.warn("[achievements] remote load failed:", error.message);
       return map;
     }
@@ -168,21 +198,31 @@ export async function persistAchievementUnlock(userId, achievementId, unlockedAt
 
   const at = unlockedAt || new Date().toISOString();
 
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      const { error } = await supabase.from("user_achievements").insert({
-        user_id: effectiveUserId,
-        achievement_id: achievementId,
-        unlocked_at: at,
-      });
+  if (!remoteAchievementsUnavailable) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const { error } = await supabase.from("user_achievements").insert({
+          user_id: effectiveUserId,
+          achievement_id: achievementId,
+          unlocked_at: at,
+        });
 
-      if (error && !isDuplicateKeyError(error)) {
-        console.warn("[achievements] remote insert failed:", error.message);
+        if (error) {
+          if (isRemoteSchemaUnavailableError(error)) {
+            markRemoteAchievementsUnavailable(error, "insert");
+          } else if (!isDuplicateKeyError(error)) {
+            console.warn("[achievements] remote insert failed:", error.message);
+          }
+        }
+      }
+    } catch (e) {
+      if (isRemoteSchemaUnavailableError(e)) {
+        markRemoteAchievementsUnavailable(e, "insert");
+      } else {
+        console.warn("[achievements] remote insert error:", e?.message || e);
       }
     }
-  } catch (e) {
-    console.warn("[achievements] remote insert error:", e?.message || e);
   }
 
   await saveLocalUnlock(effectiveUserId, achievementId, at);

@@ -78,13 +78,81 @@ function formatMessageBody(record: MessageRecord) {
   };
 }
 
-function isAuthorizedWebhook(req: Request) {
-  if (!WEBHOOK_SECRET) return true;
-  const secret =
-    req.headers.get("x-send-push-secret") ??
-    req.headers.get("x-message-push-secret") ??
-    "";
-  return secret === WEBHOOK_SECRET;
+function extractBearerToken(req: Request) {
+  const auth = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? "";
+}
+
+function extractWebhookSecret(req: Request) {
+  return (
+    extractBearerToken(req) ||
+    req.headers.get("x-send-push-secret")?.trim() ||
+    req.headers.get("x-message-push-secret")?.trim() ||
+    ""
+  );
+}
+
+async function resolveExpectedWebhookSecrets(
+  admin: ReturnType<typeof createClient> | null
+) {
+  const secrets = new Set<string>();
+  if (WEBHOOK_SECRET) secrets.add(WEBHOOK_SECRET);
+
+  if (!admin) return secrets;
+
+  const keys = ["send_push_secret", "send_push_webhook_secret", "message_push_webhook_secret"];
+  const { data, error } = await admin
+    .from("app_settings")
+    .select("key,value")
+    .in("key", keys);
+
+  if (error) {
+    console.error(LOG, "auth failure", { reason: "app_settings_lookup_failed", message: error.message });
+    return secrets;
+  }
+
+  for (const row of data ?? []) {
+    const value = String(row?.value ?? "").trim();
+    if (value) secrets.add(value);
+  }
+
+  return secrets;
+}
+
+async function authorizeWebhook(
+  req: Request,
+  admin: ReturnType<typeof createClient> | null
+): Promise<{ ok: true } | { ok: false; reason: string; status: number }> {
+  const provided = extractWebhookSecret(req);
+  const expectedSecrets = await resolveExpectedWebhookSecrets(admin);
+
+  if (!expectedSecrets.size) {
+    return {
+      ok: false,
+      reason: "webhook_secret_not_configured — set SEND_PUSH_WEBHOOK_SECRET or app_settings.send_push_secret",
+      status: 500,
+    };
+  }
+
+  if (!provided) {
+    return {
+      ok: false,
+      reason: "missing Authorization Bearer token (or x-send-push-secret header)",
+      status: 401,
+    };
+  }
+
+  if (!expectedSecrets.has(provided)) {
+    return {
+      ok: false,
+      reason: "secret mismatch — verify SEND_PUSH_WEBHOOK_SECRET matches app_settings.send_push_secret",
+      status: 401,
+    };
+  }
+
+  console.log(LOG, "auth success");
+  return { ok: true };
 }
 
 function isDatabaseWebhook(body: Record<string, unknown>) {
@@ -338,14 +406,24 @@ Deno.serve(async (req) => {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  if (!isAuthorizedWebhook(req)) {
-    console.error(LOG, "APNs failure", { reason: "unauthorized_webhook" });
-    return jsonResponse({ ok: false, error: "unauthorized" }, 401);
-  }
+  console.log(LOG, "webhook received", {
+    method: req.method,
+    hasAuthorization: Boolean(req.headers.get("authorization") ?? req.headers.get("Authorization")),
+    hasLegacySecretHeader: Boolean(
+      req.headers.get("x-send-push-secret") ?? req.headers.get("x-message-push-secret")
+    ),
+  });
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    console.error(LOG, "APNs failure", { reason: "missing_supabase_env" });
+    console.error(LOG, "auth failure", { reason: "missing_supabase_env" });
     return jsonResponse({ ok: false, error: "misconfigured" }, 500);
+  }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const auth = await authorizeWebhook(req, admin);
+  if (!auth.ok) {
+    console.error(LOG, "auth failure", { reason: auth.reason });
+    return jsonResponse({ ok: false, error: "unauthorized", reason: auth.reason }, auth.status);
   }
 
   let body: Record<string, unknown>;
@@ -355,7 +433,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: "invalid_json" }, 400);
   }
 
-  console.log(LOG, "webhook received", {
+  console.log(LOG, "webhook payload", {
     table: body?.table ?? null,
     type: body?.type ?? null,
   });
@@ -363,7 +441,6 @@ Deno.serve(async (req) => {
   if (isDatabaseWebhook(body)) {
     const table = String(body.table || "");
     const record = (body.record ?? {}) as Record<string, unknown>;
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     try {
       if (table === "messages") {
