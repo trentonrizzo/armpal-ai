@@ -27,7 +27,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>ArmPal uses the camera so users can upload progress photos, such as physique or arm measurement photos, to track fitness progress over time. Photos are private by default and are only shared publicly if the user chooses to make them public.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app uses the microphone for voice messages.</string>
+	<string>ArmPal uses the microphone for the in-app voice assistant so you can ask about your training and log fitness data by speaking.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to your photos.</string>
 	<key>UIBackgroundModes</key>

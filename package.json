@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:ios:notifications": "bash ios/verify-local-notifications.sh",
-    "generate:branding": "node scripts/generate-branding.mjs"
+    "generate:branding": "node scripts/generate-branding.mjs",
+    "test:voice": "node scripts/test-voice-agent.mjs"
   },
   "dependencies": {
     "@awesome-cordova-plugins/in-app-purchase-2": "^8.1.0",
