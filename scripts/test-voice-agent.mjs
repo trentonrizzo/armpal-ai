@@ -7,8 +7,8 @@ import { estimateOneRepMax } from "../src/lib/oneRepMax.js";
 import { toPounds, normalizeUnit } from "../src/lib/unitConvert.js";
 import { ymdInTimeZone, zonedLocalToUtcIso, isValidTimeZone } from "../src/lib/localDates.js";
 import { findMatchingPrs, resolvePrWrite, scoreLiftName } from "../src/lib/liftMatch.js";
-import { ALLOWED_TOOL_NAMES, REALTIME_TOOLS, TOOL_ALIASES } from "../api/lib/toolCatalog.js";
-import { executeFitnessTool, makeExercise } from "../api/lib/fitnessTools.js";
+import { ALLOWED_TOOL_NAMES, REALTIME_TOOLS, TOOL_ALIASES } from "../api/_realtime/toolCatalog.js";
+import { executeFitnessTool, makeExercise } from "../api/_realtime/fitnessTools.js";
 import sessionHandler from "../api/realtime/session.js";
 import toolsHandler, { parseArgs } from "../api/realtime/tools.js";
 
@@ -356,9 +356,9 @@ await check("tool result shape returns to Realtime conversation", () => {
 
 await check("voice sources do not use service role or log secrets", () => {
   const files = [
-    "api/lib/fitnessTools.js",
-    "api/lib/realtimeAuth.js",
-    "api/lib/toolCatalog.js",
+    "api/_realtime/fitnessTools.js",
+    "api/_realtime/auth.js",
+    "api/_realtime/toolCatalog.js",
     "api/realtime/session.js",
     "api/realtime/tools.js",
     "src/features/voice/realtimeClient.js",

@@ -1,6 +1,6 @@
-import { requireUser } from "../lib/realtimeAuth.js";
-import { ALLOWED_TOOL_NAMES } from "../lib/toolCatalog.js";
-import { executeFitnessTool } from "../lib/fitnessTools.js";
+import { requireUser } from "../_realtime/auth.js";
+import { ALLOWED_TOOL_NAMES } from "../_realtime/toolCatalog.js";
+import { executeFitnessTool } from "../_realtime/fitnessTools.js";
 import { isValidTimeZone } from "../../src/lib/localDates.js";
 
 export const config = { runtime: "nodejs" };

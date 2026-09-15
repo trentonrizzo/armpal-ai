@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
-import { requireUser } from "../lib/realtimeAuth.js";
-import { REALTIME_TOOLS } from "../lib/toolCatalog.js";
+import { requireUser } from "../_realtime/auth.js";
+import { REALTIME_TOOLS } from "../_realtime/toolCatalog.js";
 import { isValidTimeZone, ymdInTimeZone } from "../../src/lib/localDates.js";
 
 export const config = { runtime: "nodejs" };
