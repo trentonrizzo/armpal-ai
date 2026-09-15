@@ -132,7 +132,9 @@ export const REALTIME_TOOLS = [
       reps: num("Reps, optional"),
       unit: str("lb or kg"),
       date: str("YYYY-MM-DD, default today in user timezone"),
-      notes: str("Optional notes"),
+      notes: str(
+        "Copy the user's note wording exactly, especially numbers and units (pounds vs reps, RIR/RPE, in the tank)."
+      ),
     },
     ["lift_name", "weight"]
   ),
@@ -146,7 +148,9 @@ export const REALTIME_TOOLS = [
       reps: num("New reps"),
       unit: str("lb or kg"),
       date: str("YYYY-MM-DD"),
-      notes: str("Notes"),
+      notes: str(
+        "Copy the user's note wording exactly, especially numbers and units (pounds vs reps, RIR/RPE, in the tank)."
+      ),
     }
   ),
   fn(
@@ -332,7 +336,9 @@ export const REALTIME_TOOLS = [
       weight: num("Bodyweight"),
       unit: str("lb or kg"),
       date: str("Local YYYY-MM-DD, default today"),
-      notes: str("Optional notes"),
+      notes: str(
+        "Copy the user's note wording exactly, especially numbers and units (pounds vs reps, RIR/RPE, in the tank)."
+      ),
     },
     ["weight"]
   ),
@@ -354,7 +360,9 @@ export const REALTIME_TOOLS = [
       value: num("Value"),
       unit: str("Unit, e.g. in or cm"),
       date: str("YYYY-MM-DD"),
-      notes: str("Notes"),
+      notes: str(
+        "Copy the user's note wording exactly, especially numbers and units (pounds vs reps, RIR/RPE, in the tank)."
+      ),
     },
     ["name", "value"]
   ),
@@ -367,7 +375,9 @@ export const REALTIME_TOOLS = [
       value: num("Value"),
       unit: str("Unit"),
       date: str("YYYY-MM-DD"),
-      notes: str("Notes"),
+      notes: str(
+        "Copy the user's note wording exactly, especially numbers and units (pounds vs reps, RIR/RPE, in the tank)."
+      ),
     },
     ["measurement_id"]
   ),
@@ -381,7 +391,9 @@ export const REALTIME_TOOLS = [
       carbs: num("Carb grams"),
       fat: num("Fat grams"),
       date: str("Local YYYY-MM-DD, default today"),
-      notes: str("Notes"),
+      notes: str(
+        "Copy the user's note wording exactly, especially numbers and units (pounds vs reps, RIR/RPE, in the tank)."
+      ),
     }
   ),
   fn(

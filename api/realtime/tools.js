@@ -49,6 +49,7 @@ export default async function handler(req, res) {
       user: auth.user,
       supabase: auth.supabase,
       timeZone,
+      userTranscript: typeof body.userTranscript === "string" ? body.userTranscript : "",
     });
     return res.status(200).json(result);
   } catch (err) {

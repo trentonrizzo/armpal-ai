@@ -9,9 +9,17 @@ import { ymdInTimeZone, zonedLocalToUtcIso, isValidTimeZone } from "../src/lib/l
 import { findMatchingPrs, resolvePrWrite, scoreLiftName } from "../src/lib/liftMatch.js";
 import { ALLOWED_TOOL_NAMES, REALTIME_TOOLS, TOOL_ALIASES } from "../api/_realtime/toolCatalog.js";
 import { executeFitnessTool, makeExercise } from "../api/_realtime/fitnessTools.js";
-import sessionHandler, { openaiErrorMeta, sessionFailBody } from "../api/realtime/session.js";
+import sessionHandler, { openaiErrorMeta, sessionFailBody, REALTIME_AUDIO_INPUT } from "../api/realtime/session.js";
 import toolsHandler, { parseArgs } from "../api/realtime/tools.js";
 import { voiceErrorMessage, extractFunctionCalls } from "../src/features/voice/voiceErrors.js";
+import {
+  evaluateUserTurn,
+  canCancelActiveCommand,
+  shouldIgnoreUserTurn,
+  shouldBlockWrite,
+  preserveNoteFidelity,
+  noteNeedsUnitClarification,
+} from "../src/features/voice/voiceTurnSafety.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0;
@@ -381,6 +389,7 @@ await check("voice sources do not use service role or log secrets", () => {
     "src/features/voice/realtimeClient.js",
     "src/features/voice/VoiceAgentButton.jsx",
     "src/features/voice/voiceErrors.js",
+    "src/features/voice/voiceTurnSafety.js",
   ];
   for (const rel of files) {
     const text = readFileSync(join(root, rel), "utf8");
@@ -395,10 +404,114 @@ await check("voice sources do not use service role or log secrets", () => {
   assert.match(readFileSync(join(root, "api/realtime/session.js"), "utf8"), /\[voice\/session\] jwt_verified/);
 });
 
-await check("session instructions refuse fabricated workout history", () => {
+await check("session uses semantic VAD, near-field NR, and English transcription", () => {
+  assert.equal(REALTIME_AUDIO_INPUT.turn_detection.type, "semantic_vad");
+  assert.equal(REALTIME_AUDIO_INPUT.turn_detection.eagerness, "low");
+  assert.equal(REALTIME_AUDIO_INPUT.noise_reduction.type, "near_field");
+  assert.equal(REALTIME_AUDIO_INPUT.transcription.language, "en");
   const text = readFileSync(join(root, "api/realtime/session.js"), "utf8");
+  assert.match(text, /20 pounds in the tank/);
   assert.match(text, /completed workout history is not recorded yet/);
   assert.match(text, /gpt-realtime-2.1/);
+});
+
+await check("normal English command and explicit write are accepted", () => {
+  assert.equal(
+    evaluateUserTurn("Change my bench PR to 375.").action,
+    "accept"
+  );
+  assert.equal(evaluateUserTurn("Update my bio.").action, "accept");
+  assert.equal(
+    shouldBlockWrite({
+      name: "update_pr",
+      userTranscript: "Change my bench to 375.",
+    }),
+    false
+  );
+});
+
+await check("obvious garbage transcripts are rejected", () => {
+  assert.equal(shouldIgnoreUserTurn("Aprovado."), true);
+  assert.equal(shouldIgnoreUserTurn("지금지."), true);
+  assert.equal(shouldIgnoreUserTurn("我PR。"), true);
+  assert.equal(shouldIgnoreUserTurn("Átkozott."), true);
+  assert.equal(evaluateUserTurn("지금지.", { activeWrite: true }).action, "ignore");
+});
+
+await check("foreign fragment cannot cancel or supersede an active write", () => {
+  assert.equal(canCancelActiveCommand("지금지."), false);
+  assert.equal(canCancelActiveCommand("Aprovado."), false);
+  assert.equal(
+    shouldBlockWrite({ name: "update_profile", userTranscript: "지금지." }),
+    true
+  );
+});
+
+await check("stop is an intentional cancel and short commands stay valid", () => {
+  assert.equal(evaluateUserTurn("Stop.").action, "cancel");
+  assert.equal(canCancelActiveCommand("Cancel that."), true);
+  assert.equal(evaluateUserTurn("Yes.").action, "accept");
+  assert.equal(evaluateUserTurn("No.").action, "accept");
+  assert.equal(evaluateUserTurn("Do it.").action, "accept");
+  assert.equal(shouldIgnoreUserTurn("Yes."), false);
+});
+
+await check("background garbage cannot cancel", () => {
+  assert.equal(canCancelActiveCommand("Átkozott."), false);
+  assert.equal(evaluateUserTurn("Átkozott.", { activeWrite: true }).action, "ignore");
+});
+
+await check("note fidelity preserves pounds vs reps", () => {
+  assert.equal(
+    preserveNoteFidelity("20 reps in the tank", "I used elbow wraps and had another 20 pounds in the tank"),
+    "20 pounds in the tank"
+  );
+  assert.equal(
+    preserveNoteFidelity("2 pounds in the tank", "2 reps in reserve"),
+    "2 reps in reserve"
+  );
+  assert.equal(preserveNoteFidelity("375", "bench 375"), "375");
+  assert.equal(noteNeedsUnitClarification("20 in the tank"), true);
+  assert.equal(noteNeedsUnitClarification("20 pounds in the tank"), false);
+});
+
+await check("multi-clause command and conversational follow-up are accepted", () => {
+  const longCmd =
+    "Change my bench PR to 375 for one, put it on Monday, and add a note saying I used elbow wraps and probably had another 20 pounds in the tank.";
+  assert.equal(evaluateUserTurn(longCmd).action, "accept");
+  assert.equal(evaluateUserTurn("When did I hit it?").action, "accept");
+  assert.equal(evaluateUserTurn("What's my bench PR?").action, "accept");
+});
+
+await check("garbage transcript cannot authorize a PR write", async () => {
+  const supabase = createMockSupabase({
+    prs: [{ id: "p1", lift_name: "Bench Press", weight: 315, unit: "lb", reps: 1, date: "2026-01-01" }],
+  });
+  const blocked = await executeFitnessTool({
+    name: "update_pr",
+    args: { lift_query: "bench", weight: 1 },
+    user,
+    supabase,
+    timeZone: "America/Chicago",
+    userTranscript: "지금지.",
+  });
+  assert.equal(blocked.ignored, true);
+  assert.equal(supabase.state.prs[0].weight, 315);
+
+  const allowed = await executeFitnessTool({
+    name: "update_pr",
+    args: {
+      lift_query: "bench",
+      notes: "20 reps in the tank",
+    },
+    user,
+    supabase,
+    timeZone: "America/Chicago",
+    userTranscript: "Add a note that I used elbow wraps and had another 20 pounds in the tank.",
+  });
+  assert.equal(allowed.ok, true);
+  assert.equal(allowed.ignored, undefined);
+  assert.match(String(supabase.state.prs[0].notes), /20 pounds in the tank/);
 });
 
 console.log(`\n${passed} voice-agent checks passed`);

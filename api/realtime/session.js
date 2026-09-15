@@ -44,8 +44,37 @@ Tools:
 - Require confirmation before delete_pr, delete_workout, or delete_goal. Call the delete tool first without confirmed, speak the preview, and only pass confirmed=true after they say yes.
 - When a tool returns needs_confirmation or ambiguous candidates, ask a short clarifying question.
 
-Heaviest lift: use get_heaviest_pr (unit-aware). Do not compare kg and lb as raw numbers yourself.`;
+Heaviest lift: use get_heaviest_pr (unit-aware). Do not compare kg and lb as raw numbers yourself.
+
+Noise and turns:
+- The user speaks English into a near-field iPhone microphone.
+- Ignore background music, TV, radio, fans, distant talk, and random non-English fragments. Never treat them as commands.
+- Do not stop, pause, cancel, or change an in-progress tool because of noise or a nonsense fragment.
+- Only cancel an in-progress action if the user clearly says stop, cancel that, wait, or never mind.
+- Short pauses inside a thought are not the end of the command. Wait until they are actually finished, then act.
+
+Notes and free text:
+- For bio, PR notes, workout notes, and goal notes, copy the user's wording for numbers, units, equipment, RIR/RPE, and "in the tank".
+- Do not paraphrase quantities. "20 pounds in the tank" MUST stay pounds, never "20 reps in the tank".
+- "2 reps in reserve" stays reps.
+- If pounds vs reps is actually ambiguous and you would store it, ask a short clarification before writing.`;
 }
+
+export const REALTIME_AUDIO_INPUT = {
+  transcription: {
+    model: "gpt-4o-mini-transcribe",
+    language: "en",
+    prompt:
+      "Transcribe clear near-field English about lifting, PRs, workouts, and fitness. Ignore background music, TV, radio, and distant speech.",
+  },
+  noise_reduction: { type: "near_field" },
+  turn_detection: {
+    type: "semantic_vad",
+    eagerness: "low",
+    create_response: true,
+    interrupt_response: true,
+  },
+};
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -91,19 +120,7 @@ export default async function handler(req, res) {
       tools: REALTIME_TOOLS,
       tool_choice: "auto",
       audio: {
-        input: {
-          transcription: {
-            model: "gpt-4o-mini-transcribe",
-          },
-          turn_detection: {
-            type: "server_vad",
-            threshold: 0.5,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 550,
-            create_response: true,
-            interrupt_response: true,
-          },
-        },
+        input: REALTIME_AUDIO_INPUT,
         output: {
           voice: "marin",
         },

@@ -1,6 +1,7 @@
 import { dispatchArmpalDataChanged } from "../../lib/armpalDataChanged";
 import { supabase } from "../../supabaseClient";
 import { extractFunctionCalls, voiceErrorMessage } from "./voiceErrors";
+import { evaluateUserTurn, isWriteTool } from "./voiceTurnSafety";
 
 export { extractFunctionCalls, voiceErrorMessage };
 
@@ -8,6 +9,33 @@ const IDLE_MS = 55_000;
 const MAX_MS = 8 * 60_000;
 const REALTIME_CALLS = "https://api.openai.com/v1/realtime/calls";
 const FETCH_OPTS = { credentials: "include" };
+
+function micConstraints() {
+  const supported = navigator.mediaDevices?.getSupportedConstraints?.() || {};
+  const audio = {};
+  if (supported.echoCancellation) audio.echoCancellation = true;
+  if (supported.noiseSuppression) audio.noiseSuppression = true;
+  if (supported.autoGainControl) audio.autoGainControl = true;
+  return Object.keys(audio).length ? audio : true;
+}
+
+async function getMicrophoneStream() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
+  } catch (micErr) {
+    if (micErr?.name === "NotAllowedError" || micErr?.name === "NotFoundError") {
+      throw micErr;
+    }
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (err2) {
+      if (err2?.name === "NotAllowedError" || err2?.name === "NotFoundError") throw err2;
+      return navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+  }
+}
 
 function logStage(stage) {
   try {
@@ -65,6 +93,10 @@ export function createVoiceSession(handlers = {}) {
   let userBuf = "";
   let pendingText = "";
   let connected = false;
+  let lastAcceptedUser = "";
+  let lastUserItemId = "";
+  let toolInFlight = false;
+  let cancelRequested = false;
 
   const emit = (fn, payload) => {
     try {
@@ -132,54 +164,84 @@ export function createVoiceSession(handlers = {}) {
 
   async function runToolCalls(calls) {
     emit(handlers.onState, "working");
+    toolInFlight = true;
+    cancelRequested = false;
     const token = await getAccessToken();
-    for (const call of calls) {
-      let parsed = {};
-      try {
-        parsed = call.arguments ? JSON.parse(call.arguments) : {};
-      } catch {
-        parsed = {};
-      }
-      let result;
-      try {
-        const res = await fetch("/api/realtime/tools", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: call.name,
-            arguments: parsed,
-            timeZone,
-          }),
-        });
-        result = await res.json().catch(() => ({
-          ok: false,
-          error: "I couldn't complete that.",
-        }));
-        if (!res.ok && !result?.error) {
+    const authorizedTranscript = lastAcceptedUser;
+    try {
+      for (const call of calls) {
+        if (cancelRequested) {
+          sendEvent({
+            type: "conversation.item.create",
+            item: {
+              type: "function_call_output",
+              call_id: call.call_id,
+              output: JSON.stringify({ ok: true, cancelled: true }),
+            },
+          });
+          continue;
+        }
+        let parsed = {};
+        try {
+          parsed = call.arguments ? JSON.parse(call.arguments) : {};
+        } catch {
+          parsed = {};
+        }
+        if (cancelRequested && isWriteTool(call.name)) {
+          sendEvent({
+            type: "conversation.item.create",
+            item: {
+              type: "function_call_output",
+              call_id: call.call_id,
+              output: JSON.stringify({ ok: true, cancelled: true }),
+            },
+          });
+          continue;
+        }
+        let result;
+        try {
+          const res = await fetch("/api/realtime/tools", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: call.name,
+              arguments: parsed,
+              timeZone,
+              userTranscript: authorizedTranscript,
+            }),
+          });
+          result = await res.json().catch(() => ({
+            ok: false,
+            error: "I couldn't complete that.",
+          }));
+          if (!res.ok && !result?.error) {
+            result = { ok: false, error: "I couldn't complete that." };
+          }
+        } catch {
           result = { ok: false, error: "I couldn't complete that." };
         }
-      } catch {
-        result = { ok: false, error: "I couldn't complete that." };
+        if (result?.changed) {
+          dispatchArmpalDataChanged(result.changed);
+          emit(handlers.onDataChanged, result.changed);
+        }
+        sendEvent({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: call.call_id,
+            output: JSON.stringify(result),
+          },
+        });
       }
-      if (result?.changed) {
-        dispatchArmpalDataChanged(result.changed);
-        emit(handlers.onDataChanged, result.changed);
-      }
-      sendEvent({
-        type: "conversation.item.create",
-        item: {
-          type: "function_call_output",
-          call_id: call.call_id,
-          output: JSON.stringify(result),
-        },
-      });
+      sendEvent({ type: "response.create" });
+      bumpIdle();
+    } finally {
+      toolInFlight = false;
     }
-    sendEvent({ type: "response.create" });
-    bumpIdle();
   }
 
   function sendEvent(payload) {
@@ -193,32 +255,63 @@ export function createVoiceSession(handlers = {}) {
     if (trimmed) sendText(trimmed);
   }
 
-  function handleServerEvent(event) {
+  function ignoreNoiseTurn(itemId) {
+    const id = itemId || lastUserItemId;
+    if (id) {
+      sendEvent({ type: "conversation.item.delete", item_id: id });
+    }
+    sendEvent({ type: "response.cancel" });
+    if (lastAcceptedUser) emit(handlers.onUserTranscript, lastAcceptedUser);
+  }
+
+  function handleCompletedUserTranscript(raw, itemId) {
+    const verdict = evaluateUserTurn(raw, { activeWrite: toolInFlight });
+    if (verdict.action === "ignore") {
+      userBuf = "";
+      ignoreNoiseTurn(itemId);
+      return;
+    }
+    lastAcceptedUser = verdict.text;
+    userBuf = "";
+    emit(handlers.onUserTranscript, verdict.text);
     bumpIdle();
+    if (verdict.action === "cancel") {
+      cancelRequested = true;
+      sendEvent({ type: "response.cancel" });
+    }
+  }
+
+  function handleServerEvent(event) {
     const type = event?.type;
     if (!type) return;
 
+    if (type === "conversation.item.created" || type === "conversation.item.added") {
+      if (event.item?.role === "user" && event.item?.id) {
+        lastUserItemId = event.item.id;
+      }
+      return;
+    }
+
     if (type === "input_audio_buffer.speech_started") {
       userBuf = "";
-      emit(handlers.onState, "listening");
+      if (!toolInFlight) emit(handlers.onState, "listening");
       return;
     }
     if (type === "input_audio_buffer.speech_stopped") {
-      emit(handlers.onState, "working");
+      if (!toolInFlight) emit(handlers.onState, "working");
       return;
     }
     if (type === "conversation.item.input_audio_transcription.delta") {
       userBuf += event.delta || "";
-      if (userBuf) emit(handlers.onUserTranscript, userBuf);
+      const preview = evaluateUserTurn(userBuf, { activeWrite: toolInFlight });
+      if (preview.display) emit(handlers.onUserTranscript, userBuf);
       return;
     }
     if (
       type === "conversation.item.input_audio_transcription.completed" ||
       type === "conversation.item.input_audio_transcription.done"
     ) {
-      const text = event.transcript || userBuf;
-      userBuf = "";
-      if (text) emit(handlers.onUserTranscript, text);
+      handleCompletedUserTranscript(event.transcript || userBuf, event.item_id);
       return;
     }
     if (
@@ -230,6 +323,7 @@ export function createVoiceSession(handlers = {}) {
       assistantBuf += delta;
       emit(handlers.onAssistantTranscript, assistantBuf);
       emit(handlers.onState, "speaking");
+      bumpIdle();
       return;
     }
     if (
@@ -239,6 +333,7 @@ export function createVoiceSession(handlers = {}) {
     ) {
       const text = event.transcript || assistantBuf;
       if (text) emit(handlers.onAssistantTranscript, text);
+      bumpIdle();
       return;
     }
     if (type === "response.created") {
@@ -255,6 +350,7 @@ export function createVoiceSession(handlers = {}) {
         return;
       }
       emit(handlers.onState, "listening");
+      bumpIdle();
       return;
     }
     if (type === "error" || type === "invalid_request_error") {
@@ -285,16 +381,7 @@ export function createVoiceSession(handlers = {}) {
       throwFromSessionResponse(sessRes, sess);
 
       logStage("microphone");
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true },
-        });
-      } catch (micErr) {
-        if (micErr?.name === "NotAllowedError" || micErr?.name === "NotFoundError") {
-          throw micErr;
-        }
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      }
+      localStream = await getMicrophoneStream();
 
       logStage("peer-connection");
       pc = new RTCPeerConnection();
@@ -394,6 +481,7 @@ export function createVoiceSession(handlers = {}) {
       if (!starting && !pc) void start();
       return true;
     }
+    lastAcceptedUser = trimmed;
     emit(handlers.onUserTranscript, trimmed);
     sendEvent({
       type: "conversation.item.create",

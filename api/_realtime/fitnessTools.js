@@ -12,6 +12,11 @@ import {
   parseStoredTimestamp,
 } from "../../src/lib/localDates.js";
 import { TOOL_ALIASES } from "./toolCatalog.js";
+import {
+  applyTranscriptFidelity,
+  noteNeedsUnitClarification,
+  shouldBlockWrite,
+} from "../../src/features/voice/voiceTurnSafety.js";
 
 function ok(data = {}) {
   return { ok: true, ...data };
@@ -163,11 +168,36 @@ async function getProfile(supabase, userId) {
   });
 }
 
-export async function executeFitnessTool({ name, args, user, supabase, timeZone: tzRaw }) {
+export async function executeFitnessTool({
+  name,
+  args,
+  user,
+  supabase,
+  timeZone: tzRaw,
+  userTranscript = "",
+}) {
   const timeZone = normalizeTimeZone(tzRaw);
   const userId = user.id;
-  const a = args && typeof args === "object" ? args : {};
   const toolName = TOOL_ALIASES[name] || name;
+  if (
+    shouldBlockWrite({
+      name: toolName,
+      userTranscript,
+    })
+  ) {
+    return ok({ ignored: true, skipped: true });
+  }
+  let a = args && typeof args === "object" ? { ...args } : {};
+  a = applyTranscriptFidelity(a, userTranscript);
+  if (
+    (a.notes != null || a.bio != null) &&
+    noteNeedsUnitClarification(userTranscript)
+  ) {
+    return ok({
+      needs_confirmation: true,
+      message: "Did you mean pounds left in the tank, or reps?",
+    });
+  }
 
   switch (toolName) {
     case "get_profile":
