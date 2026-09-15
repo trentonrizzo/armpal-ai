@@ -1,5 +1,5 @@
-import { sendApnsToUser } from "./lib/apnsSendCore.js";
-import { handlePushCorsPreflight, setPushCorsHeaders } from "./lib/pushCors.js";
+import { sendApnsToUser } from "./_lib/apnsSendCore.js";
+import { handlePushCorsPreflight, setPushCorsHeaders } from "./_lib/pushCors.js";
 
 export const config = { runtime: "nodejs" };
 
