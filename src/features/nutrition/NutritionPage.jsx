@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "../../supabaseClient";
+import { useArmpalDataChanged } from "../../hooks/useArmpalDataChanged";
 import {
   fetchEntriesByDate,
   addEntry,
@@ -190,6 +191,11 @@ export default function NutritionPage() {
   React.useEffect(() => {
     loadGoals();
   }, [loadGoals]);
+
+  useArmpalDataChanged(["nutrition"], () => {
+    loadEntries();
+    loadGoals();
+  });
 
   const totals = calculateDailyTotals(entries);
 

@@ -6,6 +6,7 @@ import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import { parseStoredTimestamp, formatStoredTimestamp } from "../utils/workoutTime";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "../components/ToastProvider";
+import { useArmpalDataChanged } from "../hooks/useArmpalDataChanged";
 
 // NEW FRIENDS ICON
 import { FiUsers } from "react-icons/fi";
@@ -76,6 +77,10 @@ export default function Dashboard() {
   useEffect(() => {
     loadUserAndData();
   }, []);
+
+  useArmpalDataChanged(["profile", "goals", "workouts", "prs"], () => {
+    loadUserAndData();
+  });
 
   useEffect(() => {
     if (!user?.id) return;

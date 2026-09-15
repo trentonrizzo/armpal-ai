@@ -49,6 +49,7 @@ import React, {
 
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { useArmpalDataChanged } from "../hooks/useArmpalDataChanged";
 import ProfileMediaGallery from "../components/profile/ProfileMediaGallery";
 
 import Cropper from "react-easy-crop";
@@ -756,6 +757,10 @@ export default function ProfilePage() {
       mountedRef.current = false;
     };
   }, []);
+
+  useArmpalDataChanged(["profile"], () => {
+    boot();
+  });
 
   async function boot() {
     setLoading(true);

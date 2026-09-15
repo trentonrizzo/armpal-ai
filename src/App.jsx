@@ -62,6 +62,7 @@ import usePresence from "./hooks/usePresence";
 import useNotifications from "./hooks/useNotifications";
 import useInAppBannerNotifications from "./hooks/useInAppBannerNotifications";
 import InAppBanner from "./components/notifications/InAppBanner";
+import VoiceAgentButton from "./features/voice/VoiceAgentButton";
 import { useTheme } from "./context/ThemeContext";
 import {
   isPasswordRecoveryUrl,
@@ -402,6 +403,7 @@ function AuthenticatedLayout({ session }) {
         onClick={handleBannerClick}
       />
       <AppContent />
+      <VoiceAgentButton />
     </>
   );
 }

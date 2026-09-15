@@ -15,6 +15,7 @@
 // ============================================================
 
 import React, { useEffect, useRef, useState } from "react";
+import { useArmpalDataChanged } from "../hooks/useArmpalDataChanged";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { safeRunAchievementEvaluation } from "../features/achievements/runner";
@@ -207,6 +208,15 @@ export default function MeasurementsPage() {
       setLoading(false);
     })();
   }, []);
+
+  useArmpalDataChanged(["measurements", "bodyweight"], async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await reloadMeasurements(user.id);
+    await reloadBodyweight(user.id);
+  });
 
   // ============================================================
   // HELPERS

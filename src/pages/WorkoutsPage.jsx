@@ -18,6 +18,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { checkUsageCap, getIsPro } from "../utils/usageLimits";
 import { getDisplayText, buildDisplayText } from "../utils/displayText";
+import { useArmpalDataChanged } from "../hooks/useArmpalDataChanged";
 import { supabase } from "../supabaseClient";
 import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import {
@@ -354,6 +355,10 @@ export default function WorkoutsPage() {
       setLoading(false);
     })();
   }, []);
+
+  useArmpalDataChanged(["workouts"], () => {
+    if (user?.id) loadWorkouts(user.id);
+  });
 
   async function loadWorkouts(uid) {
     const { data: workoutRows } = await supabase

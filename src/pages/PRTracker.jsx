@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 
 import { checkUsageCap } from "../utils/usageLimits";
 import { safeRunAchievementEvaluation } from "../features/achievements/runner";
+import { useArmpalDataChanged } from "../hooks/useArmpalDataChanged";
 
 // dnd-kit
 import {
@@ -154,6 +155,10 @@ export default function PRTracker() {
       setLoading(false);
     })();
   }, []);
+
+  useArmpalDataChanged(["prs"], () => {
+    if (user) loadPRs(user.id);
+  });
 
   async function loadPRs(uid) {
     const { data, error } = await supabase

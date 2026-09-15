@@ -7,6 +7,7 @@ import {
   safeRunAchievementEvaluation,
   scheduleAchievementReconcile,
 } from "../features/achievements/runner";
+import { useArmpalDataChanged } from "../hooks/useArmpalDataChanged";
 
 export const AppContext = createContext();
 
@@ -59,12 +60,16 @@ export const AppProvider = ({ children }) => {
     loadPRs();
   }, [user]);
 
+  useArmpalDataChanged(["prs"], () => {
+    if (user?.id) loadPRs();
+  });
+
   async function loadPRs() {
     const { data, error } = await supabase
       .from("prs")
       .select("*")
       .eq("user_id", user.id)
-      .order("order_index", { ascending: true });
+      .order("date", { ascending: false });
 
     if (!error && data) setPRs(data);
   }
@@ -88,7 +93,6 @@ export const AppProvider = ({ children }) => {
         date,
         reps,
         notes,
-        order_index: prs.length,
       })
       .select();
 

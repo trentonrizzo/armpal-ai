@@ -7,6 +7,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { checkUsageCap } from "../utils/usageLimits";
+import { useArmpalDataChanged } from "../hooks/useArmpalDataChanged";
 
 import {
   DndContext,
@@ -122,6 +123,10 @@ export default function GoalsPage() {
       setLoading(false);
     })();
   }, []);
+
+  useArmpalDataChanged(["goals"], () => {
+    if (user?.id) loadGoals(user.id);
+  });
 
   async function loadGoals(uid) {
     const { data, error } = await supabase
