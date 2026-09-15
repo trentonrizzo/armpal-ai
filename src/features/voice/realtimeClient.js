@@ -1,9 +1,21 @@
 import { dispatchArmpalDataChanged } from "../../lib/armpalDataChanged";
 import { supabase } from "../../supabaseClient";
+import { extractFunctionCalls, voiceErrorMessage } from "./voiceErrors";
+
+export { extractFunctionCalls, voiceErrorMessage };
 
 const IDLE_MS = 55_000;
 const MAX_MS = 8 * 60_000;
 const REALTIME_CALLS = "https://api.openai.com/v1/realtime/calls";
+const FETCH_OPTS = { credentials: "include" };
+
+function logStage(stage) {
+  try {
+    console.info(`voice stage: ${stage}`);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function getTimeZone() {
   try {
@@ -13,33 +25,30 @@ export function getTimeZone() {
   }
 }
 
-export function extractFunctionCalls(output = []) {
-  return (Array.isArray(output) ? output : []).filter(
-    (item) => item?.type === "function_call" || item?.type === "realtime.function_call"
-  );
-}
-
-export function voiceErrorMessage(err) {
-  const code =
-    err?.name === "NotAllowedError" || err?.message === "NotAllowedError"
-      ? "mic-denied"
-      : err?.message === "session-expired"
-        ? "session-expired"
-        : err?.name === "NotFoundError"
-          ? "mic-missing"
-          : "connect";
-  if (code === "mic-denied") return "No microphone permission.";
-  if (code === "mic-missing") return "Microphone unavailable.";
-  if (code === "session-expired") return "Your session expired.";
-  return "Couldn't connect.";
-}
-
 async function getAccessToken() {
   const { data, error } = await supabase.auth.getSession();
   if (error || !data?.session?.access_token) {
     throw new Error("session-expired");
   }
   return data.session.access_token;
+}
+
+async function readJsonSafe(res) {
+  const contentType = res.headers?.get?.("content-type") || "";
+  if (contentType.includes("text/html")) return { html: true };
+  return res.json().catch(() => ({}));
+}
+
+function throwFromSessionResponse(sessRes, sess) {
+  if (sessRes.status === 401 || sess?.code === "expired") {
+    throw new Error("session-expired");
+  }
+  if (sess?.code === "session" || sessRes.status === 502 || sessRes.status === 500) {
+    throw new Error("session");
+  }
+  if (!sessRes.ok || sess?.html || !sess?.value) {
+    throw new Error("session");
+  }
 }
 
 export function createVoiceSession(handlers = {}) {
@@ -54,6 +63,8 @@ export function createVoiceSession(handlers = {}) {
   let starting = false;
   let assistantBuf = "";
   let userBuf = "";
+  let pendingText = "";
+  let connected = false;
 
   const emit = (fn, payload) => {
     try {
@@ -102,12 +113,14 @@ export function createVoiceSession(handlers = {}) {
       /* ignore */
     }
     pc = null;
+    connected = false;
   }
 
   function stop(reason = "stop") {
     if (closed && reason !== "force") return;
     closed = true;
     starting = false;
+    pendingText = "";
     if (idleTimer) clearTimeout(idleTimer);
     if (maxTimer) clearTimeout(maxTimer);
     idleTimer = null;
@@ -131,6 +144,7 @@ export function createVoiceSession(handlers = {}) {
       try {
         const res = await fetch("/api/realtime/tools", {
           method: "POST",
+          credentials: "include",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -171,6 +185,12 @@ export function createVoiceSession(handlers = {}) {
   function sendEvent(payload) {
     if (!dc || dc.readyState !== "open") return;
     dc.send(JSON.stringify(payload));
+  }
+
+  function flushPendingText() {
+    const trimmed = pendingText;
+    pendingText = "";
+    if (trimmed) sendText(trimmed);
   }
 
   function handleServerEvent(event) {
@@ -238,8 +258,8 @@ export function createVoiceSession(handlers = {}) {
       return;
     }
     if (type === "error" || type === "invalid_request_error") {
-      const msg = event.message || "Couldn't connect.";
-      if (!/cancel/i.test(msg)) emit(handlers.onError, "Couldn't connect.");
+      const msg = event.message || "";
+      if (!/cancel/i.test(msg)) emit(handlers.onError, "Couldn't connect to Realtime.");
     }
   }
 
@@ -247,21 +267,24 @@ export function createVoiceSession(handlers = {}) {
     if (starting || (pc && !closed)) return;
     starting = true;
     closed = false;
+    connected = false;
     emit(handlers.onState, "connecting");
     try {
+      logStage("requesting-session");
       const token = await getAccessToken();
       const sessRes = await fetch("/api/realtime/session", {
         method: "POST",
+        ...FETCH_OPTS,
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ timeZone }),
       });
-      const sess = await sessRes.json().catch(() => ({}));
-      if (sessRes.status === 401) throw new Error("session-expired");
-      if (!sessRes.ok || !sess.value) throw new Error("connect");
+      const sess = await readJsonSafe(sessRes);
+      throwFromSessionResponse(sessRes, sess);
 
+      logStage("microphone");
       try {
         localStream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true },
@@ -273,6 +296,7 @@ export function createVoiceSession(handlers = {}) {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
 
+      logStage("peer-connection");
       pc = new RTCPeerConnection();
       remoteAudio = document.createElement("audio");
       remoteAudio.autoplay = true;
@@ -293,6 +317,17 @@ export function createVoiceSession(handlers = {}) {
       };
 
       dc = pc.createDataChannel("oai-events");
+      const dcOpen = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("connect")), 12_000);
+        dc.addEventListener("open", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        dc.addEventListener("error", () => {
+          clearTimeout(timer);
+          reject(new Error("connect"));
+        });
+      });
       dc.addEventListener("message", (ev) => {
         try {
           handleServerEvent(JSON.parse(ev.data));
@@ -301,15 +336,18 @@ export function createVoiceSession(handlers = {}) {
         }
       });
       dc.addEventListener("open", () => {
+        connected = true;
+        logStage("connected");
         emit(handlers.onState, "listening");
         bumpIdle();
+        flushPendingText();
       });
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await new Promise((resolve) => {
         if (!pc || pc.iceGatheringState === "complete") return resolve();
-        const t = setTimeout(resolve, 1200);
+        const t = setTimeout(resolve, 3000);
         const onIce = () => {
           if (pc?.iceGatheringState === "complete") {
             clearTimeout(t);
@@ -319,6 +357,8 @@ export function createVoiceSession(handlers = {}) {
         };
         pc.addEventListener("icegatheringstatechange", onIce);
       });
+
+      logStage("sending-sdp");
       const sdpRes = await fetch(REALTIME_CALLS, {
         method: "POST",
         body: pc.localDescription?.sdp || offer.sdp,
@@ -329,7 +369,10 @@ export function createVoiceSession(handlers = {}) {
       });
       if (!sdpRes.ok) throw new Error("connect");
       const answer = await sdpRes.text();
+      if (!answer || !String(answer).startsWith("v=")) throw new Error("connect");
+      logStage("setting-remote-description");
       await pc.setRemoteDescription({ type: "answer", sdp: answer });
+      await dcOpen;
 
       maxTimer = setTimeout(() => stop("max"), MAX_MS);
       bumpIdle();
@@ -345,7 +388,12 @@ export function createVoiceSession(handlers = {}) {
 
   function sendText(text) {
     const trimmed = String(text || "").trim();
-    if (!trimmed || !dc || dc.readyState !== "open") return false;
+    if (!trimmed) return false;
+    if (!dc || dc.readyState !== "open") {
+      pendingText = trimmed;
+      if (!starting && !pc) void start();
+      return true;
+    }
     emit(handlers.onUserTranscript, trimmed);
     sendEvent({
       type: "conversation.item.create",
@@ -366,10 +414,13 @@ export function createVoiceSession(handlers = {}) {
     stop,
     sendText,
     get active() {
-      return !closed && (!!pc || starting);
+      return !closed && (!!pc || starting || connected);
     },
     get starting() {
       return starting;
+    },
+    get connected() {
+      return connected && dc?.readyState === "open";
     },
   };
 }

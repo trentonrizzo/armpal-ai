@@ -5,6 +5,19 @@ import { isValidTimeZone, ymdInTimeZone } from "../../src/lib/localDates.js";
 
 export const config = { runtime: "nodejs" };
 
+export function openaiErrorMeta(status, data) {
+  const err = data?.error && typeof data.error === "object" ? data.error : {};
+  return {
+    status: Number(status) || 0,
+    code: typeof err.code === "string" && err.code ? err.code : "none",
+    type: typeof err.type === "string" && err.type ? err.type : "none",
+  };
+}
+
+export function sessionFailBody() {
+  return { error: "Couldn't create AI session.", code: "session" };
+}
+
 function buildInstructions({ timeZone, today, displayName }) {
   const who = displayName ? `The user's display name is ${displayName}.` : "";
   return `You are ArmPal's built-in voice fitness assistant. You are Siri-like: fast, concise, and action-oriented.
@@ -41,12 +54,14 @@ export default async function handler(req, res) {
 
   const auth = await requireUser(req);
   if (auth.error) {
-    return res.status(auth.error.status).json({ error: auth.error.message });
+    return res.status(auth.error.status).json({ error: auth.error.message, code: "expired" });
   }
+  console.info("[voice/session] jwt_verified");
 
   const openaiKey = globalThis.process?.env?.OPENAI_API_KEY;
   if (!openaiKey) {
-    return res.status(500).json({ error: "Couldn't connect." });
+    console.error("[voice/session] openai_error status=0 code=missing_key type=config");
+    return res.status(502).json(sessionFailBody());
   }
 
   const body = req.body || {};
@@ -68,7 +83,7 @@ export default async function handler(req, res) {
   const safetyId = createHash("sha256").update(String(auth.user.id)).digest("hex").slice(0, 32);
 
   const payload = {
-    expires_after: { anchor: "created_at", seconds: 60 },
+    expires_after: { anchor: "created_at", seconds: 300 },
     session: {
       type: "realtime",
       model: "gpt-realtime-2.1",
@@ -97,6 +112,7 @@ export default async function handler(req, res) {
   };
 
   try {
+    console.info("[voice/session] requesting_openai_client_secret");
     const openaiRes = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
       headers: {
@@ -108,22 +124,26 @@ export default async function handler(req, res) {
     });
     const data = await openaiRes.json().catch(() => ({}));
     if (!openaiRes.ok) {
-      console.error("[ArmPal.Voice] client_secrets failed", openaiRes.status);
-      return res.status(502).json({ error: "Couldn't connect." });
+      const meta = openaiErrorMeta(openaiRes.status, data);
+      console.error(
+        `[voice/session] openai_error status=${meta.status} code=${meta.code} type=${meta.type}`
+      );
+      return res.status(502).json(sessionFailBody());
     }
     const value = data?.value || data?.client_secret?.value;
     if (!value) {
-      console.error("[ArmPal.Voice] client_secrets missing value");
-      return res.status(502).json({ error: "Couldn't connect." });
+      console.error("[voice/session] openai_error status=200 code=missing_value type=response_shape");
+      return res.status(502).json(sessionFailBody());
     }
+    console.info("[voice/session] openai_client_secret_success");
     return res.status(200).json({
       value,
       expires_at: data.expires_at || data?.client_secret?.expires_at || null,
       timeZone,
       today,
     });
-  } catch (err) {
-    console.error("[ArmPal.Voice] session error", err?.message);
-    return res.status(500).json({ error: "Couldn't connect." });
+  } catch {
+    console.error("[voice/session] openai_error status=0 code=fetch_failed type=network");
+    return res.status(500).json(sessionFailBody());
   }
 }

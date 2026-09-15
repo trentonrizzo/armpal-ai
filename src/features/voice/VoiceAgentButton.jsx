@@ -76,12 +76,10 @@ export default function VoiceAgentButton() {
     e?.preventDefault?.();
     const text = typed.trim();
     if (!text) return;
-    if (!sessionRef.current?.active) {
+    if (!sessionRef.current || state === "idle" || state === "error") {
       startSession();
-      window.setTimeout(() => {
-        sessionRef.current?.sendText(text);
-        setTyped("");
-      }, 900);
+      sessionRef.current?.sendText(text);
+      setTyped("");
       return;
     }
     sessionRef.current.sendText(text);

@@ -9,8 +9,9 @@ import { ymdInTimeZone, zonedLocalToUtcIso, isValidTimeZone } from "../src/lib/l
 import { findMatchingPrs, resolvePrWrite, scoreLiftName } from "../src/lib/liftMatch.js";
 import { ALLOWED_TOOL_NAMES, REALTIME_TOOLS, TOOL_ALIASES } from "../api/_realtime/toolCatalog.js";
 import { executeFitnessTool, makeExercise } from "../api/_realtime/fitnessTools.js";
-import sessionHandler from "../api/realtime/session.js";
+import sessionHandler, { openaiErrorMeta, sessionFailBody } from "../api/realtime/session.js";
 import toolsHandler, { parseArgs } from "../api/realtime/tools.js";
+import { voiceErrorMessage, extractFunctionCalls } from "../src/features/voice/voiceErrors.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0;
@@ -347,11 +348,27 @@ await check("tool result shape returns to Realtime conversation", () => {
     { type: "message", role: "assistant" },
     { type: "function_call", name: "get_prs", call_id: "c1", arguments: "{}" },
   ];
-  const calls = output.filter(
-    (item) => item?.type === "function_call" || item?.type === "realtime.function_call"
-  );
+  const calls = extractFunctionCalls(output);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].call_id, "c1");
+});
+
+await check("voice errors are stage-specific", () => {
+  assert.equal(voiceErrorMessage({ name: "NotAllowedError" }), "Microphone permission denied.");
+  assert.equal(voiceErrorMessage({ message: "session" }), "Couldn't create AI session.");
+  assert.equal(voiceErrorMessage({ message: "connect" }), "Couldn't connect to Realtime.");
+  assert.equal(voiceErrorMessage({ message: "session-expired" }), "Your ArmPal session expired.");
+});
+
+await check("openai 401 is mapped without leaking key material", () => {
+  const meta = openaiErrorMeta(401, {
+    error: { code: "invalid_api_key", type: "invalid_request_error", message: "Incorrect API key provided: sk-secret" },
+  });
+  assert.equal(meta.status, 401);
+  assert.equal(meta.code, "invalid_api_key");
+  assert.equal(meta.type, "invalid_request_error");
+  assert.equal(sessionFailBody().error, "Couldn't create AI session.");
+  assert.equal(JSON.stringify(meta).includes("sk-secret"), false);
 });
 
 await check("voice sources do not use service role or log secrets", () => {
@@ -363,6 +380,7 @@ await check("voice sources do not use service role or log secrets", () => {
     "api/realtime/tools.js",
     "src/features/voice/realtimeClient.js",
     "src/features/voice/VoiceAgentButton.jsx",
+    "src/features/voice/voiceErrors.js",
   ];
   for (const rel of files) {
     const text = readFileSync(join(root, rel), "utf8");
@@ -373,6 +391,8 @@ await check("voice sources do not use service role or log secrets", () => {
   const client = readFileSync(join(root, "src/features/voice/realtimeClient.js"), "utf8");
   assert.equal(client.includes("OPENAI_API_KEY"), false);
   assert.equal(client.includes("process.env"), false);
+  assert.match(client, /credentials:\s*["']include["']/);
+  assert.match(readFileSync(join(root, "api/realtime/session.js"), "utf8"), /\[voice\/session\] jwt_verified/);
 });
 
 await check("session instructions refuse fabricated workout history", () => {
