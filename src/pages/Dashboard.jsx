@@ -1,7 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { checkUsageCap, getIsPro } from "../utils/usageLimits";
+import { checkUsageCap } from "../utils/usageLimits";
 import { safeRunAchievementEvaluation } from "../features/achievements/runner";
 import { parseStoredTimestamp, formatStoredTimestamp } from "../utils/workoutTime";
 import { Link, useNavigate } from "react-router-dom";
@@ -18,10 +18,10 @@ import ConsistencyCard from "../components/ConsistencyCard";
 import CoachingCard from "../components/coaching/CoachingCard";
 import CoachingRequestModal from "../components/coaching/CoachingRequestModal";
 
-// AI entry points hidden for App Store launch — components remain on disk
-// and backend/API logic is untouched, but no UI access points are rendered.
 import EmptyState from "../components/EmptyState";
+import DashboardAIChat from "../components/ai/DashboardAIChat";
 import { useProfileGate } from "../context/ProfileGateContext";
+import { REVENUE_EVENTS, trackRevenueEvent } from "../lib/revenueAnalytics";
 export default function Dashboard() {
   const navigate = useNavigate();
 
@@ -34,9 +34,7 @@ export default function Dashboard() {
   const [goals, setGoals] = useState([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
 
-  // Smart Analytics / Progress Overview — Pro-only (centralized getIsPro)
-  const [analyticsPro, setAnalyticsPro] = useState(null);
-  const [showAnalyticsUpgrade, setShowAnalyticsUpgrade] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   // Strength Calculator State
   const [exerciseName, setExerciseName] = useState("");
@@ -81,11 +79,6 @@ export default function Dashboard() {
   useArmpalDataChanged(["profile", "goals", "workouts", "prs"], () => {
     loadUserAndData();
   });
-
-  useEffect(() => {
-    if (!user?.id) return;
-    getIsPro(user.id).then(setAnalyticsPro);
-  }, [user?.id]);
 
   async function loadUserAndData() {
     const { data, error } = await supabase.auth.getUser();
@@ -292,9 +285,9 @@ export default function Dashboard() {
                 "User")}
             </span>
 
-  {/* Pro badge hidden for App Store launch — backend isPro flag preserved. */}
-  {false && isPro && (
-    <span>PRO</span>
+  {/* Pro badge */}
+  {isPro && (
+    <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1, color: "var(--accent)" }}>PRO</span>
   )}
 </h1>
           <p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
@@ -346,10 +339,68 @@ export default function Dashboard() {
         </Link>
       </header>
 
-      {/* Upgrade banner hidden for App Store launch — backend isPro flag preserved. */}
-      {false && !isPro && (
-        <Link to="/">Upgrade</Link>
+      {/* Upgrade banner */}
+      {!isPro && (
+        <Link
+          to="/pro"
+          onClick={() => {
+            trackRevenueEvent(REVENUE_EVENTS.PAYWALL_VIEWED, {
+              feature: "armpal_pro",
+              surface: "dashboard_banner",
+            });
+          }}
+          style={{
+            display: "block",
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 14,
+            background: "color-mix(in srgb, var(--accent) 12%, var(--card))",
+            border: "1px solid color-mix(in srgb, var(--accent) 30%, var(--border))",
+            color: "var(--text)",
+            textDecoration: "none",
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 800 }}>ArmPal Pro</div>
+          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
+            Voice, AI Coach, food scan, and advanced analytics.
+          </div>
+        </Link>
       )}
+
+      <button
+        type="button"
+        onClick={() => {
+          if (isPro) {
+            setAiOpen(true);
+            return;
+          }
+          trackRevenueEvent(REVENUE_EVENTS.PAYWALL_VIEWED, {
+            feature: "ai_chat",
+            surface: "dashboard",
+          });
+          navigate("/pro");
+        }}
+        style={{
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          marginBottom: 16,
+          padding: "12px 14px",
+          borderRadius: 14,
+          background: "var(--card-2)",
+          border: "1px solid var(--border)",
+          color: "var(--text)",
+          cursor: "pointer",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 800 }}>
+          AI Coach{isPro ? "" : " · Pro"}
+        </div>
+        <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
+          Ask ArmPal about your training.
+        </div>
+      </button>
+      {aiOpen ? <DashboardAIChat onClose={() => setAiOpen(false)} /> : null}
 
       {/* AI CHAT */}
 <section style={{ marginBottom: 20 }} data-onboarding="dashboard-main">

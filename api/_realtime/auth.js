@@ -64,3 +64,23 @@ export async function requireUser(req) {
   }
   return { user, supabase: createUserClient(accessToken), accessToken };
 }
+
+export async function requireProUser(req) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth;
+  const { data } = await auth.supabase
+    .from("profiles")
+    .select("is_pro")
+    .eq("id", auth.user.id)
+    .maybeSingle();
+  if (!data?.is_pro) {
+    return {
+      error: {
+        status: 403,
+        message: "ArmPal Pro is required for voice.",
+        code: "PRO_REQUIRED",
+      },
+    };
+  }
+  return auth;
+}

@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Square, X, Keyboard } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { createVoiceSession } from "./realtimeClient";
+import { usePurchase } from "../../context/PurchaseContext";
+import { REVENUE_EVENTS, trackRevenueEvent } from "../../lib/revenueAnalytics";
 
 const STATES = {
   idle: "Tap to talk",
@@ -12,6 +15,8 @@ const STATES = {
 };
 
 export default function VoiceAgentButton() {
+  const navigate = useNavigate();
+  const { isPro } = usePurchase();
   const sessionRef = useRef(null);
   const tapLock = useRef(0);
   const [state, setState] = useState("idle");
@@ -42,6 +47,16 @@ export default function VoiceAgentButton() {
     tapLock.current = now;
     if (sessionRef.current?.starting || sessionRef.current?.active) return;
 
+    if (!isPro) {
+      setError("");
+      setUserText("");
+      setAssistantText("");
+      setOpen(true);
+      setState("idle");
+      trackRevenueEvent(REVENUE_EVENTS.PAYWALL_VIEWED, { feature: "voice", surface: "mic" });
+      return;
+    }
+
     setError("");
     setUserText("");
     setAssistantText("");
@@ -62,7 +77,7 @@ export default function VoiceAgentButton() {
     });
     sessionRef.current = session;
     void session.start();
-  }, []);
+  }, [isPro]);
 
   function onFabClick() {
     if (state === "idle" || state === "error") {
@@ -128,14 +143,39 @@ export default function VoiceAgentButton() {
           {userText ? (
             <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>{userText}</div>
           ) : null}
-          {assistantText ? (
+          {!isPro ? (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.35, marginBottom: 10 }}>
+                Voice is included with ArmPal Pro.
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  trackRevenueEvent(REVENUE_EVENTS.UPGRADE_INITIATED, { feature: "voice", surface: "mic" });
+                  navigate("/pro");
+                }}
+                style={{
+                  width: "100%",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  background: "var(--accent)",
+                  color: "var(--text)",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Upgrade to Pro
+              </button>
+            </div>
+          ) : assistantText ? (
             <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.35 }}>{assistantText}</div>
           ) : (
             <div style={{ fontSize: 13, opacity: 0.55 }}>
               {error || (state === "listening" ? "Go ahead…" : " ")}
             </div>
           )}
-          {error && state === "error" ? (
+          {isPro && error && state === "error" ? (
             <button
               type="button"
               onClick={startSession}
@@ -154,7 +194,7 @@ export default function VoiceAgentButton() {
               Retry
             </button>
           ) : null}
-          {showTyped ? (
+          {isPro ? (showTyped ? (
             <form onSubmit={sendTyped} style={{ marginTop: 10, display: "flex", gap: 6 }}>
               <input
                 value={typed}
@@ -191,7 +231,7 @@ export default function VoiceAgentButton() {
             >
               <Keyboard size={12} /> Type
             </button>
-          )}
+          )) : null}
         </div>
       )}
 

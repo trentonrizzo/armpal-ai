@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { requireUser } from "../_realtime/auth.js";
+import { requireProUser } from "../_realtime/auth.js";
 import { REALTIME_TOOLS } from "../_realtime/toolCatalog.js";
 import { isValidTimeZone, ymdInTimeZone } from "../../src/lib/localDates.js";
 
@@ -81,9 +81,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const auth = await requireUser(req);
+  const auth = await requireProUser(req);
   if (auth.error) {
-    return res.status(auth.error.status).json({ error: auth.error.message, code: "expired" });
+    return res.status(auth.error.status).json({
+      error: auth.error.message,
+      code: auth.error.code || "expired",
+    });
   }
   console.info("[voice/session] jwt_verified");
 

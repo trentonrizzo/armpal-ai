@@ -79,10 +79,12 @@ export default function ProgramViewer({ previewProgram = null, program: programP
     const base = program?.parsed_program;
     if (!base) return;
     try {
+      const { data: sessionData } = await supabase.auth.getUser();
+      const userId = sessionData?.user?.id;
       const res = await fetch("/api/modifyProgram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ baseProgram: base, modification: type }),
+        body: JSON.stringify({ baseProgram: base, modification: type, userId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Modify failed");

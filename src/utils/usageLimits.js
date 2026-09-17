@@ -1,14 +1,13 @@
 /*
   usageLimits.js — SINGLE SOURCE OF TRUTH for entry caps.
 
-  As of the live App Store build, the artificial 5-item free-tier ceiling on
-  workouts / PRs / measurements / bodyweight / goals has been removed.
-  `checkUsageCap` keeps its return shape so every consumer continues to work
-  unchanged, but `allowed` is now always true and `limit` is unbounded.
+  The artificial 5-item free-tier ceiling on workouts / PRs / measurements /
+  bodyweight / goals has been removed. `checkUsageCap` keeps its return shape
+  so every consumer continues to work, but `allowed` is always true.
 
-  Pro status is still read from Supabase `profiles.is_pro` and surfaced via
-  `getIsPro` so any non-UI code that still cares about it keeps working —
-  but no client-side gating decision depends on it anymore.
+  Pro status is still read from `profiles.is_pro` via `getIsPro`. AI, voice,
+  and advanced analytics are gated separately (server `is_pro` checks +
+  PurchaseContext / ProGate). Core logging stays unlimited on Free.
 */
 
 import { supabase } from "../supabaseClient";

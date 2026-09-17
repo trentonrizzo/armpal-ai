@@ -4,6 +4,7 @@ import { supabase } from "../../supabaseClient";
 import { addEntry } from "./nutritionService";
 import imageCompression from "browser-image-compression";
 import { Camera, X, ChevronLeft, AlertTriangle } from "lucide-react";
+import ProGate from "../../components/ProGate";
 
 const STEP = {
   PICK_IMAGE: "PICK_IMAGE",
@@ -529,9 +530,22 @@ export default function SmartFoodScanOverlay({
 
   if (!open) return null;
 
-  /* Pro gate hidden for App Store launch — backend isPro prop preserved. */
-  if (false && !isPro) {
-    return null;
+  /* Pro gate — vision AI is a paid OpenAI cost. */
+  if (!isPro) {
+    return createPortal(
+      <>
+        <div style={OVERLAY_BG} onClick={onClose} />
+        <div style={PANEL} onClick={(e) => e.stopPropagation()}>
+          <div style={INNER}>
+            <button style={CLOSE_BTN} onClick={onClose}><X size={18} /></button>
+            <div style={{ paddingTop: 24 }}>
+              <ProGate feature="food_scan" onClose={onClose} />
+            </div>
+          </div>
+        </div>
+      </>,
+      document.body
+    );
   }
 
   /* ================================================================

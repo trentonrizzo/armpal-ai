@@ -20,6 +20,8 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { usePurchase } from "../context/PurchaseContext";
+import ProGate from "../components/ProGate";
 
 /* ============================================================
    COLOR PALETTE (ORDER MATTERS)
@@ -33,7 +35,7 @@ const LINE_COLORS = [
   "#06b6d4", // cyan
 ];
 
-export default function MeasurementAnalytics() {
+function MeasurementAnalyticsApp() {
   const navigate = useNavigate();
 
   /* ============================================================
@@ -353,4 +355,15 @@ export default function MeasurementAnalytics() {
       )}
     </div>
   );
+}
+
+export default function MeasurementAnalytics() {
+  const { isPro, initializing } = usePurchase();
+  if (initializing) {
+    return <div style={{ padding: 24, opacity: 0.7 }}>Loading…</div>;
+  }
+  if (!isPro) {
+    return <ProGate feature="advanced_analytics" />;
+  }
+  return <MeasurementAnalyticsApp />;
 }

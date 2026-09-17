@@ -233,7 +233,7 @@ export default function DashboardAIChat({ onClose }) {
 
     const isPro = await getIsPro(userId);
     if (!isPro) {
-      setError("AI is temporarily unavailable. Please try again later.");
+      setError("AI Coach is included with ArmPal Pro.");
       return;
     }
 
@@ -283,7 +283,7 @@ try {
 if (!res.ok) {
 
   if (json?.error === "PRO_REQUIRED") {
-    setError("AI is temporarily unavailable. Please try again later.");
+    setError("AI Coach is included with ArmPal Pro.");
     return;
   }
 

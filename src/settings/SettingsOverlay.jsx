@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { enablePush, disablePush } from "../lib/push";
 import {
@@ -42,6 +42,8 @@ import {
   syncCurrentSession,
 } from "../lib/accountManager";
 import { OFFICIAL_NAME_STYLE } from "../utils/officialStyle";
+import { usePurchase } from "../context/PurchaseContext";
+import { REVENUE_EVENTS, trackRevenueEvent } from "../lib/revenueAnalytics";
 
 /* ============================
    TOGGLE PILL
@@ -199,6 +201,8 @@ function ReminderRow({
 export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
   const { theme, setTheme, accent, setAccent } = useTheme();
   const toast = useToast();
+  const navigate = useNavigate();
+  const { isPro } = usePurchase();
 
   function closeLegalAndOverlay() {
     setLegalModal(null);
@@ -626,6 +630,27 @@ export default function SettingsOverlay({ open, onClose, initialLegalOpen }) {
           }}
         >
           <h2 style={{ fontSize: 18, fontWeight: 900 }}>Settings</h2>
+
+          <div
+            onClick={() => {
+              trackRevenueEvent(REVENUE_EVENTS.PAYWALL_VIEWED, { feature: "armpal_pro", surface: "settings" });
+              onClose();
+              navigate("/pro");
+            }}
+            style={{
+              marginTop: 18,
+              padding: 14,
+              borderRadius: 14,
+              background: "color-mix(in srgb, var(--accent) 10%, var(--card-2))",
+              border: "1px solid color-mix(in srgb, var(--accent) 30%, var(--border))",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>{isPro ? "ArmPal Pro" : "Upgrade to Pro"}</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              {isPro ? "Voice, AI, and advanced analytics are unlocked." : "Voice assistant, AI Coach, and deeper insights."}
+            </div>
+          </div>
 
           {/* APPEARANCE */}
           <div

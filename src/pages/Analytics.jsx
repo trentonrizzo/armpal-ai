@@ -36,6 +36,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { usePurchase } from "../context/PurchaseContext";
+import ProGate from "../components/ProGate";
 
 /* ============================================================
    COLOR PALETTES
@@ -1312,7 +1314,7 @@ function PRsTabPanel() {
 /* ============================================================
    MAIN ANALYTICS PAGE (BODYWEIGHT)
 ============================================================ */
-export default function Analytics() {
+function AnalyticsApp() {
   const navigate = useNavigate();
 
   /* ============================================================
@@ -2078,4 +2080,15 @@ export default function Analytics() {
       <div style={{ height: 40 }} />
     </div>
   );
+}
+
+export default function Analytics() {
+  const { isPro, initializing } = usePurchase();
+  if (initializing) {
+    return <div style={{ padding: 24, opacity: 0.7 }}>Loading…</div>;
+  }
+  if (!isPro) {
+    return <ProGate feature="advanced_analytics" />;
+  }
+  return <AnalyticsApp />;
 }

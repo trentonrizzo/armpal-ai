@@ -1,10 +1,17 @@
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
+import { assertProProfile } from "./_lib/assertProProfile.js";
 
 export const config = { runtime: "nodejs" };
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 const MODIFICATIONS = {
   beginner: "Adapt this program for beginners: reduce intensity, add progression notes, lower volume per session, keep the same ArmPal JSON structure (frequency_range, layouts with summary and days, each day with name and exercises with name, sets, reps, intensity). Return ONLY valid JSON.",
@@ -19,7 +26,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { baseProgram, modification } = req.body || {};
+    const { baseProgram, modification, userId } = req.body || {};
+    const pro = await assertProProfile(supabase, userId);
+    if (!pro.ok) {
+      return res.status(pro.status).json({ error: pro.error, message: pro.message });
+    }
     if (!baseProgram || !modification || !MODIFICATIONS[modification]) {
       return res.status(400).json({ error: "Missing baseProgram or invalid modification" });
     }

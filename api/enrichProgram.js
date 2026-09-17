@@ -1,10 +1,17 @@
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
+import { assertProProfile } from "./_lib/assertProProfile.js";
 
 export const config = { runtime: "nodejs" };
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 const SYSTEM_PROMPT = `Analyze this training program and generate marketplace metadata.
 Return ONLY valid JSON, no markdown or code fences:
@@ -25,7 +32,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { rawContent, parsedProgram } = req.body || {};
+    const { rawContent, parsedProgram, userId } = req.body || {};
+    const pro = await assertProProfile(supabase, userId);
+    if (!pro.ok) {
+      return res.status(pro.status).json({ error: pro.error, message: pro.message });
+    }
     const userContent = `Raw content:\n${rawContent || ""}\n\nParsed program (JSON):\n${JSON.stringify(parsedProgram || {}, null, 2)}`;
 
     const completion = await openai.chat.completions.create({

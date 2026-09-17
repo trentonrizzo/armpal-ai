@@ -3,40 +3,13 @@
 
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { usePurchase } from "../context/PurchaseContext";
 import { printIapReport } from "../services/purchaseManager";
+import { FREE_FEATURE_LIST, PRO_FEATURE_LIST } from "../lib/entitlements";
+import { REVENUE_EVENTS, trackRevenueEvent } from "../lib/revenueAnalytics";
 
 const PRO_PRICE_FALLBACK_LABEL = "Price shown at purchase";
-
-const FREE_FEATURES = [
-  // Existing base benefits
-  "Strength calculator",
-  "Up to 5 workouts saved",
-  "Up to 5 bodyweight logs",
-  "Up to 5 measurement logs",
-  "Up to 5 PR logs",
-  "Unlimited nutrition entries",
-  "Profiles + friends",
-  // Media + AI limits (appended)
-  "No video uploads",
-  "20 photos/day (max 5MB)",
-  "10 voice messages/day (30s)",
-  "Limited AI usage (chat, food scan, workout converter)",
-];
-
-const PRO_FEATURES = [
-  // Existing Pro benefits
-  "AI Chat — up to 25 responses/day",
-  "AI Workout Converter — up to 10 uses/day",
-  "AI Food Scan — up to 10 scans/day",
-  "Up to 1,000 workouts, PRs, measurements, bodyweight logs, and goals",
-  "Unlimited nutrition tracking",
-  "10 videos/day (max 25MB)",
-  "100 photos/day (max 10MB)",
-  "50 voice messages/day (2 min)",
-  "Expanded AI usage with higher daily limits",
-  "Access to all Pro features",
-];
 
 function FeatureCheck({ text, accent }) {
   return (
@@ -50,6 +23,7 @@ function FeatureCheck({ text, accent }) {
 export default function ProUpgradePage() {
   const navigate = useNavigate();
   const [error, setError] = useState(null);
+  const nativeIOS = Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
   const {
     product,
     subscriptionStatus,
@@ -83,14 +57,19 @@ export default function ProUpgradePage() {
   // render the price for App Store compliance, but we MUST NOT call
   // store.order(...) — it would fail or stall, hurting App Review.
   const isRealProduct = !!product && !iapFallback;
-  const purchaseReady = isRealProduct && canPurchase;
+  const purchaseReady = nativeIOS && isRealProduct && canPurchase;
   const upgradeDisabled =
-    subResolving || purchaseLoading || verifiedPro || !purchaseReady;
+    verifiedPro ||
+    subResolving ||
+    purchaseLoading ||
+    (nativeIOS && !purchaseReady);
   const upgradeLabel = verifiedPro
     ? "You're Pro"
     : purchaseLoading
       ? "Processing..."
-      : iapFallback
+      : !nativeIOS
+        ? "Subscribe on iPhone"
+        : iapFallback
         ? "Store loading… Try again in a moment"
         : !purchaseReady
           ? "Loading..."
@@ -105,8 +84,10 @@ export default function ProUpgradePage() {
   }
 
   useEffect(() => {
-    // Print a one-shot health report when the paywall opens, then again
-    // each time the IAP state moves between loading / loaded / error.
+    trackRevenueEvent(REVENUE_EVENTS.PAYWALL_VIEWED, { feature: "armpal_pro", surface: "upgrade_page" });
+  }, []);
+
+  useEffect(() => {
     printIapReport();
   }, [productLoaded, canPurchase, priceStatus, subscriptionStatus, iapError]);
 
@@ -121,7 +102,7 @@ export default function ProUpgradePage() {
         <div style={S.proBadge}>PRO</div>
         <h1 style={S.heroTitle}>Upgrade to ArmPal Pro</h1>
         <p style={S.heroSub}>
-          Unlock higher AI limits and more room for your training history.
+          Unlock voice, AI actions, and deeper training insights.
         </p>
       </div>
 
@@ -134,7 +115,7 @@ export default function ProUpgradePage() {
             <span style={S.tierPrice}>$0</span>
           </div>
           <ul style={S.featureList}>
-            {FREE_FEATURES.map((f) => (
+            {FREE_FEATURE_LIST.map((f) => (
               <FeatureCheck key={f} text={f} accent={false} />
             ))}
           </ul>
@@ -150,7 +131,7 @@ export default function ProUpgradePage() {
             </span>
           </div>
           <ul style={S.featureList}>
-            {PRO_FEATURES.map((f) => (
+            {PRO_FEATURE_LIST.map((f) => (
               <FeatureCheck key={f} text={f} accent />
             ))}
           </ul>
@@ -176,13 +157,16 @@ export default function ProUpgradePage() {
           type="button"
           onClick={async () => {
             if (upgradeDisabled) return;
-            // Hard guard: never call into store.order() while the fallback
-            // is active — there's no real Apple product to charge against.
+            if (!nativeIOS) {
+              setError("ArmPal Pro is an App Store subscription. Open ArmPal on your iPhone to subscribe.");
+              return;
+            }
             if (iapFallback) {
               console.log("[IAP] Fallback active — purchase disabled");
               return;
             }
             setError(null);
+            trackRevenueEvent(REVENUE_EVENTS.UPGRADE_INITIATED, { feature: "armpal_pro", surface: "upgrade_page" });
             const result = await purchase();
             if (result?.ok) return;
             if (result?.status === "userCancelled") return;

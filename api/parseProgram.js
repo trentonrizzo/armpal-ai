@@ -1,10 +1,17 @@
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
+import { assertProProfile } from "./_lib/assertProProfile.js";
 
 export const config = { runtime: "nodejs" };
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 const SYSTEM_PROMPT = `You are converting free-form workout text into a simple JSON schema for ArmPal.
 
@@ -90,7 +97,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { rawContent } = req.body || {};
+    const { rawContent, userId } = req.body || {};
+    const pro = await assertProProfile(supabase, userId);
+    if (!pro.ok) {
+      return res.status(pro.status).json({ error: pro.error, message: pro.message });
+    }
     if (!rawContent || typeof rawContent !== "string") {
       return res.status(400).json({ error: "Missing rawContent" });
     }

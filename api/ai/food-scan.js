@@ -13,6 +13,7 @@
 
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { assertProProfile } from "../_lib/assertProProfile.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -138,37 +139,29 @@ export default async function handler(req, res) {
   try {
     const { imageUrl, imagePath, userText, userId, mealDate } = req.body || {};
 
+    const pro = await assertProProfile(supabase, userId);
+    if (!pro.ok) {
+      return res.status(pro.status).json({ error: pro.error, message: pro.message });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: usage } = await supabase
+      .from("ai_usage")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", today)
+      .maybeSingle();
+
+    if (usage && usage.image_scans >= DAILY_SCAN_LIMIT) {
+      return res.status(429).json({
+        error: "SCAN_LIMIT_REACHED",
+        message: "Daily AI image scan limit reached (10). Try again tomorrow.",
+      });
+    }
+
     let imageUrlToUse = imageUrl;
 
     if (!imageUrlToUse && imagePath && userId) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_pro")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (!profile?.is_pro) {
-        return res.status(403).json({
-          error: "PRO_REQUIRED",
-          message: "Smart Food Scan is a Pro feature.",
-        });
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: usage } = await supabase
-        .from("ai_usage")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("date", today)
-        .maybeSingle();
-
-      if (usage && usage.image_scans >= DAILY_SCAN_LIMIT) {
-        return res.status(429).json({
-          error: "SCAN_LIMIT_REACHED",
-          message: "Daily AI image scan limit reached (10). Try again tomorrow.",
-        });
-      }
-
       const { data: signedData, error: signErr } = await supabase.storage
         .from("food_scan_images")
         .createSignedUrl(imagePath, 300);

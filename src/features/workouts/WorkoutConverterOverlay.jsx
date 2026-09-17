@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../../supabaseClient";
 import { X, Zap } from "lucide-react";
+import ProGate from "../../components/ProGate";
 
 const PHASE = { INPUT: "INPUT", GENERATING: "GENERATING", COMPLETE: "COMPLETE" };
 
@@ -279,9 +280,22 @@ export default function WorkoutConverterOverlay({ open, onClose, userId, isPro, 
 
   if (!open) return null;
 
-  /* Pro gate hidden for App Store launch — backend isPro prop preserved. */
-  if (false && !isPro) {
-    return null;
+  /* Pro gate — expensive AI conversion. */
+  if (!isPro) {
+    return createPortal(
+      <>
+        <div style={OVERLAY_BG} onClick={onClose} />
+        <div style={PANEL}>
+          <div style={INNER}>
+            <button style={CLOSE_BTN} onClick={onClose}><X size={18} /></button>
+            <div style={{ paddingTop: 24 }}>
+              <ProGate feature="workout_converter" onClose={onClose} />
+            </div>
+          </div>
+        </div>
+      </>,
+      document.body
+    );
   }
 
   /* ============ GENERATING ============ */

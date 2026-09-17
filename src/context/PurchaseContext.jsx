@@ -10,6 +10,7 @@ import React, {
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "../supabaseClient";
 import { isResetPasswordRoute } from "../utils/recoveryUrl";
+import { REVENUE_EVENTS, trackRevenueEvent } from "../lib/revenueAnalytics";
 import {
   bootPurchases,
   checkEntitlements,
@@ -82,6 +83,7 @@ export function PurchaseProvider({ children }) {
   const unlockPro = useCallback(async () => {
     setSubscriptionStatus("pro");
     setStoredProFlag(true);
+    trackRevenueEvent(REVENUE_EVENTS.PRO_ACTIVE, { source: "unlock" });
     await persistProToProfile();
   }, []);
 
@@ -139,10 +141,8 @@ export function PurchaseProvider({ children }) {
       } else {
         const profileIsPro = await getProfileProFlag();
         if (profileIsPro) {
-          setStoredProFlag(true);
-          setSubscriptionStatus("pro");
+          await unlockPro();
         } else {
-          setStoredProFlag(false);
           applyFreeState();
         }
       }
@@ -195,6 +195,7 @@ export function PurchaseProvider({ children }) {
     try {
       const result = await orderPro();
       if (result.status === "success" && result.verified) {
+        trackRevenueEvent(REVENUE_EVENTS.PURCHASE_COMPLETED, { product: "armpal_pro" });
         await unlockPro();
         return { ok: true, status: result.status };
       }
@@ -231,6 +232,7 @@ export function PurchaseProvider({ children }) {
     try {
       const result = await restoreIap();
       if (result?.hasActiveEntitlement) {
+        trackRevenueEvent(REVENUE_EVENTS.PURCHASE_RESTORED, { product: "armpal_pro" });
         await unlockPro();
         return { ok: true };
       }

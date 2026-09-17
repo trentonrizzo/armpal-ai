@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "verify:ios:notifications": "bash ios/verify-local-notifications.sh",
     "generate:branding": "node scripts/generate-branding.mjs",
-    "test:voice": "node scripts/test-voice-agent.mjs"
+    "test:voice": "node scripts/test-voice-agent.mjs",
+    "test:pro": "node scripts/test-pro-entitlements.mjs",
+    "test": "node scripts/test-voice-agent.mjs && node scripts/test-pro-entitlements.mjs"
   },
   "dependencies": {
     "@awesome-cordova-plugins/in-app-purchase-2": "^8.1.0",
